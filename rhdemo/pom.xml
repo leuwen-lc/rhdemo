@@ -50,11 +50,10 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
-		 <!-- H2 Database dependency for in-memory database support -->
-   		 <dependency>
-   		     <groupId>com.h2database</groupId>
-  		      <artifactId>h2</artifactId>
-              <scope>runtime</scope>
+		 <dependency>
+        <groupId>org.postgresql</groupId>
+             <artifactId>postgresql</artifactId>
+             <scope>runtime</scope>
         </dependency>
 
 		<dependency>
@@ -62,6 +61,38 @@
 			<artifactId>micrometer-registry-prometheus</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+	 		 
+   		 <dependency>
+   		     <groupId>com.h2database</groupId>
+  		      <artifactId>h2</artifactId>
+              <scope>test</scope>
+        </dependency>   
+   		 <dependency>
+   		     <groupId>com.h2database</groupId>
+  		      <artifactId>h2</artifactId>
+              <scope>test</scope>
+        </dependency> <!-- H2 Database dependency for in-memory database support --> <!-- H2 Database dependency for in-memory database support -->
+   		 
+   		 
+   		 <dependency>
+   		     <groupId>com.h2database</groupId>
+  		      <artifactId>h2</artifactId>
+              <scope>test</scope>
+        </dependency>
+   		 
+   		 
+   		 <dependency>
+   		     <groupId>com.h2database</groupId>
+  		      <artifactId>h2</artifactId>
+              <scope>test</scope>
+        </dependency><!-- H2 Database dependency for in-memory database support -->
+   		 
+   		 
+   		 <dependency>
+   		     <groupId>com.h2database</groupId>
+  		      <artifactId>h2</artifactId>
+              <scope>test</scope>
+        </dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -79,6 +110,17 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+<!--			Résolution de warning mockito et load dynamique d'un Java Agent-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<argLine>
+						-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+						-Xshare:off
+					</argLine>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

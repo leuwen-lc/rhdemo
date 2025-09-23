@@ -15,12 +15,13 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 	// désactive les controles Spring Security pour la console H2 et Tomcat
 	http.authorizeHttpRequests(authorize -> authorize
-		//H2 à désactiver en prod
-		.requestMatchers("/h2-console/**").permitAll()
 	        .requestMatchers(HttpMethod.POST,"/api/**").hasRole("MAJ")
 	        .requestMatchers(HttpMethod.DELETE,"/api/**").hasRole("MAJ")
 	        .requestMatchers(HttpMethod.PUT,"/api/**").hasRole("MAJ")
 	        .requestMatchers(HttpMethod.GET,"/api/**").hasAnyRole("Consult","MAJ")
+	        .requestMatchers("/h2-console/**").permitAll()
+		.requestMatchers("/actuator/**").permitAll()
+		.requestMatchers("/error**").permitAll()
 	        .anyRequest().authenticated()
 	)
 	.csrf(csrf -> csrf.disable()) // Désactive CSRF (!global!)

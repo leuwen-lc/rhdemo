@@ -3,6 +3,7 @@ package fr.leuwen.rhdemoAPI.controller;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,24 +20,28 @@ public class EmployeController {
 	private EmployeService employeservice;
 	
 	
-	@GetMapping("/api/employes")	
+	@GetMapping("/api/employes")
+	@PreAuthorize("hasRole('consult')")
 	public Iterable<Employe> getEmployes() {
 		return employeservice.getEmployes();
 	}
 	
 	
-	@GetMapping("/api/employe")	
+	@GetMapping("/api/employe")
+	@PreAuthorize("hasRole('consult')")
 	public Optional<Employe> getEmploye(final Long id) {
 		return employeservice.getEmploye(id);
 	}
 	
 	@DeleteMapping("/api/employe")
+	@PreAuthorize("hasRole('MAJ')")
 	public void deleteEmploye(final Long id) {
 	      employeservice.deleteEmploye(id);
 	     
 	}
 	
 	@PostMapping ("/api/employe")
+	@PreAuthorize("hasRole('MAJ')")
 	public Employe saveEmploye(Employe employe) {
 	      return employeservice.saveEmploye(employe);
 	}	

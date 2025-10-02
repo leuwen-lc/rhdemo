@@ -27,7 +27,7 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>24</java.version>
+		<java.version>21</java.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -35,9 +35,8 @@
 			<artifactId>spring-boot-starter-oauth2-client</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.keycloak</groupId>
-			<artifactId>keycloak-spring-boot-starter</artifactId>
-			<version>24.0.1</version> <!-- version	Keycloak -->
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -55,8 +54,13 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
-		 <dependency>
-        <groupId>org.postgresql</groupId>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
              <artifactId>postgresql</artifactId>
              <scope>runtime</scope>
         </dependency>
@@ -72,32 +76,6 @@
   		      <artifactId>h2</artifactId>
               <scope>test</scope>
         </dependency>   
-   		 <dependency>
-   		     <groupId>com.h2database</groupId>
-  		      <artifactId>h2</artifactId>
-              <scope>test</scope>
-        </dependency> <!-- H2 Database dependency for in-memory database support --> <!-- H2 Database dependency for in-memory database support -->
-   		 
-   		 
-   		 <dependency>
-   		     <groupId>com.h2database</groupId>
-  		      <artifactId>h2</artifactId>
-              <scope>test</scope>
-        </dependency>
-   		 
-   		 
-   		 <dependency>
-   		     <groupId>com.h2database</groupId>
-  		      <artifactId>h2</artifactId>
-              <scope>test</scope>
-        </dependency><!-- H2 Database dependency for in-memory database support -->
-   		 
-   		 
-   		 <dependency>
-   		     <groupId>com.h2database</groupId>
-  		      <artifactId>h2</artifactId>
-              <scope>test</scope>
-        </dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -108,11 +86,17 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-<!--        Aide à la migration des propriétés-->
+		<!--        Aide à la migration des propriétés-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-properties-migrator</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+		<!--Utilisé pour le décodage json des jetons JWT-->
+		<dependency>
+			<groupId>com.jayway.jsonpath</groupId>
+			<artifactId>json-path</artifactId>
+			<version>2.9.0</version>
 		</dependency>
 	</dependencies>
 

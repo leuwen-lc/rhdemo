@@ -29,6 +29,7 @@ public class EmployeControllerTest {
 	//@MockitoBean
 	//private EmployeService employeService;
 	
+	
 	@Test
 	@WithMockUser(username = "UtilisateurTest", roles = {"Mauvais role"})
 	public void testGetEmployesRoleErrone() throws Exception {
@@ -38,7 +39,7 @@ public class EmployeControllerTest {
 	
 	
 	@Test
-	@WithMockUser(username = "UtilisateurTest", roles = {"Consult"})
+	@WithMockUser(username = "UtilisateurTest", roles = {"consult"})
 	public void testGetEmployes() throws Exception {
 		mockMVC.perform(get("/api/employes"))
 		.andExpect(status().isOk())

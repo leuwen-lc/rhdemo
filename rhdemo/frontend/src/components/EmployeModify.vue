@@ -1,63 +1,131 @@
 <template>
-  <div class="employe-modify">
-    <h2>Modifier un Employé par ID</h2>
+  <div>
+    <el-row justify="center">
+      <el-col :xs="24" :sm="18" :md="12" :lg="10">
+        <el-card>
+          <template #header>
+            <h2 style="text-align: center; margin: 0;">✏️ Modifier un Employé par ID</h2>
+          </template>
+          
+          <!-- Étape 1: Recherche de l'employé -->
+          <el-card v-if="!employeFound" class="search-card">
+            <template #header>
+              <h3 style="margin: 0;">🔍 Rechercher l'employé</h3>
+            </template>
+            
+            <el-form @submit.prevent="searchEmployeToModify">
+              <el-form-item label="ID de l'employé à modifier">
+                <el-input
+                  v-model="modifyId"
+                  type="number"
+                  placeholder="Entrez l'ID de l'employé"
+                  @keyup.enter="searchEmployeToModify"
+                >
+                  <template #append>
+                    <el-button 
+                      type="primary" 
+                      :loading="loading"
+                      :disabled="!modifyId"
+                      @click="searchEmployeToModify"
+                    >
+                      {{ loading ? 'Recherche...' : 'Rechercher' }}
+                    </el-button>
+                  </template>
+                </el-input>
+              </el-form-item>
+            </el-form>
+          </el-card>
 
-    <div class="search-form">
-      <div class="input-group">
-        <label for="modifyId">ID de l'employé à modifier :</label>
-        <input 
-          id="modifyId"
-          v-model="modifyId" 
-          type="number" 
-          placeholder="Entrez l'ID de l'employé"
-          @keyup.enter="searchEmployeToModify"
-        />
-      </div>
-      <button @click="searchEmployeToModify" :disabled="!modifyId || loading">
-        {{ loading ? 'Recherche...' : 'Rechercher' }}
-      </button>
-    </div>
+          <el-alert
+            v-if="error"
+            :title="error"
+            type="error"
+            show-icon
+            style="margin: 20px 0;"
+          />
+          
+          <!-- Étape 2: Affichage et modification de l'employé trouvé -->
+          <el-card v-if="employe" style="margin-top: 20px;">
+            <template #header>
+              <h3 style="margin: 0;">👤 Employé trouvé</h3>
+            </template>
+            
+            <el-descriptions :column="1" border>
+              <el-descriptions-item label="ID">{{ employe.id }}</el-descriptions-item>
+              <el-descriptions-item label="Prénom">{{ employe.prenom }}</el-descriptions-item>
+              <el-descriptions-item label="Nom">{{ employe.nom }}</el-descriptions-item>
+              <el-descriptions-item label="Email">{{ employe.mail }}</el-descriptions-item>
+            </el-descriptions>
+            
+            <div style="margin-top: 20px; text-align: center;">
+              <el-space>
+                <el-button 
+                  type="primary" 
+                  :icon="Edit"
+                  @click="$router.push(`/front/edition/${employe.id}`)"
+                >
+                  Modifier cet employé
+                </el-button>
+                <el-button 
+                  type="info" 
+                  :icon="View"
+                  @click="$router.push(`/front/employe/${employe.id}`)"
+                >
+                  Voir les détails
+                </el-button>
+              </el-space>
+            </div>
+          </el-card>
 
-    <div v-if="error" class="error">{{ error }}</div>
-    
-    <div v-if="employe" class="employe-preview">
-      <h3>Employé à modifier :</h3>
-      <div class="employe-card">
-        <p><strong>ID :</strong> {{ employe.id }}</p>
-        <p><strong>Prénom :</strong> {{ employe.prenom }}</p>
-        <p><strong>Nom :</strong> {{ employe.nom }}</p>
-        <p><strong>Email :</strong> {{ employe.mail }}</p>
-      </div>
-      
-      <div class="actions">
-        <router-link :to="`/front/edition/${employe.id}`" class="btn btn-primary">
-          ✏️ Modifier cet employé
-        </router-link>
-        <router-link :to="`/front/employe/${employe.id}`" class="btn btn-secondary">
-          👁️ Voir les détails
-        </router-link>
-      </div>
-    </div>
-
-    <div class="navigation">
-      <router-link to="/front/" class="btn btn-back">← Retour au menu principal</router-link>
-      <router-link to="/front/employes" class="btn btn-list">Voir tous les employés</router-link>
-    </div>
+          <div style="margin-top: 30px; text-align: center;">
+            <el-space>
+              <el-button 
+                type="success" 
+                :icon="ArrowLeft"
+                @click="$router.push('/front/')"
+              >
+                Retour au menu principal
+              </el-button>
+              <el-button 
+                type="info" 
+                :icon="List"
+                @click="$router.push('/front/employes')"
+              >
+                Voir tous les employés
+              </el-button>
+            </el-space>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script>
 import { getEmploye } from '../services/api';
+import { Edit, View, ArrowLeft, List } from '@element-plus/icons-vue';
 
 export default {
   name: 'EmployeModify',
+  components: {
+    Edit,
+    View,
+    ArrowLeft,
+    List
+  },
   data() {
     return {
       modifyId: '',
       employe: null,
+      employeFound: false,
       loading: false,
       error: ''
     };
+  },
+  computed: {
+    employeFound() {
+      return !!this.employe;
+    }
   },
   methods: {
     async searchEmployeToModify() {
@@ -79,126 +147,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.employe-modify {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.search-form {
-  display: flex;
-  gap: 15px;
-  align-items: end;
-  margin-bottom: 20px;
-}
-
-.input-group {
-  flex: 1;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-}
-
-.input-group input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-}
-
-button {
-  padding: 10px 20px;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-button:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-}
-
-button:hover:not(:disabled) {
-  background: #0056b3;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  padding: 10px;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-
-.employe-preview {
-  margin: 20px 0;
-}
-
-.employe-card {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.employe-card p {
-  margin: 10px 0;
-}
-
-.actions {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  margin: 20px 0;
-}
-
-.btn {
-  padding: 12px 24px;
-  text-decoration: none;
-  border-radius: 4px;
-  display: inline-block;
-  font-weight: bold;
-}
-
-.btn-primary {
-  background: #007bff;
-  color: white;
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-back {
-  background: #28a745;
-  color: white;
-}
-
-.btn-list {
-  background: #17a2b8;
-  color: white;
-}
-
-.btn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-.navigation {
-  margin-top: 30px;
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-}
-</style>

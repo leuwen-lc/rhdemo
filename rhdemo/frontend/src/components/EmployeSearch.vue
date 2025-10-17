@@ -1,54 +1,100 @@
 <template>
-  <div class="employe-search">
-    <h2>Rechercher un Employé par ID</h2>
-    
-    <div class="search-form">
-      <div class="input-group">
-        <label for="employeId">ID de l'employé :</label>
-        <input 
-          id="employeId"
-          v-model="searchId" 
-          type="number" 
-          placeholder="Entrez l'ID de l'employé"
-          @keyup.enter="searchEmploye"
-        />
-      </div>
-      <button @click="searchEmploye" :disabled="!searchId || loading">
-        {{ loading ? 'Recherche...' : 'Rechercher' }}
-      </button>
-    </div>
+  <div>
+    <el-row justify="center">
+      <el-col :xs="24" :sm="18" :md="12" :lg="10">
+        <el-card>
+          <template #header>
+            <h2 style="text-align: center; margin: 0;">🔍 Rechercher un Employé par ID</h2>
+          </template>
+          
+          <el-form @submit.prevent="searchEmploye">
+            <el-form-item label="ID de l'employé">
+              <el-input
+                v-model="searchId"
+                type="number"
+                placeholder="Entrez l'ID de l'employé"
+                @keyup.enter="searchEmploye"
+              >
+                <template #append>
+                  <el-button 
+                    type="primary" 
+                    :loading="loading"
+                    :disabled="!searchId"
+                    @click="searchEmploye"
+                  >
+                    {{ loading ? 'Recherche...' : 'Rechercher' }}
+                  </el-button>
+                </template>
+              </el-input>
+            </el-form-item>
+          </el-form>
 
-    <div v-if="error" class="error">{{ error }}</div>
-    
-    <div v-if="employe" class="employe-result">
-      <h3>Employé trouvé :</h3>
-      <div class="employe-card">
-        <p><strong>ID :</strong> {{ employe.id }}</p>
-        <p><strong>Prénom :</strong> {{ employe.prenom }}</p>
-        <p><strong>Nom :</strong> {{ employe.nom }}</p>
-        <p><strong>Email :</strong> {{ employe.mail }}</p>
-        <div class="actions">
-          <router-link :to="`/front/employe/${employe.id}`" class="btn btn-primary">
-            Voir les détails
-          </router-link>
-          <router-link :to="`/front/edition/${employe.id}`" class="btn btn-secondary">
-            Modifier
-          </router-link>
-        </div>
-      </div>
-    </div>
+          <el-alert
+            v-if="error"
+            :title="error"
+            type="error"
+            show-icon
+            style="margin: 20px 0;"
+          />
+          
+          <el-card v-if="employe" style="margin-top: 20px;">
+            <template #header>
+              <h3 style="margin: 0;">👤 Employé trouvé</h3>
+            </template>
+            
+            <el-descriptions :column="1" border>
+              <el-descriptions-item label="ID">{{ employe.id }}</el-descriptions-item>
+              <el-descriptions-item label="Prénom">{{ employe.prenom }}</el-descriptions-item>
+              <el-descriptions-item label="Nom">{{ employe.nom }}</el-descriptions-item>
+              <el-descriptions-item label="Email">{{ employe.mail }}</el-descriptions-item>
+            </el-descriptions>
+            
+            <div style="margin-top: 20px; text-align: center;">
+              <el-space>
+                <el-button 
+                  type="primary" 
+                  :icon="View"
+                  @click="$router.push(`/front/employe/${employe.id}`)"
+                >
+                  Voir les détails
+                </el-button>
+                <el-button 
+                  type="warning" 
+                  :icon="Edit"
+                  @click="$router.push(`/front/edition/${employe.id}`)"
+                >
+                  Modifier
+                </el-button>
+              </el-space>
+            </div>
+          </el-card>
 
-    <div class="navigation">
-      <router-link to="/front/" class="btn btn-back">← Retour au menu principal</router-link>
-    </div>
+          <div style="margin-top: 30px; text-align: center;">
+            <el-button 
+              type="success" 
+              :icon="ArrowLeft"
+              @click="$router.push('/front/')"
+            >
+              Retour au menu principal
+            </el-button>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script>
 import { getEmploye } from '../services/api';
+import { View, Edit, ArrowLeft } from '@element-plus/icons-vue';
 
 export default {
   name: 'EmployeSearch',
+  components: {
+    View,
+    Edit,
+    ArrowLeft
+  },
   data() {
     return {
       searchId: '',
@@ -77,114 +123,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.employe-search {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.search-form {
-  display: flex;
-  gap: 15px;
-  align-items: end;
-  margin-bottom: 20px;
-}
-
-.input-group {
-  flex: 1;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-}
-
-.input-group input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-}
-
-button {
-  padding: 10px 20px;
-  background: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-button:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-}
-
-button:hover:not(:disabled) {
-  background: #0056b3;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  padding: 10px;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-
-.employe-result {
-  margin: 20px 0;
-}
-
-.employe-card {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.employe-card p {
-  margin: 10px 0;
-}
-
-.actions {
-  margin-top: 15px;
-  display: flex;
-  gap: 10px;
-}
-
-.btn {
-  padding: 8px 16px;
-  text-decoration: none;
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.btn-primary {
-  background: #007bff;
-  color: white;
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-back {
-  background: #28a745;
-  color: white;
-}
-
-.btn:hover {
-  opacity: 0.9;
-}
-
-.navigation {
-  margin-top: 30px;
-}
-</style>

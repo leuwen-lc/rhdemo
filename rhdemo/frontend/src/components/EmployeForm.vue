@@ -1,66 +1,96 @@
 <template>
-  <div class="employe-form">
-    <h2>{{ isEditing ? "✏️ Modification" : "➕ Ajout" }} d'un Employé</h2>
-    
-    <div v-if="loading" class="loading">Chargement des données...</div>
-    
-    <form @submit.prevent="submit" class="form" v-if="!loading">
-      <div class="form-group">
-        <label for="prenom">Prénom *</label>
-        <input 
-          id="prenom"
-          v-model="localEmploye.prenom" 
-          type="text"
-          placeholder="Prénom de l'employé" 
-          required 
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="nom">Nom *</label>
-        <input 
-          id="nom"
-          v-model="localEmploye.nom" 
-          type="text"
-          placeholder="Nom de l'employé" 
-          required 
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="mail">Email *</label>
-        <input 
-          id="mail"
-          v-model="localEmploye.mail" 
-          type="email"
-          placeholder="email@exemple.com" 
-          required 
-        />
-      </div>
-      
-      <div class="form-group">
-        <label for="motdepasse">{{ isEditing ? "Nouveau mot de passe" : "Mot de passe" }} *</label>
-        <input 
-          id="motdepasse"
-          v-model="localEmploye.motdepasse" 
-          type="password"
-          placeholder="Mot de passe" 
-          required 
-        />
-      </div>
-      
-      <div class="form-actions">
-        <button type="submit" :disabled="saving" class="btn btn-primary">
-          {{ saving ? 'Sauvegarde...' : (isEditing ? 'Modifier' : 'Ajouter') }}
-        </button>
-        <button type="button" @click="cancel" class="btn btn-secondary">
-          Annuler
-        </button>
-      </div>
-    </form>
-    
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
+  <div>
+    <el-row justify="center">
+      <el-col :xs="24" :sm="18" :md="12" :lg="10">
+        <el-card>
+          <template #header>
+            <h2 style="text-align: center; margin: 0;">
+              {{ isEditing ? "✏️ Modification" : "➕ Ajout" }} d'un Employé
+            </h2>
+          </template>
+          
+          <el-loading-parent v-loading="loading">
+            <el-form 
+              v-if="!loading"
+              :model="localEmploye"
+              :rules="rules"
+              ref="employeForm"
+              label-position="top"
+              @submit.prevent="submit"
+            >
+              <el-form-item label="Prénom" prop="prenom">
+                <el-input
+                  v-model="localEmploye.prenom"
+                  placeholder="Prénom de l'employé"
+                />
+              </el-form-item>
+              
+              <el-form-item label="Nom" prop="nom">
+                <el-input
+                  v-model="localEmploye.nom"
+                  placeholder="Nom de l'employé"
+                />
+              </el-form-item>
+              
+              <el-form-item label="Email" prop="mail">
+                <el-input
+                  v-model="localEmploye.mail"
+                  type="email"
+                  placeholder="email@exemple.com"
+                />
+              </el-form-item>
+              
+              <el-form-item 
+                :label="isEditing ? 'Nouveau mot de passe' : 'Mot de passe'"
+                prop="motdepasse"
+              >
+                <el-input
+                  v-model="localEmploye.motdepasse"
+                  type="password"
+                  placeholder="Mot de passe"
+                  show-password
+                />
+              </el-form-item>
+              
+              <el-form-item>
+                <el-row justify="center">
+                  <el-col :span="24" style="text-align: center;">
+                    <el-space>
+                      <el-button 
+                        type="primary" 
+                        :loading="saving"
+                        @click="submit"
+                      >
+                        {{ saving ? 'Sauvegarde...' : (isEditing ? 'Modifier' : 'Ajouter') }}
+                      </el-button>
+                      <el-button @click="cancel">
+                        Annuler
+                      </el-button>
+                    </el-space>
+                  </el-col>
+                </el-row>
+              </el-form-item>
+            </el-form>
+          </el-loading-parent>
+          
+          <el-alert
+            v-if="error"
+            :title="error"
+            type="error"
+            show-icon
+            style="margin-top: 20px;"
+          />
+          
+          <el-alert
+            v-if="success"
+            :title="success"
+            type="success"
+            show-icon
+            style="margin-top: 20px;"
+          />
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 <script>
@@ -80,7 +110,22 @@ export default {
       loading: false,
       saving: false,
       error: "",
-      success: ""
+      success: "",
+      rules: {
+        prenom: [
+          { required: true, message: 'Le prénom est requis', trigger: 'blur' }
+        ],
+        nom: [
+          { required: true, message: 'Le nom est requis', trigger: 'blur' }
+        ],
+        mail: [
+          { required: true, message: 'L\'email est requis', trigger: 'blur' },
+          { type: 'email', message: 'Format d\'email invalide', trigger: 'blur' }
+        ],
+        motdepasse: [
+          { required: true, message: 'Le mot de passe est requis', trigger: 'blur' }
+        ]
+      }
     };
   },
   computed: {
@@ -91,6 +136,10 @@ export default {
   async created() {
     if (this.isEditing) {
       await this.loadEmploye();
+      // Pour l'édition, le mot de passe n'est pas requis
+      this.rules.motdepasse = [
+        { message: 'Laissez vide pour conserver l\'ancien mot de passe', trigger: 'blur' }
+      ];
     }
   },
   methods: {
@@ -112,6 +161,10 @@ export default {
     },
     
     async submit() {
+      // Valider le formulaire
+      const valid = await this.$refs.employeForm.validate().catch(() => false);
+      if (!valid) return;
+      
       this.saving = true;
       this.error = "";
       this.success = "";
@@ -145,126 +198,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.employe-form {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.loading {
-  text-align: center;
-  font-size: 18px;
-  color: #007bff;
-  margin: 40px 0;
-}
-
-.form {
-  background: white;
-  padding: 30px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: bold;
-  color: #333;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 0.3s;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #007bff;
-}
-
-.form-actions {
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  margin-top: 30px;
-}
-
-.btn {
-  padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
-  min-width: 120px;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: #007bff;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #0056b3;
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #545b62;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
-  padding: 15px;
-  border-radius: 8px;
-  margin: 20px 0;
-  text-align: center;
-}
-
-.success {
-  color: #155724;
-  background: #d4edda;
-  border: 1px solid #c3e6cb;
-  padding: 15px;
-  border-radius: 8px;
-  margin: 20px 0;
-  text-align: center;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .form {
-    padding: 20px;
-  }
-  
-  .form-actions {
-    flex-direction: column;
-  }
-  
-  .btn {
-    width: 100%;
-  }
-}
-</style>

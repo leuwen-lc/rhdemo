@@ -1,64 +1,147 @@
 <template>
-  <div class="employe-delete">
-    <h2>Supprimer un Employé par ID</h2>
-    
-    <div class="warning-box">
-      ⚠️ <strong>Attention :</strong> Cette action est irréversible !
-    </div>
+  <div>
+    <el-row justify="center">
+      <el-col :xs="24" :sm="18" :md="12" :lg="10">
+        <el-card>
+          <template #header>
+            <h2 style="text-align: center; margin: 0;">🗑️ Supprimer un Employé par ID</h2>
+          </template>
+          
+          <el-alert
+            title="Attention : Cette action est irréversible !"
+            type="warning"
+            show-icon
+            :closable="false"
+            style="margin-bottom: 20px;"
+          />
 
-    <div class="search-form">
-      <div class="input-group">
-        <label for="deleteId">ID de l'employé à supprimer :</label>
-        <input 
-          id="deleteId"
-          v-model="deleteId" 
-          type="number" 
-          placeholder="Entrez l'ID de l'employé"
-          @keyup.enter="searchEmployeToDelete"
-        />
-      </div>
-      <button @click="searchEmployeToDelete" :disabled="!deleteId || loading">
-        {{ loading ? 'Recherche...' : 'Rechercher' }}
-      </button>
-    </div>
+          <!-- Étape 1: Recherche de l'employé -->
+          <el-card v-if="!employe || deleted" class="search-card">
+            <template #header>
+              <h3 style="margin: 0;">🔍 Rechercher l'employé à supprimer</h3>
+            </template>
+            
+            <el-form @submit.prevent="searchEmployeToDelete">
+              <el-form-item label="ID de l'employé à supprimer">
+                <el-input
+                  v-model="deleteId"
+                  type="number"
+                  placeholder="Entrez l'ID de l'employé"
+                  @keyup.enter="searchEmployeToDelete"
+                >
+                  <template #append>
+                    <el-button 
+                      type="primary" 
+                      :loading="loading"
+                      :disabled="!deleteId"
+                      @click="searchEmployeToDelete"
+                    >
+                      {{ loading ? 'Recherche...' : 'Rechercher' }}
+                    </el-button>
+                  </template>
+                </el-input>
+              </el-form-item>
+            </el-form>
+          </el-card>
 
-    <div v-if="error" class="error">{{ error }}</div>
-    <div v-if="success" class="success">{{ success }}</div>
-    
-    <div v-if="employe && !deleted" class="employe-preview">
-      <h3>Employé à supprimer :</h3>
-      <div class="employe-card">
-        <p><strong>ID :</strong> {{ employe.id }}</p>
-        <p><strong>Prénom :</strong> {{ employe.prenom }}</p>
-        <p><strong>Nom :</strong> {{ employe.nom }}</p>
-        <p><strong>Email :</strong> {{ employe.mail }}</p>
-      </div>
-      
-      <div class="confirmation">
-        <p><strong>Êtes-vous sûr de vouloir supprimer cet employé ?</strong></p>
-        <div class="actions">
-          <button @click="confirmDelete" :disabled="deleting" class="btn btn-danger">
-            {{ deleting ? 'Suppression...' : 'Oui, supprimer' }}
-          </button>
-          <button @click="cancelDelete" class="btn btn-secondary">
-            Annuler
-          </button>
-        </div>
-      </div>
-    </div>
+          <el-alert
+            v-if="error"
+            :title="error"
+            type="error"
+            show-icon
+            style="margin: 20px 0;"
+          />
+          
+          <el-alert
+            v-if="success"
+            :title="success"
+            type="success"
+            show-icon
+            style="margin: 20px 0;"
+          />
+          
+          <!-- Étape 2: Confirmation de suppression -->
+          <el-card v-if="employe && !deleted" style="margin-top: 20px;">
+            <template #header>
+              <h3 style="margin: 0;">⚠️ Confirmez la suppression</h3>
+            </template>
+            
+            <el-descriptions :column="1" border style="margin-bottom: 20px;">
+              <el-descriptions-item label="ID">{{ employe.id }}</el-descriptions-item>
+              <el-descriptions-item label="Prénom">{{ employe.prenom }}</el-descriptions-item>
+              <el-descriptions-item label="Nom">{{ employe.nom }}</el-descriptions-item>
+              <el-descriptions-item label="Email">{{ employe.mail }}</el-descriptions-item>
+            </el-descriptions>
+            
+            <el-alert
+              title="Êtes-vous sûr de vouloir supprimer définitivement cet employé ?"
+              type="error"
+              show-icon
+              :closable="false"
+              style="margin-bottom: 20px;"
+            />
+            
+            <div style="text-align: center;">
+              <el-space>
+                <el-popconfirm
+                  title="Confirmer la suppression définitive ?"
+                  confirm-button-text="Oui, supprimer"
+                  cancel-button-text="Annuler"
+                  confirm-button-type="danger"
+                  @confirm="confirmDelete"
+                >
+                  <template #reference>
+                    <el-button 
+                      type="danger" 
+                      :loading="deleting"
+                      :icon="Delete"
+                    >
+                      {{ deleting ? 'Suppression...' : 'Supprimer définitivement' }}
+                    </el-button>
+                  </template>
+                </el-popconfirm>
+                <el-button @click="cancelDelete">
+                  Annuler
+                </el-button>
+              </el-space>
+            </div>
+          </el-card>
 
-    <div class="navigation">
-      <router-link to="/front/" class="btn btn-back">← Retour au menu principal</router-link>
-      <router-link to="/front/employes" class="btn btn-list">Voir tous les employés</router-link>
-    </div>
+          <div style="margin-top: 30px; text-align: center;">
+            <el-space>
+              <el-button 
+                type="success" 
+                :icon="ArrowLeft"
+                @click="$router.push('/front/')"
+              >
+                Retour au menu principal
+              </el-button>
+              <el-button 
+                type="info" 
+                :icon="List"
+                @click="$router.push('/front/employes')"
+              >
+                Voir tous les employés
+              </el-button>
+            </el-space>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script>
 import { getEmploye, deleteEmploye } from '../services/api';
+import { Delete, ArrowLeft, List } from '@element-plus/icons-vue';
 
 export default {
   name: 'EmployeDelete',
+  components: {
+    Delete,
+    ArrowLeft,
+    List
+  },
   data() {
     return {
       deleteId: '',
@@ -115,145 +198,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.employe-delete {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.warning-box {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  color: #856404;
-  padding: 15px;
-  border-radius: 4px;
-  margin-bottom: 20px;
-}
-
-.search-form {
-  display: flex;
-  gap: 15px;
-  align-items: end;
-  margin-bottom: 20px;
-}
-
-.input-group {
-  flex: 1;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-}
-
-.input-group input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-}
-
-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-button:disabled {
-  background: #6c757d;
-  color: white;
-  cursor: not-allowed;
-}
-
-.error {
-  color: #dc3545;
-  background: #f8d7da;
-  padding: 10px;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-
-.success {
-  color: #155724;
-  background: #d4edda;
-  padding: 10px;
-  border-radius: 4px;
-  margin: 10px 0;
-}
-
-.employe-preview {
-  margin: 20px 0;
-}
-
-.employe-card {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.employe-card p {
-  margin: 10px 0;
-}
-
-.confirmation {
-  background: #ffe6e6;
-  border: 1px solid #ffcccc;
-  padding: 20px;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.actions {
-  margin-top: 15px;
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.btn {
-  padding: 10px 20px;
-  text-decoration: none;
-  border-radius: 4px;
-  display: inline-block;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-danger {
-  background: #dc3545;
-  color: white;
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-back {
-  background: #28a745;
-  color: white;
-}
-
-.btn-list {
-  background: #007bff;
-  color: white;
-}
-
-.btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.navigation {
-  margin-top: 30px;
-  display: flex;
-  gap: 15px;
-}
-</style>

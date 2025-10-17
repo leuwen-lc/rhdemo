@@ -23,7 +23,9 @@ public class AccueilController {
     public String getInfo() {
 	StringBuffer info=new StringBuffer();
 	info.append("API disponibles sur /api/... <br>");
-	info.append("Monitoring sur / <br>");
+	info.append("Documentation Swagger UI sur /api-docs/swagger-ui/index.html <br>");
+	info.append("Documentation OpenAPI sur /api-docs/docs <br>");
+	info.append("Monitoring sur /actuator <br>");
 	info.append("Info utilisateurs sur /who <br>");
 	info.append("Logout sur /logout");
 	return info.toString();

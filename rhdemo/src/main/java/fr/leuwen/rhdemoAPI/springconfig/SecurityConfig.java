@@ -22,8 +22,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
 	http 
 	.csrf(csrf -> csrf.disable()) // Désactive CSRF (!global!)
-	.authorizeHttpRequests(auth -> auth 
-            .requestMatchers("/who","/error*","/logout").permitAll()
+	.authorizeHttpRequests(auth -> ( auth 
+            .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
+            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
             .requestMatchers("/actuator/**").hasRole("admin")
             // Pour les requètes REST les filtres de roles sont directement au niveau des méthodes du controleur
             .anyRequest().authenticated())
@@ -34,8 +35,6 @@ public class SecurityConfig {
 		.logoutUrl("/logout")
 	        .logoutSuccessHandler(logoutSuccessHandler))
         ;
-	//	.formLogin(Customizer.withDefaults())
-	//.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable())) 
 	return http.build();
     }
     

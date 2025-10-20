@@ -1,6 +1,5 @@
 package fr.leuwen.rhdemoAPI.model;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -16,8 +15,7 @@ private Long id;
 private String prenom;
 private String nom;
 private String mail;
-@Column(name="mdp")
-private String motdepasse;
+private String adresse;
 
 
 public Long getId() {
@@ -44,11 +42,11 @@ public String getMail() {
 public void setMail(String mail) {
 	this.mail = mail;
 }
-public String getMotdepasse() {
-	return motdepasse;
+public String getAdresse() {
+	return adresse;
 }
-public void setMotdepasse(String motdepasse) {
-	this.motdepasse = motdepasse;
+public void setAdresse(String adresse) {
+	this.adresse = adresse;
 }
 
 

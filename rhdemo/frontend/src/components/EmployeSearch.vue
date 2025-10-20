@@ -47,6 +47,7 @@
               <el-descriptions-item label="Prénom">{{ employe.prenom }}</el-descriptions-item>
               <el-descriptions-item label="Nom">{{ employe.nom }}</el-descriptions-item>
               <el-descriptions-item label="Email">{{ employe.mail }}</el-descriptions-item>
+              <el-descriptions-item label="Adresse">{{ employe.adresse }}</el-descriptions-item>
             </el-descriptions>
             
             <div style="margin-top: 20px; text-align: center;">

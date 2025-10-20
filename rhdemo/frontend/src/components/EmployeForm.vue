@@ -40,15 +40,12 @@
                 />
               </el-form-item>
               
-              <el-form-item 
-                :label="isEditing ? 'Nouveau mot de passe' : 'Mot de passe'"
-                prop="motdepasse"
-              >
+              <el-form-item label="Adresse" prop="adresse">
                 <el-input
-                  v-model="localEmploye.motdepasse"
-                  type="password"
-                  placeholder="Mot de passe"
-                  show-password
+                  v-model="localEmploye.adresse"
+                  type="textarea"
+                  placeholder="Adresse complète"
+                  :rows="3"
                 />
               </el-form-item>
               
@@ -104,7 +101,7 @@ export default {
         prenom: "",
         nom: "",
         mail: "",
-        motdepasse: "",
+        adresse: "",
         id: null
       },
       loading: false,
@@ -122,9 +119,7 @@ export default {
           { required: true, message: 'L\'email est requis', trigger: 'blur' },
           { type: 'email', message: 'Format d\'email invalide', trigger: 'blur' }
         ],
-        motdepasse: [
-          { required: true, message: 'Le mot de passe est requis', trigger: 'blur' }
-        ]
+        adresse: []
       }
     };
   },
@@ -136,9 +131,14 @@ export default {
   async created() {
     if (this.isEditing) {
       await this.loadEmploye();
-      // Pour l'édition, le mot de passe n'est pas requis
-      this.rules.motdepasse = [
-        { message: 'Laissez vide pour conserver l\'ancien mot de passe', trigger: 'blur' }
+      // Pour l'édition, l'adresse n'est pas obligatoire si on veut la conserver
+      this.rules.adresse = [
+        { message: 'Laissez vide pour conserver l\'ancienne adresse', trigger: 'blur' }
+      ];
+    } else {
+      // Pour la création, l'adresse est requise
+      this.rules.adresse = [
+        { required: true, message: 'L\'adresse est requise', trigger: 'blur' }
       ];
     }
   },
@@ -150,9 +150,7 @@ export default {
       try {
         const res = await getEmploye(this.$route.params.id);
         this.localEmploye = { ...res.data };
-        // Vider le mot de passe pour la sécurité
-        this.localEmploye.motdepasse = "";
-      } catch (e) {
+        } catch (e) {
         this.error = "Erreur lors du chargement de l'employé";
         console.error('Erreur de chargement:', e);
       } finally {
@@ -171,9 +169,9 @@ export default {
       
       try {
         const employeToSave = { ...this.localEmploye };
-        // Pour la modification, si le mot de passe est vide, ne pas l'envoyer
-        if (this.isEditing && !employeToSave.motdepasse) {
-          delete employeToSave.motdepasse;
+        // Pour la modification, si l'adresse est vide, ne pas l'envoyer
+        if (this.isEditing && !employeToSave.adresse) {
+          delete employeToSave.adresse;
         }
         
         const result = await saveEmploye(employeToSave);

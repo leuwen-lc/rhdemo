@@ -53,7 +53,7 @@ public class EmployeController {
 	      logger.debug("Prénom reçu: {}", employe.getPrenom());
 	      logger.debug("Nom reçu: {}", employe.getNom());
 	      logger.debug("Mail reçu: {}", employe.getMail());
-	      logger.debug("Mot de passe reçu: {}", employe.getMotdepasse() != null ? "[MASQUÉ]" : "null");
+	      logger.debug("Adresse reçue: {}", employe.getAdresse());
 	      logger.info("Données employé validées, sauvegarde en cours...");
 	      
 	      Employe savedEmploye = employeservice.saveEmploye(employe);

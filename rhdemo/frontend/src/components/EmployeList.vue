@@ -45,6 +45,7 @@
             <el-table-column prop="prenom" label="Prénom" />
             <el-table-column prop="nom" label="Nom" />
             <el-table-column prop="mail" label="Email" />
+            <el-table-column prop="adresse" label="Adresse" />
             <el-table-column label="Actions" width="300">
               <template #default="scope">
                 <el-space>

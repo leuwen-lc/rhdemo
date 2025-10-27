@@ -5,7 +5,7 @@ CREATE TABLE employes (
   prenom VARCHAR(250) NOT NULL,
   nom VARCHAR(250) NOT NULL,
   mail VARCHAR(250) NOT NULL,
-  adresse VARCHAR(500) NOT NULL
+  adresse VARCHAR(500)
 );
  
 INSERT INTO employes (prenom, nom, mail, adresse) VALUES

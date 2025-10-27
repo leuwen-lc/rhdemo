@@ -40,11 +40,11 @@
                 />
               </el-form-item>
               
-              <el-form-item label="Adresse" prop="adresse">
+              <el-form-item label="Adresse (optionnelle)" prop="adresse">
                 <el-input
                   v-model="localEmploye.adresse"
                   type="textarea"
-                  placeholder="Adresse complète"
+                  placeholder="Adresse complète (optionnelle)"
                   :rows="3"
                 />
               </el-form-item>
@@ -119,7 +119,7 @@ export default {
           { required: true, message: 'L\'email est requis', trigger: 'blur' },
           { type: 'email', message: 'Format d\'email invalide', trigger: 'blur' }
         ],
-        adresse: []
+        adresse: []  // Adresse optionnelle pour tous les cas
       }
     };
   },
@@ -131,15 +131,6 @@ export default {
   async created() {
     if (this.isEditing) {
       await this.loadEmploye();
-      // Pour l'édition, l'adresse n'est pas obligatoire si on veut la conserver
-      this.rules.adresse = [
-        { message: 'Laissez vide pour conserver l\'ancienne adresse', trigger: 'blur' }
-      ];
-    } else {
-      // Pour la création, l'adresse est requise
-      this.rules.adresse = [
-        { required: true, message: 'L\'adresse est requise', trigger: 'blur' }
-      ];
     }
   },
   methods: {
@@ -169,9 +160,9 @@ export default {
       
       try {
         const employeToSave = { ...this.localEmploye };
-        // Pour la modification, si l'adresse est vide, ne pas l'envoyer
-        if (this.isEditing && !employeToSave.adresse) {
-          delete employeToSave.adresse;
+        // Si l'adresse est vide, envoyer une chaîne vide ou null (selon l'API backend)
+        if (!employeToSave.adresse) {
+          employeToSave.adresse = '';
         }
         
         const result = await saveEmploye(employeToSave);

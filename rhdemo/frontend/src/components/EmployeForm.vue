@@ -22,6 +22,7 @@
                 <el-input
                   v-model="localEmploye.prenom"
                   placeholder="Prénom de l'employé"
+                  data-testid="employe-prenom-input"
                 />
               </el-form-item>
               
@@ -29,6 +30,7 @@
                 <el-input
                   v-model="localEmploye.nom"
                   placeholder="Nom de l'employé"
+                  data-testid="employe-nom-input"
                 />
               </el-form-item>
               
@@ -37,6 +39,7 @@
                   v-model="localEmploye.mail"
                   type="email"
                   placeholder="email@exemple.com"
+                  data-testid="employe-email-input"
                 />
               </el-form-item>
               
@@ -46,6 +49,7 @@
                   type="textarea"
                   placeholder="Adresse complète (optionnelle)"
                   :rows="3"
+                  data-testid="employe-adresse-input"
                 />
               </el-form-item>
               
@@ -57,10 +61,14 @@
                         type="primary" 
                         :loading="saving"
                         @click="submit"
+                        data-testid="employe-submit-button"
                       >
                         {{ saving ? 'Sauvegarde...' : (isEditing ? 'Modifier' : 'Ajouter') }}
                       </el-button>
-                      <el-button @click="cancel">
+                      <el-button 
+                        @click="cancel"
+                        data-testid="employe-cancel-button"
+                      >
                         Annuler
                       </el-button>
                     </el-space>
@@ -76,6 +84,7 @@
             type="error"
             show-icon
             style="margin-top: 20px;"
+            data-testid="employe-error-alert"
           />
           
           <el-alert
@@ -84,6 +93,7 @@
             type="success"
             show-icon
             style="margin-top: 20px;"
+            data-testid="employe-success-alert"
           />
         </el-card>
       </el-col>

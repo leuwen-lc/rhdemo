@@ -11,6 +11,7 @@
                 type="primary" 
                 :icon="Plus" 
                 @click="$router.push('/front/ajout')"
+                data-testid="add-employe-button"
               >
                 Ajouter un employé
               </el-button>
@@ -18,6 +19,7 @@
                 type="info" 
                 :icon="Refresh" 
                 @click="fetchEmployes"
+                data-testid="refresh-button"
               >
                 Actualiser
               </el-button>
@@ -40,6 +42,7 @@
             style="width: 100%"
             stripe
             border
+            data-testid="employes-table"
           >
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column prop="prenom" label="Prénom" />
@@ -54,6 +57,7 @@
                     type="info" 
                     :icon="View"
                     @click="$router.push(`/front/employe/${scope.row.id}`)"
+                    :data-testid="`view-button-${scope.row.id}`"
                   >
                     Voir
                   </el-button>
@@ -62,6 +66,7 @@
                     type="warning" 
                     :icon="Edit"
                     @click="edit(scope.row.id)"
+                    :data-testid="`edit-button-${scope.row.id}`"
                   >
                     Editer
                   </el-button>
@@ -74,6 +79,7 @@
                         size="small" 
                         type="danger" 
                         :icon="Delete"
+                        :data-testid="`delete-button-${scope.row.id}`"
                       >
                         Supprimer
                       </el-button>

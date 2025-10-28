@@ -28,6 +28,7 @@
                   type="number"
                   placeholder="Entrez l'ID de l'employé"
                   @keyup.enter="searchEmployeToDelete"
+                  data-testid="delete-id-input"
                 >
                   <template #append>
                     <el-button 
@@ -35,6 +36,7 @@
                       :loading="loading"
                       :disabled="!deleteId"
                       @click="searchEmployeToDelete"
+                      data-testid="search-employe-button"
                     >
                       {{ loading ? 'Recherche...' : 'Rechercher' }}
                     </el-button>
@@ -50,6 +52,7 @@
             type="error"
             show-icon
             style="margin: 20px 0;"
+            data-testid="delete-error-alert"
           />
           
           <el-alert
@@ -58,6 +61,7 @@
             type="success"
             show-icon
             style="margin: 20px 0;"
+            data-testid="delete-success-alert"
           />
           
           <!-- Étape 2: Confirmation de suppression -->
@@ -66,7 +70,7 @@
               <h3 style="margin: 0;">⚠️ Confirmez la suppression</h3>
             </template>
             
-            <el-descriptions :column="1" border style="margin-bottom: 20px;">
+            <el-descriptions :column="1" border style="margin-bottom: 20px;" data-testid="employe-details">
               <el-descriptions-item label="ID">{{ employe.id }}</el-descriptions-item>
               <el-descriptions-item label="Prénom">{{ employe.prenom }}</el-descriptions-item>
               <el-descriptions-item label="Nom">{{ employe.nom }}</el-descriptions-item>
@@ -89,6 +93,7 @@
                   confirm-button-text="Oui, supprimer"
                   cancel-button-text="Annuler"
                   confirm-button-type="danger"
+                  :confirm-button-attrs="{ 'data-testid': 'confirm-deletex2-button' }"
                   @confirm="confirmDelete"
                 >
                   <template #reference>
@@ -96,12 +101,16 @@
                       type="danger" 
                       :loading="deleting"
                       :icon="Delete"
+                      data-testid="confirm-delete-button"
                     >
                       {{ deleting ? 'Suppression...' : 'Supprimer définitivement' }}
                     </el-button>
                   </template>
                 </el-popconfirm>
-                <el-button @click="cancelDelete">
+                <el-button 
+                  @click="cancelDelete"
+                  data-testid="cancel-delete-button"
+                >
                   Annuler
                 </el-button>
               </el-space>

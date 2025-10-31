@@ -173,9 +173,13 @@ export default {
       this.employe = null;
       this.deleted = false;
       
+      //console.log('🔍 [AVANT GET] Cookie CSRF:', document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN=')));
+      
       try {
         const response = await getEmploye(this.deleteId);
         this.employe = response.data;
+        
+        //console.log('🔍 [APRÈS GET] Cookie CSRF:', document.cookie.split('; ').find(r => r.startsWith('XSRF-TOKEN=')));
       } catch (err) {
         this.error = 'Employé non trouvé ou erreur de connexion';
       } finally {

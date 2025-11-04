@@ -35,7 +35,7 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
   - Possibilité de migration vers Cypress si souhaité.
 - Outils recommandés : JUnit, Mockito (backend), Jest / Vue Test Utils (frontend), Selenium / Cypress (E2E).
 
-## DevSecOps — checklist (à intégrer dès le début)
+## DevSecOps — checklist (à éprouver)
 - Authentification / Autorisation : Keycloak (ou équivalent).
   - Ne pas stocker de mots de passe en clair dans la base ; externaliser la gestion d'identités.
 - Secrets : ne pas committer. Utiliser Vault, AWS Secrets Manager, Kubernetes Secrets ou équivalent.
@@ -46,27 +46,21 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
 - Politique de mots de passe et MFA (si le contexte l'impose).
 - Contrôles d’accès : RBAC ou scopes simples selon les besoins.
 
-## Installation (prérequis)
-- Java 11+ (ou version définie par le projet)
-- Maven (ou Gradle selon le projet)
-- Node.js 14+ et npm/yarn
-- Docker (optionnel, pour Keycloak, base de données, etc.)
+## Installation (TODO)
+- Java 21+ (ou version définie par le projet)
+- Maven 
+- Docker (pour Keycloak et pour déploiement)
 
-## Lancer le projet (exemples)
+## Lancer le projet (TODO)
 1. Démarrer les services dépendants (Keycloak, base de données) — exemple avec Docker Compose :
    ```bash
    docker compose up -d
    ```
-2. Lancer le back‑end (depuis le répertoire `backend`) :
+2. Lancer le back‑end et le front-end
    ```bash
    mvn clean spring-boot:run
    ```
-3. Lancer le front‑end (depuis le répertoire `frontend`) :
-   ```bash
-   npm install
-   npm run dev
-   ```
-4. Lancer les tests E2E (projet séparé `e2e-tests`) :
+3. Lancer les tests E2E (projet séparé `e2e-tests`) :
    ```bash
    # Exemple pour Selenium (via Maven ou script dédié)
    mvn -f e2e-tests clean test

@@ -1,0 +1,5 @@
+Principal
+Name: [be35c87a-0c7d-482d-a2ce-612a0d570c33], Granted Authorities: [[OIDC_USER, SCOPE_email, SCOPE_openid, SCOPE_profile]], User Attributes: [{at_hash=Oa20ch4g48j3-Omsp66-JQ, sub=be35c87a-0c7d-482d-a2ce-612a0d570c33, resource_access={RHDemo={roles=[ROLE_consult, ROLE_MAJ]}, account={roles=[manage-account, manage-account-links, view-profile]}}, email_verified=false, iss=http://localhost:6080/realms/LeuwenRealm, typ=ID, preferred_username=madjid, given_name=madjid, nonce=E1rBPyRsxqtbBFvkP0HF_P_bQND14n2YBD8oe3yFD7E, sid=838f6bc2-0436-485e-b7c6-311d4ce77d3c, aud=[RHDemo], acr=1, azp=RHDemo, auth_time=2025-11-04T09:47:03Z, name=madjid hamza, exp=2025-11-04T09:52:03Z, session_state=838f6bc2-0436-485e-b7c6-311d4ce77d3c, family_name=hamza, iat=2025-11-04T09:47:03Z, email=madjid@free.fr, jti=9c7ee4a6-1651-40d0-bf83-523105861f2f}]
+
+Authorities
+[ROLE_consult, ROLE_MAJ]

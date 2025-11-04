@@ -5,6 +5,9 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +34,27 @@ public class EmployeController {
 		return employeservice.getEmployes();
 	}
 	
+	/**
+	 * Récupère une page d'employés avec pagination.
+	 * 
+	 * @param page Numéro de la page à récupérer (commence à 0). Par défaut : 0 (première page)
+	 * @param size Nombre d'éléments par page. Par défaut : 20.
+	 * @return Page<Employe> Objet contenant la liste des employés de la page demandée ainsi que 
+	 *         les métadonnées de pagination (totalElements, totalPages, etc.)
+	 * 
+	 * Exemple d'utilisation :
+	 * - GET /api/employes/page              → Première page avec 20 éléments
+	 * - GET /api/employes/page?page=0       → Première page avec 20 éléments
+	 * - GET /api/employes/page?page=2&size=50 → Troisième page avec 50 éléments
+	 */
+	@GetMapping("/api/employes/page")
+	@PreAuthorize("hasRole('consult')")
+	public Page<Employe> getEmployesPage(
+			@RequestParam(defaultValue = "0") int page,
+			@RequestParam(defaultValue = "20") int size) {
+		Pageable pageable = PageRequest.of(page, size);
+		return employeservice.getEmployesPage(pageable);
+	}
 	
 	@GetMapping("/api/employe")
 	@PreAuthorize("hasRole('consult')")

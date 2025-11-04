@@ -24,6 +24,13 @@ public class EmployeListPage {
     private final By refreshButton = By.cssSelector("[data-testid='refresh-button']");
     private final By pageTitle = By.xpath("//h2[contains(text(), 'Liste de tous les Employés')]");
     
+    // Locators pour la pagination
+    private final By pagination = By.cssSelector("[data-testid='pagination']");
+    private final By paginationPrevButton = By.cssSelector("[data-testid='pagination'] button.btn-prev");
+    private final By paginationNextButton = By.cssSelector("[data-testid='pagination'] button.btn-next");
+    private final By paginationNumbers = By.cssSelector("[data-testid='pagination'] .el-pager li");
+    private final By paginationTotal = By.cssSelector("[data-testid='pagination'] .el-pagination__total");
+    
     public EmployeListPage(WebDriver driver) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
@@ -184,5 +191,208 @@ public class EmployeListPage {
         waitForTableToLoad();
         WebElement deleteButton = driver.findElement(By.cssSelector("[data-testid='delete-button-" + employeId + "']"));
         deleteButton.click();
+    }
+    
+    // ============= MÉTHODES DE PAGINATION =============
+    
+    /**
+     * Vérifie si la pagination est présente sur la page
+     */
+    public boolean isPaginationPresent() {
+        try {
+            return driver.findElement(pagination).isDisplayed();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Récupère le nombre total d'éléments depuis la pagination
+     */
+    public int getTotalElementsFromPagination() {
+        if (!isPaginationPresent()) {
+            return getEmployeCount();
+        }
+        
+        try {
+            WebElement totalElement = driver.findElement(paginationTotal);
+            String totalText = totalElement.getText(); // Format: "Total: 303"
+            return Integer.parseInt(totalText.replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+    
+    /**
+     * Navigue vers la dernière page en cliquant sur le dernier numéro de page
+     */
+    public void goToLastPage() {
+        if (!isPaginationPresent()) {
+            return; // Pas de pagination, déjà sur la seule page
+        }
+        
+        try {
+            // Trouver tous les numéros de page
+            List<WebElement> pageNumbers = driver.findElements(paginationNumbers);
+            
+            if (!pageNumbers.isEmpty()) {
+                // Le dernier élément non-actif est la dernière page
+                WebElement lastPageNumber = null;
+                for (WebElement pageNumber : pageNumbers) {
+                    if (!pageNumber.getAttribute("class").contains("is-active") 
+                        && !pageNumber.getAttribute("class").contains("more")) {
+                        lastPageNumber = pageNumber;
+                    }
+                }
+                
+                if (lastPageNumber != null) {
+                    lastPageNumber.click();
+                    waitForTableToLoad();
+                    // Attendre que la page soit chargée
+                    Thread.sleep(1000);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la navigation vers la dernière page: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Navigue vers la page suivante
+     */
+    public void goToNextPage() {
+        if (!isPaginationPresent()) {
+            return;
+        }
+        
+        try {
+            WebElement nextButton = driver.findElement(paginationNextButton);
+            if (nextButton.isEnabled()) {
+                nextButton.click();
+                waitForTableToLoad();
+                Thread.sleep(500);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la navigation vers la page suivante: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Navigue vers la page précédente
+     */
+    public void goToPreviousPage() {
+        if (!isPaginationPresent()) {
+            return;
+        }
+        
+        try {
+            WebElement prevButton = driver.findElement(paginationPrevButton);
+            if (prevButton.isEnabled()) {
+                prevButton.click();
+                waitForTableToLoad();
+                Thread.sleep(500);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la navigation vers la page précédente: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Cherche un employé par email dans toutes les pages (pagination robuste)
+     * Commence par la dernière page (où se trouvent les nouveaux employés)
+     */
+    public boolean findEmployeByEmailAcrossPages(String email) {
+        if (!isPaginationPresent()) {
+            // Pas de pagination, recherche simple
+            return isEmployePresentByEmail(email);
+        }
+        
+        // D'abord vérifier la dernière page (les nouveaux employés y sont)
+        goToLastPage();
+        if (isEmployePresentByEmail(email)) {
+            return true;
+        }
+        
+        // Si pas trouvé, parcourir toutes les pages depuis le début
+        goToFirstPage();
+        
+        do {
+            if (isEmployePresentByEmail(email)) {
+                return true;
+            }
+        } while (goToNextPageIfPossible());
+        
+        return false;
+    }
+    
+    /**
+     * Navigue vers la première page
+     */
+    public void goToFirstPage() {
+        if (!isPaginationPresent()) {
+            return;
+        }
+        
+        try {
+            List<WebElement> pageNumbers = driver.findElements(paginationNumbers);
+            if (!pageNumbers.isEmpty()) {
+                // Le premier élément est toujours la page 1
+                pageNumbers.get(0).click();
+                waitForTableToLoad();
+                Thread.sleep(500);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la navigation vers la première page: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Navigue vers la page suivante si possible
+     * @return true si la navigation a réussi, false sinon (dernière page)
+     */
+    private boolean goToNextPageIfPossible() {
+        if (!isPaginationPresent()) {
+            return false;
+        }
+        
+        try {
+            WebElement nextButton = driver.findElement(paginationNextButton);
+            if (nextButton.isEnabled() && !nextButton.getAttribute("class").contains("disabled")) {
+                nextButton.click();
+                waitForTableToLoad();
+                Thread.sleep(500);
+                return true;
+            }
+        } catch (Exception e) {
+            // Fin de pagination ou erreur
+        }
+        return false;
+    }
+    
+    /**
+     * Récupère l'ID d'un employé par email en parcourant toutes les pages si nécessaire
+     */
+    public String getEmployeIdByEmailAcrossPages(String email) {
+        if (!isPaginationPresent()) {
+            return getEmployeIdByEmail(email);
+        }
+        
+        // Commencer par la dernière page
+        goToLastPage();
+        String employeId = getEmployeIdByEmail(email);
+        if (employeId != null) {
+            return employeId;
+        }
+        
+        // Parcourir depuis le début
+        goToFirstPage();
+        do {
+            employeId = getEmployeIdByEmail(email);
+            if (employeId != null) {
+                return employeId;
+            }
+        } while (goToNextPageIfPossible());
+        
+        return null;
     }
 }

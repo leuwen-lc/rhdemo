@@ -3,6 +3,8 @@ package fr.leuwen.rhdemoAPI.service;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import fr.leuwen.rhdemoAPI.model.Employe;
@@ -22,6 +24,9 @@ public class EmployeService {
         return employerepository.findAll();
     }
 
+    public Page<Employe> getEmployesPage(Pageable pageable) {
+        return employerepository.findAll(pageable);
+    }
 
     public void deleteEmploye(final Long id) {
         employerepository.deleteById(id);

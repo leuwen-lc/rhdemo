@@ -100,5 +100,9 @@ export default {
 .menu-button {
   width: 100%;
   height: 50px;
+  margin: 0 !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
 }
+
 </style>

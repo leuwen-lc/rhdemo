@@ -53,6 +53,10 @@ export function getEmployes() {
   return api.get('/employes');
 }
 
+export function getEmployesPage(page = 0, size = 20) {
+  return api.get('/employes/page', { params: { page, size } });
+}
+
 export function getEmploye(id) {
   return api.get('/employe', { params: { id } });
 }

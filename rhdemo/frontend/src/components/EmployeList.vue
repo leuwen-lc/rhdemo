@@ -8,6 +8,14 @@
           <el-col :span="12" style="text-align: center;">
             <el-space>
               <el-button 
+                type="default" 
+                :icon="HomeFilled" 
+                @click="$router.push('/front')"
+                data-testid="back-to-menu-button"
+              >
+                Retour au menu
+              </el-button>
+              <el-button 
                 type="primary" 
                 :icon="Plus" 
                 @click="$router.push('/front/ajout')"
@@ -45,8 +53,8 @@
             data-testid="employes-table"
           >
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="prenom" label="Prénom" />
-            <el-table-column prop="nom" label="Nom" />
+            <el-table-column prop="prenom" label="Prénom" sortable />
+            <el-table-column prop="nom" label="Nom" sortable />
             <el-table-column prop="mail" label="Email" />
             <el-table-column prop="adresse" label="Adresse" />
             <el-table-column label="Actions" width="300">
@@ -90,6 +98,21 @@
             </el-table-column>
           </el-table>
           
+          <el-row justify="center" style="margin-top: 20px;" v-if="employes.length > 0">
+            <div data-testid="pagination">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :page-sizes="[10, 20, 50, 100]"
+                :total="totalElements"
+                layout="total, sizes, prev, pager, next, jumper"
+                @size-change="handleSizeChange"
+                @current-change="handlePageChange"
+                background
+              />
+            </div>
+          </el-row>
+          
           <el-empty 
             v-else-if="!loading && !error"
             description="Aucun employé trouvé"
@@ -108,8 +131,8 @@
   </div>
 </template>
 <script>
-import { getEmployes, deleteEmploye } from '../services/api';
-import { Plus, Refresh, View, Edit, Delete } from '@element-plus/icons-vue';
+import { getEmployesPage, deleteEmploye } from '../services/api';
+import { Plus, Refresh, View, Edit, Delete, HomeFilled } from '@element-plus/icons-vue';
 
 export default {
   components: {
@@ -117,13 +140,17 @@ export default {
     Refresh,
     View,
     Edit,
-    Delete
+    Delete,
+    HomeFilled
   },
   data() {
     return {
       employes: [],
       loading: false,
-      error: ''
+      error: '',
+      currentPage: 1,
+      pageSize: 20,
+      totalElements: 0
     };
   },
   methods: {
@@ -131,8 +158,9 @@ export default {
       this.loading = true;
       this.error = '';
       try {
-        const res = await getEmployes();
-        this.employes = res.data;
+        const res = await getEmployesPage(this.currentPage - 1, this.pageSize);
+        this.employes = res.data.content;
+        this.totalElements = res.data.totalElements;
       } catch (e) {
         this.error = 'Erreur de chargement';
       } finally {
@@ -149,6 +177,15 @@ export default {
     },
     edit(id) {
       this.$router.push(`/front/edition/${id}`);
+    },
+    handlePageChange(page) {
+      this.currentPage = page;
+      this.fetchEmployes();
+    },
+    handleSizeChange(size) {
+      this.pageSize = size;
+      this.currentPage = 1;
+      this.fetchEmployes();
     }
   },
   created() {

@@ -85,18 +85,31 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
             .as("La page de liste devrait être chargée")
             .isTrue();
         
-        // Vérifier que l'employé est présent par email
-        assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
-            .as("L'employé devrait être présent dans la liste (recherche par email)")
-            .isTrue();
+        // Vérifier si la pagination est présente
+        boolean hasPagination = listPage.isPaginationPresent();
+        System.out.println("Pagination présente: " + (hasPagination ? "Oui" : "Non"));
         
-        // Vérifier que l'employé est présent par nom
-        assertThat(listPage.isEmployePresentByName(TEST_PRENOM, TEST_NOM))
-            .as("L'employé devrait être présent dans la liste (recherche par nom)")
-            .isTrue();
+        if (hasPagination) {
+            // Avec pagination: l'employé est sur la dernière page (ajout récent)
+            System.out.println("Navigation vers la dernière page...");
+            listPage.goToLastPage();
+            
+            // Vérifier que l'employé est présent sur la dernière page
+            assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
+                .as("L'employé devrait être présent sur la dernière page")
+                .isTrue();
+            
+            // Récupérer l'ID sur cette page
+            employeId = listPage.getEmployeIdByEmail(TEST_EMAIL);
+        } else {
+            // Sans pagination: recherche simple
+            assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
+                .as("L'employé devrait être présent dans la liste")
+                .isTrue();
+            
+            employeId = listPage.getEmployeIdByEmail(TEST_EMAIL);
+        }
         
-        // Récupérer l'ID de l'employé pour la suppression
-        employeId = listPage.getEmployeIdByEmail(TEST_EMAIL);
         assertThat(employeId)
             .as("L'ID de l'employé devrait être récupéré")
             .isNotNull()
@@ -183,8 +196,18 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         // Actualiser la liste pour s'assurer d'avoir les données à jour
         listPage.clickRefreshButton();
         
+        // Vérifier avec gestion de pagination
+        boolean employeStillPresent;
+        if (listPage.isPaginationPresent()) {
+            // Recherche dans toutes les pages
+            employeStillPresent = listPage.findEmployeByEmailAcrossPages(TEST_EMAIL);
+        } else {
+            // Recherche simple
+            employeStillPresent = listPage.isEmployePresentByEmail(TEST_EMAIL);
+        }
+        
         // Vérifier que l'employé n'est plus présent
-        assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
+        assertThat(employeStillPresent)
             .as("L'employé ne devrait plus être présent dans la liste")
             .isFalse();
         

@@ -7,39 +7,37 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
 - Utiliser un agent IA (Copilot Chat dans VS Code) pour améliorer la productivité et la qualité du code.
 - S'appuyer sur Spring Boot et son écosystème pour le back‑end.
 - Fournir une IHM riche côté client avec Vue.js et le design system Element Plus.
-- Mettre en place une structure évolutive (layers, API, client riche, gestion des rôles).
+- Mettre en place une structure solide et évolutive même si le projet reste simple (layers, API, client riche, OIDC, gestion des rôles, CI/CD, test-automatisés, déploiement en containers,...).
 - Intégrer des considérations DevSecOps dès le début du projet.
 
 ## Principes généraux
 - Favoriser l'utilisation des composants fournis (Element Plus) plutôt que de sur‑spécifier l'IHM.
 - Rendre les tests IHM robustes (usage de marqueurs `data-testid`), tout en vérifiant l'accessibilité d'Element Plus dans le contexte de l'application.
-- Préférer les solutions éprouvées pour l'authentification et la gestion des identités (Keycloak).
-- Séparer les responsabilités : Backend For Frontend (BFF) pour simplifier les flows d'authentification côté client.
+- Mettre en place une solutions éprouvées pour l'authentification et la gestion des identités. La gestion des identités par l'applicatif n'est plus acceptable même sur des petits projets.
+- Séparer les responsabilités : Backend For Frontend (BFF), c'est le backend qui obtiens les jetons auprès du fournisseur d'identité et les stocke pour sécuriser les flows d'authentification.
 
 ## Fonctionnalités
-- Application basique CRUD (Create / Read / Update / Delete).
-- Architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
-- Pagination gérée côté front‑end et back‑end (attention à l'impact perf lorsque le jeu de données grossit).
+- Application basique CRUD (Create / Read / Update / Delete)....
+- ... Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
+- Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit.
 
 ## Architecture
 - Back‑end : Spring Boot, Spring Security (BFF pour déléguer l'authentification).
   - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
-  - Le back‑end renvoie un cookie de session (approche stateful) ; il faut activer la protection CSRF.
+  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF sera activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté (TODO).
 - Front‑end : Vue.js + Element Plus (design system) — privilégier les composants standards pour accélérer le développement.
-- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Option possible : remplacer par Cypress selon préférence.
+- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
 
 ## Tests
-- Tests unitaires pour le back‑end et le front‑end.
-- Tests d'intégration / bout en bout :
-  - Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse.
-  - Possibilité de migration vers Cypress si souhaité.
-- Outils recommandés : JUnit, Mockito (backend), Jest / Vue Test Utils (frontend), Selenium / Cypress (E2E).
+- Tests d'intégration (avec base H2) pour le back‑end intégré dans la chaine de build (Maven).
+- Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse.
+- Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
 
-## DevSecOps — checklist (à éprouver)
+## DevSecOps — checklist (à afiner)
 - Authentification / Autorisation : Keycloak (ou équivalent).
   - Ne pas stocker de mots de passe en clair dans la base ; externaliser la gestion d'identités.
-- Secrets : ne pas committer. Utiliser Vault, AWS Secrets Manager, Kubernetes Secrets ou équivalent.
-- Dépendances : SCA (OWASP Dependency‑Check, Snyk, Dependabot).
+- Secrets : ne pas committer. Utiliser Vault, AWS Secrets Manager, Kubernetes Secrets ou équivalent (TODO).
+- Dépendances : SCA (OWASP Dependency‑Check, Snyk, Dependabot) (TODO dans la chaine CI/CD).
 - CI : SAST minimal (ESLint/TSLint pour frontend, SpotBugs/Bandit selon la stack) + tests unitaires.
 - TLS : activer TLS sur les endpoints publics (certificats en staging/production).
 - Logging / monitoring basique : succès/échecs d'authentification, erreurs applicatives, métriques de disponibilité.
@@ -48,8 +46,9 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
 
 ## Installation (TODO)
 - Java 21+ (ou version définie par le projet)
-- Maven 
-- Docker (pour Keycloak et pour déploiement)
+- Pour édition/lancement mode dev : VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue ou Spring Tool Suite (Eclipse)
+- Pour chaine CI/CD  Jenkins 2.528.1 ou + (TODO)
+- Pour déploiement env de test : Docker Compose (TODO)
 
 ## Lancer le projet (TODO)
 1. Démarrer les services dépendants (Keycloak, base de données) — exemple avec Docker Compose :
@@ -63,17 +62,15 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
 3. Lancer les tests E2E (projet séparé `e2e-tests`) :
    ```bash
    # Exemple pour Selenium (via Maven ou script dédié)
-   mvn -f e2e-tests clean test
+   mvn -f rhDemoAPITestIHM clean test
    ```
-
-Remplace les commandes ci‑dessous par celles correspondant à ton projet (Gradle, Yarn, etc.).
 
 ## Bonnes pratiques et conseils
 - Utiliser `data-testid` pour les éléments critiques testés en E2E.
-- Ne pas sur‑spécifier l'IHM : s'adapter aux composants Element Plus facilite la maintenance.
-- Documenter les flows d'authentification (schémas, cookies, CSRF) pour les nouveaux arrivants.
+- Ne pas sur‑spécifier l'IHM : s'adapter aux composants Element Plus facilite la maintenance même si il peut y avoir dans certains cas des problèmes pour insérer le 'data-testid'.
+- Documenter particulièrement les flows d'authentification (schémas, cookies, CSRF) et l'interface avec KeyCloak .
 - Gérer la pagination côté API avec des limites et des offsets/cursors pour garder de bonnes performances.
-- Mettre en place des règles de protection sur les branches et automatiser les scans de sécurité dans la CI.
+- Automatiser les scans de sécurité dans la CI (TODO).
 
 ## Contribuer
 - Ouvrir une issue décrivant la modification souhaitée.

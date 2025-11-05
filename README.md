@@ -59,7 +59,7 @@ Ce dépôt est une preuve de concept visant à explorer un ensemble de sujets te
    ```bash
    mvn clean spring-boot:run
    ```
-3. Lancer les tests E2E (projet séparé `e2e-tests`) :
+3. Lancer les tests E2E (projet séparé `rhDemoAPITestIHM`) :
    ```bash
    # Exemple pour Selenium (via Maven ou script dédié)
    mvn -f rhDemoAPITestIHM clean test

@@ -13,6 +13,8 @@ import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,6 +26,8 @@ import java.util.List;
  */
 public abstract class BaseSeleniumTest {
     
+    private static final Logger log = LoggerFactory.getLogger(BaseSeleniumTest.class);
+    
     protected static WebDriver driver;
     protected static WebDriverWait wait;
     
@@ -33,7 +37,7 @@ public abstract class BaseSeleniumTest {
     
     @BeforeAll
     public static void setUpClass() {
-        System.out.println("🚀 Initialisation du navigateur pour la suite de tests...");
+        log.info("🚀 Initialisation du navigateur pour la suite de tests...");
         
         // Configuration du WebDriver selon le navigateur choisi
         if (TestConfig.BROWSER.equalsIgnoreCase("chrome")) {
@@ -66,7 +70,7 @@ public abstract class BaseSeleniumTest {
         // Initialisation du WebDriverWait
         wait = new WebDriverWait(driver, Duration.ofSeconds(TestConfig.EXPLICIT_WAIT));
         
-        System.out.println("✅ Navigateur " + TestConfig.BROWSER + " initialisé avec succès");
+        log.info("✅ Navigateur {} initialisé avec succès", TestConfig.BROWSER);
         
         // Authentification Keycloak
 
@@ -78,7 +82,7 @@ public abstract class BaseSeleniumTest {
      * Cette méthode est appelée une seule fois au début de la suite de tests
      */
     private static void authenticateKeycloak() {
-        System.out.println("🔐 Authentification Keycloak en cours...");
+        log.info("🔐 Authentification Keycloak en cours...");
         
         try {
             // Aller sur la page d'accueil (qui redirige vers Keycloak si pas authentifié)
@@ -95,7 +99,7 @@ public abstract class BaseSeleniumTest {
             
             // Vérifier si on est sur la page de login Keycloak
             if (driver.getCurrentUrl().contains("keycloak") || driver.getCurrentUrl().contains("realms")) {
-                System.out.println("📋 Page de login Keycloak détectée");
+                log.info("📋 Page de login Keycloak détectée");
                 
                 // Attendre que le formulaire soit visible
                 authWait.until(ExpectedConditions.visibilityOfElementLocated(usernameField));
@@ -104,18 +108,18 @@ public abstract class BaseSeleniumTest {
                 WebElement usernameInput = driver.findElement(usernameField);
                 usernameInput.clear();
                 usernameInput.sendKeys(testUsername);
-                System.out.println("✏️ Username saisi: " + testUsername);
+                log.info("✏️ Username saisi: {}", testUsername);
 
                 // Remplir le password
                 WebElement passwordInput = driver.findElement(passwordField);
                 passwordInput.clear();
                 passwordInput.sendKeys(testPwd);
-                System.out.println("✏️ Password saisi");
+                log.info("✏️ Password saisi");
                 
                 // Cliquer sur le bouton de connexion
                 WebElement submitButton = driver.findElement(loginButton);
                 submitButton.click();
-                System.out.println("🔘 Bouton de connexion cliqué");
+                log.info("🔘 Bouton de connexion cliqué");
                 
                 // Attendre la redirection vers l'application
                 authWait.until(ExpectedConditions.urlContains(TestConfig.BASE_URL));
@@ -123,20 +127,19 @@ public abstract class BaseSeleniumTest {
                 // Vérifier qu'on est bien authentifié (on ne doit plus être sur la page Keycloak)
                 String currentUrl = driver.getCurrentUrl();
                 if (!currentUrl.contains("keycloak") && !currentUrl.contains("realms")) {
-                    System.out.println("✅ Authentification Keycloak réussie !");
-                    System.out.println("🌐 URL actuelle: " + currentUrl);
+                    log.info("✅ Authentification Keycloak réussie !");
+                    log.info("🌐 URL actuelle: {}", currentUrl);
                 } else {
-                    System.err.println("⚠️ Toujours sur la page Keycloak après authentification");
-                    System.err.println("URL: " + currentUrl);
+                    log.warn("⚠️ Toujours sur la page Keycloak après authentification");
+                    log.warn("URL: {}", currentUrl);
                 }
                 
             } else {
-                System.out.println("ℹ️ Déjà authentifié (pas de redirection vers Keycloak)");
+                log.info("ℹ️ Déjà authentifié (pas de redirection vers Keycloak)");
             }
             
         } catch (Exception e) {
-            System.err.println("❌ Erreur lors de l'authentification Keycloak: " + e.getMessage());
-            e.printStackTrace();
+            log.error("❌ Erreur lors de l'authentification Keycloak: {}", e.getMessage(), e);
             // On ne lance pas d'exception pour ne pas bloquer tous les tests
             // Les tests individuels échoueront si l'authentification a échoué
         }
@@ -144,10 +147,10 @@ public abstract class BaseSeleniumTest {
     
     @AfterAll
     public static void tearDownClass() {
-        System.out.println("🛑 Fermeture du navigateur...");
+        log.info("🛑 Fermeture du navigateur...");
         if (driver != null) {
             driver.quit();
-            System.out.println("✅ Navigateur fermé");
+            log.info("✅ Navigateur fermé");
         }
     }
     

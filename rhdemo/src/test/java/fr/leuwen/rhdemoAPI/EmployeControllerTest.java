@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -20,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @TestPropertySource(locations = "classpath:application-test.properties")
 @AutoConfigureMockMvc
+@ActiveProfiles("test") // Active le profil "test" pour utiliser TestSecurityConfig
 public class EmployeControllerTest {
 	
 	@Autowired
@@ -44,7 +46,9 @@ public class EmployeControllerTest {
 		mockMVC.perform(get("/api/employes"))
 		.andExpect(status().isOk())
 		//Test intégration uniquement
-		//première ligne du résultat, champ firstName
+		.andExpect(jsonPath("$").isArray())
+		.andExpect(jsonPath("$.length()").value(4)) // On attend 4 employés du data.sql
+		//première ligne du résultat, champ prenom
 		.andExpect(jsonPath("$[0].prenom", is("Laurent")));
 	}
 	

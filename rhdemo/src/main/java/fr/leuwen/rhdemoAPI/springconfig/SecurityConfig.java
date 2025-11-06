@@ -3,6 +3,7 @@ package fr.leuwen.rhdemoAPI.springconfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -22,6 +23,7 @@ import java.util.function.Supplier;
 @EnableWebSecurity
 //Permet de positionner des annotations de type @PreAuthorize("hasRole('rolexx')")
 @EnableMethodSecurity
+@Profile("!test") // Désactive cette configuration pour le profil "test"
 public class SecurityConfig {
     @Autowired
     private GrantedAuthoritiesKeyCloakMapper keycloakmapper;

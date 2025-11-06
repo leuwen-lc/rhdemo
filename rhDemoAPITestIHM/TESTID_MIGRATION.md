@@ -135,7 +135,7 @@ By.xpath("//input[contains(@placeholder, 'Prénom')]")    // Plus lent
 ```bash
 # 1. Compiler le projet de tests
 cd /home/leno-vo/git/repository/rhDemoAPITestIHM
-/home/leno-vo/git/repository/rhdemo/mvnw clean compile
+/home/leno-vo/git/repository/rhDemo/mvnw clean compile
 
 # 2. Démarrer l'application
 cd /home/leno-vo/git/repository/rhdemo
@@ -269,7 +269,7 @@ Chaque `data-testid` doit être **unique** dans la page :
 
 ### Liens utiles
 
-- **Guide complet :** `/rhdemo/DATA_TESTID_GUIDE.md`
+- **Guide complet :** `/rhDemo/DATA_TESTID_GUIDE.md`
 - **Selenium CSS Selectors :** https://www.selenium.dev/documentation/webdriver/elements/locators/
 - **Testing Best Practices :** https://testing-library.com/docs/queries/bytestid/
 
@@ -277,7 +277,7 @@ Chaque `data-testid` doit être **unique** dans la page :
 
 ```bash
 # Rechercher tous les data-testid dans le code Vue
-cd /home/leno-vo/git/repository/rhdemo/frontend
+cd /home/leno-vo/git/repository/rhDemo/frontend
 grep -r "data-testid" src/components/
 
 # Rechercher tous les usages dans les tests

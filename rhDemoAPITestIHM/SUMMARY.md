@@ -89,12 +89,12 @@ cd /home/leno-vo/git/repository/rhDemoAPITestIHM
 ### Méthode 2 : Maven direct
 ```bash
 cd /home/leno-vo/git/repository/rhDemoAPITestIHM
-/home/leno-vo/git/repository/rhdemo/mvnw clean test
+/home/leno-vo/git/repository/rhDemo/mvnw clean test
 ```
 
 ### Méthode 3 : Test spécifique
 ```bash
-/home/leno-vo/git/repository/rhdemo/mvnw test -Dtest=EmployeLifecycleTest
+/home/leno-vo/git/repository/rhDemo/mvnw test -Dtest=EmployeLifecycleTest
 ```
 
 **⚠️ IMPORTANT** : L'application RH Demo doit être démarrée sur http://localhost:9000

@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 // Config test intégration
 @SpringBootTest
-@TestPropertySource(locations = "classpath:application-test.properties")
+@TestPropertySource(locations = "classpath:application-test.yml")
 @AutoConfigureMockMvc
 @ActiveProfiles("test") // Active le profil "test" pour utiliser TestSecurityConfig
 public class EmployeControllerTest {

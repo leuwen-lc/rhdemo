@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: rhdemoAPI
+  
+  # PostgreSQL (prod)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dbrhdemo
+    username: dbrhdemo
+    password: ${RHDEMO_DATASOURCE_PASSWORD_PG}
+    driver-class-name: org.postgresql.Driver
+  
+  # Evite l'ecrasement du schema data.sql par JPA
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  
+  # OAuth2 / Keycloak
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: RHDemo
+            scope: openid
+            client-secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+            redirect-uri: '{baseUrl}/login/oauth2/code/{registrationId}'
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:6090/realms/LeuwenRealm
+
+server:
+  port: 9000
+
+# Niveau de log
+logging:
+  level:
+    root: ERROR
+    fr.leuwen: DEBUG
+    org.springframework.boot.web.embedded.tomcat: INFO
+    org.springframework.boot.actuate: DEBUG
+    org.springframework.security: DEBUG
+  
+  # Pattern de log avec timestamp
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n'
+    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n'
+
+# Endpoints Actuator disponibles
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+# SpringDoc / Swagger
+springdoc:
+  api-docs:
+    path: /api-docs/docs
+  swagger-ui:
+    path: /api-docs/swagger-ui
+
+# Propriétés custom
+fr:
+  leuwen:
+    rhdemoAPI:
+      messagelancement: Lancement de l'application RH Demo

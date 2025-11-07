@@ -1,0 +1,68 @@
+# ========================================
+# Configuration Keycloak Server
+# ========================================
+keycloak:
+  server:
+    url: http://localhost:6090
+  
+  admin:
+    realm: master
+    username: admin
+    password: adminpassword
+    client: admin-cli
+  
+  # ========================================
+  # Configuration du Realm à créer
+  # ========================================
+  realm:
+    name: LeuwenRealm
+    displayName: Leuwen Realm
+    enabled: true
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    id: RHDemo
+    name: RHDemo
+    description: authent des users API et Admin de RHDemo
+    secret: lmax7TDMmHk5g7ZgCCXK9ILpjHHvHYga
+    rootUrl: http://localhost:9000/
+    baseUrl: ''
+    adminUrl: ''
+    redirectUris: http://localhost:9000/*
+    webOrigins: http://localhost:9000/*
+    
+    # ========================================
+    # Configuration des Client Roles
+    # ========================================
+    roles: ROLE_admin,ROLE_consult,ROLE_MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs
+  # ========================================
+  # Format: username:password:role1,role2
+  users:
+    admil:
+      username: admil
+      password: admil123
+      email: admil@leuwen.fr
+      firstname: Admin
+      lastname: Admil
+      roles: ROLE_admin
+    
+    consuela:
+      username: consuela
+      password: consuela123
+      email: consuela@leuwen.fr
+      firstname: Consuela
+      lastname: Consulte
+      roles: ROLE_consult
+    
+    madjid:
+      username: madjid
+      password: madjid123
+      email: madjid@leuwen.fr
+      firstname: Madjid
+      lastname: Majeur
+      roles: ROLE_consult,ROLE_MAJ

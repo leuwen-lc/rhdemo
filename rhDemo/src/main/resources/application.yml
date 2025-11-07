@@ -2,11 +2,17 @@ spring:
   application:
     name: rhdemoAPI
   
+  # Import des secrets depuis fichiers externes
+  config:
+    import:
+      - optional:file:./secrets/secrets.yml
+      - optional:file:./secrets/secrets-dev.yml
+  
   # PostgreSQL (prod)
   datasource:
     url: jdbc:postgresql://localhost:5432/dbrhdemo
     username: dbrhdemo
-    password: ${RHDEMO_DATASOURCE_PASSWORD_PG}
+    password: ${rhdemo.datasource.password.pg}
     driver-class-name: org.postgresql.Driver
   
   # Evite l'ecrasement du schema data.sql par JPA
@@ -22,7 +28,7 @@ spring:
           keycloak:
             client-id: RHDemo
             scope: openid
-            client-secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+            client-secret: ${rhdemo.client.registration.keycloak.client.secret}
             redirect-uri: '{baseUrl}/login/oauth2/code/{registrationId}'
         provider:
           keycloak:

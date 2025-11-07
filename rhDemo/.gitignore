@@ -1,10 +1,18 @@
 HELP.md
 target/
 bin/
-secrets/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Secrets ###
+# Ne pas commiter les secrets de production
+secrets/secrets.yml
+# Autoriser le template et les secrets-dev chiffrés
+!secrets/secrets.yml.template
+!secrets/secrets-dev.yml
+# Ignorer les backups
+secrets/*.backup
 
 
 ### Node ###

@@ -6,7 +6,7 @@ app:
     url: http://localhost:9000
 
 # Navigateur (chrome, firefox, edge)
-browser: chrome
+browser: firefox
 
 # Mode headless (true/false)
 headless:

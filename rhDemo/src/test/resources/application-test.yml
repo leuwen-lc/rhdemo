@@ -2,11 +2,17 @@
 # Utilise H2 au lieu de PostgreSQL
 
 spring:
+  # Import des secrets pour les tests
+  config:
+    import:
+      - optional:file:./secrets/secrets.yml
+      - optional:file:./secrets/secrets-dev.yml
+  
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
-    password: ''
+    password: ${rhdemo.datasource.password.h2:}
   
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect

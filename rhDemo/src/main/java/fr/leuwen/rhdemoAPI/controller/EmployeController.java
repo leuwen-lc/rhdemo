@@ -1,7 +1,5 @@
 package fr.leuwen.rhdemoAPI.controller;
 
-import java.util.Optional;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import fr.leuwen.rhdemoAPI.model.Employe;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
+import jakarta.validation.Valid;
 
 @RestController
 public class EmployeController {
@@ -58,7 +57,7 @@ public class EmployeController {
 	
 	@GetMapping("/api/employe")
 	@PreAuthorize("hasRole('consult')")
-	public Optional<Employe> getEmploye(@RequestParam final Long id) {
+	public Employe getEmploye(@RequestParam final Long id) {
 		return employeservice.getEmploye(id);
 	}
 	
@@ -71,7 +70,7 @@ public class EmployeController {
 	
 	@PostMapping ("/api/employe")
 	@PreAuthorize("hasRole('MAJ')")
-	public Employe saveEmploye(@RequestBody Employe employe) {
+	public Employe saveEmploye(@Valid @RequestBody Employe employe) {
 	      logger.debug("=== RÉCEPTION DONNÉES EMPLOYE ===");
 	      logger.debug("ID reçu: {}", employe.getId());
 	      logger.debug("Prénom reçu: {}", employe.getPrenom());

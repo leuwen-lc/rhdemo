@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import fr.leuwen.rhdemoAPI.exception.EmployeNotFoundException;
 import fr.leuwen.rhdemoAPI.model.Employe;
 import fr.leuwen.rhdemoAPI.repository.EmployeRepository;
 
@@ -15,8 +16,9 @@ public class EmployeService {
 	@Autowired
 	private EmployeRepository employerepository;
 	
-	public Optional<Employe> getEmploye(final Long id) {
-        return employerepository.findById(id);
+	public Employe getEmploye(final Long id) {
+        return employerepository.findById(id)
+            .orElseThrow(() -> new EmployeNotFoundException(id));
     }
 
 
@@ -29,13 +31,15 @@ public class EmployeService {
     }
 
     public void deleteEmploye(final Long id) {
+        // Vérifier que l'employé existe avant de le supprimer
+        if (!employerepository.existsById(id)) {
+            throw new EmployeNotFoundException(id);
+        }
         employerepository.deleteById(id);
     }
 
     public Employe saveEmploye(Employe employe) {
-
         Employe savedEmploye = employerepository.save(employe);
-
         return savedEmploye;
     }
 }

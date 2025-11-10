@@ -19,9 +19,6 @@ pipeline {
         // Fichiers de secrets SOPS
         SECRETS_FILE = 'secrets/secrets-staging.yml'
         SECRETS_DECRYPTED = 'secrets/secrets-decrypted.yml'
-        
-        // Clé Age pour SOPS (credential Jenkins)
-        SOPS_AGE_KEY_FILE = credentials('sops-age-key')
     }
     
     parameters {
@@ -71,48 +68,49 @@ pipeline {
                 script {
                     echo '▶ Déchiffrement du fichier de secrets...'
                 }
-                sh '''
-                    # Configurer la clé Age pour SOPS
-                    export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE}"
-                    
-                    # Déchiffrer le fichier de secrets
-                    echo "Déchiffrement de ${SECRETS_FILE}..."
-                    sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
-                    
-                    # Vérifier que le fichier a été déchiffré
-                    if [ ! -f ${SECRETS_DECRYPTED} ]; then
-                        echo "❌ Échec du déchiffrement"
-                        exit 1
-                    fi
-                    
-                    echo "✅ Secrets déchiffrés avec succès"
-                    
-                    # Extraire les valeurs pour les variables d'environnement
-                    # Utilisation de yq pour parser le YAML
-                    if ! command -v yq &> /dev/null; then
-                        echo "Installation de yq..."
-                        wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
-                        chmod +x /tmp/yq
-                        sudo mv /tmp/yq /usr/local/bin/yq
-                    fi
-                    
-                    # Exporter les secrets comme variables d'environnement pour les stages suivants
-                    echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > secrets/env-vars.sh
-                    echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
-                    echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
-                    
-                    # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
-                    if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                        echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
-                    fi
-                    
-                    if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                        echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
-                    fi
-                    
-                    # Afficher (sans montrer les valeurs)
-                    echo "✅ Variables d'environnement préparées"
-                '''
+                
+                // Utiliser le credential sops-age-key de manière sécurisée
+                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
+                    sh '''
+                        # Déchiffrer le fichier de secrets
+                        echo "Déchiffrement de ${SECRETS_FILE}..."
+                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                        
+                        # Vérifier que le fichier a été déchiffré
+                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
+                            echo "❌ Échec du déchiffrement"
+                            exit 1
+                        fi
+                        
+                        echo "✅ Secrets déchiffrés avec succès"
+                        
+                        # Extraire les valeurs pour les variables d'environnement
+                        # Utilisation de yq pour parser le YAML
+                        if ! command -v yq &> /dev/null; then
+                            echo "Installation de yq..."
+                            wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
+                            chmod +x /tmp/yq
+                            sudo mv /tmp/yq /usr/local/bin/yq
+                        fi
+                        
+                        # Exporter les secrets comme variables d'environnement pour les stages suivants
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > secrets/env-vars.sh
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                        
+                        # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
+                        if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                            echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                        fi
+                        
+                        if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                            echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                        fi
+                        
+                        # Afficher (sans montrer les valeurs)
+                        echo "✅ Variables d'environnement préparées"
+                    '''
+                }
             }
             post {
                 always {

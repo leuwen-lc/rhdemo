@@ -621,7 +621,7 @@ pipeline {
                     
                     Voir les détails: ${env.BUILD_URL}
                 """,
-                to: 'team@example.com'
+                to: "${env.SMTP_USER}"
             )
         }
         
@@ -641,7 +641,7 @@ pipeline {
                     
                     Voir les logs: ${env.BUILD_URL}console
                 """,
-                to: 'team@example.com',
+                to: "${env.SMTP_USER}",
                 attachLog: true
             )
         }

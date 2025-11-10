@@ -43,8 +43,8 @@ jenkins:
             value: "/opt/java/openjdk"
           - key: "MAVEN_HOME"
             value: "/opt/maven"
-          - key: "PATH"
-            value: "/opt/java/openjdk/bin:/opt/maven/bin:$PATH"
+          - key: "PATH+EXTRA"
+            value: "/opt/java/openjdk/bin:/opt/maven/bin"
           - key: "NOTIFICATION_EMAIL"
             value: "${SMTP_USER}"
 

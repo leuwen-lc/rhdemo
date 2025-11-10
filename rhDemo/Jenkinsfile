@@ -7,11 +7,6 @@ pipeline {
     }
     
     environment {
-        // Variables d'environnement pour l'application
-        RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET = credentials('keycloak-client-secret')
-        RHDEMO_DATASOURCE_PASSWORD_H2 = credentials('h2-db-password')
-        RHDEMO_DATASOURCE_PASSWORD_PG = credentials('postgres-db-password')
-        
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
         APP_VERSION = '0.0.1-SNAPSHOT'
@@ -21,9 +16,12 @@ pipeline {
         TEST_PORT = '9000'
         TEST_PROJECT_PATH = '../rhDemoAPITestIHM'
         
-        // Configuration du déploiement
-        STAGING_SERVER = credentials('staging-server-url')
-        PROD_SERVER = credentials('prod-server-url')
+        // Fichiers de secrets SOPS
+        SECRETS_FILE = 'secrets/secrets-staging.yml'
+        SECRETS_DECRYPTED = 'secrets/secrets-decrypted.yml'
+        
+        // Clé Age pour SOPS (credential Jenkins)
+        SOPS_AGE_KEY_FILE = credentials('sops-age-key')
     }
     
     parameters {
@@ -51,11 +49,90 @@ pipeline {
             }
         }
         
-        stage('🔍 Vérification Environnement') {
+        stage('� Déchiffrement Secrets SOPS') {
+            steps {
+                script {
+                    echo '▶ Installation et configuration de SOPS...'
+                }
+                sh '''
+                    # Installation de SOPS si nécessaire
+                    if ! command -v sops &> /dev/null; then
+                        echo "Installation de SOPS..."
+                        SOPS_VERSION="3.8.1"
+                        wget -q https://github.com/mozilla/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /tmp/sops
+                        chmod +x /tmp/sops
+                        sudo mv /tmp/sops /usr/local/bin/sops
+                    fi
+                    
+                    echo "SOPS version:"
+                    sops --version
+                '''
+                
+                script {
+                    echo '▶ Déchiffrement du fichier de secrets...'
+                }
+                sh '''
+                    # Configurer la clé Age pour SOPS
+                    export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE}"
+                    
+                    # Déchiffrer le fichier de secrets
+                    echo "Déchiffrement de ${SECRETS_FILE}..."
+                    sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                    
+                    # Vérifier que le fichier a été déchiffré
+                    if [ ! -f ${SECRETS_DECRYPTED} ]; then
+                        echo "❌ Échec du déchiffrement"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Secrets déchiffrés avec succès"
+                    
+                    # Extraire les valeurs pour les variables d'environnement
+                    # Utilisation de yq pour parser le YAML
+                    if ! command -v yq &> /dev/null; then
+                        echo "Installation de yq..."
+                        wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
+                        chmod +x /tmp/yq
+                        sudo mv /tmp/yq /usr/local/bin/yq
+                    fi
+                    
+                    # Exporter les secrets comme variables d'environnement pour les stages suivants
+                    echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > secrets/env-vars.sh
+                    echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                    echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                    
+                    # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
+                    if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                        echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                    fi
+                    
+                    if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                        echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                    fi
+                    
+                    # Afficher (sans montrer les valeurs)
+                    echo "✅ Variables d'environnement préparées"
+                '''
+            }
+            post {
+                always {
+                    script {
+                        // Supprimer le fichier déchiffré pour la sécurité
+                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
+                    }
+                }
+            }
+        }
+        
+        stage('�🔍 Vérification Environnement') {
             steps {
                 script {
                     echo '▶ Vérification de l\'environnement...'
+                    // Charger les variables d'environnement depuis le fichier
                     sh '''
+                        # Charger les secrets
+                        source secrets/env-vars.sh
+                        
                         echo "Java version:"
                         java -version
                         echo "\nMaven version:"
@@ -79,7 +156,11 @@ pipeline {
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Compilation du backend Spring Boot...'
                 }
-                sh './mvnw clean compile -DskipTests'
+                sh '''
+                    # Charger les secrets pour la compilation
+                    source secrets/env-vars.sh
+                    ./mvnw clean compile -DskipTests
+                '''
             }
         }
         
@@ -101,8 +182,12 @@ pipeline {
                 script {
                     echo '▶ Package du JAR avec frontend intégré...'
                 }
-                sh './mvnw package -DskipTests'
-                sh "ls -lh ${JAR_FILE}"
+                sh '''
+                    # Charger les secrets pour le package
+                    source secrets/env-vars.sh
+                    ./mvnw package -DskipTests
+                    ls -lh ${JAR_FILE}
+                '''
             }
         }
         
@@ -118,7 +203,11 @@ pipeline {
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Exécution des tests unitaires avec base H2...'
                 }
-                sh './mvnw test'
+                sh '''
+                    # Charger les secrets pour les tests
+                    source secrets/env-vars.sh
+                    ./mvnw test
+                '''
             }
             post {
                 always {
@@ -140,6 +229,8 @@ pipeline {
                 }
                 withSonarQubeEnv('SonarQube') {
                     sh '''
+                        # Charger les secrets pour l'analyse
+                        source secrets/env-vars.sh
                         ./mvnw sonar:sonar \
                             -Dsonar.projectKey=rhdemo-api \
                             -Dsonar.projectName="RHDemo API" \
@@ -168,7 +259,11 @@ pipeline {
                 script {
                     echo '▶ Génération du rapport de couverture JaCoCo...'
                 }
-                sh './mvnw jacoco:report'
+                sh '''
+                    # Charger les secrets pour le rapport
+                    source secrets/env-vars.sh
+                    ./mvnw jacoco:report
+                '''
                 jacoco(
                     execPattern: '**/target/jacoco.exec',
                     classPattern: '**/target/classes',
@@ -194,6 +289,8 @@ pipeline {
                     
                     // Démarrage en arrière-plan
                     sh '''
+                        # Charger les secrets pour l'application test
+                        source secrets/env-vars.sh
                         nohup java -jar ${JAR_FILE} \
                             --spring.profiles.active=test \
                             --server.port=${TEST_PORT} \
@@ -279,7 +376,11 @@ pipeline {
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Analyse des vulnérabilités des dépendances...'
                 }
-                sh './mvnw org.owasp:dependency-check-maven:check'
+                sh '''
+                    # Charger les secrets pour l'analyse de sécurité
+                    source secrets/env-vars.sh
+                    ./mvnw org.owasp:dependency-check-maven:check
+                '''
             }
             post {
                 always {
@@ -340,6 +441,9 @@ pipeline {
                     echo '▶ Déploiement sur l\'environnement de staging...'
                 }
                 sh '''
+                    # Charger les secrets et URLs de serveurs
+                    source secrets/env-vars.sh
+                    
                     # Déploiement via SSH ou script de déploiement
                     echo "Copie du JAR vers le serveur de staging..."
                     # scp ${JAR_FILE} user@${STAGING_SERVER}:/opt/rhdemo/
@@ -361,6 +465,9 @@ pipeline {
                     echo '▶ Vérification du déploiement staging...'
                 }
                 sh '''
+                    # Charger les secrets et URLs de serveurs
+                    source secrets/env-vars.sh
+                    
                     echo "Vérification du healthcheck..."
                     # curl -f http://${STAGING_SERVER}/actuator/health || exit 1
                     
@@ -406,9 +513,12 @@ pipeline {
                     echo '▶ Sauvegarde de la base de données de production...'
                 }
                 sh '''
+                    # Charger les secrets
+                    source secrets/env-vars.sh
+                    
                     BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
                     echo "Création du backup: ${BACKUP_FILE}"
-                    # pg_dump -h ${PROD_DB_HOST} -U ${PROD_DB_USER} rhdemo > ${BACKUP_FILE}
+                    # pg_dump -h ${PROD_SERVER} -U rhdemo rhdemo > ${BACKUP_FILE}
                     echo "✅ Backup créé (décommenter pour activer)"
                 '''
             }
@@ -424,6 +534,9 @@ pipeline {
                     echo '🚀 Déploiement Blue-Green...'
                 }
                 sh '''
+                    # Charger les secrets et URLs de serveurs
+                    source secrets/env-vars.sh
+                    
                     # Stratégie Blue-Green deployment
                     echo "1. Déploiement sur le serveur Green..."
                     # scp ${JAR_FILE} user@${PROD_SERVER}-green:/opt/rhdemo/
@@ -454,6 +567,9 @@ pipeline {
                     echo '▶ Vérification du déploiement production...'
                 }
                 sh '''
+                    # Charger les secrets et URLs de serveurs
+                    source secrets/env-vars.sh
+                    
                     echo "Healthcheck application..."
                     # curl -f http://${PROD_SERVER}/actuator/health
                     
@@ -480,8 +596,11 @@ pipeline {
                 echo '  NETTOYAGE ET NOTIFICATIONS'
                 echo '═══════════════════════════════════════════════════════'
             }
-            // Nettoyage
+            // Nettoyage des fichiers sensibles
             sh '''
+                # Supprimer les fichiers de secrets déchiffrés
+                rm -f secrets/env-vars.sh secrets/secrets-decrypted.yml || true
+                
                 # Arrêt de l'application test si elle tourne encore
                 if [ -f app-test.pid ]; then
                     kill $(cat app-test.pid) 2>/dev/null || true
@@ -508,20 +627,6 @@ pipeline {
                 echo "✅ Pipeline réussi${deployInfo} !"
             }
             
-            // Notification Slack
-            slackSend(
-                color: 'good',
-                message: """
-                    ✅ *BUILD SUCCESS* - RHDemo API
-                    Branch: ${env.BRANCH_NAME}
-                    Build: ${env.BUILD_NUMBER}
-                    Déploiement: ${params.DEPLOY_ENV}
-                    Durée: ${currentBuild.durationString}
-                    <${env.BUILD_URL}|Voir le build>
-                """.stripIndent(),
-                channel: '#rhdemo-ci'
-            )
-            
             // Email de notification
             emailext(
                 subject: "✅ BUILD SUCCESS - RHDemo API #${env.BUILD_NUMBER}",
@@ -543,19 +648,6 @@ pipeline {
                 echo "❌ Pipeline échoué !"
             }
             
-            // Notification Slack en cas d'échec
-            slackSend(
-                color: 'danger',
-                message: """
-                    ❌ *BUILD FAILED* - RHDemo API
-                    Branch: ${env.BRANCH_NAME}
-                    Build: ${env.BUILD_NUMBER}
-                    Stage: ${env.STAGE_NAME}
-                    <${env.BUILD_URL}console|Voir les logs>
-                """.stripIndent(),
-                channel: '#rhdemo-ci'
-            )
-            
             // Email d'alerte
             emailext(
                 subject: "❌ BUILD FAILED - RHDemo API #${env.BUILD_NUMBER}",
@@ -576,18 +668,6 @@ pipeline {
             script {
                 echo "⚠️ Pipeline instable (tests échoués mais build réussi)"
             }
-            
-            slackSend(
-                color: 'warning',
-                message: """
-                    ⚠️ *BUILD UNSTABLE* - RHDemo API
-                    Branch: ${env.BRANCH_NAME}
-                    Build: ${env.BUILD_NUMBER}
-                    Certains tests ont échoué
-                    <${env.BUILD_URL}testReport|Voir les tests>
-                """.stripIndent(),
-                channel: '#rhdemo-ci'
-            )
         }
     }
 }

@@ -1,0 +1,17 @@
+# Variables d'environnement locales
+.env
+
+# Workspace Jenkins local
+workspace/
+
+# Certificats SSL
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
+# Logs
+*.log
+
+# Fichiers temporaires
+*.tmp
+*.bak
+*.swp

@@ -1,0 +1,207 @@
+# ═══════════════════════════════════════════════════════════════════
+# JENKINS CONFIGURATION AS CODE (JCasC)
+# Configuration automatique de Jenkins au démarrage
+# ═══════════════════════════════════════════════════════════════════
+
+jenkins:
+  # ────────────────────────────────────────────────────────────────
+  # CONFIGURATION SYSTÈME
+  # ────────────────────────────────────────────────────────────────
+  systemMessage: |
+    🚀 Jenkins RHDemo - Serveur CI/CD
+    Configuré automatiquement avec Jenkins Configuration as Code
+    
+  numExecutors: 2
+  mode: NORMAL
+  
+  quietPeriod: 5
+  scmCheckoutRetryCount: 3
+  
+  # ────────────────────────────────────────────────────────────────
+  # SÉCURITÉ
+  # ────────────────────────────────────────────────────────────────
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD:-admin123}"
+          name: "Administrator"
+          description: "Jenkins Administrator"
+  
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  
+  # ────────────────────────────────────────────────────────────────
+  # OUTILS GLOBAUX
+  # ────────────────────────────────────────────────────────────────
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "JAVA_HOME"
+            value: "/opt/java/openjdk"
+          - key: "MAVEN_HOME"
+            value: "/opt/maven"
+          - key: "PATH"
+            value: "/opt/java/openjdk/bin:/opt/maven/bin:$PATH"
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION DES OUTILS (JDK, Maven, etc.)
+# ═══════════════════════════════════════════════════════════════════
+tool:
+  # JDK 21 (déjà installé dans l'image Docker)
+  jdk:
+    installations:
+      - name: "JDK21"
+        home: "/opt/java/openjdk"
+  
+  # Maven (déjà installé dans l'image Docker)
+  maven:
+    installations:
+      - name: "Maven3"
+        home: "/opt/maven"
+  
+  # Git (déjà installé sur le système)
+  git:
+    installations:
+      - name: "Default"
+        home: "git"
+
+# ═══════════════════════════════════════════════════════════════════
+# CREDENTIALS (à configurer manuellement ou via variables d'env)
+# ═══════════════════════════════════════════════════════════════════
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # Secrets Keycloak
+          - string:
+              scope: GLOBAL
+              id: "keycloak-client-secret"
+              secret: "${KEYCLOAK_CLIENT_SECRET:-your-secret-here}"
+              description: "Keycloak Client Secret"
+          
+          # Mot de passe H2
+          - string:
+              scope: GLOBAL
+              id: "h2-db-password"
+              secret: "${H2_DB_PASSWORD:-password}"
+              description: "H2 Database Password (tests)"
+          
+          # Mot de passe PostgreSQL
+          - string:
+              scope: GLOBAL
+              id: "postgres-db-password"
+              secret: "${POSTGRES_DB_PASSWORD:-your-postgres-password}"
+              description: "PostgreSQL Database Password"
+          
+          # URLs des serveurs
+          - string:
+              scope: GLOBAL
+              id: "staging-server-url"
+              secret: "${STAGING_SERVER_URL:-staging.example.com}"
+              description: "Staging Server URL"
+          
+          - string:
+              scope: GLOBAL
+              id: "prod-server-url"
+              secret: "${PROD_SERVER_URL:-prod.example.com}"
+              description: "Production Server URL"
+          
+          # GitHub Token (si nécessaire)
+          - string:
+              scope: GLOBAL
+              id: "github-token"
+              secret: "${GITHUB_TOKEN:-}"
+              description: "GitHub Personal Access Token"
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION SONARQUBE
+# ═══════════════════════════════════════════════════════════════════
+unclassified:
+  sonarGlobalConfiguration:
+    installations:
+      - name: "SonarQube"
+        serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
+        credentialsId: "sonar-token"
+
+  # Configuration Email
+  mailer:
+    smtpHost: "${SMTP_HOST:-smtp.gmail.com}"
+    smtpPort: "${SMTP_PORT:-587}"
+    charset: "UTF-8"
+
+  # Configuration Location
+  location:
+    url: "http://localhost:8080/"
+    adminAddress: "jenkins@example.com"
+
+# ═══════════════════════════════════════════════════════════════════
+# JOBS - Pipeline RHDemo
+# ═══════════════════════════════════════════════════════════════════
+jobs:
+  - script: |
+      pipelineJob('rhdemo-pipeline') {
+        displayName('RHDemo API - Pipeline CI/CD')
+        description('Pipeline complet pour RHDemo API avec SOPS')
+        
+        parameters {
+          choice {
+            name('DEPLOY_ENV')
+            choices(['none', 'staging', 'production'])
+            description('Environnement de déploiement')
+          }
+          booleanParam {
+            name('RUN_SELENIUM_TESTS')
+            defaultValue(true)
+            description('Exécuter les tests Selenium')
+          }
+          booleanParam {
+            name('RUN_SONAR')
+            defaultValue(false)
+            description('Exécuter l\'analyse SonarQube')
+          }
+          booleanParam {
+            name('SKIP_MANUAL_APPROVAL')
+            defaultValue(false)
+            description('Ignorer l\'approbation manuelle pour la production')
+          }
+        }
+        
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('/home/leno-vo/git/repository/rhDemo')
+                }
+                branches('*/packaging-et-déploiement-dans-environnement-séparé')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+        
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('30')
+                daysToKeepStr('90')
+                artifactNumToKeepStr('10')
+                artifactDaysToKeepStr('30')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+        
+        triggers {
+          pollSCM {
+            scmpoll_spec('H/15 * * * *')
+            ignorePostCommitHooks(false)
+          }
+        }
+      }

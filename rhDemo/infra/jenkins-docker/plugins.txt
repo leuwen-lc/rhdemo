@@ -1,0 +1,135 @@
+# ═══════════════════════════════════════════════════════════════════
+# PLUGINS JENKINS - Liste complète pour le Jenkinsfile RHDemo
+# ═══════════════════════════════════════════════════════════════════
+
+# ────────────────────────────────────────────────────────────────
+# PLUGINS ESSENTIELS
+# ────────────────────────────────────────────────────────────────
+git:latest
+workflow-aggregator:latest
+pipeline-stage-view:latest
+credentials:latest
+credentials-binding:latest
+ssh-credentials:latest
+
+# ────────────────────────────────────────────────────────────────
+# GESTION DU CODE SOURCE
+# ────────────────────────────────────────────────────────────────
+github:latest
+github-branch-source:latest
+gitlab-plugin:latest
+bitbucket:latest
+scm-api:latest
+
+# ────────────────────────────────────────────────────────────────
+# BUILD & OUTILS JAVA
+# ────────────────────────────────────────────────────────────────
+maven-plugin:latest
+config-file-provider:latest
+pipeline-maven:latest
+jdk-tool:latest
+
+# ────────────────────────────────────────────────────────────────
+# QUALITÉ DU CODE
+# ────────────────────────────────────────────────────────────────
+sonar:latest
+jacoco:latest
+warnings-ng:latest
+
+# ────────────────────────────────────────────────────────────────
+# TESTS
+# ────────────────────────────────────────────────────────────────
+junit:latest
+testng-plugin:latest
+htmlpublisher:latest
+performance:latest
+
+# ────────────────────────────────────────────────────────────────
+# SÉCURITÉ
+# ────────────────────────────────────────────────────────────────
+dependency-check-jenkins-plugin:latest
+
+# ────────────────────────────────────────────────────────────────
+# DOCKER & KUBERNETES
+# ────────────────────────────────────────────────────────────────
+docker-workflow:latest
+docker-plugin:latest
+docker-commons:latest
+kubernetes:latest
+kubernetes-cli:latest
+
+# ────────────────────────────────────────────────────────────────
+# NOTIFICATIONS
+# ────────────────────────────────────────────────────────────────
+email-ext:latest
+mailer:latest
+
+# ────────────────────────────────────────────────────────────────
+# DÉPLOIEMENT
+# ────────────────────────────────────────────────────────────────
+ssh-agent:latest
+publish-over-ssh:latest
+ansible:latest
+
+# ────────────────────────────────────────────────────────────────
+# UI & REPORTING
+# ────────────────────────────────────────────────────────────────
+dashboard-view:latest
+build-monitor-plugin:latest
+blueocean:latest
+pipeline-graph-view:latest
+timestamper:latest
+ansicolor:latest
+jobConfigHistory:latest
+
+# ────────────────────────────────────────────────────────────────
+# PARAMÈTRES & INPUT
+# ────────────────────────────────────────────────────────────────
+build-timeout:latest
+parameterized-trigger:latest
+conditional-buildstep:latest
+
+# ────────────────────────────────────────────────────────────────
+# GESTION DES ARTIFACTS
+# ────────────────────────────────────────────────────────────────
+artifactory:latest
+nexus-artifact-uploader:latest
+artifact-manager-s3:latest
+
+# ────────────────────────────────────────────────────────────────
+# WORKSPACE & NETTOYAGE
+# ────────────────────────────────────────────────────────────────
+ws-cleanup:latest
+build-discarder:latest
+
+# ────────────────────────────────────────────────────────────────
+# SÉCURITÉ & AUTHENTIFICATION
+# ────────────────────────────────────────────────────────────────
+matrix-auth:latest
+role-strategy:latest
+ldap:latest
+active-directory:latest
+github-oauth:latest
+saml:latest
+
+# ────────────────────────────────────────────────────────────────
+# MONITORING & MÉTRIQUES
+# ────────────────────────────────────────────────────────────────
+prometheus:latest
+metrics:latest
+
+# ────────────────────────────────────────────────────────────────
+# CONFIGURATION AS CODE
+# ────────────────────────────────────────────────────────────────
+configuration-as-code:latest
+job-dsl:latest
+
+# ────────────────────────────────────────────────────────────────
+# UTILITAIRES
+# ────────────────────────────────────────────────────────────────
+locale:latest
+greenballs:latest
+rebuild:latest
+embeddable-build-status:latest
+pipeline-utility-steps:latest
+http_request:latest

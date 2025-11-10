@@ -2,67 +2,76 @@
 # Configuration Keycloak Server
 # ========================================
 keycloak:
-  server:
-    url: http://localhost:6090
+  server-url: http://localhost:6090
   
   admin:
     realm: master
     username: admin
     password: adminpassword
-    client: admin-cli
   
   # ========================================
   # Configuration du Realm à créer
   # ========================================
   realm:
     name: LeuwenRealm
-    displayName: Leuwen Realm
+    display-name: Leuwen Realm
     enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
   
   # ========================================
   # Configuration du Client RHDemo
   # ========================================
   client:
-    id: RHDemo
+    client-id: RHDemo
     name: RHDemo
-    description: authent des users API et Admin de RHDemo
     secret: lmax7TDMmHk5g7ZgCCXK9ILpjHHvHYga
-    rootUrl: http://localhost:9000/
-    baseUrl: ''
-    adminUrl: ''
-    redirectUris: http://localhost:9000/*
-    webOrigins: http://localhost:9000/*
-    
-    # ========================================
-    # Configuration des Client Roles
-    # ========================================
-    roles: ROLE_admin,ROLE_consult,ROLE_MAJ
+    root-url: http://localhost:9000/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - http://localhost:9000/*
+    web-origins:
+      - http://localhost:9000/*
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
   
   # ========================================
   # Configuration des Utilisateurs
   # ========================================
-  # Format: username:password:role1,role2
   users:
-    admil:
-      username: admil
+    - username: admil
       password: admil123
       email: admil@leuwen.fr
-      firstname: Admin
-      lastname: Admil
-      roles: ROLE_admin
+      first-name: Admin
+      last-name: Admil
+      roles:
+        - ROLE_admin
     
-    consuela:
-      username: consuela
+    - username: consuela
       password: consuela123
       email: consuela@leuwen.fr
-      firstname: Consuela
-      lastname: Consulte
-      roles: ROLE_consult
+      first-name: Consuela
+      last-name: Consulte
+      roles:
+        - ROLE_consult
     
-    madjid:
-      username: madjid
+    - username: madjid
       password: madjid123
       email: madjid@leuwen.fr
-      firstname: Madjid
-      lastname: Majeur
-      roles: ROLE_consult,ROLE_MAJ
+      first-name: Madjid
+      last-name: Majeur
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ
+

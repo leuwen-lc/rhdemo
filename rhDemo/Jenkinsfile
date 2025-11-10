@@ -20,7 +20,8 @@ pipeline {
         SECRETS_FILE = 'secrets/secrets-staging.yml'
         SECRETS_DECRYPTED = 'secrets/secrets-decrypted.yml'
         
-        // Note: SOPS_AGE_KEY_FILE est défini comme variable globale dans Jenkins
+        // Clé Age pour SOPS (credential Jenkins)
+        SOPS_AGE_KEY_FILE = credentials('sops-age-key')
     }
     
     parameters {

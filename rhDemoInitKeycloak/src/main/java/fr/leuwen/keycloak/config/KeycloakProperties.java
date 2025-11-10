@@ -1,16 +1,14 @@
 package fr.leuwen.keycloak.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Configuration properties pour Keycloak
- * Remplace l'ancien ConfigLoader.java avec une approche Spring Boot type-safe
+ * Configuration properties pour l'initialisation de Keycloak.
+ * Remplace l'ancien ConfigLoader.java avec un binding automatique du fichier YAML.
  */
-@Component
 @ConfigurationProperties(prefix = "keycloak")
 public class KeycloakProperties {
 

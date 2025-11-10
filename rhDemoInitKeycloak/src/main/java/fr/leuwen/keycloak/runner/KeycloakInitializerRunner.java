@@ -122,30 +122,14 @@ public class KeycloakInitializerRunner implements CommandLineRunner {
         logger.info("   👤 Utilisateur admin: {}", properties.getAdmin().getUsername());
 
         try {
-            // Configurer Jackson pour ignorer les propriétés inconnues
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES, false);
-
-            // Créer le provider JSON
-            org.jboss.resteasy.plugins.providers.jackson.ResteasyJackson2Provider jsonProvider = 
-                new org.jboss.resteasy.plugins.providers.jackson.ResteasyJackson2Provider();
-            jsonProvider.setMapper(mapper);
-
-            // Créer le client REST
-            org.jboss.resteasy.client.jaxrs.ResteasyClient client = (org.jboss.resteasy.client.jaxrs.ResteasyClient) 
-                jakarta.ws.rs.client.ClientBuilder.newClient()
-                .register(org.jboss.resteasy.plugins.providers.FormUrlEncodedProvider.class)
-                .register(jsonProvider);
-
-            // Créer le client Keycloak
+            // Créer le client Keycloak avec configuration par défaut
+            // Les providers Jackson et FormUrlEncoded sont déjà enregistrés automatiquement
             return KeycloakBuilder.builder()
                     .serverUrl(properties.getServerUrl())
                     .realm(properties.getAdmin().getRealm())
                     .username(properties.getAdmin().getUsername())
                     .password(properties.getAdmin().getPassword())
                     .clientId("admin-cli")
-                    .resteasyClient(client)
                     .build();
 
         } catch (Exception e) {

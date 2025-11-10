@@ -6,7 +6,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fr.leuwen.keycloak.ConfigLoader;
+import fr.leuwen.keycloak.config.KeycloakProperties;
 
 import java.util.List;
 
@@ -17,13 +17,13 @@ public class ClientRoleService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClientRoleService.class);
     private final Keycloak keycloak;
-    private final ConfigLoader config;
+    private final KeycloakProperties properties;
     private final String realmName;
     
-    public ClientRoleService(Keycloak keycloak, ConfigLoader config) {
+    public ClientRoleService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.config = config;
-        this.realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        this.properties = properties;
+        this.realmName = properties.getRealm().getName();
     }
     
     /**
@@ -32,14 +32,14 @@ public class ClientRoleService {
      * @return true si tous les rôles ont été créés avec succès, false sinon
      */
     public boolean createClientRoles(String clientInternalId) {
-        String[] roles = config.getArrayProperty("keycloak.client.roles");
+        List<String> roles = properties.getClient().getRoles();
         
-        if (roles.length == 0) {
+        if (roles == null || roles.isEmpty()) {
             logger.warn("⚠️ Aucun client role défini dans la configuration");
             return true;
         }
         
-        logger.info("🔧 Création de {} client roles...", roles.length);
+        logger.info("🔧 Création de {} client roles...", roles.size());
         boolean allSuccess = true;
         
         for (String roleName : roles) {

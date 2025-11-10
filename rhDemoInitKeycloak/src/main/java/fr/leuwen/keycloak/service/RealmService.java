@@ -5,7 +5,7 @@ import org.keycloak.representations.idm.RealmRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fr.leuwen.keycloak.ConfigLoader;
+import fr.leuwen.keycloak.config.KeycloakProperties;
 
 /**
  * Service pour créer et configurer le Realm Keycloak
@@ -14,11 +14,11 @@ public class RealmService {
     
     private static final Logger logger = LoggerFactory.getLogger(RealmService.class);
     private final Keycloak keycloak;
-    private final ConfigLoader config;
+    private final KeycloakProperties properties;
     
-    public RealmService(Keycloak keycloak, ConfigLoader config) {
+    public RealmService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.config = config;
+        this.properties = properties;
     }
     
     /**
@@ -26,7 +26,7 @@ public class RealmService {
      * @return true si le realm a été créé ou existe déjà, false en cas d'erreur
      */
     public boolean createRealm() {
-        String realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        String realmName = properties.getRealm().getName();
         
         try {
             logger.info("🔍 Vérification de l'existence du realm '{}'...", realmName);
@@ -46,21 +46,21 @@ public class RealmService {
             // Créer le nouveau realm
             RealmRepresentation realm = new RealmRepresentation();
             realm.setRealm(realmName);
-            realm.setDisplayName(config.getProperty("keycloak.realm.displayName", "Leuwen Realm"));
-            realm.setEnabled(config.getBooleanProperty("keycloak.realm.enabled", true));
+            realm.setDisplayName(properties.getRealm().getDisplayName());
+            realm.setEnabled(properties.getRealm().isEnabled());
             
             // Configuration de sécurité recommandée
-            realm.setRegistrationAllowed(false);
-            realm.setRegistrationEmailAsUsername(false);
-            realm.setResetPasswordAllowed(true);
-            realm.setEditUsernameAllowed(false);
-            realm.setLoginWithEmailAllowed(true);
-            realm.setDuplicateEmailsAllowed(false);
+            realm.setRegistrationAllowed(properties.getRealm().isRegistrationAllowed());
+            realm.setRegistrationEmailAsUsername(properties.getRealm().isRegistrationEmailAsUsername());
+            realm.setResetPasswordAllowed(properties.getRealm().isResetPasswordAllowed());
+            realm.setEditUsernameAllowed(properties.getRealm().isEditUsernameAllowed());
+            realm.setLoginWithEmailAllowed(properties.getRealm().isLoginWithEmailAllowed());
+            realm.setDuplicateEmailsAllowed(properties.getRealm().isDuplicateEmailsAllowed());
             
             // Paramètres de session
-            realm.setSsoSessionIdleTimeout(1800); // 30 minutes
-            realm.setSsoSessionMaxLifespan(36000); // 10 heures
-            realm.setAccessTokenLifespan(300); // 5 minutes
+            realm.setSsoSessionIdleTimeout(properties.getRealm().getSsoSessionIdleTimeout());
+            realm.setSsoSessionMaxLifespan(properties.getRealm().getSsoSessionMaxLifespan());
+            realm.setAccessTokenLifespan(properties.getRealm().getAccessTokenLifespan());
             
             // Créer le realm via l'API
             keycloak.realms().create(realm);
@@ -85,7 +85,7 @@ public class RealmService {
      * @return true si le realm a été supprimé, false sinon
      */
     public boolean deleteRealm() {
-        String realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        String realmName = properties.getRealm().getName();
         
         try {
             logger.warn("⚠️ Suppression du realm '{}'...", realmName);
@@ -102,7 +102,7 @@ public class RealmService {
      * Affiche les informations du realm
      */
     public void displayRealmInfo() {
-        String realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        String realmName = properties.getRealm().getName();
         
         try {
             RealmRepresentation realm = keycloak.realm(realmName).toRepresentation();

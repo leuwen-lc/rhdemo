@@ -6,7 +6,7 @@ import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fr.leuwen.keycloak.ConfigLoader;
+import fr.leuwen.keycloak.config.KeycloakProperties;
 
 import java.util.List;
 import java.util.Map;
@@ -18,13 +18,13 @@ public class ClientScopeService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClientScopeService.class);
     private final Keycloak keycloak;
-    private final ConfigLoader config;
+    private final KeycloakProperties properties;
     private final String realmName;
     
-    public ClientScopeService(Keycloak keycloak, ConfigLoader config) {
+    public ClientScopeService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.config = config;
-        this.realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        this.properties = properties;
+        this.realmName = properties.getRealm().getName();
     }
     
     /**

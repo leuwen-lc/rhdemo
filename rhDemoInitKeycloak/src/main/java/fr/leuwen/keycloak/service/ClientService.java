@@ -6,7 +6,7 @@ import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fr.leuwen.keycloak.ConfigLoader;
+import fr.leuwen.keycloak.config.KeycloakProperties;
 
 import jakarta.ws.rs.core.Response;
 import java.util.*;
@@ -18,13 +18,13 @@ public class ClientService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClientService.class);
     private final Keycloak keycloak;
-    private final ConfigLoader config;
+    private final KeycloakProperties properties;
     private final String realmName;
     
-    public ClientService(Keycloak keycloak, ConfigLoader config) {
+    public ClientService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.config = config;
-        this.realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        this.properties = properties;
+        this.realmName = properties.getRealm().getName();
     }
     
     /**
@@ -32,7 +32,7 @@ public class ClientService {
      * @return L'ID interne du client créé ou existant, null en cas d'erreur
      */
     public String createClient() {
-        String clientId = config.getProperty("keycloak.client.id", "RHDemo");
+        String clientId = properties.getClient().getClientId();
         
         try {
             logger.info("🔍 Vérification de l'existence du client '{}'...", clientId);
@@ -81,28 +81,23 @@ public class ClientService {
         ClientRepresentation client = new ClientRepresentation();
         
         // Identifiants et noms
-        client.setClientId(config.getProperty("keycloak.client.id", "RHDemo"));
-        client.setName(config.getProperty("keycloak.client.name", ""));
-        client.setDescription(config.getProperty("keycloak.client.description", 
-                "authent des users API et Admin de RHDemo"));
+        client.setClientId(properties.getClient().getClientId());
+        client.setName(properties.getClient().getName());
+        client.setDescription("authent des users API et Admin de RHDemo");
         
         // URLs
-        client.setRootUrl(config.getProperty("keycloak.client.rootUrl", "http://localhost:9000/"));
-        client.setBaseUrl(config.getProperty("keycloak.client.baseUrl", ""));
-        client.setAdminUrl(config.getProperty("keycloak.client.adminUrl", ""));
+        client.setRootUrl(properties.getClient().getRootUrl());
+        client.setBaseUrl(properties.getClient().getBaseUrl());
+        client.setAdminUrl(properties.getClient().getAdminUrl());
         
         // Redirect URIs et Web Origins
-        String redirectUris = config.getProperty("keycloak.client.redirectUris", "http://localhost:9000/*");
-        client.setRedirectUris(Arrays.asList(redirectUris.split(",")));
-        
-        String webOrigins = config.getProperty("keycloak.client.webOrigins", "http://localhost:9000/*");
-        client.setWebOrigins(Arrays.asList(webOrigins.split(",")));
+        client.setRedirectUris(properties.getClient().getRedirectUris());
+        client.setWebOrigins(properties.getClient().getWebOrigins());
         
         // Configuration d'authentification
         client.setEnabled(true);
         client.setClientAuthenticatorType("client-secret");
-        client.setSecret(config.getProperty("keycloak.client.secret", 
-                "lmax7TDMmHk5g7ZgCCXK9ILpjHHvHYga"));
+        client.setSecret(properties.getClient().getSecret());
         
         // Flow configuration
         client.setStandardFlowEnabled(true);

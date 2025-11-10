@@ -7,7 +7,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import fr.leuwen.keycloak.ConfigLoader;
+import fr.leuwen.keycloak.config.KeycloakProperties;
 
 import jakarta.ws.rs.core.Response;
 import java.util.ArrayList;
@@ -21,13 +21,13 @@ public class UserService {
     
     private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     private final Keycloak keycloak;
-    private final ConfigLoader config;
+    private final KeycloakProperties properties;
     private final String realmName;
     
-    public UserService(Keycloak keycloak, ConfigLoader config) {
+    public UserService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.config = config;
-        this.realmName = config.getProperty("keycloak.realm.name", "LeuwenRealm");
+        this.properties = properties;
+        this.realmName = properties.getRealm().getName();
     }
     
     /**
@@ -38,21 +38,18 @@ public class UserService {
     public boolean createAllUsers(String clientInternalId) {
         logger.info("👥 Création des utilisateurs...");
         
+        List<KeycloakProperties.User> users = properties.getUsers();
+        if (users == null || users.isEmpty()) {
+            logger.warn("⚠️ Aucun utilisateur défini dans la configuration");
+            return true;
+        }
+        
         boolean allSuccess = true;
         
-        // Créer admil
-        if (!createUser("admil", clientInternalId)) {
-            allSuccess = false;
-        }
-        
-        // Créer consuela
-        if (!createUser("consuela", clientInternalId)) {
-            allSuccess = false;
-        }
-        
-        // Créer madjid
-        if (!createUser("madjid", clientInternalId)) {
-            allSuccess = false;
+        for (KeycloakProperties.User user : users) {
+            if (!createUser(user, clientInternalId)) {
+                allSuccess = false;
+            }
         }
         
         return allSuccess;
@@ -60,20 +57,16 @@ public class UserService {
     
     /**
      * Crée un utilisateur spécifique avec ses rôles
-     * @param userKey La clé de l'utilisateur dans la configuration (ex: "admil", "consuela", "madjid")
+     * @param user L'utilisateur à créer
      * @param clientInternalId L'ID interne du client pour l'assignation des rôles
      * @return true si l'utilisateur a été créé avec succès, false sinon
      */
-    public boolean createUser(String userKey, String clientInternalId) {
-        String username = config.getProperty("keycloak.users." + userKey + ".username");
-        String password = config.getProperty("keycloak.users." + userKey + ".password");
-        String email = config.getProperty("keycloak.users." + userKey + ".email");
-        String firstname = config.getProperty("keycloak.users." + userKey + ".firstname");
-        String lastname = config.getProperty("keycloak.users." + userKey + ".lastname");
-        String rolesStr = config.getProperty("keycloak.users." + userKey + ".roles");
+    public boolean createUser(KeycloakProperties.User user, String clientInternalId) {
+        String username = user.getUsername();
+        String password = user.getPassword();
         
         if (username == null || password == null) {
-            logger.error("❌ Configuration incomplète pour l'utilisateur '{}'", userKey);
+            logger.error("❌ Configuration incomplète pour l'utilisateur");
             return false;
         }
         
@@ -88,10 +81,10 @@ public class UserService {
             String userId = null;
             boolean userExists = false;
             
-            for (UserRepresentation user : existingUsers) {
-                if (user.getUsername().equals(username)) {
+            for (UserRepresentation existingUser : existingUsers) {
+                if (existingUser.getUsername().equals(username)) {
                     logger.info("✅ L'utilisateur '{}' existe déjà", username);
-                    userId = user.getId();
+                    userId = existingUser.getId();
                     userExists = true;
                     break;
                 }
@@ -101,10 +94,9 @@ public class UserService {
             if (!userExists) {
                 logger.info("➡️ L'utilisateur '{}' n'existe pas, création en cours...", username);
                 
-                UserRepresentation user = buildUserRepresentation(
-                        username, password, email, firstname, lastname);
+                UserRepresentation userRep = buildUserRepresentation(user);
                 
-                try (Response response = keycloak.realm(realmName).users().create(user)) {
+                try (Response response = keycloak.realm(realmName).users().create(userRep)) {
                     if (response.getStatus() == 201) {
                         // Récupérer l'ID de l'utilisateur créé
                         String location = response.getHeaderString("Location");
@@ -120,9 +112,8 @@ public class UserService {
             }
             
             // Assigner les rôles client
-            if (rolesStr != null && !rolesStr.trim().isEmpty() && userId != null) {
-                String[] roles = rolesStr.split(",");
-                assignClientRolesToUser(userId, clientInternalId, roles);
+            if (user.getRoles() != null && !user.getRoles().isEmpty() && userId != null) {
+                assignClientRolesToUser(userId, clientInternalId, user.getRoles());
             }
             
             return true;
@@ -136,27 +127,25 @@ public class UserService {
     /**
      * Construit la représentation d'un utilisateur
      */
-    private UserRepresentation buildUserRepresentation(
-            String username, String password, String email, 
-            String firstname, String lastname) {
+    private UserRepresentation buildUserRepresentation(KeycloakProperties.User user) {
         
-        UserRepresentation user = new UserRepresentation();
-        user.setEnabled(true);
-        user.setUsername(username);
-        user.setEmail(email);
-        user.setFirstName(firstname);
-        user.setLastName(lastname);
-        user.setEmailVerified(true);
+        UserRepresentation userRep = new UserRepresentation();
+        userRep.setEnabled(true);
+        userRep.setUsername(user.getUsername());
+        userRep.setEmail(user.getEmail());
+        userRep.setFirstName(user.getFirstName());
+        userRep.setLastName(user.getLastName());
+        userRep.setEmailVerified(true);
         
         // Définir le mot de passe
         CredentialRepresentation credential = new CredentialRepresentation();
         credential.setType(CredentialRepresentation.PASSWORD);
-        credential.setValue(password);
+        credential.setValue(user.getPassword());
         credential.setTemporary(false); // Le mot de passe n'est pas temporaire
         
-        user.setCredentials(Arrays.asList(credential));
+        userRep.setCredentials(Arrays.asList(credential));
         
-        return user;
+        return userRep;
     }
     
     /**
@@ -165,7 +154,7 @@ public class UserService {
      * @param clientInternalId L'ID interne du client
      * @param roleNames Les noms des rôles à assigner
      */
-    public void assignClientRolesToUser(String userId, String clientInternalId, String[] roleNames) {
+    public void assignClientRolesToUser(String userId, String clientInternalId, List<String> roleNames) {
         try {
             List<RoleRepresentation> rolesToAssign = new ArrayList<>();
             

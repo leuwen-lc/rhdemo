@@ -47,6 +47,8 @@ jenkins:
             value: "/opt/java/openjdk/bin:/opt/maven/bin:$PATH"
           - key: "NOTIFICATION_EMAIL"
             value: "${SMTP_USER}"
+          - key: "SOPS_AGE_KEY_FILE"
+            value: "/var/jenkins_home/.config/sops/age/keys.txt"
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION DES OUTILS (JDK, Maven, etc.)

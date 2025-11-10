@@ -49,20 +49,11 @@ pipeline {
         stage('� Déchiffrement Secrets SOPS') {
             steps {
                 script {
-                    echo '▶ Installation et configuration de SOPS...'
+                    echo '▶ Vérification SOPS et YQ...'
                 }
                 sh '''
-                    # Installation de SOPS si nécessaire
-                    if ! command -v sops &> /dev/null; then
-                        echo "Installation de SOPS..."
-                        SOPS_VERSION="3.8.1"
-                        wget -q https://github.com/mozilla/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /tmp/sops
-                        chmod +x /tmp/sops
-                        sudo mv /tmp/sops /usr/local/bin/sops
-                    fi
-                    
-                    echo "SOPS version:"
                     sops --version
+                    yq --version
                 '''
                 
                 script {
@@ -85,14 +76,6 @@ pipeline {
                         echo "✅ Secrets déchiffrés avec succès"
                         
                         # Extraire les valeurs pour les variables d'environnement
-                        # Utilisation de yq pour parser le YAML
-                        if ! command -v yq &> /dev/null; then
-                            echo "Installation de yq..."
-                            wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
-                            chmod +x /tmp/yq
-                            sudo mv /tmp/yq /usr/local/bin/yq
-                        fi
-                        
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
                         echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > secrets/env-vars.sh
                         echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh

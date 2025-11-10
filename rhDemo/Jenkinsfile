@@ -388,7 +388,9 @@ pipeline {
                         reportDir: 'target',
                         reportFiles: 'dependency-check-report.html',
                         reportName: 'OWASP Dependency Check',
-                        allowMissing: true
+                        allowMissing: true,
+                        keepAll: true,
+                        alwaysLinkToLastBuild: true
                     ])
                 }
             }
@@ -420,7 +422,9 @@ pipeline {
                     reportDir: 'target/site/jacoco',
                     reportFiles: 'index.html',
                     reportName: 'Code Coverage',
-                    allowMissing: true
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
                 ])
             }
         }

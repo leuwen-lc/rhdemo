@@ -600,29 +600,33 @@ pipeline {
                 echo '  NETTOYAGE ET NOTIFICATIONS'
                 echo '═══════════════════════════════════════════════════════'
             }
-            // Nettoyage des fichiers sensibles
-            sh '''
-                # Supprimer les fichiers de secrets déchiffrés
-                rm -f secrets/env-vars.sh secrets/secrets-decrypted.yml || true
-                
-                # Arrêt de l'application test si elle tourne encore
-                if [ -f app-test.pid ]; then
-                    kill $(cat app-test.pid) 2>/dev/null || true
-                    rm app-test.pid
-                fi
-                
-                # Nettoyage des logs
-                rm -f app-test.log
-            '''
             
-            // Nettoyage du workspace (optionnel)
-            cleanWs(
-                deleteDirs: true,
-                patterns: [
-                    [pattern: 'target/**', type: 'INCLUDE'],
-                    [pattern: '**/node_modules/**', type: 'INCLUDE']
-                ]
-            )
+            // Nettoyage dans un contexte node
+            node {
+                // Nettoyage des fichiers sensibles
+                sh '''
+                    # Supprimer les fichiers de secrets déchiffrés
+                    rm -f secrets/env-vars.sh secrets/secrets-decrypted.yml || true
+                    
+                    # Arrêt de l'application test si elle tourne encore
+                    if [ -f app-test.pid ]; then
+                        kill $(cat app-test.pid) 2>/dev/null || true
+                        rm app-test.pid
+                    fi
+                    
+                    # Nettoyage des logs
+                    rm -f app-test.log
+                '''
+                
+                // Nettoyage du workspace (optionnel)
+                cleanWs(
+                    deleteDirs: true,
+                    patterns: [
+                        [pattern: 'target/**', type: 'INCLUDE'],
+                        [pattern: '**/node_modules/**', type: 'INCLUDE']
+                    ]
+                )
+            }
         }
         
         success {

@@ -621,7 +621,7 @@ pipeline {
                     
                     Voir les détails: ${env.BUILD_URL}
                 """,
-                to: "${env.SMTP_USER}"
+                to: "${env.NOTIFICATION_EMAIL}"
             )
         }
         
@@ -641,7 +641,7 @@ pipeline {
                     
                     Voir les logs: ${env.BUILD_URL}console
                 """,
-                to: "${env.SMTP_USER}",
+                to: "${env.NOTIFICATION_EMAIL}",
                 attachLog: true
             )
         }

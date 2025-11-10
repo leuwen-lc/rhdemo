@@ -45,6 +45,8 @@ jenkins:
             value: "/opt/maven"
           - key: "PATH"
             value: "/opt/java/openjdk/bin:/opt/maven/bin:$PATH"
+          - key: "NOTIFICATION_EMAIL"
+            value: "${SMTP_USER}"
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION DES OUTILS (JDK, Maven, etc.)
@@ -174,13 +176,12 @@ jobs:
             scm {
               git {
                 remote {
-                  url('/home/leno-vo/git/repository/rhDemo')
+                  url('https://github.com/leuwen-lc/rhdemo.git')
                 }
                 branches('*/packaging-et-déploiement-dans-environnement-séparé')
               }
             }
-            scriptPath('Jenkinsfile')
-            lightweight(false)
+            scriptPath('rhDemo/Jenkinsfile')
           }
         }
         

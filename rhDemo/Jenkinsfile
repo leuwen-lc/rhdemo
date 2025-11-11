@@ -115,7 +115,7 @@ pipeline {
                     // Charger les variables d'environnement depuis le fichier
                     sh '''
                         # Charger les secrets
-                        source rhDemo/secrets/env-vars.sh
+                        . rhDemo/secrets/env-vars.sh
                         
                         echo "Java version:"
                         java -version
@@ -142,7 +142,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour la compilation
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     cd rhDemo && ./mvnw clean compile -DskipTests
                 '''
             }
@@ -166,7 +166,7 @@ pipeline {
                 script {
                     echo "🔨 Compilation et packaging de l'application..."
                     sh """
-                        source rhDemo/secrets/env-vars.sh
+                        . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean package -DskipTests
                     """
                 }
@@ -182,7 +182,7 @@ pipeline {
                 script {
                     echo "🧪 Exécution des tests unitaires..."
                     sh """
-                        source rhDemo/secrets/env-vars.sh
+                        . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw test
                     """
                 }
@@ -200,7 +200,7 @@ pipeline {
                 withSonarQubeEnv('SonarQube') {
                     sh '''
                         # Charger les secrets pour l'analyse
-                        source rhDemo/secrets/env-vars.sh
+                        . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw sonar:sonar \
                             -Dsonar.projectKey=rhdemo-api \
                             -Dsonar.projectName="RHDemo API" \
@@ -231,7 +231,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour le rapport
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     cd rhDemo && ./mvnw jacoco:report
                 '''
                 jacoco(
@@ -260,7 +260,7 @@ pipeline {
                     // Démarrage en arrière-plan
                     sh '''
                         # Charger les secrets pour l'application test
-                        source rhDemo/secrets/env-vars.sh
+                        . rhDemo/secrets/env-vars.sh
                         nohup java -jar ${JAR_FILE} \
                             --spring.profiles.active=test \
                             --server.port=${TEST_PORT} \
@@ -348,7 +348,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour l'analyse de sécurité
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
                 '''
             }
@@ -416,7 +416,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     
                     # Déploiement via SSH ou script de déploiement
                     echo "Copie du JAR vers le serveur de staging..."
@@ -440,7 +440,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     
                     echo "Vérification du healthcheck..."
                     # curl -f http://${STAGING_SERVER}/actuator/health || exit 1
@@ -488,7 +488,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     
                     BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
                     echo "Création du backup: ${BACKUP_FILE}"
@@ -509,7 +509,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     
                     # Stratégie Blue-Green deployment
                     echo "1. Déploiement sur le serveur Green..."
@@ -542,7 +542,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source rhDemo/secrets/env-vars.sh
+                    . rhDemo/secrets/env-vars.sh
                     
                     echo "Healthcheck application..."
                     # curl -f http://${PROD_SERVER}/actuator/health

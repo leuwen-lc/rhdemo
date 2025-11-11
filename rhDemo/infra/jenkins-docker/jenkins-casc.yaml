@@ -71,52 +71,64 @@ tool:
         home: "git"
 
 # ═══════════════════════════════════════════════════════════════════
-# CREDENTIALS (à configurer manuellement ou via variables d'env)
+# CREDENTIALS
+# ⚠️  Les credentials sont gérés manuellement dans Jenkins UI
+#     pour permettre la persistance entre les redémarrages
+#
+# Liste des credentials à créer manuellement :
+#
+# 1. sops-age-key (Secret file)
+#    - Type: Secret file
+#    - ID: sops-age-key
+#    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
+#    - Description: SOPS AGE Private Key for decrypting secrets
+#
+# 2. keycloak-client-secret (Secret text)
+#    - Type: Secret text
+#    - ID: keycloak-client-secret
+#    - Secret: ${KEYCLOAK_CLIENT_SECRET}
+#    - Description: Keycloak Client Secret
+#
+# 3. h2-db-password (Secret text)
+#    - Type: Secret text
+#    - ID: h2-db-password
+#    - Secret: ${H2_DB_PASSWORD}
+#    - Description: H2 Database Password (tests)
+#
+# 4. postgres-db-password (Secret text)
+#    - Type: Secret text
+#    - ID: postgres-db-password
+#    - Secret: ${POSTGRES_DB_PASSWORD}
+#    - Description: PostgreSQL Database Password
+#
+# 5. staging-server-url (Secret text)
+#    - Type: Secret text
+#    - ID: staging-server-url
+#    - Secret: ${STAGING_SERVER_URL}
+#    - Description: Staging Server URL
+#
+# 6. prod-server-url (Secret text)
+#    - Type: Secret text
+#    - ID: prod-server-url
+#    - Secret: ${PROD_SERVER_URL}
+#    - Description: Production Server URL
+#
+# 7. github-token (Secret text - optionnel)
+#    - Type: Secret text
+#    - ID: github-token
+#    - Secret: ${GITHUB_TOKEN}
+#    - Description: GitHub Personal Access Token
+#
+# 8. sonar-token (Secret text - optionnel)
+#    - Type: Secret text
+#    - ID: sonar-token
+#    - Secret: ${SONAR_TOKEN}
+#    - Description: SonarQube Authentication Token
 # ═══════════════════════════════════════════════════════════════════
-credentials:
-  system:
-    domainCredentials:
-      - credentials:
-          # Secrets Keycloak
-          - string:
-              scope: GLOBAL
-              id: "keycloak-client-secret"
-              secret: "${KEYCLOAK_CLIENT_SECRET:-your-secret-here}"
-              description: "Keycloak Client Secret"
-          
-          # Mot de passe H2
-          - string:
-              scope: GLOBAL
-              id: "h2-db-password"
-              secret: "${H2_DB_PASSWORD:-password}"
-              description: "H2 Database Password (tests)"
-          
-          # Mot de passe PostgreSQL
-          - string:
-              scope: GLOBAL
-              id: "postgres-db-password"
-              secret: "${POSTGRES_DB_PASSWORD:-your-postgres-password}"
-              description: "PostgreSQL Database Password"
-          
-          # URLs des serveurs
-          - string:
-              scope: GLOBAL
-              id: "staging-server-url"
-              secret: "${STAGING_SERVER_URL:-staging.example.com}"
-              description: "Staging Server URL"
-          
-          - string:
-              scope: GLOBAL
-              id: "prod-server-url"
-              secret: "${PROD_SERVER_URL:-prod.example.com}"
-              description: "Production Server URL"
-          
-          # GitHub Token (si nécessaire)
-          - string:
-              scope: GLOBAL
-              id: "github-token"
-              secret: "${GITHUB_TOKEN:-}"
-              description: "GitHub Personal Access Token"
+# credentials:
+#   system:
+#     domainCredentials:
+#       - credentials: []
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION SONARQUBE

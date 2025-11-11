@@ -97,6 +97,11 @@ pipeline {
                         echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         
+                        # Mots de passe Keycloak pour environnement staging
+                        echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        
                         # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
                         if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
                             echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
@@ -348,9 +353,17 @@ pipeline {
                     . rhDemo/secrets/env-vars.sh
                     cd ${STAGING_INFRA_PATH}
                     
+                    # Variables d'environnement pour Docker Compose
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
+                    export RHDEMO_DB_PASSWORD=\${RHDEMO_DATASOURCE_PASSWORD_PG}
                     export RHDEMO_DATASOURCE_PASSWORD_PG=\${RHDEMO_DATASOURCE_PASSWORD_PG}
-                    export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+                    export RHDEMO_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+                    export RHDEMO_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+                    
+                    # Variables Keycloak (depuis SOPS)
+                    export KEYCLOAK_DB_PASSWORD=\${KEYCLOAK_DB_PASSWORD}
+                    export KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
+                    export KEYCLOAK_ADMIN_USER=\${KEYCLOAK_ADMIN_USER}
                     
                     docker-compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     

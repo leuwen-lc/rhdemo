@@ -10,15 +10,15 @@ pipeline {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
         APP_VERSION = '0.0.1-SNAPSHOT'
-        JAR_FILE = "target/rhdemoAPI-${APP_VERSION}.jar"
+        JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
         
         // Configuration des tests
         TEST_PORT = '9000'
-        TEST_PROJECT_PATH = '../rhDemoAPITestIHM'
+        TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
         
         // Fichiers de secrets SOPS
-        SECRETS_FILE = 'secrets/secrets-staging.yml'
-        SECRETS_DECRYPTED = 'secrets/secrets-decrypted.yml'
+        SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
+        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
     }
     
     parameters {
@@ -64,7 +64,7 @@ pipeline {
                 withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
                     sh '''
                         # Créer le répertoire secrets s'il n'existe pas
-                        mkdir -p secrets
+                        mkdir -p rhDemo/secrets
                         
                         # Déchiffrer le fichier de secrets
                         echo "Déchiffrement de ${SECRETS_FILE}..."
@@ -80,17 +80,17 @@ pipeline {
                         
                         # Extraire les valeurs pour les variables d'environnement
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
-                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > secrets/env-vars.sh
-                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
-                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         
                         # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
                         if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                            echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                            echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         fi
                         
                         if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                            echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> secrets/env-vars.sh
+                            echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         fi
                         
                         # Afficher (sans montrer les valeurs)
@@ -115,12 +115,12 @@ pipeline {
                     // Charger les variables d'environnement depuis le fichier
                     sh '''
                         # Charger les secrets
-                        source secrets/env-vars.sh
+                        source rhDemo/secrets/env-vars.sh
                         
                         echo "Java version:"
                         java -version
                         echo "\nMaven version:"
-                        ./mvnw -version
+                        cd rhDemo && ./mvnw -version
                         echo "\nVariables d'environnement:"
                         env | grep RHDEMO || echo "Variables RHDEMO configurées"
                     '''
@@ -142,8 +142,8 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour la compilation
-                    source secrets/env-vars.sh
-                    ./mvnw clean compile -DskipTests
+                    source rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw clean compile -DskipTests
                 '''
             }
         }
@@ -155,23 +155,21 @@ pipeline {
                 }
                 sh '''
                     echo "Installation Node.js et build Vue.js automatique via frontend-maven-plugin"
-                    cd frontend
+                    cd rhDemo/frontend
                     ls -la node/ || echo "Node.js sera installé par Maven"
                 '''
             }
         }
         
-        stage('📦 Package Complet') {
+        stage('� Build') {
             steps {
                 script {
-                    echo '▶ Package du JAR avec frontend intégré...'
+                    echo "🔨 Compilation et packaging de l'application..."
+                    sh """
+                        source rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw clean package -DskipTests
+                    """
                 }
-                sh '''
-                    # Charger les secrets pour le package
-                    source secrets/env-vars.sh
-                    ./mvnw package -DskipTests
-                    ls -lh ${JAR_FILE}
-                '''
             }
         }
         
@@ -182,23 +180,11 @@ pipeline {
         stage('🧪 Tests Unitaires') {
             steps {
                 script {
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 3 : QUALITÉ DU CODE'
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Exécution des tests unitaires avec base H2...'
-                }
-                sh '''
-                    # Charger les secrets pour les tests
-                    source secrets/env-vars.sh
-                    ./mvnw test
-                '''
-            }
-            post {
-                always {
-                    junit '**/target/surefire-reports/*.xml'
-                    script {
-                        echo '✅ Rapports de tests JUnit générés'
-                    }
+                    echo "🧪 Exécution des tests unitaires..."
+                    sh """
+                        source rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw test
+                    """
                 }
             }
         }
@@ -214,8 +200,8 @@ pipeline {
                 withSonarQubeEnv('SonarQube') {
                     sh '''
                         # Charger les secrets pour l'analyse
-                        source secrets/env-vars.sh
-                        ./mvnw sonar:sonar \
+                        source rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw sonar:sonar \
                             -Dsonar.projectKey=rhdemo-api \
                             -Dsonar.projectName="RHDemo API" \
                             -Dsonar.java.binaries=target/classes
@@ -245,13 +231,13 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour le rapport
-                    source secrets/env-vars.sh
-                    ./mvnw jacoco:report
+                    source rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw jacoco:report
                 '''
                 jacoco(
-                    execPattern: '**/target/jacoco.exec',
-                    classPattern: '**/target/classes',
-                    sourcePattern: '**/src/main/java'
+                    execPattern: '**/rhDemo/target/jacoco.exec',
+                    classPattern: '**/rhDemo/target/classes',
+                    sourcePattern: '**/rhDemo/src/main/java'
                 )
             }
         }
@@ -274,7 +260,7 @@ pipeline {
                     // Démarrage en arrière-plan
                     sh '''
                         # Charger les secrets pour l'application test
-                        source secrets/env-vars.sh
+                        source rhDemo/secrets/env-vars.sh
                         nohup java -jar ${JAR_FILE} \
                             --spring.profiles.active=test \
                             --server.port=${TEST_PORT} \
@@ -311,7 +297,7 @@ pipeline {
                 dir(TEST_PROJECT_PATH) {
                     sh '''
                         # Utilisation du wrapper Maven du projet principal
-                        /home/leno-vo/git/repository/rhdemo/mvnw clean test \
+                        cd ${WORKSPACE}/rhDemo && ./mvnw clean test -f ../${TEST_PROJECT_PATH}/pom.xml \
                             -Dtest.baseurl=http://localhost:${TEST_PORT} \
                             -Dselenium.headless=true
                     '''
@@ -362,14 +348,14 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets pour l'analyse de sécurité
-                    source secrets/env-vars.sh
-                    ./mvnw org.owasp:dependency-check-maven:check
+                    source rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
                 '''
             }
             post {
                 always {
                     publishHTML([
-                        reportDir: 'target',
+                        reportDir: 'rhDemo/target',
                         reportFiles: 'dependency-check-report.html',
                         reportName: 'OWASP Dependency Check',
                         allowMissing: true,
@@ -430,7 +416,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source secrets/env-vars.sh
+                    source rhDemo/secrets/env-vars.sh
                     
                     # Déploiement via SSH ou script de déploiement
                     echo "Copie du JAR vers le serveur de staging..."
@@ -454,7 +440,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source secrets/env-vars.sh
+                    source rhDemo/secrets/env-vars.sh
                     
                     echo "Vérification du healthcheck..."
                     # curl -f http://${STAGING_SERVER}/actuator/health || exit 1
@@ -502,7 +488,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets
-                    source secrets/env-vars.sh
+                    source rhDemo/secrets/env-vars.sh
                     
                     BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
                     echo "Création du backup: ${BACKUP_FILE}"
@@ -523,7 +509,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source secrets/env-vars.sh
+                    source rhDemo/secrets/env-vars.sh
                     
                     # Stratégie Blue-Green deployment
                     echo "1. Déploiement sur le serveur Green..."
@@ -556,7 +542,7 @@ pipeline {
                 }
                 sh '''
                     # Charger les secrets et URLs de serveurs
-                    source secrets/env-vars.sh
+                    source rhDemo/secrets/env-vars.sh
                     
                     echo "Healthcheck application..."
                     # curl -f http://${PROD_SERVER}/actuator/health

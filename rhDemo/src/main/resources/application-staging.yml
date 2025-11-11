@@ -1,0 +1,41 @@
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:RHDemo}
+            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+            scope: openid
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          keycloak:
+            # Définir tous les endpoints manuellement (pas d'issuer-uri)
+            # URLs publiques HTTPS pour les redirections navigateur
+            authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
+            # URLs internes HTTP pour communication backend (nom du service Docker)
+            token-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/token
+            # PAS de user-info-uri pour éviter l'appel qui échoue avec le 401
+            # user-info-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/userinfo
+            jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          # Pas d'issuer-uri pour éviter la validation HTTPS depuis le container
+          # Spring Security validera l'issuer depuis le JWT lui-même
+          # JWK pour récupération des clés (HTTP interne avec nom du service Docker)
+          jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
+
+# Configuration serveur pour reverse proxy
+server:
+  # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
+  forward-headers-strategy: framework
+
+# Logging pour debug
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: TRACE
+    org.springframework.web.client: DEBUG

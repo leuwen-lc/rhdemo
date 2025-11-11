@@ -1,7 +1,6 @@
 package fr.leuwen.keycloak.runner;
 
 import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.KeycloakBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -22,9 +21,11 @@ public class KeycloakInitializerRunner implements CommandLineRunner {
     private static final Logger logger = LoggerFactory.getLogger(KeycloakInitializerRunner.class);
     
     private final KeycloakProperties properties;
+    private final Keycloak keycloak;
 
-    public KeycloakInitializerRunner(KeycloakProperties properties) {
+    public KeycloakInitializerRunner(KeycloakProperties properties, Keycloak keycloak) {
         this.properties = properties;
+        this.keycloak = keycloak;
     }
 
     @Override
@@ -33,15 +34,9 @@ public class KeycloakInitializerRunner implements CommandLineRunner {
         logger.info("║  Initialisation de la configuration Keycloak pour RHDemo  ║");
         logger.info("╚════════════════════════════════════════════════════════════╝");
         logger.info("");
-
-        Keycloak keycloak = null;
+        logger.info("✅ Client Keycloak configuré avec succès!");
 
         try {
-            // 1. Connexion à Keycloak
-            logger.info("🔌 ÉTAPE 1: Connexion au serveur Keycloak...");
-            keycloak = connectToKeycloak();
-            logger.info("✅ Client Keycloak configuré avec succès!");
-
             // 2. Création du Realm
             logger.info("");
             logger.info("🏛️ ÉTAPE 2: Création du Realm...");
@@ -106,38 +101,8 @@ public class KeycloakInitializerRunner implements CommandLineRunner {
             logger.error("💥 Erreur fatale lors de l'initialisation de Keycloak", e);
             System.exit(1);
         } finally {
-            if (keycloak != null) {
-                logger.info("🔌 Fermeture de la connexion Keycloak...");
-                keycloak.close();
-            }
-        }
-    }
-
-    /**
-     * Établit une connexion avec le serveur Keycloak en tant qu'admin
-     */
-    private Keycloak connectToKeycloak() {
-        logger.info("   🔗 Serveur: {}", properties.getServerUrl());
-        logger.info("   🏛️ Realm admin: {}", properties.getAdmin().getRealm());
-        logger.info("   👤 Utilisateur admin: {}", properties.getAdmin().getUsername());
-
-        try {
-            // Créer le client Keycloak avec configuration par défaut
-            // Les providers Jackson et FormUrlEncoded sont déjà enregistrés automatiquement
-            return KeycloakBuilder.builder()
-                    .serverUrl(properties.getServerUrl())
-                    .realm(properties.getAdmin().getRealm())
-                    .username(properties.getAdmin().getUsername())
-                    .password(properties.getAdmin().getPassword())
-                    .clientId("admin-cli")
-                    .build();
-
-        } catch (Exception e) {
-            logger.error("❌ Impossible de se connecter à Keycloak. Vérifiez que:");
-            logger.error("   - Keycloak est démarré sur {}", properties.getServerUrl());
-            logger.error("   - Les credentials admin sont corrects");
-            logger.error("   - Le realm '{}' existe", properties.getAdmin().getRealm());
-            throw new RuntimeException("Échec de connexion à Keycloak", e);
+            logger.info("🔌 Fermeture de la connexion Keycloak...");
+            keycloak.close();
         }
     }
 }

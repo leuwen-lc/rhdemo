@@ -1,0 +1,52 @@
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose Override pour Jenkins CI/CD
+# 
+# Ce fichier override le docker-compose.yml principal pour
+# utiliser l'image Docker buildée par Maven/Paketo au lieu
+# de rebuilder depuis le contexte.
+#
+# Usage dans Jenkins:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.jenkins.yml \
+#                  up -d
+#
+# Variables attendues dans .env:
+#   RHDEMO_IMAGE=rhdemo-api:0.0.1-SNAPSHOT-123
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # Override de l'application RHDemo
+  # Utilise l'image buildée au lieu de build context
+  rhdemo-app:
+    image: ${RHDEMO_IMAGE:-rhdemo-api:0.0.1-SNAPSHOT}
+    # Supprime la directive 'build' du docker-compose.yml principal
+    build: null
+    
+    # On peut aussi override d'autres paramètres si nécessaire
+    # Par exemple, activer des logs plus verbeux pour les tests:
+    environment:
+      - SPRING_PROFILES_ACTIVE=staging
+      - LOGGING_LEVEL_ROOT=INFO
+      - LOGGING_LEVEL_FR_LEUWEN=DEBUG
+      
+      # Variables OAuth2/Keycloak
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID=RHDemo
+      - SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=${RHDEMO_KEYCLOAK_CLIENT_SECRET}
+      
+      # Base de données
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://rhdemo-db:5432/rhdemo
+      - SPRING_DATASOURCE_USERNAME=rhdemo
+      - SPRING_DATASOURCE_PASSWORD=${RHDEMO_DB_PASSWORD}
+      
+      # Configuration OAuth2 Provider
+      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI=http://keycloak:8080/realms/RHDemo
+      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_AUTHORIZATION_URI=https://${KEYCLOAK_DOMAIN}/realms/RHDemo/protocol/openid-connect/auth
+      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_TOKEN_URI=http://keycloak:8080/realms/RHDemo/protocol/openid-connect/token
+      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_JWK_SET_URI=http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
+      
+      # Forward headers pour reverse proxy
+      - SERVER_FORWARD_HEADERS_STRATEGY=framework
+      
+      # Memory settings (peut être ajusté selon les ressources Jenkins)
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC
+

@@ -1,0 +1,80 @@
+# ========================================
+# Configuration Keycloak Server - STAGING
+# ========================================
+keycloak:
+  server-url: http://localhost:8080
+  
+  admin:
+    realm: master
+    username: ${KEYCLOAK_ADMIN_USER:admin}
+    password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
+  
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: ${RHDEMO_CLIENT_SECRET:changeme_client_secret}
+    root-url: https://rhdemo.staging.local/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://rhdemo.staging.local/*
+      - http://localhost:9000/*
+    web-origins:
+      - https://rhdemo.staging.local
+      - http://localhost:9000
+    roles:
+      - admin
+      - consult
+      - MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: admin
+      password: admin123
+      email: admin@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - admin
+        - consult
+        - MAJ
+    
+    - username: consultant
+      password: consult123
+      email: consultant@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - consult
+    
+    - username: manager
+      password: manager123
+      email: manager@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - consult
+        - MAJ

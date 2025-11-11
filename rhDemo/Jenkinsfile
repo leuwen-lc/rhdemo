@@ -24,6 +24,14 @@ pipeline {
         // Fichiers de secrets SOPS
         SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
         SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
+        
+        // Configuration environnement staging (Docker Compose)
+        STAGING_INFRA_PATH = 'rhDemo/infra/staging'
+        KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
+        TEST_DOMAIN = 'rhdemo.staging.local'
+        KEYCLOAK_DOMAIN = 'keycloak.staging.local'
+        COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
+        RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
     }
     
     parameters {
@@ -267,59 +275,202 @@ pipeline {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 4 : TESTS FONCTIONNELS
+        // PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)
         // ════════════════════════════════════════════════════════════════
         
-        stage('🚀 Démarrage App Test') {
+        stage('⚙️ Configuration Environnement Test') {
             when {
                 expression { params.RUN_SELENIUM_TESTS == true }
             }
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 4 : TESTS FONCTIONNELS'
+                    echo '  PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)'
                     echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Démarrage de l\'application en mode test (Docker)...'
+                    echo '▶ Configuration de l\'environnement de test Docker Compose...'
                     
-                    // Démarrage du container Docker
+                    // Nettoyer l'environnement précédent si existant
                     sh """
-                        . rhDemo/secrets/env-vars.sh
-                        
-                        # Arrêter le container s'il existe déjà
-                        docker stop rhdemo-test 2>/dev/null || true
-                        docker rm rhdemo-test 2>/dev/null || true
-                        
-                        # Démarrer le container en arrière-plan
-                        docker run -d \
-                            --name rhdemo-test \
-                            -p ${TEST_PORT}:9000 \
-                            -e SPRING_PROFILES_ACTIVE=test \
-                            -e RHDEMO_DATASOURCE_PASSWORD_H2=\${RHDEMO_DATASOURCE_PASSWORD_H2} \
-                            -e RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET} \
-                            ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
-                        
-                        # Sauvegarder le nom du container
-                        echo "rhdemo-test" > app-test.container
+                        cd ${STAGING_INFRA_PATH}
+                        docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        docker network prune -f
                     """
                     
-                    // Attente de disponibilité
-                    sh '''
-                        echo "Attente du démarrage de l'application..."
-                        for i in {1..60}; do
-                            if curl -s http://localhost:${TEST_PORT}/actuator/health > /dev/null; then
-                                echo "✅ Application démarrée avec succès!"
-                                exit 0
-                            fi
-                            echo "Tentative $i/60..."
-                            sleep 2
-                        done
-                        echo "❌ Échec du démarrage de l'application"
-                        docker logs rhdemo-test
-                        exit 1
-                    '''
+                    // Configuration du fichier hosts (si Jenkins tourne localement)
+                    sh """
+                        # Vérifier si les entrées hosts existent
+                        if ! grep -q "${TEST_DOMAIN}" /etc/hosts 2>/dev/null; then
+                            echo "⚠️  ATTENTION: Ajouter '127.0.0.1 ${TEST_DOMAIN} ${KEYCLOAK_DOMAIN}' à /etc/hosts"
+                        fi
+                    """
                 }
             }
         }
+        
+        stage('🔐 Génération Certificats SSL') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Génération des certificats SSL auto-signés...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    ./generate-certs.sh --domain ${TEST_DOMAIN} --domain ${KEYCLOAK_DOMAIN}
+                """
+            }
+        }
+        
+        stage('🏷️ Tag Image Docker') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo "▶ Tag de l'image Docker: ${RHDEMO_IMAGE}..."
+                }
+                sh """
+                    docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${RHDEMO_IMAGE}
+                """
+            }
+        }
+        
+        stage('🐳 Démarrage Environnement Docker') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage de l\'environnement Docker Compose (5 services)...'
+                }
+                sh """
+                    . rhDemo/secrets/env-vars.sh
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    export RHDEMO_IMAGE=${RHDEMO_IMAGE}
+                    export RHDEMO_DATASOURCE_PASSWORD_PG=\${RHDEMO_DATASOURCE_PASSWORD_PG}
+                    export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+                    
+                    docker compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
+                    
+                    echo "✅ Services démarrés:"
+                    docker compose -p ${COMPOSE_PROJECT_NAME} ps
+                """
+            }
+        }
+        
+        stage('🏥 Vérification Healthchecks') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Attente healthcheck des services...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    echo "⏳ Attente des bases de données (30s)..."
+                    sleep 30
+                    
+                    echo "⏳ Attente Keycloak (60s max)..."
+                    timeout=60
+                    while [ \$timeout -gt 0 ]; do
+                        if curl -k -f https://${KEYCLOAK_DOMAIN}/health/ready 2>/dev/null; then
+                            echo "✅ Keycloak ready"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Keycloak timeout"
+                        exit 1
+                    fi
+                    
+                    echo "⏳ Attente RHDemo App (60s max)..."
+                    timeout=60
+                    while [ \$timeout -gt 0 ]; do
+                        if curl -k -f https://${TEST_DOMAIN}/actuator/health 2>/dev/null; then
+                            echo "✅ RHDemo App ready"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ RHDemo App timeout"
+                        exit 1
+                    fi
+                """
+            }
+        }
+        
+        stage('🔑 Initialisation Keycloak') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation du realm Keycloak...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    ./init-keycloak.sh --non-interactive
+                    
+                    if [ \$? -ne 0 ]; then
+                        echo "❌ Échec de l'initialisation Keycloak"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Keycloak initialisé (realm RHDemo, 3 utilisateurs)"
+                """
+            }
+        }
+        
+        stage('💾 Initialisation Base de Données') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation de la base de données PostgreSQL...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    ./init-database.sh --force
+                    
+                    if [ \$? -ne 0 ]; then
+                        echo "❌ Échec de l'initialisation de la base"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Base de données initialisée (303 employés)"
+                """
+            }
+        }
+        
+        stage('⏱️ Stabilisation Environnement') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Stabilisation de l\'environnement (15s)...'
+                }
+                sh 'sleep 15'
+                script {
+                    echo '✅ Environnement prêt pour les tests'
+                }
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 5 : TESTS FONCTIONNELS
+        // ════════════════════════════════════════════════════════════════
         
         stage('🌐 Tests Selenium IHM') {
             when {
@@ -327,15 +478,27 @@ pipeline {
             }
             steps {
                 script {
-                    echo '▶ Exécution des tests Selenium...'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 5 : TESTS FONCTIONNELS'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
                 }
                 dir(TEST_PROJECT_PATH) {
-                    sh '''
+                    sh """
+                        . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
+                        
                         # Utilisation du wrapper Maven du projet principal
-                        cd ${WORKSPACE}/rhDemo && ./mvnw clean test -f ../${TEST_PROJECT_PATH}/pom.xml \
-                            -Dtest.baseurl=http://localhost:${TEST_PORT} \
-                            -Dselenium.headless=true
-                    '''
+                        cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
+                            -Dtest.baseurl=https://${TEST_DOMAIN} \\
+                            -Dselenium.headless=true \\
+                            -Dtest.keycloak.url=https://${KEYCLOAK_DOMAIN} \\
+                            -Dtest.admin.user=admin \\
+                            -Dtest.admin.password=\${KEYCLOAK_ADMIN_PASSWORD:-admin123} \\
+                            -Dtest.consult.user=consultant \\
+                            -Dtest.consult.password=consult123 \\
+                            -Dtest.manager.user=manager \\
+                            -Dtest.manager.password=manager123
+                    """
                 }
             }
             post {
@@ -372,14 +535,14 @@ pipeline {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 5 : SÉCURITÉ
+        // PHASE 6 : SÉCURITÉ
         // ════════════════════════════════════════════════════════════════
         
         stage('🔒 Scan Vulnérabilités') {
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 5 : SÉCURITÉ'
+                    echo '  PHASE 6 : SÉCURITÉ'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Analyse des vulnérabilités des dépendances...'
                 }
@@ -404,14 +567,14 @@ pipeline {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 6 : ARCHIVAGE
+        // PHASE 7 : ARCHIVAGE
         // ════════════════════════════════════════════════════════════════
         
         stage('📚 Archivage Artifacts') {
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 6 : ARCHIVAGE'
+                    echo '  PHASE 7 : ARCHIVAGE'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Archivage du JAR et des rapports...'
                 }
@@ -437,7 +600,7 @@ pipeline {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 7 : DÉPLOIEMENT STAGING
+        // PHASE 8 : DÉPLOIEMENT STAGING
         // ════════════════════════════════════════════════════════════════
         
         stage('🎭 Déploiement Staging') {
@@ -447,7 +610,7 @@ pipeline {
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 7 : DÉPLOIEMENT STAGING'
+                    echo '  PHASE 8 : DÉPLOIEMENT STAGING'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Déploiement sur l\'environnement de staging...'
                 }
@@ -491,7 +654,7 @@ pipeline {
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 8 : PRODUCTION
+        // PHASE 9 : PRODUCTION
         // ════════════════════════════════════════════════════════════════
         
         stage('✋ Validation Manuelle') {
@@ -503,7 +666,7 @@ pipeline {
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 8 : PRODUCTION'
+                    echo '  PHASE 9 : PRODUCTION'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Approbation manuelle requise pour la production...'
                 }
@@ -606,6 +769,29 @@ pipeline {
                 echo '═══════════════════════════════════════════════════════'
                 echo '  NETTOYAGE ET NOTIFICATIONS'
                 echo '═══════════════════════════════════════════════════════'
+                
+                // PHASE 6 : Nettoyage de l'environnement Docker Compose
+                if (params.RUN_SELENIUM_TESTS == true) {
+                    echo '▶ Nettoyage de l\'environnement Docker Compose...'
+                    sh """
+                        cd ${STAGING_INFRA_PATH} || exit 0
+                        
+                        # Afficher les logs en cas d'échec
+                        if [ "\${currentBuild.result}" != "SUCCESS" ]; then
+                            echo "📋 Logs des services Docker:"
+                            docker compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
+                        fi
+                        
+                        # Arrêt et suppression des containers/volumes/networks
+                        docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        
+                        # Suppression de l'image de build taguée
+                        docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
+                        
+                        echo "✅ Environnement nettoyé"
+                    """ 
+                }
+                
                 echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'
             }
         }

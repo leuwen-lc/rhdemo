@@ -1,0 +1,170 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # Base de données PostgreSQL pour l'application RHDemo
+  # ═══════════════════════════════════════════════════════════════
+  rhdemo-db:
+    image: postgres:16-alpine
+    container_name: rhdemo-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rhdemo
+      POSTGRES_USER: rhdemo
+      POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD}
+    volumes:
+      - rhdemo-db-data:/var/lib/postgresql/data
+      - ../../pgddl.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - rhdemo-staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rhdemo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Base de données PostgreSQL pour Keycloak
+  # ═══════════════════════════════════════════════════════════════
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - rhdemo-staging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Keycloak - Serveur d'authentification
+  # ═══════════════════════════════════════════════════════════════
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    container_name: keycloak-staging
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --db=postgres
+      - --db-url=jdbc:postgresql://keycloak-db:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=${KEYCLOAK_DB_PASSWORD}
+      - --proxy-headers=xforwarded
+      - --http-enabled=true
+      - --health-enabled=true
+      - --metrics-enabled=true
+    environment:
+      # Admin Keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      
+      # Configuration hostname : pas de KC_HOSTNAME_URL fixe
+      # Keycloak utilisera l'URL de la requête entrante (dynamique)
+      # Cela permet aux tokens d'avoir l'issuer correct selon le contexte
+      # - HTTPS pour les requêtes via nginx (frontend)
+      # - HTTP pour les requêtes backend internes
+      
+      # Logging
+      KC_LOG_LEVEL: info
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      rhdemo-staging:
+        aliases:
+          - keycloak.staging.local
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════
+  # Application RHDemo (image Paketo)
+  # ═══════════════════════════════════════════════════════════════
+  rhdemo-app:
+    image: rhdemo-api:${APP_VERSION:-0.0.1-SNAPSHOT}
+    container_name: rhdemo-staging-app
+    restart: unless-stopped
+    environment:
+      # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
+      SPRING_PROFILES_ACTIVE: staging
+      SERVER_PORT: 9000
+      
+      # Base de données PostgreSQL
+      SPRING_DATASOURCE_URL: jdbc:postgresql://rhdemo-db:5432/rhdemo
+      SPRING_DATASOURCE_USERNAME: rhdemo
+      SPRING_DATASOURCE_PASSWORD: ${RHDEMO_DB_PASSWORD}
+      
+      # OAuth2/Keycloak
+      # Configuration définie dans src/main/resources/application-staging.yml
+      # Seuls les secrets sont passés en variables d'environnement
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: ${RHDEMO_CLIENT_SECRET}
+      
+      # Actuator
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when_authorized
+      
+      # JVM Options (Paketo)
+      BPL_JVM_THREAD_COUNT: 50
+      BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+    depends_on:
+      rhdemo-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - rhdemo-staging
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════
+  # Nginx - Reverse Proxy avec HTTPS
+  # ═══════════════════════════════════════════════════════════════
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: rhdemo-staging-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      - rhdemo-app
+      - keycloak
+    networks:
+      - rhdemo-staging
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  rhdemo-staging:
+    name: rhdemo-staging-network
+    driver: bridge
+
+volumes:
+  rhdemo-db-data:
+    name: rhdemo-staging-db-data
+  keycloak-db-data:
+    name: keycloak-staging-db-data
+  nginx-cache:
+    name: rhdemo-staging-nginx-cache

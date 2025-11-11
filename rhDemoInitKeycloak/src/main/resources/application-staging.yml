@@ -1,0 +1,80 @@
+# ========================================
+# Configuration Keycloak Server - STAGING
+# Générée automatiquement par init-keycloak.sh
+# ========================================
+keycloak:
+  server-url: https://keycloak.staging.local
+  
+  admin:
+    realm: master
+    username: admin
+    password: nXvqN36bueHIp9OVmmoMw56ZxJjXOFKQ_password
+  
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: Tdr7xrRTaknzN9waFxhrW42yZRWRyT4A
+    root-url: https://rhdemo.staging.local/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://rhdemo.staging.local/*
+      - http://localhost:9000/*
+    web-origins:
+      - https://rhdemo.staging.local
+      - http://localhost:9000
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: admin
+      password: admin123
+      email: admin@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - ROLE_admin
+       
+    
+    - username: consultant
+      password: consult123
+      email: consultant@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - ROLE_consult
+    
+    - username: manager
+      password: manager123
+      email: manager@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ

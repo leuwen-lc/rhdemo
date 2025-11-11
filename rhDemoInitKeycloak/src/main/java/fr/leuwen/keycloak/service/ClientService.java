@@ -28,8 +28,8 @@ public class ClientService {
     }
     
     /**
-     * Crée le client RHDemo s'il n'existe pas déjà
-     * @return L'ID interne du client créé ou existant, null en cas d'erreur
+     * Crée le client RHDemo (supprime et recrée s'il existe déjà pour forcer la mise à jour)
+     * @return L'ID interne du client créé, null en cas d'erreur
      */
     public String createClient() {
         String clientId = properties.getClient().getClientId();
@@ -43,11 +43,13 @@ public class ClientService {
                     .findByClientId(clientId);
             
             if (!existingClients.isEmpty()) {
-                logger.info("✅ Le client '{}' existe déjà", clientId);
-                return existingClients.get(0).getId();
+                String existingId = existingClients.get(0).getId();
+                logger.warn("⚠️  Le client '{}' existe déjà (ID: {}), suppression pour recréation...", clientId, existingId);
+                keycloak.realm(realmName).clients().get(existingId).remove();
+                logger.info("✅ Client existant supprimé");
             }
             
-            logger.info("➡️ Le client '{}' n'existe pas, création en cours...", clientId);
+            logger.info("➡️ Création du client '{}'...", clientId);
             
             // Créer le nouveau client
             ClientRepresentation client = buildClientRepresentation();
@@ -156,7 +158,7 @@ public class ClientService {
         config.put("multivalued", "true");
         config.put("userinfo.token.claim", "false");
         config.put("user.attribute", "foo");
-        config.put("id.token.claim", "false");
+        config.put("id.token.claim", "true");  // IMPORTANT: Inclure dans l'ID token pour OAuth2 sans userinfo
         config.put("lightweight.claim", "false");
         config.put("access.token.claim", "true");
         config.put("claim.name", "resource_access.${client_id}.roles");

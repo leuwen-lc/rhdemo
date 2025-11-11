@@ -65,6 +65,13 @@
             <version>6.2.7.Final</version>
         </dependency>
 
+        <!-- Apache HTTP Client pour support SSL custom -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.5.14</version>
+        </dependency>
+
         <!-- JAX-RS API -->
         <dependency>
             <groupId>jakarta.ws.rs</groupId>

@@ -21,18 +21,21 @@ spring:
       ddl-auto: validate
   
   # OAuth2 / Keycloak
-  security:
-    oauth2:
-      client:
-        registration:
-          keycloak:
-            client-id: RHDemo
-            scope: openid
-            client-secret: ${rhdemo.client.registration.keycloak.client.secret}
-            redirect-uri: '{baseUrl}/login/oauth2/code/{registrationId}'
-        provider:
-          keycloak:
-            issuer-uri: http://localhost:6090/realms/LeuwenRealm
+  # Configuration pour développement local
+  # Pour staging, voir application-staging.yml
+  # Pour production, surcharger via variables d'environnement
+  # security:
+  #   oauth2:
+  #     client:
+  #       registration:
+  #         keycloak:
+  #           client-id: RHDemo
+  #           scope: openid
+  #           client-secret: ${rhdemo.client.registration.keycloak.client.secret}
+  #           redirect-uri: '{baseUrl}/login/oauth2/code/{registrationId}'
+  #       provider:
+  #         keycloak:
+  #           issuer-uri: http://localhost:6090/realms/LeuwenRealm
 
 server:
   port: 9000

@@ -32,6 +32,7 @@ pipeline {
         KEYCLOAK_DOMAIN = 'keycloak.staging.local'
         COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
         RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
+        DOCKER_COMPOSE_CMD = '/usr/bin/docker compose'
     }
     
     parameters {
@@ -292,7 +293,7 @@ pipeline {
                     // Nettoyer l'environnement précédent si existant
                     sh """
                         cd ${STAGING_INFRA_PATH}
-                        docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         docker network prune -f
                     """
                     
@@ -352,10 +353,10 @@ pipeline {
                     export RHDEMO_DATASOURCE_PASSWORD_PG=\${RHDEMO_DATASOURCE_PASSWORD_PG}
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
                     
-                    docker compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
+                    ${DOCKER_COMPOSE_CMD} -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
                     echo "✅ Services démarrés:"
-                    docker compose -p ${COMPOSE_PROJECT_NAME} ps
+                    ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} ps
                 """
             }
         }
@@ -779,11 +780,11 @@ pipeline {
                         # Afficher les logs en cas d'échec
                         if [ "\${currentBuild.result}" != "SUCCESS" ]; then
                             echo "📋 Logs des services Docker:"
-                            docker compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
+                            ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
                         fi
                         
                         # Arrêt et suppression des containers/volumes/networks
-                        docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         
                         # Suppression de l'image de build taguée
                         docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true

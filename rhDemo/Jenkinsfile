@@ -32,7 +32,6 @@ pipeline {
         KEYCLOAK_DOMAIN = 'keycloak.staging.local'
         COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
         RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
-        DOCKER_COMPOSE_CMD = '/usr/bin/docker compose'
     }
     
     parameters {
@@ -293,7 +292,7 @@ pipeline {
                     // Nettoyer l'environnement précédent si existant
                     sh """
                         cd ${STAGING_INFRA_PATH}
-                        ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        /usr/bin/docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         docker network prune -f
                     """
                     
@@ -353,10 +352,10 @@ pipeline {
                     export RHDEMO_DATASOURCE_PASSWORD_PG=\${RHDEMO_DATASOURCE_PASSWORD_PG}
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
                     
-                    ${DOCKER_COMPOSE_CMD} -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
+                    /usr/bin/docker compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
                     echo "✅ Services démarrés:"
-                    ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} ps
+                    /usr/bin/docker compose -p ${COMPOSE_PROJECT_NAME} ps
                 """
             }
         }
@@ -774,23 +773,29 @@ pipeline {
                 // PHASE 6 : Nettoyage de l'environnement Docker Compose
                 if (params.RUN_SELENIUM_TESTS == true) {
                     echo '▶ Nettoyage de l\'environnement Docker Compose...'
+                    
+                    // Afficher les logs si le build a échoué
+                    def buildResult = currentBuild.result ?: 'SUCCESS'
+                    if (buildResult != 'SUCCESS') {
+                        echo "📋 Récupération des logs Docker (build ${buildResult})..."
+                        sh """
+                            cd ${STAGING_INFRA_PATH} || exit 0
+                            /usr/bin/docker compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
+                        """
+                    }
+                    
+                    // Nettoyage de l'environnement
                     sh """
                         cd ${STAGING_INFRA_PATH} || exit 0
                         
-                        # Afficher les logs en cas d'échec
-                        if [ "\${currentBuild.result}" != "SUCCESS" ]; then
-                            echo "📋 Logs des services Docker:"
-                            ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
-                        fi
-                        
                         # Arrêt et suppression des containers/volumes/networks
-                        ${DOCKER_COMPOSE_CMD} -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        /usr/bin/docker compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         
                         # Suppression de l'image de build taguée
                         docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
                         
                         echo "✅ Environnement nettoyé"
-                    """ 
+                    """
                 }
                 
                 echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'

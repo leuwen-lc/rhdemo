@@ -19,8 +19,8 @@ services:
   # Utilise l'image buildée au lieu de build context
   rhdemo-app:
     image: ${RHDEMO_IMAGE:-rhdemo-api:0.0.1-SNAPSHOT}
-    # Supprime la directive 'build' du docker-compose.yml principal
-    build: null
+    # La directive 'build' du docker-compose.yml est automatiquement ignorée
+    # quand 'image' est défini ici
     
     # On peut aussi override d'autres paramètres si nécessaire
     # Par exemple, activer des logs plus verbeux pour les tests:

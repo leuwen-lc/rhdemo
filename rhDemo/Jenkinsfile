@@ -12,6 +12,11 @@ pipeline {
         APP_VERSION = '0.0.1-SNAPSHOT'
         JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
         
+        // Configuration Docker
+        DOCKER_IMAGE_NAME = "rhdemo-api"
+        DOCKER_IMAGE_TAG = "${APP_VERSION}"
+        DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
+        
         // Configuration des tests
         TEST_PORT = '9000'
         TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
@@ -161,7 +166,7 @@ pipeline {
             }
         }
         
-        stage('� Build') {
+        stage('🔨 Build') {
             steps {
                 script {
                     echo "🔨 Compilation et packaging de l'application..."
@@ -169,6 +174,25 @@ pipeline {
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean package -DskipTests
                     """
+                }
+            }
+        }
+        
+        stage('🐳 Build Docker Image (Paketo)') {
+            steps {
+                script {
+                    echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
+                    sh """
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw spring-boot:build-image \
+                            -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -DskipTests
+                    """
+                    
+                    echo "✅ Image Docker créée: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    
+                    // Lister les images créées
+                    sh "docker images | grep ${DOCKER_IMAGE_NAME} || true"
                 }
             }
         }
@@ -255,18 +279,28 @@ pipeline {
                     echo '═══════════════════════════════════════════════════════'
                     echo '  PHASE 4 : TESTS FONCTIONNELS'
                     echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Démarrage de l\'application en mode test...'
+                    echo '▶ Démarrage de l\'application en mode test (Docker)...'
                     
-                    // Démarrage en arrière-plan
-                    sh '''
-                        # Charger les secrets pour l'application test
+                    // Démarrage du container Docker
+                    sh """
                         . rhDemo/secrets/env-vars.sh
-                        nohup java -jar ${JAR_FILE} \
-                            --spring.profiles.active=test \
-                            --server.port=${TEST_PORT} \
-                            > app-test.log 2>&1 &
-                        echo $! > app-test.pid
-                    '''
+                        
+                        # Arrêter le container s'il existe déjà
+                        docker stop rhdemo-test 2>/dev/null || true
+                        docker rm rhdemo-test 2>/dev/null || true
+                        
+                        # Démarrer le container en arrière-plan
+                        docker run -d \
+                            --name rhdemo-test \
+                            -p ${TEST_PORT}:9000 \
+                            -e SPRING_PROFILES_ACTIVE=test \
+                            -e RHDEMO_DATASOURCE_PASSWORD_H2=\${RHDEMO_DATASOURCE_PASSWORD_H2} \
+                            -e RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET} \
+                            ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        
+                        # Sauvegarder le nom du container
+                        echo "rhdemo-test" > app-test.container
+                    """
                     
                     // Attente de disponibilité
                     sh '''
@@ -280,6 +314,7 @@ pipeline {
                             sleep 2
                         done
                         echo "❌ Échec du démarrage de l'application"
+                        docker logs rhdemo-test
                         exit 1
                     '''
                 }
@@ -324,10 +359,12 @@ pipeline {
                 script {
                     echo '▶ Arrêt de l\'application test...'
                     sh '''
-                        if [ -f app-test.pid ]; then
-                            PID=$(cat app-test.pid)
-                            kill $PID || echo "Processus déjà arrêté"
-                            rm app-test.pid
+                        if [ -f app-test.container ]; then
+                            CONTAINER=$(cat app-test.container)
+                            echo "Arrêt du container: $CONTAINER"
+                            docker stop $CONTAINER || echo "Container déjà arrêté"
+                            docker rm $CONTAINER || echo "Container déjà supprimé"
+                            rm app-test.container
                         fi
                     '''
                 }

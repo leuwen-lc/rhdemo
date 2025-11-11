@@ -114,6 +114,15 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<image>
+						<name>rhdemo-api:${project.version}</name>
+						<builder>paketobuildpacks/builder-jammy-base:latest</builder>
+						<env>
+							<BP_JVM_VERSION>21</BP_JVM_VERSION>
+						</env>
+					</image>
+				</configuration>
 			</plugin>
 			<!--			Résolution de warning mockito et load dynamique d'un Java Agent-->
 			<plugin>

@@ -63,6 +63,9 @@ pipeline {
                 // Utiliser le credential sops-age-key de manière sécurisée
                 withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
                     sh '''
+                        # Créer le répertoire secrets s'il n'existe pas
+                        mkdir -p secrets
+                        
                         # Déchiffrer le fichier de secrets
                         echo "Déchiffrement de ${SECRETS_FILE}..."
                         sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}

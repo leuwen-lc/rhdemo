@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD}
     volumes:
       - rhdemo-db-data:/var/lib/postgresql/data
-      - ../../pgddl.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ${WORKSPACE:-../..}/pgddl.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     networks:
       - rhdemo-staging
     healthcheck:

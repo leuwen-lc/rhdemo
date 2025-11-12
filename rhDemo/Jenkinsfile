@@ -363,6 +363,7 @@ pipeline {
                     
                     # Variables d'environnement pour Docker Compose
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
+                    export WORKSPACE=${env.WORKSPACE}/rhDemo
                     
                     # Alias pour les variables attendues par docker-compose.yml
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"

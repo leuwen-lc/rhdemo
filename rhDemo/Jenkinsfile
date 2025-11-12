@@ -412,15 +412,18 @@ pipeline {
                     echo "⏳ Attente des bases de données (30s)..."
                     sleep 30
                     
-                    # Récupérer l'IP du conteneur nginx
+                    # Récupérer les IPs des conteneurs
                     NGINX_IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rhdemo-staging-nginx)
+                    KEYCLOAK_IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' keycloak-staging)
                     echo "📍 IP nginx: \$NGINX_IP"
+                    echo "📍 IP keycloak: \$KEYCLOAK_IP"
                     
-                    echo "⏳ Attente Keycloak via nginx (60s max)..."
+                    echo "⏳ Attente Keycloak (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
-                        if curl -k -f -H "Host: keycloak.staging.local" https://\${NGINX_IP}/health/ready 2>/dev/null; then
-                            echo "✅ Keycloak ready"
+                        # Tester directement Keycloak sans passer par nginx
+                        if curl -f http://\${KEYCLOAK_IP}:8080/health/ready 2>/dev/null; then
+                            echo "✅ Keycloak ready (direct)"
                             break
                         fi
                         sleep 2
@@ -428,15 +431,18 @@ pipeline {
                     done
                     
                     if [ \$timeout -le 0 ]; then
-                        echo "❌ Keycloak timeout"
+                        echo "❌ Keycloak timeout après 60s"
+                        echo "Logs Keycloak:"
+                        docker logs --tail=20 keycloak-staging || true
                         exit 1
                     fi
                     
-                    echo "⏳ Attente RHDemo App via nginx (60s max)..."
+                    echo "⏳ Attente RHDemo App (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
+                        # Tester via nginx avec header Host correct
                         if curl -k -f -H "Host: rhdemo.staging.local" https://\${NGINX_IP}/actuator/health 2>/dev/null; then
-                            echo "✅ RHDemo App ready"
+                            echo "✅ RHDemo App ready (via nginx)"
                             break
                         fi
                         sleep 2
@@ -444,7 +450,11 @@ pipeline {
                     done
                     
                     if [ \$timeout -le 0 ]; then
-                        echo "❌ RHDemo App timeout"
+                        echo "❌ RHDemo App timeout après 60s"
+                        echo "Logs RHDemo:"
+                        docker logs --tail=20 rhdemo-staging-app || true
+                        echo "Logs nginx:"
+                        docker logs --tail=20 rhdemo-staging-nginx || true
                         exit 1
                     fi
                 """

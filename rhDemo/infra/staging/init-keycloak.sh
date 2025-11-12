@@ -63,15 +63,32 @@ else
 fi
 
 # Vérifier que Keycloak est accessible
-echo -e "${YELLOW}→ Vérification de l'accessibilité de Keycloak...${NC}"
+# En mode CI/CD, utiliser l'URL HTTP du conteneur Docker directement
+# En mode interactif, utiliser HTTPS via nginx
+if [ "$NON_INTERACTIVE" = true ]; then
+    KEYCLOAK_URL="http://keycloak-staging:8080"
+    echo -e "${YELLOW}→ Vérification Keycloak (mode CI/CD: ${KEYCLOAK_URL})...${NC}"
+else
+    KEYCLOAK_URL="https://${KEYCLOAK_DOMAIN}"
+    echo -e "${YELLOW}→ Vérification de l'accessibilité de Keycloak...${NC}"
+fi
 
 MAX_RETRIES=30
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -k -s -o /dev/null -w "%{http_code}" https://${KEYCLOAK_DOMAIN} | grep -q "200\|301\|302\|404"; then
-        echo -e "${GREEN}✓ Keycloak est accessible${NC}"
-        break
+    if [ "$NON_INTERACTIVE" = true ]; then
+        # Mode CI/CD : accès direct HTTP au conteneur (pas de -k nécessaire)
+        if curl -s -o /dev/null -w "%{http_code}" ${KEYCLOAK_URL} | grep -q "200\|301\|302\|404"; then
+            echo -e "${GREEN}✓ Keycloak est accessible (${KEYCLOAK_URL})${NC}"
+            break
+        fi
+    else
+        # Mode interactif : accès HTTPS via nginx (-k pour certificat auto-signé)
+        if curl -k -s -o /dev/null -w "%{http_code}" ${KEYCLOAK_URL} | grep -q "200\|301\|302\|404"; then
+            echo -e "${GREEN}✓ Keycloak est accessible${NC}"
+            break
+        fi
     fi
     
     RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -82,7 +99,12 @@ done
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     echo
     echo -e "${RED}✗ Keycloak n'est pas accessible après ${MAX_RETRIES} tentatives${NC}"
-    echo -e "Vérifiez que Keycloak est démarré: ${BLUE}sudo docker compose ps keycloak${NC}"
+    if [ "$NON_INTERACTIVE" = true ]; then
+        echo -e "URL testée: ${KEYCLOAK_URL}"
+        echo -e "Vérifiez: docker ps | grep keycloak"
+    else
+        echo -e "Vérifiez que Keycloak est démarré: ${BLUE}sudo docker compose ps keycloak${NC}"
+    fi
     exit 1
 fi
 
@@ -110,7 +132,7 @@ cat > "${CONFIG_FILE}" << EOF
 # Générée automatiquement par init-keycloak.sh
 # ========================================
 keycloak:
-  server-url: https://${KEYCLOAK_DOMAIN}
+  server-url: ${KEYCLOAK_URL}
   
   admin:
     realm: master

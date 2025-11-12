@@ -450,8 +450,10 @@ pipeline {
                     # Car Spring Security a besoin que le realm RHDemo existe au démarrage
                     echo "🔑 Initialisation du realm Keycloak..."
                     # Déjà dans rhDemo/infra/staging depuis ligne 421
-                    # Exporter KEYCLOAK_DOMAIN pour init-keycloak.sh
+                    # Exporter les variables pour init-keycloak.sh
                     export KEYCLOAK_DOMAIN=${KEYCLOAK_DOMAIN}
+                    export RHDEMO_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+                    export NGINX_DOMAIN=${TEST_DOMAIN}
                     ./init-keycloak.sh --non-interactive
                     
                     if [ \$? -ne 0 ]; then

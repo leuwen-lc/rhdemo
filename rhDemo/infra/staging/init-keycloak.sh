@@ -192,7 +192,6 @@ keycloak:
       last-name: RHDemo
       roles:
         - ROLE_admin
-       
     
     - username: consultant
       password: consult123

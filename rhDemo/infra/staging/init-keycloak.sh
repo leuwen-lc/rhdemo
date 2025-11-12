@@ -12,7 +12,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RHDEMO_INIT_KEYCLOAK_DIR="/home/leno-vo/git/repository/rhDemoInitKeycloak"
+# Chemin relatif depuis infra/staging vers rhDemoInitKeycloak
+# En mode CI/CD (Jenkins): workspace contient rhDemo/ et rhDemoInitKeycloak/
+# En mode local: dépend de la structure mais même logique
+RHDEMO_INIT_KEYCLOAK_DIR="${SCRIPT_DIR}/../../../rhDemoInitKeycloak"
 ENV_FILE="${SCRIPT_DIR}/.env"
 
 # Mode non-interactif pour CI/CD

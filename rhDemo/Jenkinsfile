@@ -386,15 +386,20 @@ pipeline {
                     
                     # Connecter Jenkins au réseau staging pour accès direct aux services
                     echo "🔗 Connexion de Jenkins au réseau staging..."
-                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | head -n 1)
+                    # Trouver le conteneur Jenkins principal (pas l'agent)
+                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                    echo "Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
                     if [ -n "\$JENKINS_CONTAINER" ]; then
-                        docker network connect rhdemo-staging-network \$JENKINS_CONTAINER 2>/dev/null || echo "Jenkins déjà connecté au réseau"
-                        echo "✅ Jenkins connecté au réseau rhdemo-staging-network"
+                        docker network connect rhdemo-staging-network \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau rhdemo-staging-network"
+                    else
+                        echo "❌ ERREUR: Conteneur Jenkins introuvable!"
+                        docker ps --filter "name=jenkins"
                     fi
                     
-                    # Attendre que les conteneurs démarrent
-                    echo "⏳ Attente démarrage conteneurs (15s)..."
-                    sleep 15
+                    # Attendre que les conteneurs démarrent (augmenté pour Keycloak)
+                    echo "⏳ Attente démarrage conteneurs (20s)..."
+                    sleep 20
                     
                     # Copier les configurations dans les conteneurs
                     echo "📋 Copie des configurations dans les conteneurs..."
@@ -417,10 +422,11 @@ pipeline {
                 sh """
                     cd ${STAGING_INFRA_PATH}
                     
-                    echo "⏳ Attente des bases de données (30s)..."
-                    sleep 30
+                    echo "⏳ Attente initialisation bases de données et Keycloak (45s)..."
+                    echo "   (Keycloak prend ~15s pour démarrer + init DB)"
+                    sleep 45
                     
-                    echo "⏳ Attente Keycloak (60s max)..."
+                    echo "⏳ Vérification Keycloak (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
                         # Accès direct via nom de service grâce au réseau partagé
@@ -428,6 +434,7 @@ pipeline {
                             echo "✅ Keycloak ready"
                             break
                         fi
+                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
                         sleep 2
                         timeout=\$((timeout - 2))
                     done
@@ -439,7 +446,7 @@ pipeline {
                         exit 1
                     fi
                     
-                    echo "⏳ Attente RHDemo App (60s max)..."
+                    echo "⏳ Vérification RHDemo App (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
                         # Accès direct via nom de service grâce au réseau partagé
@@ -447,6 +454,7 @@ pipeline {
                             echo "✅ RHDemo App ready"
                             break
                         fi
+                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
                         sleep 2
                         timeout=\$((timeout - 2))
                     done
@@ -840,11 +848,11 @@ pipeline {
                     sh """
                         cd ${STAGING_INFRA_PATH} || exit 0
                         
-                        # Déconnecter Jenkins du réseau staging
-                        JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | head -n 1)
+                        # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
+                        JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
                         if [ -n "\$JENKINS_CONTAINER" ]; then
                             docker network disconnect rhdemo-staging-network \$JENKINS_CONTAINER 2>/dev/null || true
-                            echo "🔌 Jenkins déconnecté du réseau staging"
+                            echo "🔌 Jenkins (\$JENKINS_CONTAINER) déconnecté du réseau staging"
                         fi
                         
                         # Arrêt et suppression des containers/volumes/networks

@@ -368,9 +368,7 @@ pipeline {
                     
                     # Variables d'environnement pour Docker Compose
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
-                    export WORKSPACE=\$(pwd)
-                    
-                    # Définir WORKSPACE après cd pour obtenir chemin absolu
+                    # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
                     export WORKSPACE=\$(pwd)
                     
                     # Alias pour les variables attendues par docker-compose.yml
@@ -449,7 +447,7 @@ pipeline {
                     # Initialiser Keycloak AVANT de démarrer l'app RHDemo
                     # Car Spring Security a besoin que le realm RHDemo existe au démarrage
                     echo "🔑 Initialisation du realm Keycloak..."
-                    cd ${env.WORKSPACE_PATH}/rhDemo/infra/staging
+                    # Déjà dans rhDemo/infra/staging depuis ligne 423
                     ./init-keycloak.sh --non-interactive
                     
                     if [ \$? -ne 0 ]; then

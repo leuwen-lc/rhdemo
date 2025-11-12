@@ -412,10 +412,14 @@ pipeline {
                     echo "⏳ Attente des bases de données (30s)..."
                     sleep 30
                     
-                    echo "⏳ Attente Keycloak (60s max)..."
+                    # Récupérer l'IP du conteneur nginx
+                    NGINX_IP=\$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rhdemo-staging-nginx)
+                    echo "📍 IP nginx: \$NGINX_IP"
+                    
+                    echo "⏳ Attente Keycloak via nginx (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
-                        if curl -k -f https://${KEYCLOAK_DOMAIN}/health/ready 2>/dev/null; then
+                        if curl -k -f -H "Host: keycloak.staging.local" https://\${NGINX_IP}/health/ready 2>/dev/null; then
                             echo "✅ Keycloak ready"
                             break
                         fi
@@ -428,10 +432,10 @@ pipeline {
                         exit 1
                     fi
                     
-                    echo "⏳ Attente RHDemo App (60s max)..."
+                    echo "⏳ Attente RHDemo App via nginx (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
-                        if curl -k -f https://${TEST_DOMAIN}/actuator/health 2>/dev/null; then
+                        if curl -k -f -H "Host: rhdemo.staging.local" https://\${NGINX_IP}/actuator/health 2>/dev/null; then
                             echo "✅ RHDemo App ready"
                             break
                         fi

@@ -144,17 +144,18 @@ pipeline {
             }
         }
         
-        stage('🔧 Configuration & Build rhDemoInitKeycloak') {
+        stage('🔧 Configuration rhDemoInitKeycloak') {
             steps {
                 script {
                     echo '▶ Génération de application-staging.yml pour rhDemoInitKeycloak...'
+                    echo '   (Sera utilisé directement via mvnw spring-boot:run, sans packaging JAR)'
                 }
                 
                 sh '''
                     # Source les secrets déchiffrés
                     . rhDemo/secrets/env-vars.sh
                     
-                    # Générer application-staging.yml AVANT la compilation
+                    # Générer application-staging.yml (sera utilisé directement par Maven)
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
                     
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
@@ -242,48 +243,32 @@ YMLEOF
                     
                     echo "✅ Configuration générée: ${CONFIG_FILE}"
                     
-                    # Debug: Vérifier que les variables sont bien substituées
-                    echo "🔍 Vérification des valeurs (extrait):"
+                    # Vérifier que les variables sont bien substituées
+                    echo ""
+                    echo "🔍 Vérification des valeurs substituées:"
+                    echo "   Admin credentials:"
                     grep -A 2 "admin:" "${CONFIG_FILE}" | head -3
-                    grep "secret:" "${CONFIG_FILE}"
+                    echo ""
+                    echo "   Client secret (20 premiers caractères):"
+                    grep "secret:" "${CONFIG_FILE}" | cut -c1-40
+                    echo ""
+                    echo "   Root URL:"
                     grep "root-url:" "${CONFIG_FILE}"
+                    echo ""
+                    
+                    # Vérifier qu'il n'y a pas de ${VAR} littérales (non substituées)
+                    if grep -q '\${' "${CONFIG_FILE}"; then
+                        echo "❌ ERREUR: Variables non substituées détectées!"
+                        echo "   Variables trouvées:"
+                        grep '\${' "${CONFIG_FILE}"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Configuration générée avec toutes les variables substituées"
                 '''
                 
                 script {
-                    echo '▶ Compilation du projet rhDemoInitKeycloak...'
-                }
-                
-                dir('rhDemoInitKeycloak') {
-                    sh '''
-                        # Build du projet avec le fichier application-staging.yml généré
-                        ./mvnw clean package -DskipTests
-                        
-                        # Vérifier que le JAR a été créé
-                        if [ ! -f target/rhDemoInitKeycloak-*.jar ]; then
-                            echo "❌ JAR non trouvé dans target/"
-                            exit 1
-                        fi
-                        
-                        echo "✅ JAR créé: $(ls target/rhDemoInitKeycloak-*.jar)"
-                        
-                        # CRITIQUE: Vérifier que le YAML dans le JAR contient les vraies valeurs
-                        echo "🔍 Vérification du YAML dans le JAR..."
-                        JAR_FILE=$(ls target/rhDemoInitKeycloak-*.jar)
-                        unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep -A 2 "admin:" | head -3
-                        
-                        # Vérifier qu'il n'y a pas de ${VAR} littérales
-                        if unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep -q '\${'; then
-                            echo "❌ ERREUR: Variables non substituées détectées dans le JAR!"
-                            unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep '\${'
-                            exit 1
-                        fi
-                        
-                        echo "✅ YAML dans le JAR contient les vraies valeurs"
-                    '''
-                }
-                
-                script {
-                    echo '✅ rhDemoInitKeycloak configuré et buildé avec succès'
+                    echo '✅ rhDemoInitKeycloak configuré (prêt pour exécution via mvnw)'
                 }
             }
         }
@@ -622,26 +607,45 @@ YMLEOF
                     # Source les secrets
                     . rhDemo/secrets/env-vars.sh
                     
-                    echo "🚀 Lancement de rhDemoInitKeycloak..."
+                    echo "🚀 Exécution de rhDemoInitKeycloak via Maven..."
+                    echo "   (Utilise directement application-staging.yml généré, sans packaging)"
                     
                     cd ${WORKSPACE}/rhDemoInitKeycloak
-                    JAR_FILE=\$(find target -name "rhDemoInitKeycloak-*.jar" -type f | head -n 1)
                     
-                    if [ -z "\${JAR_FILE}" ]; then
-                        echo "❌ JAR non trouvé dans target/"
+                    # Vérification que le fichier de config existe
+                    CONFIG_FILE="src/main/resources/application-staging.yml"
+                    if [ ! -f "\${CONFIG_FILE}" ]; then
+                        echo "❌ Fichier de configuration manquant: \${CONFIG_FILE}"
                         exit 1
                     fi
                     
-                    echo "📦 JAR: \${JAR_FILE}"
+                    echo "� Configuration trouvée: \${CONFIG_FILE}"
+                    echo ""
+                    echo "🔍 Vérification des valeurs (extrait):"
+                    echo "   Admin username:"
+                    grep "username:" "\${CONFIG_FILE}" | head -1
+                    echo "   Client secret (10 premiers caractères):"
+                    grep "secret:" "\${CONFIG_FILE}" | cut -c1-30
+                    echo ""
                     
-                    if java -jar "\${JAR_FILE}" --spring.profiles.active=staging; then
-                        echo "✅ Keycloak initialisé (realm RHDemo, client, 3 utilisateurs)"
+                    # Exécution directe via Maven Spring Boot plugin
+                    if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging; then
+                        echo ""
+                        echo "✅ Keycloak initialisé avec succès"
+                        echo "   - Realm RHDemo créé"
+                        echo "   - Client RHDemo configuré"
+                        echo "   - 3 utilisateurs créés (admin, consultant, manager)"
                     else
+                        echo ""
                         echo "❌ Échec de l'initialisation Keycloak"
+                        echo ""
+                        echo "📋 Logs Keycloak pour diagnostic:"
+                        docker logs --tail=30 keycloak-staging || true
                         exit 1
                     fi
                     
                     # Attendre propagation de la configuration
+                    echo ""
                     echo "⏳ Attente propagation config Keycloak (10s)..."
                     sleep 10
                 """

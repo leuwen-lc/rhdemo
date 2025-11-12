@@ -58,18 +58,22 @@ pipeline {
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
                 
                 script {
-                    echo '▶ Checkout du projet rhDemoInitKeycloak...'
+                    echo '▶ Vérification du projet rhDemoInitKeycloak...'
+                    // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
+                    // Le checkout SCM récupère déjà tout le workspace
                 }
                 
-                // Cloner le repo rhDemoInitKeycloak dans le workspace
-                dir('rhDemoInitKeycloak') {
-                    git branch: 'main',
-                        url: 'https://github.com/leuwen-lc/rhDemoInitKeycloak.git'
-                }
-                
-                script {
-                    echo '✅ Repos clonés: rhDemo + rhDemoInitKeycloak'
-                }
+                sh '''
+                    if [ -d "rhDemoInitKeycloak" ]; then
+                        echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
+                        ls -la rhDemoInitKeycloak
+                    else
+                        echo "❌ rhDemoInitKeycloak introuvable"
+                        echo "Structure du workspace:"
+                        ls -la
+                        exit 1
+                    fi
+                '''
             }
         }
         

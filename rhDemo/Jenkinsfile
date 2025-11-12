@@ -304,6 +304,11 @@ pipeline {
                         # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
                         docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true
                         
+                        # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
+                        # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
+                        echo "🧹 Suppression image nginx pour éviter layers corrompus..."
+                        docker rmi nginx:1.27-alpine 2>/dev/null || true
+                        
                         # Nettoyer les réseaux orphelins
                         docker network prune -f
                     """

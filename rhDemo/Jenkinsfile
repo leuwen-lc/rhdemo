@@ -157,7 +157,8 @@ pipeline {
                     # Générer application-staging.yml AVANT la compilation
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
                     
-                    cat > "${CONFIG_FILE}" << 'YMLEOF'
+                    # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
+                    cat > "${CONFIG_FILE}" << YMLEOF
 # ========================================
 # Configuration Keycloak Server - STAGING
 # Générée automatiquement par Jenkins CI/CD
@@ -240,6 +241,12 @@ keycloak:
 YMLEOF
                     
                     echo "✅ Configuration générée: ${CONFIG_FILE}"
+                    
+                    # Debug: Vérifier que les variables sont bien substituées
+                    echo "🔍 Vérification des valeurs (extrait):"
+                    grep -A 2 "admin:" "${CONFIG_FILE}" | head -3
+                    grep "secret:" "${CONFIG_FILE}"
+                    grep "root-url:" "${CONFIG_FILE}"
                 '''
                 
                 script {

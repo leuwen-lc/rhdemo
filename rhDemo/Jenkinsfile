@@ -449,11 +449,21 @@ pipeline {
                     # Initialiser Keycloak AVANT de démarrer l'app RHDemo
                     # Car Spring Security a besoin que le realm RHDemo existe au démarrage
                     echo "🔑 Initialisation du realm Keycloak..."
-                    # Déjà dans rhDemo/infra/staging depuis ligne 421
-                    # Exporter les variables pour init-keycloak.sh
-                    export KEYCLOAK_DOMAIN=${KEYCLOAK_DOMAIN}
-                    export RHDEMO_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
-                    export NGINX_DOMAIN=${TEST_DOMAIN}
+                    
+                    # STRATÉGIE: Générer un fichier .env.staging avec toutes les variables
+                    # Cela garantit le même comportement qu'en mode manuel (source d'un fichier)
+                    cat > .env.staging << 'ENVEOF'
+# Variables d'environnement pour init-keycloak.sh (mode CI/CD)
+# Généré automatiquement par Jenkins depuis secrets SOPS
+KEYCLOAK_DOMAIN=${KEYCLOAK_DOMAIN}
+KEYCLOAK_ADMIN_USER=\${KEYCLOAK_ADMIN_USER}
+KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
+RHDEMO_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+NGINX_DOMAIN=${TEST_DOMAIN}
+ENVEOF
+                    
+                    echo "✓ Fichier .env.staging généré avec secrets SOPS"
+                    
                     ./init-keycloak.sh --non-interactive
                     
                     if [ \$? -ne 0 ]; then

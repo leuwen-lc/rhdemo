@@ -44,25 +44,27 @@ echo -e "${BLUE}  Initialisation Keycloak pour RHDemo Staging${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo
 
-# En mode non-interactif (Jenkins), les variables doivent être déjà définies
-# En mode interactif, charger depuis .env
+# STRATÉGIE UNIFIÉE: Toujours charger depuis un fichier .env
+# Cela garantit le même comportement en mode CI/CD et manuel
 if [ "$NON_INTERACTIVE" = true ]; then
-    # Mode CI/CD : vérifier que les variables nécessaires sont définies
-    if [ -z "$KEYCLOAK_DOMAIN" ] || [ -z "$KEYCLOAK_ADMIN_USER" ] || [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-        echo -e "${RED}✗ Variables d'environnement manquantes${NC}"
-        echo -e "Variables requises: KEYCLOAK_DOMAIN, KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD"
+    # Mode CI/CD : utiliser .env.staging généré par Jenkins avec secrets SOPS
+    ENV_FILE_CICD="${SCRIPT_DIR}/.env.staging"
+    if [ ! -f "${ENV_FILE_CICD}" ]; then
+        echo -e "${RED}✗ Fichier .env.staging introuvable${NC}"
+        echo -e "Jenkins doit générer ce fichier avec les secrets SOPS"
         exit 1
     fi
-    echo -e "${GREEN}✓ Variables d'environnement détectées (mode CI/CD)${NC}"
+    source "${ENV_FILE_CICD}"
+    echo -e "${GREEN}✓ Variables chargées depuis .env.staging (mode CI/CD)${NC}"
 else
-    # Mode interactif : charger depuis .env
+    # Mode interactif : charger depuis .env créé par init-staging.sh
     if [ ! -f "${ENV_FILE}" ]; then
         echo -e "${RED}✗ Fichier .env introuvable${NC}"
         echo -e "Exécutez d'abord: ./init-staging.sh"
         exit 1
     fi
-    # Charger les variables d'environnement
     source "${ENV_FILE}"
+    echo -e "${GREEN}✓ Variables chargées depuis .env (mode manuel)${NC}"
 fi
 
 # Vérifier que Keycloak est accessible

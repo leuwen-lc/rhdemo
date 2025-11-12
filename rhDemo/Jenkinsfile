@@ -446,6 +446,22 @@ pipeline {
                         exit 1
                     fi
                     
+                    # Initialiser Keycloak AVANT de démarrer l'app RHDemo
+                    # Car Spring Security a besoin que le realm RHDemo existe au démarrage
+                    echo "🔑 Initialisation du realm Keycloak..."
+                    cd ${env.WORKSPACE_PATH}/rhDemo/infra/staging
+                    ./init-keycloak.sh --non-interactive
+                    
+                    if [ \$? -ne 0 ]; then
+                        echo "❌ Échec de l'initialisation Keycloak"
+                        exit 1
+                    fi
+                    echo "✅ Keycloak initialisé (realm RHDemo, 3 utilisateurs)"
+                    
+                    # Attendre quelques secondes que l'app détecte le nouveau realm
+                    echo "⏳ Attente propagation config Keycloak (10s)..."
+                    sleep 10
+                    
                     echo "⏳ Vérification RHDemo App (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
@@ -469,27 +485,8 @@ pipeline {
             }
         }
         
-        stage('🔑 Initialisation Keycloak') {
-            when {
-                expression { params.RUN_SELENIUM_TESTS == true }
-            }
-            steps {
-                script {
-                    echo '▶ Initialisation du realm Keycloak...'
-                }
-                sh """
-                    cd ${STAGING_INFRA_PATH}
-                    ./init-keycloak.sh --non-interactive
-                    
-                    if [ \$? -ne 0 ]; then
-                        echo "❌ Échec de l'initialisation Keycloak"
-                        exit 1
-                    fi
-                    
-                    echo "✅ Keycloak initialisé (realm RHDemo, 3 utilisateurs)"
-                """
-            }
-        }
+        // Note: Initialisation Keycloak déplacée dans le stage 🏥 Vérification Healthchecks
+        // pour s'exécuter AVANT le démarrage de rhdemo-app (qui a besoin du realm RHDemo)
         
         stage('💾 Initialisation Base de Données') {
             when {

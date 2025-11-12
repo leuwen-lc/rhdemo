@@ -41,15 +41,26 @@ echo -e "${BLUE}  Initialisation Keycloak pour RHDemo Staging${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo
 
-# Vérifier que le fichier .env existe
-if [ ! -f "${ENV_FILE}" ]; then
-    echo -e "${RED}✗ Fichier .env introuvable${NC}"
-    echo -e "Exécutez d'abord: ./init-staging.sh"
-    exit 1
+# En mode non-interactif (Jenkins), les variables doivent être déjà définies
+# En mode interactif, charger depuis .env
+if [ "$NON_INTERACTIVE" = true ]; then
+    # Mode CI/CD : vérifier que les variables nécessaires sont définies
+    if [ -z "$KEYCLOAK_DOMAIN" ] || [ -z "$KEYCLOAK_ADMIN_USER" ] || [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        echo -e "${RED}✗ Variables d'environnement manquantes${NC}"
+        echo -e "Variables requises: KEYCLOAK_DOMAIN, KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Variables d'environnement détectées (mode CI/CD)${NC}"
+else
+    # Mode interactif : charger depuis .env
+    if [ ! -f "${ENV_FILE}" ]; then
+        echo -e "${RED}✗ Fichier .env introuvable${NC}"
+        echo -e "Exécutez d'abord: ./init-staging.sh"
+        exit 1
+    fi
+    # Charger les variables d'environnement
+    source "${ENV_FILE}"
 fi
-
-# Charger les variables d'environnement
-source "${ENV_FILE}"
 
 # Vérifier que Keycloak est accessible
 echo -e "${YELLOW}→ Vérification de l'accessibilité de Keycloak...${NC}"

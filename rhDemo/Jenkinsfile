@@ -418,6 +418,8 @@ pipeline {
                     echo '▶ Attente healthcheck des services...'
                 }
                 sh """
+                    # Source les secrets pour init-keycloak.sh
+                    . rhDemo/secrets/env-vars.sh
                     cd ${STAGING_INFRA_PATH}
                     
                     echo "⏳ Attente initialisation bases de données et Keycloak (45s)..."
@@ -447,7 +449,9 @@ pipeline {
                     # Initialiser Keycloak AVANT de démarrer l'app RHDemo
                     # Car Spring Security a besoin que le realm RHDemo existe au démarrage
                     echo "🔑 Initialisation du realm Keycloak..."
-                    # Déjà dans rhDemo/infra/staging depuis ligne 423
+                    # Déjà dans rhDemo/infra/staging depuis ligne 421
+                    # Exporter KEYCLOAK_DOMAIN pour init-keycloak.sh
+                    export KEYCLOAK_DOMAIN=${KEYCLOAK_DOMAIN}
                     ./init-keycloak.sh --non-interactive
                     
                     if [ \$? -ne 0 ]; then

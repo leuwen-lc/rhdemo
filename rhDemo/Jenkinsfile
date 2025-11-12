@@ -350,20 +350,19 @@ pipeline {
                     echo '▶ Démarrage de l\'environnement Docker Compose (5 services)...'
                 }
                 sh """
+                    # Source les secrets SOPS
                     . rhDemo/secrets/env-vars.sh
                     cd ${STAGING_INFRA_PATH}
                     
                     # Variables d'environnement pour Docker Compose
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
-                    export RHDEMO_DB_PASSWORD=\${RHDEMO_DATASOURCE_PASSWORD_PG}
-                    export RHDEMO_DATASOURCE_PASSWORD_PG=\${RHDEMO_DATASOURCE_PASSWORD_PG}
-                    export RHDEMO_KEYCLOAK_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-                    export RHDEMO_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
                     
-                    # Variables Keycloak (depuis SOPS)
-                    export KEYCLOAK_DB_PASSWORD=\${KEYCLOAK_DB_PASSWORD}
-                    export KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
-                    export KEYCLOAK_ADMIN_USER=\${KEYCLOAK_ADMIN_USER}
+                    # Alias pour les variables attendues par docker-compose.yml
+                    export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
+                    export RHDEMO_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+                    
+                    # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
+                    # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
                     
                     docker-compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     

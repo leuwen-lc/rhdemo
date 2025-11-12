@@ -429,8 +429,8 @@ pipeline {
                     echo "⏳ Vérification Keycloak (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
-                        # Accès direct via nom de service grâce au réseau partagé
-                        if curl -f http://keycloak-staging:8080/health/ready 2>/dev/null; then
+                        # Keycloak expose son endpoint health sur le port management (9000)
+                        if curl -f http://keycloak-staging:9000/health/ready 2>/dev/null; then
                             echo "✅ Keycloak ready"
                             break
                         fi

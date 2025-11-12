@@ -1,99 +1,58 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
 # Script d'initialisation de Keycloak pour l'environnement staging
+# USAGE MANUEL LOCAL UNIQUEMENT
+#
+# Pour CI/CD Jenkins: l'initialisation est gérée directement dans Jenkinsfile
+# (génération application-staging.yml + exécution JAR)
+#
 # Utilise le projet rhDemoInitKeycloak pour créer le realm, 
 # le client et les utilisateurs
 #
 # Usage:
-#   ./init-keycloak.sh              # Mode interactif
-#   ./init-keycloak.sh --non-interactive  # Mode CI/CD (Jenkins)
+#   ./init-keycloak.sh
 # ═══════════════════════════════════════════════════════════════
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Chemin relatif depuis infra/staging vers rhDemoInitKeycloak
-# En mode CI/CD (Jenkins): workspace contient rhDemo/ et rhDemoInitKeycloak/
-# En mode local: dépend de la structure mais même logique
 RHDEMO_INIT_KEYCLOAK_DIR="${SCRIPT_DIR}/../../../rhDemoInitKeycloak"
 ENV_FILE="${SCRIPT_DIR}/.env"
 
-# Mode non-interactif pour CI/CD
-NON_INTERACTIVE=false
-if [[ "$1" == "--non-interactive" || "$1" == "-n" ]]; then
-    NON_INTERACTIVE=true
-fi
-
-# Couleurs (désactivées en mode non-interactif)
-if [ "$NON_INTERACTIVE" = true ]; then
-    RED=''
-    GREEN=''
-    YELLOW=''
-    BLUE=''
-    NC=''
-else
-    RED='\033[0;31m'
-    GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
-fi
+# Couleurs
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Initialisation Keycloak pour RHDemo Staging${NC}"
+echo -e "${BLUE}  Initialisation Keycloak pour RHDemo Staging (mode manuel)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo
 
-# STRATÉGIE UNIFIÉE: Toujours charger depuis un fichier .env
-# Cela garantit le même comportement en mode CI/CD et manuel
-if [ "$NON_INTERACTIVE" = true ]; then
-    # Mode CI/CD : utiliser .env.staging généré par Jenkins avec secrets SOPS
-    ENV_FILE_CICD="${SCRIPT_DIR}/.env.staging"
-    if [ ! -f "${ENV_FILE_CICD}" ]; then
-        echo -e "${RED}✗ Fichier .env.staging introuvable${NC}"
-        echo -e "Jenkins doit générer ce fichier avec les secrets SOPS"
-        exit 1
-    fi
-    source "${ENV_FILE_CICD}"
-    echo -e "${GREEN}✓ Variables chargées depuis .env.staging (mode CI/CD)${NC}"
-else
-    # Mode interactif : charger depuis .env créé par init-staging.sh
-    if [ ! -f "${ENV_FILE}" ]; then
-        echo -e "${RED}✗ Fichier .env introuvable${NC}"
-        echo -e "Exécutez d'abord: ./init-staging.sh"
-        exit 1
-    fi
-    source "${ENV_FILE}"
-    echo -e "${GREEN}✓ Variables chargées depuis .env (mode manuel)${NC}"
+# Charger les variables depuis .env (créé par init-staging.sh)
+if [ ! -f "${ENV_FILE}" ]; then
+    echo -e "${RED}✗ Fichier .env introuvable${NC}"
+    echo -e "Exécutez d'abord: ./init-staging.sh"
+    exit 1
 fi
 
-# Vérifier que Keycloak est accessible
-# En mode CI/CD, utiliser l'URL HTTP du conteneur Docker directement
-# En mode interactif, utiliser HTTPS via nginx
-if [ "$NON_INTERACTIVE" = true ]; then
-    KEYCLOAK_URL="http://keycloak-staging:8080"
-    echo -e "${YELLOW}→ Vérification Keycloak (mode CI/CD: ${KEYCLOAK_URL})...${NC}"
-else
-    KEYCLOAK_URL="https://${KEYCLOAK_DOMAIN}"
-    echo -e "${YELLOW}→ Vérification de l'accessibilité de Keycloak...${NC}"
-fi
+source "${ENV_FILE}"
+echo -e "${GREEN}✓ Variables chargées depuis .env${NC}"
+
+# Vérifier que Keycloak est accessible (via HTTPS nginx)
+KEYCLOAK_URL="https://${KEYCLOAK_DOMAIN}"
+echo -e "${YELLOW}→ Vérification de l'accessibilité de Keycloak...${NC}"
 
 MAX_RETRIES=30
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if [ "$NON_INTERACTIVE" = true ]; then
-        # Mode CI/CD : accès direct HTTP au conteneur (pas de -k nécessaire)
-        if curl -s -o /dev/null -w "%{http_code}" ${KEYCLOAK_URL} | grep -q "200\|301\|302\|404"; then
-            echo -e "${GREEN}✓ Keycloak est accessible (${KEYCLOAK_URL})${NC}"
-            break
-        fi
-    else
-        # Mode interactif : accès HTTPS via nginx (-k pour certificat auto-signé)
-        if curl -k -s -o /dev/null -w "%{http_code}" ${KEYCLOAK_URL} | grep -q "200\|301\|302\|404"; then
-            echo -e "${GREEN}✓ Keycloak est accessible${NC}"
-            break
-        fi
+    # Mode manuel : accès HTTPS via nginx (-k pour certificat auto-signé)
+    if curl -k -s -o /dev/null -w "%{http_code}" ${KEYCLOAK_URL} | grep -q "200\|301\|302\|404"; then
+        echo -e "${GREEN}✓ Keycloak est accessible${NC}"
+        break
     fi
     
     RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -104,12 +63,7 @@ done
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     echo
     echo -e "${RED}✗ Keycloak n'est pas accessible après ${MAX_RETRIES} tentatives${NC}"
-    if [ "$NON_INTERACTIVE" = true ]; then
-        echo -e "URL testée: ${KEYCLOAK_URL}"
-        echo -e "Vérifiez: docker ps | grep keycloak"
-    else
-        echo -e "Vérifiez que Keycloak est démarré: ${BLUE}sudo docker compose ps keycloak${NC}"
-    fi
+    echo -e "Vérifiez que Keycloak est démarré: ${BLUE}sudo docker compose ps keycloak${NC}"
     exit 1
 fi
 
@@ -216,13 +170,14 @@ EOF
 echo -e "${GREEN}✓ Configuration générée: ${CONFIG_FILE}${NC}"
 echo
 
-# Exécuter l'initialisation Keycloak
+# Exécuter l'initialisation Keycloak (mode manuel uniquement)
 echo -e "${YELLOW}→ Initialisation de Keycloak (realm, client, utilisateurs)...${NC}"
 echo -e "${YELLOW}  Cela peut prendre 30-60 secondes...${NC}"
 echo
 
 cd "${RHDEMO_INIT_KEYCLOAK_DIR}"
 
+# Utiliser Maven wrapper pour exécution en mode dev
 if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging -q; then
     echo
     echo -e "${GREEN}✓ Keycloak initialisé avec succès !${NC}"

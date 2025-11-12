@@ -56,10 +56,51 @@ pipeline {
                 }
                 checkout scm
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
+                
+                script {
+                    echo '▶ Checkout du projet rhDemoInitKeycloak...'
+                }
+                
+                // Cloner le repo rhDemoInitKeycloak dans le workspace
+                dir('rhDemoInitKeycloak') {
+                    git branch: 'main',
+                        url: 'https://github.com/leuwen-lc/rhDemoInitKeycloak.git'
+                }
+                
+                script {
+                    echo '✅ Repos clonés: rhDemo + rhDemoInitKeycloak'
+                }
             }
         }
         
-        stage('� Déchiffrement Secrets SOPS') {
+        stage('🔧 Build rhDemoInitKeycloak') {
+            steps {
+                script {
+                    echo '▶ Compilation du projet rhDemoInitKeycloak...'
+                }
+                
+                dir('rhDemoInitKeycloak') {
+                    sh '''
+                        # Build du projet sans exécuter les tests (phase package)
+                        ./mvnw clean package -DskipTests
+                        
+                        # Vérifier que le JAR a été créé
+                        if [ ! -f target/rhDemoInitKeycloak-*.jar ]; then
+                            echo "❌ JAR non trouvé dans target/"
+                            exit 1
+                        fi
+                        
+                        echo "✅ JAR créé: $(ls target/rhDemoInitKeycloak-*.jar)"
+                    '''
+                }
+                
+                script {
+                    echo '✅ rhDemoInitKeycloak buildé avec succès'
+                }
+            }
+        }
+        
+        stage('🔒 Déchiffrement Secrets SOPS') {
             steps {
                 script {
                     echo '▶ Vérification SOPS et YQ...'
@@ -450,23 +491,110 @@ pipeline {
                     # Car Spring Security a besoin que le realm RHDemo existe au démarrage
                     echo "🔑 Initialisation du realm Keycloak..."
                     
-                    # STRATÉGIE: Générer un fichier .env.staging avec toutes les variables
-                    # Cela garantit le même comportement qu'en mode manuel (source d'un fichier)
-                    cat > .env.staging << 'ENVEOF'
-# Variables d'environnement pour init-keycloak.sh (mode CI/CD)
-# Généré automatiquement par Jenkins depuis secrets SOPS
-KEYCLOAK_DOMAIN=${KEYCLOAK_DOMAIN}
-KEYCLOAK_ADMIN_USER=\${KEYCLOAK_ADMIN_USER}
-KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
-RHDEMO_CLIENT_SECRET=\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-NGINX_DOMAIN=${TEST_DOMAIN}
-ENVEOF
+                    # CI/CD SIMPLIFIÉ: Générer directement application-staging.yml
+                    # Pas de double indirection (Jenkins → .env → yml)
+                    CONFIG_FILE="${WORKSPACE}/rhDemoInitKeycloak/src/main/resources/application-staging.yml"
                     
-                    echo "✓ Fichier .env.staging généré avec secrets SOPS"
+                    cat > "\${CONFIG_FILE}" << 'YMLEOF'
+# ========================================
+# Configuration Keycloak Server - STAGING
+# Générée automatiquement par Jenkins CI/CD
+# ========================================
+keycloak:
+  server-url: http://keycloak-staging:8080
+  
+  admin:
+    realm: master
+    username: \${KEYCLOAK_ADMIN_USER}
+    password: \${KEYCLOAK_ADMIN_PASSWORD}
+  
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: \${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+    root-url: https://${TEST_DOMAIN}/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://${TEST_DOMAIN}/*
+      - http://localhost:9000/*
+    web-origins:
+      - https://${TEST_DOMAIN}
+      - http://localhost:9000
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: admin
+      password: admin123
+      email: admin@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - ROLE_admin
+    
+    - username: consultant
+      password: consult123
+      email: consultant@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - ROLE_consult
+    
+    - username: manager
+      password: manager123
+      email: manager@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ
+YMLEOF
                     
-                    ./init-keycloak.sh --non-interactive
+                    echo "✅ Configuration générée: \${CONFIG_FILE}"
                     
-                    if [ \$? -ne 0 ]; then
+                    # Exécuter directement le JAR Java (déjà compilé dans stage précédent)
+                    echo "🚀 Lancement de rhDemoInitKeycloak..."
+                    
+                    cd ${WORKSPACE}/rhDemoInitKeycloak
+                    JAR_FILE=\$(find target -name "rhDemoInitKeycloak-*.jar" -type f | head -n 1)
+                    
+                    if [ -z "\${JAR_FILE}" ]; then
+                        echo "❌ JAR non trouvé dans target/"
+                        exit 1
+                    fi
+                    
+                    echo "📦 JAR: \${JAR_FILE}"
+                    
+                    if java -jar "\${JAR_FILE}" --spring.profiles.active=staging; then
+                        echo "✅ Keycloak initialisé (realm RHDemo, client, 3 utilisateurs)"
+                    else
                         echo "❌ Échec de l'initialisation Keycloak"
                         exit 1
                     fi

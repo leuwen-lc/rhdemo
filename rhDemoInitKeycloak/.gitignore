@@ -32,3 +32,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Configuration générée dynamiquement (contient secrets)
+src/main/resources/application-staging.yml

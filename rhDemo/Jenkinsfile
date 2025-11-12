@@ -77,34 +77,7 @@ pipeline {
             }
         }
         
-        stage('🔧 Build rhDemoInitKeycloak') {
-            steps {
-                script {
-                    echo '▶ Compilation du projet rhDemoInitKeycloak...'
-                }
-                
-                dir('rhDemoInitKeycloak') {
-                    sh '''
-                        # Build du projet sans exécuter les tests (phase package)
-                        ./mvnw clean package -DskipTests
-                        
-                        # Vérifier que le JAR a été créé
-                        if [ ! -f target/rhDemoInitKeycloak-*.jar ]; then
-                            echo "❌ JAR non trouvé dans target/"
-                            exit 1
-                        fi
-                        
-                        echo "✅ JAR créé: $(ls target/rhDemoInitKeycloak-*.jar)"
-                    '''
-                }
-                
-                script {
-                    echo '✅ rhDemoInitKeycloak buildé avec succès'
-                }
-            }
-        }
-        
-        stage('🔒 Déchiffrement Secrets SOPS') {
+        stage(' Déchiffrement Secrets SOPS') {
             steps {
                 script {
                     echo '▶ Vérification SOPS et YQ...'
@@ -167,6 +140,129 @@ pipeline {
                         // Supprimer le fichier déchiffré pour la sécurité
                         sh 'rm -f ${SECRETS_DECRYPTED} || true'
                     }
+                }
+            }
+        }
+        
+        stage('🔧 Configuration & Build rhDemoInitKeycloak') {
+            steps {
+                script {
+                    echo '▶ Génération de application-staging.yml pour rhDemoInitKeycloak...'
+                }
+                
+                sh '''
+                    # Source les secrets déchiffrés
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    # Générer application-staging.yml AVANT la compilation
+                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
+                    
+                    cat > "${CONFIG_FILE}" << 'YMLEOF'
+# ========================================
+# Configuration Keycloak Server - STAGING
+# Générée automatiquement par Jenkins CI/CD
+# ========================================
+keycloak:
+  server-url: http://keycloak-staging:8080
+  
+  admin:
+    realm: master
+    username: ${KEYCLOAK_ADMIN_USER}
+    password: ${KEYCLOAK_ADMIN_PASSWORD}
+  
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+    root-url: https://${TEST_DOMAIN}/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://${TEST_DOMAIN}/*
+      - http://localhost:9000/*
+    web-origins:
+      - https://${TEST_DOMAIN}
+      - http://localhost:9000
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: admin
+      password: admin123
+      email: admin@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - ROLE_admin
+    
+    - username: consultant
+      password: consult123
+      email: consultant@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - ROLE_consult
+    
+    - username: manager
+      password: manager123
+      email: manager@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ
+YMLEOF
+                    
+                    echo "✅ Configuration générée: ${CONFIG_FILE}"
+                '''
+                
+                script {
+                    echo '▶ Compilation du projet rhDemoInitKeycloak...'
+                }
+                
+                dir('rhDemoInitKeycloak') {
+                    sh '''
+                        # Build du projet avec le fichier application-staging.yml généré
+                        ./mvnw clean package -DskipTests
+                        
+                        # Vérifier que le JAR a été créé
+                        if [ ! -f target/rhDemoInitKeycloak-*.jar ]; then
+                            echo "❌ JAR non trouvé dans target/"
+                            exit 1
+                        fi
+                        
+                        echo "✅ JAR créé: $(ls target/rhDemoInitKeycloak-*.jar)"
+                    '''
+                }
+                
+                script {
+                    echo '✅ rhDemoInitKeycloak configuré et buildé avec succès'
                 }
             }
         }
@@ -454,20 +550,18 @@ pipeline {
             }
         }
         
-        stage('🏥 Vérification Healthchecks') {
+        stage('🏥 Healthcheck Keycloak') {
             when {
                 expression { params.RUN_SELENIUM_TESTS == true }
             }
             steps {
                 script {
-                    echo '▶ Attente healthcheck des services...'
+                    echo '▶ Attente démarrage Keycloak...'
                 }
                 sh """
-                    # Source les secrets pour init-keycloak.sh
-                    . rhDemo/secrets/env-vars.sh
                     cd ${STAGING_INFRA_PATH}
                     
-                    echo "⏳ Attente initialisation bases de données et Keycloak (45s)..."
+                    echo "⏳ Attente démarrage Keycloak (45s)..."
                     echo "   (Keycloak prend ~15s pour démarrer + init DB)"
                     sleep 45
                     
@@ -490,100 +584,23 @@ pipeline {
                         docker logs --tail=20 keycloak-staging || true
                         exit 1
                     fi
+                """
+            }
+        }
+        
+        stage('🔑 Initialisation Keycloak') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation du realm Keycloak...'
+                    echo 'Création du realm RHDemo, client et utilisateurs'
+                }
+                sh """
+                    # Source les secrets
+                    . rhDemo/secrets/env-vars.sh
                     
-                    # Initialiser Keycloak AVANT de démarrer l'app RHDemo
-                    # Car Spring Security a besoin que le realm RHDemo existe au démarrage
-                    echo "🔑 Initialisation du realm Keycloak..."
-                    
-                    # CI/CD SIMPLIFIÉ: Générer directement application-staging.yml
-                    # Pas de double indirection (Jenkins → .env → yml)
-                    CONFIG_FILE="${WORKSPACE}/rhDemoInitKeycloak/src/main/resources/application-staging.yml"
-                    
-                    cat > "\${CONFIG_FILE}" << 'YMLEOF'
-# ========================================
-# Configuration Keycloak Server - STAGING
-# Générée automatiquement par Jenkins CI/CD
-# ========================================
-keycloak:
-  server-url: http://keycloak-staging:8080
-  
-  admin:
-    realm: master
-    username: \${KEYCLOAK_ADMIN_USER}
-    password: \${KEYCLOAK_ADMIN_PASSWORD}
-  
-  # ========================================
-  # Configuration du Realm RHDemo
-  # ========================================
-  realm:
-    name: RHDemo
-    display-name: RHDemo Application
-    enabled: true
-    registration-allowed: false
-    registration-email-as-username: false
-    reset-password-allowed: true
-    edit-username-allowed: false
-    login-with-email-allowed: true
-    duplicate-emails-allowed: false
-    remember-me: true
-    sso-session-idle-timeout: 1800
-    sso-session-max-lifespan: 36000
-    access-token-lifespan: 300
-  
-  # ========================================
-  # Configuration du Client RHDemo
-  # ========================================
-  client:
-    client-id: RHDemo
-    name: RHDemo
-    secret: \${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-    root-url: https://${TEST_DOMAIN}/
-    base-url: ''
-    admin-url: ''
-    redirect-uris:
-      - https://${TEST_DOMAIN}/*
-      - http://localhost:9000/*
-    web-origins:
-      - https://${TEST_DOMAIN}
-      - http://localhost:9000
-    roles:
-      - ROLE_admin
-      - ROLE_consult
-      - ROLE_MAJ
-  
-  # ========================================
-  # Configuration des Utilisateurs de test
-  # ========================================
-  users:
-    - username: admin
-      password: admin123
-      email: admin@rhdemo.local
-      first-name: Admin
-      last-name: RHDemo
-      roles:
-        - ROLE_admin
-    
-    - username: consultant
-      password: consult123
-      email: consultant@rhdemo.local
-      first-name: Jean
-      last-name: Consultant
-      roles:
-        - ROLE_consult
-    
-    - username: manager
-      password: manager123
-      email: manager@rhdemo.local
-      first-name: Marie
-      last-name: Manager
-      roles:
-        - ROLE_consult
-        - ROLE_MAJ
-YMLEOF
-                    
-                    echo "✅ Configuration générée: \${CONFIG_FILE}"
-                    
-                    # Exécuter directement le JAR Java (déjà compilé dans stage précédent)
                     echo "🚀 Lancement de rhDemoInitKeycloak..."
                     
                     cd ${WORKSPACE}/rhDemoInitKeycloak
@@ -602,37 +619,13 @@ YMLEOF
                         echo "❌ Échec de l'initialisation Keycloak"
                         exit 1
                     fi
-                    echo "✅ Keycloak initialisé (realm RHDemo, 3 utilisateurs)"
                     
-                    # Attendre quelques secondes que l'app détecte le nouveau realm
+                    # Attendre propagation de la configuration
                     echo "⏳ Attente propagation config Keycloak (10s)..."
                     sleep 10
-                    
-                    echo "⏳ Vérification RHDemo App (60s max)..."
-                    timeout=60
-                    while [ \$timeout -gt 0 ]; do
-                        # Accès direct via nom de service grâce au réseau partagé
-                        if curl -f http://rhdemo-staging-app:9000/actuator/health 2>/dev/null; then
-                            echo "✅ RHDemo App ready"
-                            break
-                        fi
-                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
-                        sleep 2
-                        timeout=\$((timeout - 2))
-                    done
-                    
-                    if [ \$timeout -le 0 ]; then
-                        echo "❌ RHDemo App timeout après 60s"
-                        echo "Logs RHDemo:"
-                        docker logs --tail=20 rhdemo-staging-app || true
-                        exit 1
-                    fi
                 """
             }
         }
-        
-        // Note: Initialisation Keycloak déplacée dans le stage 🏥 Vérification Healthchecks
-        // pour s'exécuter AVANT le démarrage de rhdemo-app (qui a besoin du realm RHDemo)
         
         stage('💾 Initialisation Base de Données') {
             when {
@@ -656,18 +649,45 @@ YMLEOF
             }
         }
         
-        stage('⏱️ Stabilisation Environnement') {
+        stage('🏥 Healthcheck Application RHDemo') {
             when {
                 expression { params.RUN_SELENIUM_TESTS == true }
             }
             steps {
                 script {
-                    echo '▶ Stabilisation de l\'environnement (15s)...'
+                    echo '▶ Vérification santé de l\'application RHDemo...'
                 }
-                sh 'sleep 15'
-                script {
-                    echo '✅ Environnement prêt pour les tests'
-                }
+                sh """
+                    echo "⏳ Vérification RHDemo App (60s max)..."
+                    timeout=60
+                    while [ \$timeout -gt 0 ]; do
+                        # Accès direct via nom de service grâce au réseau partagé
+                        if curl -f http://rhdemo-staging-app:9000/actuator/health 2>/dev/null; then
+                            echo "✅ RHDemo App ready"
+                            break
+                        fi
+                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ RHDemo App timeout après 60s"
+                        echo "Logs RHDemo:"
+                        docker logs --tail=50 rhdemo-staging-app || true
+                        exit 1
+                    fi
+                    
+                    # Vérification supplémentaire: endpoint Swagger
+                    echo "🔍 Vérification endpoint Swagger..."
+                    if curl -f http://rhdemo-staging-app:9000/api-docs/swagger-ui/index.html 2>/dev/null > /dev/null; then
+                        echo "✅ Swagger UI accessible"
+                    else
+                        echo "⚠️  Swagger UI non accessible (non bloquant)"
+                    fi
+                    
+                    echo "✅ Application RHDemo opérationnelle"
+                """
             }
         }
         

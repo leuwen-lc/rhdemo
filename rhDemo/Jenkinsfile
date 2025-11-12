@@ -370,15 +370,8 @@ pipeline {
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
                     export WORKSPACE=\$(pwd)
                     
-                    # DÉBOGAGE : Vérifier l'existence des fichiers critiques
-                    echo "🔍 Vérification des fichiers à monter..."
-                    echo "📁 WORKSPACE=\${WORKSPACE}"
-                    echo "📄 Vérification pgddl.sql:"
-                    ls -lh \${WORKSPACE}/../../pgddl.sql || echo "❌ ERREUR: pgddl.sql n'existe pas!"
-                    echo "📄 Vérification nginx.conf:"
-                    ls -lh \${WORKSPACE}/nginx/nginx.conf || echo "❌ ERREUR: nginx.conf n'existe pas!"
-                    echo "📁 Contenu nginx/:"
-                    ls -la \${WORKSPACE}/nginx/ || echo "❌ ERREUR: répertoire nginx/ n'existe pas!"
+                    # Définir WORKSPACE après cd pour obtenir chemin absolu
+                    export WORKSPACE=\$(pwd)
                     
                     # Alias pour les variables attendues par docker-compose.yml
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
@@ -387,9 +380,19 @@ pipeline {
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
                     
+                    # Démarrer les conteneurs SANS bind mounts problématiques
+                    echo "🚀 Démarrage des conteneurs Docker..."
                     docker-compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
-                    echo "✅ Services démarrés:"
+                    # Attendre que les conteneurs démarrent
+                    echo "⏳ Attente démarrage conteneurs (15s)..."
+                    sleep 15
+                    
+                    # Copier les configurations dans les conteneurs
+                    echo "📋 Copie des configurations dans les conteneurs..."
+                    ./copy-configs.sh
+                    
+                    echo "✅ Environnement Docker opérationnel:"
                     docker-compose -p ${COMPOSE_PROJECT_NAME} ps
                 """
             }

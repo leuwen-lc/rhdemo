@@ -35,7 +35,7 @@ pipeline {
     }
     
     parameters {
-        choice(name: 'DEPLOY_ENV', choices: ['none', 'staging', 'production'], description: 'Environnement de déploiement')
+        choice(name: 'DEPLOY_ENV', choices: ['staging', 'production', 'none'], description: 'Environnement de déploiement (staging par défaut)')
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
         booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'SKIP_MANUAL_APPROVAL', defaultValue: false, description: 'Ignorer l\'approbation manuelle pour la production')
@@ -297,7 +297,14 @@ pipeline {
                     // Nettoyer l'environnement précédent si existant
                     sh """
                         cd ${STAGING_INFRA_PATH}
+                        
+                        # Arrêter et supprimer les conteneurs du build précédent
                         docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        
+                        # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
+                        docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true
+                        
+                        # Nettoyer les réseaux orphelins
                         docker network prune -f
                     """
                     

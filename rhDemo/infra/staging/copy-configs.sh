@@ -88,6 +88,23 @@ docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
 echo "✅ Schéma PostgreSQL initialisé"
 echo ""
 
+echo "→ Attente que rhdemo-app soit opérationnel..."
+# Attendre que le conteneur rhdemo-app soit en état "healthy" ou "running"
+timeout=60
+while [ $timeout -gt 0 ]; do
+    if docker ps --format '{{.Names}}\t{{.Status}}' | grep -q "rhdemo-staging-app.*Up"; then
+        echo "✅ rhdemo-app démarré"
+        break
+    fi
+    sleep 2
+    timeout=$((timeout - 2))
+done
+
+if [ $timeout -le 0 ]; then
+    echo "⚠️  Timeout: rhdemo-app n'est pas prêt - nginx peut échouer à résoudre le DNS"
+fi
+
+echo ""
 echo "→ Redémarrage nginx pour charger la config..."
 docker restart rhdemo-staging-nginx >/dev/null
 

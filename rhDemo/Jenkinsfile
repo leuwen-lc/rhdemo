@@ -265,6 +265,20 @@ YMLEOF
                         fi
                         
                         echo "✅ JAR créé: $(ls target/rhDemoInitKeycloak-*.jar)"
+                        
+                        # CRITIQUE: Vérifier que le YAML dans le JAR contient les vraies valeurs
+                        echo "🔍 Vérification du YAML dans le JAR..."
+                        JAR_FILE=$(ls target/rhDemoInitKeycloak-*.jar)
+                        unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep -A 2 "admin:" | head -3
+                        
+                        # Vérifier qu'il n'y a pas de ${VAR} littérales
+                        if unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep -q '\${'; then
+                            echo "❌ ERREUR: Variables non substituées détectées dans le JAR!"
+                            unzip -p "${JAR_FILE}" BOOT-INF/classes/application-staging.yml | grep '\${'
+                            exit 1
+                        fi
+                        
+                        echo "✅ YAML dans le JAR contient les vraies valeurs"
                     '''
                 }
                 

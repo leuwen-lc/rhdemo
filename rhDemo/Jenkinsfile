@@ -365,6 +365,16 @@ pipeline {
                     export RHDEMO_IMAGE=${RHDEMO_IMAGE}
                     export WORKSPACE=\$(pwd)
                     
+                    # DÉBOGAGE : Vérifier l'existence des fichiers critiques
+                    echo "🔍 Vérification des fichiers à monter..."
+                    echo "📁 WORKSPACE=\${WORKSPACE}"
+                    echo "📄 Vérification pgddl.sql:"
+                    ls -lh \${WORKSPACE}/../../pgddl.sql || echo "❌ ERREUR: pgddl.sql n'existe pas!"
+                    echo "📄 Vérification nginx.conf:"
+                    ls -lh \${WORKSPACE}/nginx/nginx.conf || echo "❌ ERREUR: nginx.conf n'existe pas!"
+                    echo "📁 Contenu nginx/:"
+                    ls -la \${WORKSPACE}/nginx/ || echo "❌ ERREUR: répertoire nginx/ n'existe pas!"
+                    
                     # Alias pour les variables attendues par docker-compose.yml
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
                     export RHDEMO_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"

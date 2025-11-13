@@ -30,7 +30,7 @@ spring:
         registration:
           keycloak:
             client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:RHDemo}
-            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+            client-secret: ${rhdemo.client.registration.keycloak.client.secret}
             scope: openid
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"

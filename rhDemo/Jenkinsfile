@@ -546,12 +546,75 @@ YMLEOF
                     echo "⏳ Attente démarrage conteneurs (20s)..."
                     sleep 20
                     
-                    # Copier les configurations dans les conteneurs
-                    echo "📋 Copie des configurations dans les conteneurs..."
-                    ./copy-configs.sh
+                    # Copier les configurations nginx et certificats SSL
+                    echo "📋 Copie des configurations nginx..."
+                    docker cp nginx/nginx.conf rhdemo-staging-nginx:/etc/nginx/nginx.conf
+                    docker cp nginx/conf.d/. rhdemo-staging-nginx:/etc/nginx/conf.d/
+                    
+                    if [ -d "certs" ]; then
+                        docker cp certs/. rhdemo-staging-nginx:/etc/nginx/ssl/
+                        echo "✅ Configurations nginx et certificats copiés"
+                    else
+                        echo "✅ Configurations nginx copiées (certificats manquants)"
+                    fi
                     
                     echo "✅ Environnement Docker opérationnel:"
                     docker-compose -p ${COMPOSE_PROJECT_NAME} ps
+                """
+            }
+        }
+        
+        stage('💾 Initialisation Base de Données') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation de la base de données PostgreSQL...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    # Attendre que PostgreSQL soit prêt
+                    echo "⏳ Attente PostgreSQL ready (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec rhdemo-staging-db pg_isready -U rhdemo >/dev/null 2>&1; then
+                            echo "✅ PostgreSQL ready"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: PostgreSQL n'est pas prêt après 30s"
+                        docker logs --tail=20 rhdemo-staging-db
+                        exit 1
+                    fi
+                    
+                    # Copier et exécuter le schéma SQL
+                    PGDDL_PATH="../../pgddl.sql"
+                    if [ ! -f "\$PGDDL_PATH" ]; then
+                        echo "❌ Erreur: Fichier pgddl.sql introuvable"
+                        exit 1
+                    fi
+                    
+                    echo "📋 Copie du schéma SQL dans le container..."
+                    docker cp "\$PGDDL_PATH" rhdemo-staging-db:/tmp/schema.sql
+                    
+                    echo "🔧 Exécution du schéma SQL (DROP + CREATE + INSERT)..."
+                    docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
+                    
+                    # Vérifier le nombre d'employés insérés
+                    EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
+                    
+                    echo "✅ Base de données initialisée"
+                    echo "   📊 Nombre d'employés: \$EMPLOYEE_COUNT"
+                    
+                    if [ "\$EMPLOYEE_COUNT" != "303" ]; then
+                        echo "⚠️  Attention: Attendu 303 employés, trouvé \$EMPLOYEE_COUNT"
+                    fi
                 """
             }
         }
@@ -648,37 +711,6 @@ YMLEOF
                     echo ""
                     echo "⏳ Attente propagation config Keycloak (10s)..."
                     sleep 10
-                """
-            }
-        }
-        
-        stage('💾 Vérification Base de Données') {
-            when {
-                expression { params.RUN_SELENIUM_TESTS == true }
-            }
-            steps {
-                script {
-                    echo '▶ Vérification de la base de données PostgreSQL...'
-                    echo '   (Base déjà initialisée lors du démarrage Docker Compose)'
-                }
-                sh """
-                    echo "🔍 Vérification du nombre d'employés dans la base..."
-                    
-                    # Compter les employés via connexion directe au container
-                    EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" 2>/dev/null | tr -d ' ')
-                    
-                    if [ -z "\$EMPLOYEE_COUNT" ]; then
-                        echo "❌ Impossible de récupérer le nombre d'employés"
-                        echo "   La table 'employes' existe-t-elle ?"
-                        exit 1
-                    fi
-                    
-                    echo "✅ Base de données opérationnelle"
-                    echo "   📊 Nombre d'employés: \$EMPLOYEE_COUNT"
-                    
-                    if [ "\$EMPLOYEE_COUNT" -lt 1 ]; then
-                        echo "⚠️  Attention: Base vide (aucun employé)"
-                    fi
                 """
             }
         }

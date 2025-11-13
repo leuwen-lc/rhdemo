@@ -738,9 +738,10 @@ YMLEOF
                     echo "⏳ Vérification RHDemo App (60s max)..."
                     timeout=60
                     while [ \$timeout -gt 0 ]; do
-                        # Accès direct via nom de service grâce au réseau partagé
-                        if curl -f http://rhdemo-staging-app:9000/actuator/health 2>/dev/null; then
-                            echo "✅ RHDemo App ready"
+                        # Test simple de connexion TCP sur le port 9000
+                        # (les endpoints nécessitent une authentification OAuth2)
+                        if nc -z rhdemo-staging-app 9000 2>/dev/null; then
+                            echo "✅ RHDemo App ready (port 9000 accessible)"
                             break
                         fi
                         echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
@@ -755,12 +756,12 @@ YMLEOF
                         exit 1
                     fi
                     
-                    # Vérification supplémentaire: endpoint Swagger
-                    echo "🔍 Vérification endpoint Swagger..."
-                    if curl -f http://rhdemo-staging-app:9000/api-docs/swagger-ui/index.html 2>/dev/null > /dev/null; then
-                        echo "✅ Swagger UI accessible"
+                    # Vérification que l'application redirige vers OAuth2 (signe qu'elle est démarrée)
+                    echo "🔍 Vérification redirection OAuth2..."
+                    if curl -s -o /dev/null -w "%{http_code}" http://rhdemo-staging-app:9000/front/ | grep -q "302"; then
+                        echo "✅ Application redirige correctement vers OAuth2"
                     else
-                        echo "⚠️  Swagger UI non accessible (non bloquant)"
+                        echo "⚠️  Pas de redirection OAuth2 détectée (non bloquant)"
                     fi
                     
                     echo "✅ Application RHDemo opérationnelle"

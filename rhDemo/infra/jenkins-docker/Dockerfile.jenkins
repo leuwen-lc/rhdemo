@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y \
     # Node.js pour build frontend
     nodejs \
     npm \
+    # Firefox + GeckoDriver pour tests Selenium
+    firefox-esr \
     && rm -rf /var/lib/apt/lists/*
 
 # ═══════════════════════════════════════════════════════════════════

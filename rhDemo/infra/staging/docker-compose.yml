@@ -77,9 +77,7 @@ services:
       keycloak-db:
         condition: service_healthy
     networks:
-      rhdemo-staging:
-        aliases:
-          - keycloak.staging.local
+      - rhdemo-staging
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
       interval: 10s

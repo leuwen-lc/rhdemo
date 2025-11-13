@@ -13,8 +13,8 @@ keycloak:
   # Configuration du Realm à créer
   # ========================================
   realm:
-    name: LeuwenRealm
-    display-name: Leuwen Realm
+    name: RHDemo
+    display-name: RHDemo Application
     enabled: true
     registration-allowed: false
     registration-email-as-username: false

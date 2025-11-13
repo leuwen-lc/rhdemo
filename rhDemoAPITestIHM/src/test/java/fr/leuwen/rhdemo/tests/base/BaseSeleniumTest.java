@@ -56,13 +56,15 @@ public abstract class BaseSeleniumTest {
             WebDriverManager.firefoxdriver().setup();
             FirefoxOptions options = new FirefoxOptions();
             if (TestConfig.HEADLESS_MODE) {
-                options.addArguments("--headless");
+                options.addArguments("-headless");  // Firefox utilise -headless (un seul tiret)
+                // Options supplémentaires pour environnement conteneur Docker
+                options.addArguments("--no-sandbox");
+                options.addArguments("--disable-dev-shm-usage");
+                options.addPreference("browser.download.folderList", 2);
+                options.addPreference("browser.helperApps.alwaysAsk.force", false);
+                // Forcer le mode headless via variable d'environnement
+                options.addPreference("MOZ_HEADLESS", "1");
             }
-            // Options supplémentaires pour conteneur Docker
-            options.addArguments("--no-sandbox");
-            options.addArguments("--disable-dev-shm-usage");
-            options.addPreference("browser.download.folderList", 2);
-            options.addPreference("browser.helperApps.alwaysAsk.force", false);
             driver = new FirefoxDriver(options);
         } else {
             throw new IllegalArgumentException("Navigateur non supporté: " + TestConfig.BROWSER);

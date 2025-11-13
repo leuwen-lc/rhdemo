@@ -350,6 +350,13 @@ YMLEOF
                         docker system prune -f --filter "label=io.buildpacks.stack.id" || true
                     """
                     
+                    // CRITIQUE: Supprimer PHYSIQUEMENT target/ avant build image Docker
+                    // pour éviter que Paketo réutilise un JAR avec ancienne configuration
+                    sh """
+                        echo "🗑️  Suppression physique du target/ avant build image..."
+                        cd rhDemo && rm -rf target/
+                    """
+                    
                     sh """
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean spring-boot:build-image \

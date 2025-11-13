@@ -10,9 +10,13 @@ services:
     container_name: rhdemo-jenkins
     restart: unless-stopped
     
-    # Privilèges pour exécuter Docker-in-Docker
-    privileged: true
-    user: root
+    # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
+    # L'accès Docker se fait via le groupe docker (GID 984 de l'hôte)
+    user: jenkins
+    
+    # Ajouter le groupe docker avec le bon GID de l'hôte (984)
+    group_add:
+      - 984
     
     ports:
       - "8080:8080"      # Interface Web Jenkins
@@ -31,8 +35,8 @@ services:
       # Binaire Docker CLI
       - /usr/bin/docker:/usr/bin/docker
       
-      # Maven local repository (cache)
-      - maven_repository:/root/.m2
+      # Maven local repository (cache) - utilisateur jenkins
+      - maven_repository:/var/jenkins_home/.m2
       
       # Répertoire de travail partagé (optionnel)
       - ./workspace:/workspace

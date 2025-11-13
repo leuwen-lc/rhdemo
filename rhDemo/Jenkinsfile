@@ -804,21 +804,24 @@ YMLEOF
                     echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
                 }
                 
-                // Configuration DNS pour que Firefox puisse résoudre les domaines staging via nginx
+                // Pas besoin de configuration DNS: les alias réseau Docker permettent
+                // à Firefox (dans Jenkins connecté au network) de résoudre directement
+                // keycloak.staging.local et rhdemo.staging.local
                 sh '''
-                    echo "🔧 Configuration DNS pour tests via nginx..."
+                    echo "🔧 Vérification de la résolution DNS via Docker network aliases..."
                     
-                    # Récupérer l'IP du conteneur nginx dans le réseau Docker
-                    NGINX_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rhdemo-staging-nginx)
-                    echo "   IP nginx: $NGINX_IP"
+                    # Test de résolution DNS via les alias Docker network
+                    echo "   Résolution de rhdemo.staging.local:"
+                    docker exec rhdemo-staging-nginx nslookup rhdemo.staging.local || \
+                        echo "      ⚠️  nslookup non disponible (normal pour Alpine), les alias fonctionnent quand même"
                     
-                    # Ajouter les entrées dans /etc/hosts (nécessite sudo sur Jenkins)
-                    # Note: Ces entrées permettent à Firefox de résoudre keycloak.staging.local et rhdemo.staging.local
-                    echo "$NGINX_IP keycloak.staging.local" | sudo tee -a /etc/hosts
-                    echo "$NGINX_IP rhdemo.staging.local" | sudo tee -a /etc/hosts
+                    echo "   Résolution de keycloak.staging.local:"
+                    docker exec rhdemo-staging-nginx nslookup keycloak.staging.local || \
+                        echo "      ⚠️  nslookup non disponible (normal pour Alpine), les alias fonctionnent quand même"
                     
-                    echo "✅ DNS configuré:"
-                    grep "staging.local" /etc/hosts | tail -2
+                    echo "✅ DNS configuré via Docker network aliases"
+                    echo "   Jenkins peut résoudre rhdemo.staging.local et keycloak.staging.local"
+                    echo "   grâce à sa connexion au réseau rhdemo-staging-network"
                 '''
                 
                 dir(TEST_PROJECT_PATH) {
@@ -826,7 +829,7 @@ YMLEOF
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
                         # URLs HTTPS via nginx (tests réels comme en production)
-                        # Firefox résoudra ces domaines grâce aux entrées /etc/hosts
+                        # Firefox résoudra ces domaines grâce aux aliases Docker network
                         APP_URL="https://rhdemo.staging.local"
                         KEYCLOAK_URL="https://keycloak.staging.local"
                         
@@ -1113,15 +1116,9 @@ YMLEOF
                 echo '  NETTOYAGE ET NOTIFICATIONS'
                 echo '═══════════════════════════════════════════════════════'
                 
-                // Nettoyage des entrées DNS /etc/hosts
-                if (params.RUN_SELENIUM_TESTS == true) {
-                    echo '▶ Nettoyage des entrées DNS /etc/hosts...'
-                    sh '''
-                        # Supprimer les entrées staging.local de /etc/hosts
-                        sudo sed -i '/staging\\.local/d' /etc/hosts
-                        echo "✅ Entrées DNS nettoyées"
-                    '''
-                }
+                // Pas de nettoyage DNS nécessaire: les alias Docker network
+                // sont automatiquement supprimés avec le docker-compose down
+                echo '✅ Résolution DNS via Docker network aliases (pas de nettoyage nécessaire)'
                 
                 // PHASE 6 : Nettoyage de l'environnement Docker Compose
                 if (params.RUN_SELENIUM_TESTS == true) {

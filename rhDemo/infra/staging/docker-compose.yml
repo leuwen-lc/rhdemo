@@ -77,7 +77,10 @@ services:
       keycloak-db:
         condition: service_healthy
     networks:
-      - rhdemo-staging
+      rhdemo-staging:
+        aliases:
+          - keycloak-staging
+          - keycloak.staging.local
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
       interval: 10s
@@ -121,7 +124,10 @@ services:
       keycloak:
         condition: service_healthy
     networks:
-      - rhdemo-staging
+      rhdemo-staging:
+        aliases:
+          - rhdemo-staging-app
+          - rhdemo.staging.local
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 || exit 1"]
       interval: 30s
@@ -147,7 +153,11 @@ services:
       - rhdemo-app
       - keycloak
     networks:
-      - rhdemo-staging
+      rhdemo-staging:
+        aliases:
+          - nginx
+          - rhdemo.staging.local
+          - keycloak.staging.local
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
       interval: 30s

@@ -3,10 +3,10 @@ spring:
     name: rhdemoAPI
   
   # Import des secrets depuis fichiers externes
+  # En dev local: créer secrets/secrets.yml depuis secrets.yml.template
   config:
     import:
       - optional:file:./secrets/secrets.yml
-      - optional:file:./secrets/secrets-dev.yml
   
   # PostgreSQL (prod)
   datasource:

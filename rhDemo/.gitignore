@@ -8,11 +8,11 @@ META-INF/
 !**/src/test/**/target/
 
 ### Secrets ###
-# Ne pas commiter les secrets de production
+# Ne pas commiter les secrets de dev local
 secrets/secrets.yml
-# Autoriser le template et les secrets-dev chiffrés
+# Autoriser le template et les secrets chiffrés pour CI/CD
 !secrets/secrets.yml.template
-!secrets/secrets-dev.yml
+!secrets/secrets-staging.yml
 # Ignorer les backups
 secrets/*.backup
 

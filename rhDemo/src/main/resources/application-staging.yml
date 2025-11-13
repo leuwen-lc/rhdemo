@@ -12,20 +12,20 @@ spring:
         provider:
           keycloak:
             # Définir tous les endpoints manuellement (pas d'issuer-uri)
-            # URLs publiques HTTPS pour les redirections navigateur
-            authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
-            # URLs internes HTTP pour communication backend (nom du service Docker)
-            token-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/token
+            # URLs internes HTTP pour communication backend ET redirections navigateur (tests Selenium)
+            # Dans le réseau Docker, on utilise le nom du service (pas HTTPS)
+            authorization-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/auth
+            token-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/token
             # PAS de user-info-uri pour éviter l'appel qui échoue avec le 401
-            # user-info-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/userinfo
-            jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
+            # user-info-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/userinfo
+            jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
             user-name-attribute: preferred_username
       resourceserver:
         jwt:
           # Pas d'issuer-uri pour éviter la validation HTTPS depuis le container
           # Spring Security validera l'issuer depuis le JWT lui-même
           # JWK pour récupération des clés (HTTP interne avec nom du service Docker)
-          jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
+          jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
 
 # Configuration serveur pour reverse proxy
 server:

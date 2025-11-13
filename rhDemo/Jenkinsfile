@@ -776,11 +776,16 @@ YMLEOF
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
+                        # URLs internes Docker (pas HTTPS, noms de services)
+                        # Jenkins est connecté au réseau rhdemo-staging-network
+                        APP_URL="http://rhdemo-staging-app:9000"
+                        KEYCLOAK_URL="http://keycloak-staging:8080"
+                        
                         # Utilisation du wrapper Maven du projet principal
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
-                            -Dtest.baseurl=https://${TEST_DOMAIN} \\
+                            -Dtest.baseurl=\${APP_URL} \\
                             -Dselenium.headless=true \\
-                            -Dtest.keycloak.url=https://${KEYCLOAK_DOMAIN} \\
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL} \\
                             -Dtest.admin.user=admin \\
                             -Dtest.admin.password=\${KEYCLOAK_ADMIN_PASSWORD:-admin123} \\
                             -Dtest.consult.user=consultant \\

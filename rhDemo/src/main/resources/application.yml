@@ -24,21 +24,35 @@ spring:
   # Configuration pour développement local
   # Pour staging, voir application-staging.yml
   # Pour production, surcharger via variables d'environnement
-  # security:
-  #   oauth2:
-  #     client:
-  #       registration:
-  #         keycloak:
-  #           client-id: RHDemo
-  #           scope: openid
-  #           client-secret: ${rhdemo.client.registration.keycloak.client.secret}
-  #           redirect-uri: '{baseUrl}/login/oauth2/code/{registrationId}'
-  #       provider:
-  #         keycloak:
-  #           issuer-uri: http://localhost:6090/realms/LeuwenRealm
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:RHDemo}
+            client-secret: ${SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+            scope: openid
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          keycloak:
+            # Environnement local: Keycloak sur localhost:6090 (docker-compose local)
+            # Endpoints publics pour redirections navigateur
+            authorization-uri: http://localhost:6090/realms/RHDemo/protocol/openid-connect/auth
+            # Endpoints backend pour communication serveur (même URL en local)
+            token-uri: http://localhost:6090/realms/RHDemo/protocol/openid-connect/token
+            jwk-set-uri: http://localhost:6090/realms/RHDemo/protocol/openid-connect/certs
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          # JWK pour validation des tokens JWT
+          jwk-set-uri: http://localhost:6090/realms/RHDemo/protocol/openid-connect/certs
 
 server:
   port: 9000
+  # Support des headers X-Forwarded-* si derrière un reverse proxy
+  # En local direct, cette option est ignorée
+  forward-headers-strategy: framework
 
 # Niveau de log
 logging:

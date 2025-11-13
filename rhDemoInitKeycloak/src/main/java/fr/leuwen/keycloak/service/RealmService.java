@@ -62,6 +62,19 @@ public class RealmService {
             realm.setSsoSessionMaxLifespan(properties.getRealm().getSsoSessionMaxLifespan());
             realm.setAccessTokenLifespan(properties.getRealm().getAccessTokenLifespan());
             
+            // DEBUG: Logger la représentation complète avant envoi
+            logger.info("═══════════════════════════════════════════════════════════");
+            logger.info("🔍 DEBUG: RealmRepresentation à envoyer à Keycloak:");
+            logger.info("   - realm: {}", realm.getRealm());
+            logger.info("   - displayName: {}", realm.getDisplayName());
+            logger.info("   - enabled: {}", realm.isEnabled());
+            logger.info("   - registrationAllowed: {}", realm.isRegistrationAllowed());
+            logger.info("   - loginWithEmailAllowed: {}", realm.isLoginWithEmailAllowed());
+            logger.info("   - ssoSessionIdleTimeout: {}", realm.getSsoSessionIdleTimeout());
+            logger.info("   - ssoSessionMaxLifespan: {}", realm.getSsoSessionMaxLifespan());
+            logger.info("   - accessTokenLifespan: {}", realm.getAccessTokenLifespan());
+            logger.info("═══════════════════════════════════════════════════════════");
+            
             // Créer le realm via l'API
             keycloak.realms().create(realm);
             logger.info("✅ Realm '{}' créé avec succès!", realmName);
@@ -72,7 +85,18 @@ public class RealmService {
                 logger.info("ℹ️ Le realm '{}' existe déjà (HTTP 409)", realmName);
                 return true; // Considérer comme un succès
             }
-            logger.error("❌ Erreur lors de la création du realm '{}': HTTP {}", realmName, e.getResponse().getStatus(), e);
+            
+            // Capturer le message d'erreur détaillé de Keycloak
+            String errorBody = "N/A";
+            try {
+                errorBody = e.getResponse().readEntity(String.class);
+            } catch (Exception ex) {
+                logger.warn("Impossible de lire le corps de la réponse d'erreur");
+            }
+            
+            logger.error("❌ Erreur lors de la création du realm '{}': HTTP {}", realmName, e.getResponse().getStatus());
+            logger.error("📋 Message d'erreur Keycloak: {}", errorBody);
+            logger.error("🔍 Stack trace:", e);
             return false;
         } catch (Exception e) {
             logger.error("❌ Erreur lors de la création du realm '{}'", realmName, e);

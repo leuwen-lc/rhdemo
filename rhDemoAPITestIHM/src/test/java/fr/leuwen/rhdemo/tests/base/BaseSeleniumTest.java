@@ -43,6 +43,11 @@ public abstract class BaseSeleniumTest {
         if (TestConfig.BROWSER.equalsIgnoreCase("chrome")) {
             WebDriverManager.chromedriver().setup();
             ChromeOptions options = new ChromeOptions();
+            
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
+            // Permet à Chrome de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            options.setAcceptInsecureCerts(true);
+            
             if (TestConfig.HEADLESS_MODE) {
                 options.addArguments("--headless");
                 options.addArguments("--disable-gpu");
@@ -55,6 +60,11 @@ public abstract class BaseSeleniumTest {
         } else if (TestConfig.BROWSER.equalsIgnoreCase("firefox")) {
             WebDriverManager.firefoxdriver().setup();
             FirefoxOptions options = new FirefoxOptions();
+            
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
+            // Permet à Firefox de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            options.setAcceptInsecureCerts(true);
+            
             if (TestConfig.HEADLESS_MODE) {
                 options.addArguments("-headless");  // Firefox utilise -headless (un seul tiret)
                 // Options supplémentaires pour environnement conteneur Docker

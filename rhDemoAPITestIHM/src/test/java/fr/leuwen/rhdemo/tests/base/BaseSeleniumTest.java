@@ -58,6 +58,11 @@ public abstract class BaseSeleniumTest {
             if (TestConfig.HEADLESS_MODE) {
                 options.addArguments("--headless");
             }
+            // Options supplémentaires pour conteneur Docker
+            options.addArguments("--no-sandbox");
+            options.addArguments("--disable-dev-shm-usage");
+            options.addPreference("browser.download.folderList", 2);
+            options.addPreference("browser.helperApps.alwaysAsk.force", false);
             driver = new FirefoxDriver(options);
         } else {
             throw new IllegalArgumentException("Navigateur non supporté: " + TestConfig.BROWSER);

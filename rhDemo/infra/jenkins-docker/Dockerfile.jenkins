@@ -21,8 +21,15 @@ RUN apt-get update && apt-get install -y \
     # Node.js pour build frontend
     nodejs \
     npm \
-    # Firefox + GeckoDriver pour tests Selenium
+    # Firefox + dépendances pour tests Selenium headless
     firefox-esr \
+    # Bibliothèques X11 et graphiques pour Firefox headless
+    xvfb \
+    libgtk-3-0 \
+    libdbus-glib-1-2 \
+    libxt6 \
+    libpci3 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # ═══════════════════════════════════════════════════════════════════

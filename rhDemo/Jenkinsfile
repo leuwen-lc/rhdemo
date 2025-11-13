@@ -543,6 +543,11 @@ YMLEOF
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
                     
+                    # IMPORTANT: Nettoyage forcé des conteneurs existants pour éviter les conflits de noms
+                    echo "🧹 Nettoyage des conteneurs staging existants..."
+                    docker rm -f keycloak-staging-db rhdemo-staging-db keycloak-staging rhdemo-staging-app rhdemo-staging-nginx 2>/dev/null || true
+                    echo "✅ Conteneurs existants supprimés"
+                    
                     # Démarrer les conteneurs SANS bind mounts problématiques
                     echo "🚀 Démarrage des conteneurs Docker..."
                     docker-compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d

@@ -43,41 +43,51 @@ public class RealmService {
                 logger.info("➡️ Le realm '{}' n'existe pas, création en cours...", realmName);
             }
             
-            // Créer le nouveau realm
+            // STRATÉGIE: Créer un realm MINIMAL d'abord, puis le configurer après création
+            // L'erreur "unable to read contents from stream" indique un problème de sérialisation JSON
+            // Probablement des champs avec valeurs par défaut incompatibles
+            
+            logger.info("🔧 Tentative 1: Création realm MINIMAL (seulement nom + enabled)...");
             RealmRepresentation realm = new RealmRepresentation();
             realm.setRealm(realmName);
-            realm.setDisplayName(properties.getRealm().getDisplayName());
-            realm.setEnabled(properties.getRealm().isEnabled());
+            realm.setEnabled(true);
             
-            // Configuration de sécurité recommandée
-            realm.setRegistrationAllowed(properties.getRealm().isRegistrationAllowed());
-            realm.setRegistrationEmailAsUsername(properties.getRealm().isRegistrationEmailAsUsername());
-            realm.setResetPasswordAllowed(properties.getRealm().isResetPasswordAllowed());
-            realm.setEditUsernameAllowed(properties.getRealm().isEditUsernameAllowed());
-            realm.setLoginWithEmailAllowed(properties.getRealm().isLoginWithEmailAllowed());
-            realm.setDuplicateEmailsAllowed(properties.getRealm().isDuplicateEmailsAllowed());
-            
-            // Paramètres de session
-            realm.setSsoSessionIdleTimeout(properties.getRealm().getSsoSessionIdleTimeout());
-            realm.setSsoSessionMaxLifespan(properties.getRealm().getSsoSessionMaxLifespan());
-            realm.setAccessTokenLifespan(properties.getRealm().getAccessTokenLifespan());
-            
-            // DEBUG: Logger la représentation complète avant envoi
             logger.info("═══════════════════════════════════════════════════════════");
-            logger.info("🔍 DEBUG: RealmRepresentation à envoyer à Keycloak:");
+            logger.info("🔍 DEBUG: RealmRepresentation MINIMAL à envoyer:");
             logger.info("   - realm: {}", realm.getRealm());
-            logger.info("   - displayName: {}", realm.getDisplayName());
             logger.info("   - enabled: {}", realm.isEnabled());
-            logger.info("   - registrationAllowed: {}", realm.isRegistrationAllowed());
-            logger.info("   - loginWithEmailAllowed: {}", realm.isLoginWithEmailAllowed());
-            logger.info("   - ssoSessionIdleTimeout: {}", realm.getSsoSessionIdleTimeout());
-            logger.info("   - ssoSessionMaxLifespan: {}", realm.getSsoSessionMaxLifespan());
-            logger.info("   - accessTokenLifespan: {}", realm.getAccessTokenLifespan());
             logger.info("═══════════════════════════════════════════════════════════");
             
-            // Créer le realm via l'API
+            // Créer le realm via l'API (version minimale)
             keycloak.realms().create(realm);
-            logger.info("✅ Realm '{}' créé avec succès!", realmName);
+            logger.info("✅ Realm '{}' créé avec succès (version minimale)!", realmName);
+            
+            // Maintenant, mettre à jour avec la configuration complète
+            logger.info("🔧 Configuration du realm avec les paramètres souhaités...");
+            try {
+                RealmRepresentation realmToUpdate = keycloak.realm(realmName).toRepresentation();
+                
+                // Appliquer la configuration souhaitée
+                realmToUpdate.setDisplayName(properties.getRealm().getDisplayName());
+                realmToUpdate.setRegistrationAllowed(properties.getRealm().isRegistrationAllowed());
+                realmToUpdate.setRegistrationEmailAsUsername(properties.getRealm().isRegistrationEmailAsUsername());
+                realmToUpdate.setResetPasswordAllowed(properties.getRealm().isResetPasswordAllowed());
+                realmToUpdate.setEditUsernameAllowed(properties.getRealm().isEditUsernameAllowed());
+                realmToUpdate.setLoginWithEmailAllowed(properties.getRealm().isLoginWithEmailAllowed());
+                realmToUpdate.setDuplicateEmailsAllowed(properties.getRealm().isDuplicateEmailsAllowed());
+                realmToUpdate.setSsoSessionIdleTimeout(properties.getRealm().getSsoSessionIdleTimeout());
+                realmToUpdate.setSsoSessionMaxLifespan(properties.getRealm().getSsoSessionMaxLifespan());
+                realmToUpdate.setAccessTokenLifespan(properties.getRealm().getAccessTokenLifespan());
+                
+                // Mettre à jour le realm
+                keycloak.realm(realmName).update(realmToUpdate);
+                logger.info("✅ Configuration du realm '{}' appliquée avec succès!", realmName);
+                
+            } catch (Exception e) {
+                logger.warn("⚠️  Realm créé mais échec de la configuration avancée: {}", e.getMessage());
+                logger.info("   Le realm existe mais avec configuration par défaut");
+            }
+            
             return true;
             
         } catch (jakarta.ws.rs.ClientErrorException e) {

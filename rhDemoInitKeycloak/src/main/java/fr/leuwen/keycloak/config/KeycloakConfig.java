@@ -32,35 +32,20 @@ public class KeycloakConfig {
         logger.info("   👤 Utilisateur admin: {}", properties.getAdmin().getUsername());
 
         try {
-            // Créer un HTTP client qui accepte tous les certificats SSL (pour dev/staging)
-            SSLContext sslContext = SSLContextBuilder.create()
-                    .loadTrustMaterial((chain, authType) -> true) // Trust all certificates
-                    .build();
+            // STRATÉGIE: Utiliser le client HTTP par défaut de Resteasy (pas de custom Apache HttpClient)
+            // L'erreur "unable to read contents from stream" pourrait être causée par le ApacheHttpClient43Engine
+            // qui a des problèmes avec certains payloads JSON
             
-            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-                    sslContext,
-                    NoopHostnameVerifier.INSTANCE // Disable hostname verification
-            );
-            
-            CloseableHttpClient httpClient = HttpClients.custom()
-                    .setSSLSocketFactory(sslSocketFactory)
-                    .build();
-            
-            logger.warn("⚠️  Validation SSL désactivée - À utiliser UNIQUEMENT en dev/staging!");
+            logger.warn("⚠️  Utilisation du client HTTP par défaut (SSL non vérifié via système)");
+            logger.warn("⚠️  Pour staging: s'assurer que le serveur Keycloak utilise HTTP (pas HTTPS)");
 
-            // Créer le client Keycloak avec le HTTP client custom
-            org.jboss.resteasy.client.jaxrs.ResteasyClient resteasyClient = 
-                ((ResteasyClientBuilder) ResteasyClientBuilder.newBuilder())
-                    .httpEngine(new org.jboss.resteasy.client.jaxrs.engines.ApacheHttpClient43Engine(httpClient))
-                    .build();
-
+            // Client Keycloak avec configuration par défaut (plus simple et moins de problèmes potentiels)
             return KeycloakBuilder.builder()
                     .serverUrl(properties.getServerUrl())
                     .realm(properties.getAdmin().getRealm())
                     .username(properties.getAdmin().getUsername())
                     .password(properties.getAdmin().getPassword())
                     .clientId("admin-cli")
-                    .resteasyClient(resteasyClient)
                     .build();
 
         } catch (Exception e) {

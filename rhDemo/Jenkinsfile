@@ -344,7 +344,7 @@ YMLEOF
                     echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
                     sh """
                         . rhDemo/secrets/env-vars.sh
-                        cd rhDemo && ./mvnw spring-boot:build-image \
+                        cd rhDemo && ./mvnw clean spring-boot:build-image \
                             -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
                             -DskipTests
                     """

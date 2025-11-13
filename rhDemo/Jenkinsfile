@@ -735,33 +735,45 @@ YMLEOF
                     echo '▶ Vérification santé de l\'application RHDemo...'
                 }
                 sh """
-                    echo "⏳ Vérification RHDemo App (60s max)..."
-                    timeout=60
+                    echo "⏳ Vérification RHDemo App (90s max, healthcheck start_period=60s)..."
+                    timeout=90
                     while [ \$timeout -gt 0 ]; do
-                        # Test simple de connexion TCP sur le port 9000
-                        # (les endpoints nécessitent une authentification OAuth2)
-                        if nc -z rhdemo-staging-app 9000 2>/dev/null; then
-                            echo "✅ RHDemo App ready (port 9000 accessible)"
+                        # Utiliser le healthcheck Docker pour vérifier l'état du conteneur
+                        container_status=\$(docker inspect --format='{{.State.Health.Status}}' rhdemo-staging-app 2>/dev/null || echo "unknown")
+                        
+                        # Accepter "healthy" ou "starting" (pendant start_period)
+                        if [ "\$container_status" = "healthy" ]; then
+                            echo "✅ RHDemo App ready (healthcheck passed)"
                             break
+                        elif [ "\$container_status" = "starting" ]; then
+                            # Pendant start_period, on peut aussi vérifier avec curl
+                            http_code=\$(curl -s -o /dev/null -w "%{http_code}" http://rhdemo-staging-app:9000/front/ 2>/dev/null || echo "000")
+                            if [ "\$http_code" = "302" ] || [ "\$http_code" = "301" ]; then
+                                echo "✅ RHDemo App ready (responding with HTTP \$http_code, healthcheck starting)"
+                                break
+                            fi
+                        elif [ "\$container_status" = "unknown" ]; then
+                            # Si pas de healthcheck, vérifier que le conteneur est au moins démarré
+                            container_running=\$(docker inspect --format='{{.State.Running}}' rhdemo-staging-app 2>/dev/null || echo "false")
+                            if [ "\$container_running" = "true" ]; then
+                                echo "✅ RHDemo App ready (container running)"
+                                break
+                            fi
                         fi
-                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
-                        sleep 2
-                        timeout=\$((timeout - 2))
+                        
+                        echo "   Container status: \$container_status - retry dans 3s... (reste \${timeout}s)"
+                        sleep 3
+                        timeout=\$((timeout - 3))
                     done
                     
                     if [ \$timeout -le 0 ]; then
-                        echo "❌ RHDemo App timeout après 60s"
-                        echo "Logs RHDemo:"
+                        echo "❌ RHDemo App timeout après 90s"
+                        echo "Container status final:"
+                        docker inspect --format='Status={{.State.Status}} Health={{.State.Health.Status}}' rhdemo-staging-app || true
+                        echo ""
+                        echo "Logs RHDemo (dernières 50 lignes):"
                         docker logs --tail=50 rhdemo-staging-app || true
                         exit 1
-                    fi
-                    
-                    # Vérification que l'application redirige vers OAuth2 (signe qu'elle est démarrée)
-                    echo "🔍 Vérification redirection OAuth2..."
-                    if curl -s -o /dev/null -w "%{http_code}" http://rhdemo-staging-app:9000/front/ | grep -q "302"; then
-                        echo "✅ Application redirige correctement vers OAuth2"
-                    else
-                        echo "⚠️  Pas de redirection OAuth2 détectée (non bloquant)"
                     fi
                     
                     echo "✅ Application RHDemo opérationnelle"

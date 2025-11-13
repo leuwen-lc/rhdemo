@@ -342,7 +342,14 @@ YMLEOF
             steps {
                 script {
                     echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
-                    echo "⚠️  Suppression du cache buildpack pour forcer reconstruction complète..."
+                    echo "⚠️  Nettoyage complet: suppression cache Docker + target/ + images existantes..."
+                    
+                    // Supprimer les anciennes images Docker pour forcer reconstruction
+                    sh """
+                        docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker system prune -f --filter "label=io.buildpacks.stack.id" || true
+                    """
+                    
                     sh """
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean spring-boot:build-image \

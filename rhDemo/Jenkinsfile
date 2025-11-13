@@ -342,10 +342,14 @@ YMLEOF
             steps {
                 script {
                     echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
+                    echo "⚠️  Suppression du cache buildpack pour forcer reconstruction complète..."
                     sh """
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean spring-boot:build-image \
                             -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -Dspring-boot.build-image.pullPolicy=IF_NOT_PRESENT \
+                            -Dspring-boot.build-image.publish=false \
+                            -Dspring-boot.build-image.cleanCache=true \
                             -DskipTests
                     """
                     

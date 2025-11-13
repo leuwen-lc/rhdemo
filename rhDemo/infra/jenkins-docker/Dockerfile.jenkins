@@ -98,10 +98,10 @@ ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
 # ═══════════════════════════════════════════════════════════════════
 
 # Ajouter Jenkins au groupe docker pour accéder au socket Docker
-# Note: On crée simplement le groupe docker sans spécifier de GID
-# Le GID sera mappé avec celui de l'hôte via docker-compose (group_add)
-RUN groupadd docker 2>/dev/null || true && \
-    usermod -aG docker jenkins 2>/dev/null || true
+# Le GID 984 correspond au groupe docker sur l'hôte
+# Si le GID existe déjà, on ajoute simplement jenkins au groupe existant
+RUN (groupadd -g 984 docker || groupadd docker) && \
+    usermod -aG docker jenkins
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION FINALE

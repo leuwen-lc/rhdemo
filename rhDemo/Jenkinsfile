@@ -803,14 +803,32 @@ YMLEOF
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
                 }
+                
+                // Configuration DNS pour que Firefox puisse résoudre les domaines staging via nginx
+                sh '''
+                    echo "🔧 Configuration DNS pour tests via nginx..."
+                    
+                    # Récupérer l'IP du conteneur nginx dans le réseau Docker
+                    NGINX_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' rhdemo-staging-nginx)
+                    echo "   IP nginx: $NGINX_IP"
+                    
+                    # Ajouter les entrées dans /etc/hosts (nécessite sudo sur Jenkins)
+                    # Note: Ces entrées permettent à Firefox de résoudre keycloak.staging.local et rhdemo.staging.local
+                    echo "$NGINX_IP keycloak.staging.local" | sudo tee -a /etc/hosts
+                    echo "$NGINX_IP rhdemo.staging.local" | sudo tee -a /etc/hosts
+                    
+                    echo "✅ DNS configuré:"
+                    grep "staging.local" /etc/hosts | tail -2
+                '''
+                
                 dir(TEST_PROJECT_PATH) {
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
-                        # URLs internes Docker (pas HTTPS, noms de services)
-                        # Jenkins est connecté au réseau rhdemo-staging-network
-                        APP_URL="http://rhdemo-staging-app:9000"
-                        KEYCLOAK_URL="http://keycloak-staging:8080"
+                        # URLs HTTPS via nginx (tests réels comme en production)
+                        # Firefox résoudra ces domaines grâce aux entrées /etc/hosts
+                        APP_URL="https://rhdemo.staging.local"
+                        KEYCLOAK_URL="https://keycloak.staging.local"
                         
                         # Utilisation du wrapper Maven du projet principal
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
@@ -1094,6 +1112,16 @@ YMLEOF
                 echo '═══════════════════════════════════════════════════════'
                 echo '  NETTOYAGE ET NOTIFICATIONS'
                 echo '═══════════════════════════════════════════════════════'
+                
+                // Nettoyage des entrées DNS /etc/hosts
+                if (params.RUN_SELENIUM_TESTS == true) {
+                    echo '▶ Nettoyage des entrées DNS /etc/hosts...'
+                    sh '''
+                        # Supprimer les entrées staging.local de /etc/hosts
+                        sudo sed -i '/staging\\.local/d' /etc/hosts
+                        echo "✅ Entrées DNS nettoyées"
+                    '''
+                }
                 
                 // PHASE 6 : Nettoyage de l'environnement Docker Compose
                 if (params.RUN_SELENIUM_TESTS == true) {

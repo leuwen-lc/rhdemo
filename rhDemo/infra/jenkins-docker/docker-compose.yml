@@ -55,7 +55,6 @@ services:
       - H2_DB_PASSWORD=${H2_DB_PASSWORD}
       - POSTGRES_DB_PASSWORD=${POSTGRES_DB_PASSWORD}
       - SONAR_TOKEN=${SONAR_TOKEN}
-      - SLACK_TOKEN=${SLACK_TOKEN}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       
       # Timezone

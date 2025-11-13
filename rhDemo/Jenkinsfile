@@ -652,24 +652,33 @@ YMLEOF
             }
         }
         
-        stage('💾 Initialisation Base de Données') {
+        stage('💾 Vérification Base de Données') {
             when {
                 expression { params.RUN_SELENIUM_TESTS == true }
             }
             steps {
                 script {
-                    echo '▶ Initialisation de la base de données PostgreSQL...'
+                    echo '▶ Vérification de la base de données PostgreSQL...'
+                    echo '   (Base déjà initialisée lors du démarrage Docker Compose)'
                 }
                 sh """
-                    cd ${STAGING_INFRA_PATH}
-                    ./init-database.sh --force
+                    echo "🔍 Vérification du nombre d'employés dans la base..."
                     
-                    if [ \$? -ne 0 ]; then
-                        echo "❌ Échec de l'initialisation de la base"
+                    # Compter les employés via connexion directe au container
+                    EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" 2>/dev/null | tr -d ' ')
+                    
+                    if [ -z "\$EMPLOYEE_COUNT" ]; then
+                        echo "❌ Impossible de récupérer le nombre d'employés"
+                        echo "   La table 'employes' existe-t-elle ?"
                         exit 1
                     fi
                     
-                    echo "✅ Base de données initialisée (303 employés)"
+                    echo "✅ Base de données opérationnelle"
+                    echo "   📊 Nombre d'employés: \$EMPLOYEE_COUNT"
+                    
+                    if [ "\$EMPLOYEE_COUNT" -lt 1 ]; then
+                        echo "⚠️  Attention: Base vide (aucun employé)"
+                    fi
                 """
             }
         }

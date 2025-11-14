@@ -834,12 +834,12 @@ YMLEOF
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
-                        # URLs via ports exposés de nginx (localhost:80)
-                        # Nginx proxie vers rhdemo-app et keycloak selon les routes:
-                        #   - / (catch-all) → rhdemo-app:9000 (handles /front/*, /api/*, /login/oauth2/*)
-                        #   - /realms/* → keycloak:8080/realms/*
-                        APP_URL="http://localhost:80"
-                        KEYCLOAK_URL="http://localhost:80/realms/RHDemo"
+                        # URLs via nginx dans le réseau Docker
+                        # Firefox dans Jenkins doit utiliser le nom du conteneur nginx, pas localhost
+                        # Car Jenkins container a son propre localhost (127.0.0.1 interne)
+                        # Jenkins est connecté à rhdemo-staging-network → peut résoudre rhdemo-staging-nginx
+                        APP_URL="http://rhdemo-staging-nginx"
+                        KEYCLOAK_URL="http://rhdemo-staging-nginx/realms/RHDemo"
                         
                         echo "📍 Configuration des URLs de test:"
                         echo "   APP_URL: \${APP_URL}"

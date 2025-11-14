@@ -167,8 +167,9 @@ public abstract class BaseSeleniumTest {
             
         } catch (Exception e) {
             log.error("❌ Erreur lors de l'authentification Keycloak: {}", e.getMessage(), e);
-            // On ne lance pas d'exception pour ne pas bloquer tous les tests
-            // Les tests individuels échoueront si l'authentification a échoué
+            // CRITICAL: Relancer l'exception pour arrêter immédiatement la suite de tests
+            // Si l'authentification échoue, aucun test ne peut réussir
+            throw new RuntimeException("❌ AUTHENTIFICATION KEYCLOAK ÉCHOUÉE - Arrêt de la suite de tests", e);
         }
     }
     

@@ -156,7 +156,7 @@ public class ClientService {
         Map<String, String> config = new HashMap<>();
         config.put("introspection.token.claim", "true");
         config.put("multivalued", "true");
-        config.put("userinfo.token.claim", "false");
+        config.put("userinfo.token.claim", "true");  // CRITICAL: Inclure dans UserInfo endpoint pour Spring Security OAuth2
         config.put("user.attribute", "foo");
         config.put("id.token.claim", "true");  // IMPORTANT: Inclure dans l'ID token pour OAuth2 sans userinfo
         config.put("lightweight.claim", "false");

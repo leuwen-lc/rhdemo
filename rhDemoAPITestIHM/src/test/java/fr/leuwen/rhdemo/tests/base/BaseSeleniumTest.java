@@ -141,14 +141,24 @@ public abstract class BaseSeleniumTest {
                 // Attendre la redirection vers l'application
                 authWait.until(ExpectedConditions.urlContains(TestConfig.BASE_URL));
                 
-                // Vérifier qu'on est bien authentifié (on ne doit plus être sur la page Keycloak)
+                // Vérifier qu'on est bien authentifié (vérification stricte)
                 String currentUrl = driver.getCurrentUrl();
-                if (!currentUrl.contains("keycloak") && !currentUrl.contains("realms")) {
-                    log.info("✅ Authentification Keycloak réussie !");
-                    log.info("🌐 URL actuelle: {}", currentUrl);
-                } else {
+                log.info("🌐 URL après authentification: {}", currentUrl);
+                
+                if (currentUrl.contains("/login?error")) {
+                    log.error("❌ Échec d'authentification: redirection vers /login?error");
+                    log.error("Causes possibles:");
+                    log.error("  - Credentials invalides");
+                    log.error("  - Rôles manquants dans le token JWT");
+                    log.error("  - Client Keycloak mal configuré (mappers)");
+                    throw new RuntimeException("Authentification Keycloak échouée: " + currentUrl);
+                } else if (currentUrl.contains("keycloak") || currentUrl.contains("realms")) {
                     log.warn("⚠️ Toujours sur la page Keycloak après authentification");
-                    log.warn("URL: {}", currentUrl);
+                    throw new RuntimeException("Redirection OAuth2 incomplète: " + currentUrl);
+                } else if (currentUrl.contains("/front")) {
+                    log.info("✅ Authentification Keycloak réussie !");
+                } else {
+                    log.warn("⚠️ URL inattendue après authentification: {}", currentUrl);
                 }
                 
             } else {

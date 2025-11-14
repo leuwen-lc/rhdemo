@@ -749,6 +749,10 @@ YMLEOF
                         echo "   - Realm RHDemo créé"
                         echo "   - Client RHDemo configuré"
                         echo "   - 3 utilisateurs créés (admin, consultant, manager)"
+                        
+                        echo ""
+                        echo "🔍 DEBUG: Vérification du client-secret dans Keycloak..."
+                        echo "   Secret utilisé pour init: \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)... (longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET})"
                     else
                         echo ""
                         echo "❌ Échec de l'initialisation Keycloak"

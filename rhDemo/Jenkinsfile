@@ -547,8 +547,9 @@ YMLEOF
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
                     
                     # DEBUG: Afficher la valeur du client-secret (masqué)
-                    echo "🔍 DEBUG: Client-secret length: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
-                    echo "🔍 DEBUG: Client-secret (10 premiers car): \${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET:0:10}..."
+                    echo "🔍 DEBUG: Client-secret exporté avec succès"
+                    echo "   Longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET} caractères"
+                    echo "   Début (cut): \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)..."
                     
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER

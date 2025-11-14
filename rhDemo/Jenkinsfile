@@ -590,8 +590,16 @@ YMLEOF
                     docker exec rhdemo-staging-nginx nginx -s reload  # Reload
                     echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
                     
-                    # Attendre que nginx soit prêt avec la nouvelle config
-                    sleep 3
+                    # Vérifier que nginx écoute réellement sur le port 443
+                    echo "🔍 Vérification que nginx écoute sur le port 443..."
+                    if docker exec rhdemo-staging-nginx netstat -tuln | grep -q ':443'; then
+                        echo "✅ Nginx écoute sur le port 443 (HTTPS)"
+                    else
+                        echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
+                        echo "Ports écoutés par nginx:"
+                        docker exec rhdemo-staging-nginx netstat -tuln
+                        exit 1
+                    fi
                     
                     echo "✅ Environnement Docker opérationnel:"
                     docker-compose -p ${COMPOSE_PROJECT_NAME} ps
@@ -805,6 +813,69 @@ YMLEOF
             }
         }
         
+        stage('🌐 Healthcheck Nginx HTTPS') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
+                }
+                sh '''
+                    echo "🔍 Test accès HTTPS depuis Jenkins (conditions réelles Selenium)..."
+                    echo "   URL testée: https://rhdemo.staging.local/front/"
+                    echo ""
+                    
+                    # Obtenir le conteneur Jenkins
+                    JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v "agent" | head -n 1)
+                    
+                    # Test depuis Jenkins (là où Firefox tourne)
+                    timeout=30
+                    while [ $timeout -gt 0 ]; do
+                        HTTP_CODE=$(docker exec ${JENKINS_CONTAINER} curl -k -s -o /dev/null -w "%{http_code}" https://rhdemo.staging.local/front/ 2>/dev/null || echo "000")
+                        
+                        # Accepter 302 (redirect OAuth2) ou 200
+                        if echo "${HTTP_CODE}" | grep -qE "^(200|302)$"; then
+                            echo "✅ Nginx HTTPS accessible depuis Jenkins (HTTP ${HTTP_CODE})"
+                            echo "   Firefox pourra se connecter via HTTPS"
+                            break
+                        fi
+                        
+                        echo "   HTTP ${HTTP_CODE} - retry dans 2s... (reste ${timeout}s)"
+                        sleep 2
+                        timeout=$((timeout - 2))
+                    done
+                    
+                    if [ $timeout -le 0 ]; then
+                        echo "❌ ERREUR: Nginx HTTPS inaccessible après 30s"
+                        echo ""
+                        echo "🔍 Diagnostics:"
+                        echo ""
+                        echo "1. État du conteneur nginx:"
+                        docker ps --filter "name=nginx"
+                        echo ""
+                        echo "2. Ports écoutés par nginx:"
+                        docker exec rhdemo-staging-nginx netstat -tuln | grep LISTEN
+                        echo ""
+                        echo "3. Configuration nginx chargée:"
+                        docker exec rhdemo-staging-nginx nginx -T 2>&1 | grep -A 5 "listen.*443"
+                        echo ""
+                        echo "4. Logs nginx (dernières 20 lignes):"
+                        docker logs --tail=20 rhdemo-staging-nginx
+                        echo ""
+                        echo "5. Test DNS depuis Jenkins:"
+                        docker exec ${JENKINS_CONTAINER} getent hosts rhdemo.staging.local
+                        echo ""
+                        exit 1
+                    fi
+                    
+                    echo ""
+                    echo "✅ Stack complète opérationnelle et accessible via HTTPS"
+                    echo "   Prêt pour les tests Selenium"
+                '''
+            }
+        }
+        
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS FONCTIONNELS
         // ════════════════════════════════════════════════════════════════
@@ -821,41 +892,6 @@ YMLEOF
                     echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
                 }
                 
-                // Test DNS depuis Jenkins (là où Firefox tourne réellement)
-                sh '''
-                    echo "🔧 Diagnostic réseau depuis Jenkins container..."
-                    echo ""
-                    
-                    # Obtenir le nom du conteneur Jenkins
-                    JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v "agent" | head -n 1)
-                    echo "📍 Conteneur Jenkins: ${JENKINS_CONTAINER}"
-                    echo ""
-                    
-                    # Test 1: Vérifier les réseaux Docker de Jenkins
-                    echo "1️⃣ Réseaux Docker de Jenkins:"
-                    docker inspect ${JENKINS_CONTAINER} --format='{{range $net, $v := .NetworkSettings.Networks}}   - {{$net}}{{end}}'
-                    echo ""
-                    
-                    # Test 2: DNS depuis Jenkins (là où Firefox tourne)
-                    echo "2️⃣ Test DNS rhdemo.staging.local depuis Jenkins:"
-                    if docker exec ${JENKINS_CONTAINER} getent hosts rhdemo.staging.local 2>/dev/null; then
-                        echo "   ✅ DNS résout rhdemo.staging.local"
-                    else
-                        echo "   ❌ ERREUR: Jenkins ne peut PAS résoudre rhdemo.staging.local"
-                        echo "   Firefox ne pourra pas se connecter!"
-                    fi
-                    echo ""
-                    
-                    # Test 3: Connexion HTTPS depuis Jenkins
-                    echo "3️⃣ Test connexion HTTPS depuis Jenkins:"
-                    HTTP_CODE=$(docker exec ${JENKINS_CONTAINER} curl -k -s -o /dev/null -w "%{http_code}" https://rhdemo.staging.local/front/ 2>/dev/null || echo "000")
-                    if echo "${HTTP_CODE}" | grep -qE "^(200|302)$"; then
-                        echo "   ✅ Jenkins peut se connecter (HTTP ${HTTP_CODE})"
-                    else
-                        echo "   ❌ ERREUR: Connexion échouée (HTTP ${HTTP_CODE})"
-                    fi
-                '''
-                
                 dir(TEST_PROJECT_PATH) {
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
@@ -868,22 +904,23 @@ YMLEOF
                         APP_URL="https://rhdemo.staging.local"
                         KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
                         
+                        # IMPORTANT: Exporter les credentials Keycloak comme variables d'environnement
+                        # BaseSeleniumTest.java cherche RHDEMOTEST_USER et RHDEMOTEST_PWD (pas les propriétés Maven)
+                        # Utilisation de manager (ROLE_consult + ROLE_MAJ) pour tester toutes les opérations
+                        export RHDEMOTEST_USER="manager"
+                        export RHDEMOTEST_PWD="manager123"
+                        
                         echo "📍 Configuration des URLs de test:"
                         echo "   APP_URL: \${APP_URL}"
                         echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
-                        echo "   Utilisation des network aliases DNS configurés dans docker-compose"
+                        echo "   RHDEMOTEST_USER: \${RHDEMOTEST_USER} (ROLE_consult + ROLE_MAJ)"
+                        echo "   (Healthcheck HTTPS validé avant ce stage)"
                         
                         # Utilisation du wrapper Maven du projet principal
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
                             -Dtest.baseurl=\${APP_URL} \\
                             -Dselenium.headless=true \\
-                            -Dtest.keycloak.url=\${KEYCLOAK_URL} \\
-                            -Dtest.admin.user=admin \\
-                            -Dtest.admin.password=\${KEYCLOAK_ADMIN_PASSWORD:-admin123} \\
-                            -Dtest.consult.user=consultant \\
-                            -Dtest.consult.password=consult123 \\
-                            -Dtest.manager.user=manager \\
-                            -Dtest.manager.password=manager123
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL}
                     """
                 }
             }

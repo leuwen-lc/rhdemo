@@ -812,24 +812,39 @@ YMLEOF
                     echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
                 }
                 
-                // Pas besoin de configuration DNS: les alias réseau Docker permettent
-                // à Firefox (dans Jenkins connecté au network) de résoudre directement
-                // keycloak.staging.local et rhdemo.staging.local
+                // Test DNS depuis Jenkins (là où Firefox tourne réellement)
                 sh '''
-                    echo "🔧 Vérification de la résolution DNS via Docker network aliases..."
+                    echo "🔧 Diagnostic réseau depuis Jenkins container..."
+                    echo ""
                     
-                    # Test de résolution DNS via les alias Docker network
-                    echo "   Résolution de rhdemo.staging.local:"
-                    docker exec rhdemo-staging-nginx nslookup rhdemo.staging.local || \
-                        echo "      ⚠️  nslookup non disponible (normal pour Alpine), les alias fonctionnent quand même"
+                    # Obtenir le nom du conteneur Jenkins
+                    JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v "agent" | head -n 1)
+                    echo "📍 Conteneur Jenkins: ${JENKINS_CONTAINER}"
+                    echo ""
                     
-                    echo "   Résolution de keycloak.staging.local:"
-                    docker exec rhdemo-staging-nginx nslookup keycloak.staging.local || \
-                        echo "      ⚠️  nslookup non disponible (normal pour Alpine), les alias fonctionnent quand même"
+                    # Test 1: Vérifier les réseaux Docker de Jenkins
+                    echo "1️⃣ Réseaux Docker de Jenkins:"
+                    docker inspect ${JENKINS_CONTAINER} --format='{{range $net, $v := .NetworkSettings.Networks}}   - {{$net}}{{end}}'
+                    echo ""
                     
-                    echo "✅ DNS configuré via Docker network aliases"
-                    echo "   Jenkins peut résoudre rhdemo.staging.local et keycloak.staging.local"
-                    echo "   grâce à sa connexion au réseau rhdemo-staging-network"
+                    # Test 2: DNS depuis Jenkins (là où Firefox tourne)
+                    echo "2️⃣ Test DNS rhdemo.staging.local depuis Jenkins:"
+                    if docker exec ${JENKINS_CONTAINER} getent hosts rhdemo.staging.local 2>/dev/null; then
+                        echo "   ✅ DNS résout rhdemo.staging.local"
+                    else
+                        echo "   ❌ ERREUR: Jenkins ne peut PAS résoudre rhdemo.staging.local"
+                        echo "   Firefox ne pourra pas se connecter!"
+                    fi
+                    echo ""
+                    
+                    # Test 3: Connexion HTTPS depuis Jenkins
+                    echo "3️⃣ Test connexion HTTPS depuis Jenkins:"
+                    HTTP_CODE=$(docker exec ${JENKINS_CONTAINER} curl -k -s -o /dev/null -w "%{http_code}" https://rhdemo.staging.local/front/ 2>/dev/null || echo "000")
+                    if echo "${HTTP_CODE}" | grep -qE "^(200|302)$"; then
+                        echo "   ✅ Jenkins peut se connecter (HTTP ${HTTP_CODE})"
+                    else
+                        echo "   ❌ ERREUR: Connexion échouée (HTTP ${HTTP_CODE})"
+                    fi
                 '''
                 
                 dir(TEST_PROJECT_PATH) {

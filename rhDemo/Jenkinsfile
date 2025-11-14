@@ -543,6 +543,9 @@ YMLEOF
                     # Alias pour les variables attendues par docker-compose.yml
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
                     
+                    # OAuth2 Client Secret pour Spring Boot
+                    export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+                    
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
                     

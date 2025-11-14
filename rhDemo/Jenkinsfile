@@ -546,6 +546,10 @@ YMLEOF
                     # OAuth2 Client Secret pour Spring Boot
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
                     
+                    # DEBUG: Afficher la valeur du client-secret (masqué)
+                    echo "🔍 DEBUG: Client-secret length: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+                    echo "🔍 DEBUG: Client-secret (10 premiers car): \${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET:0:10}..."
+                    
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
                     

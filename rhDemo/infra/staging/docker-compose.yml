@@ -143,7 +143,8 @@ services:
     container_name: rhdemo-staging-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      # Port 80 fermé pour sécurité - Tests utilisent HTTPS uniquement
+      # - "80:80"
       - "443:443"
     volumes:
       # Note: nginx.conf et conf.d copiés via docker cp au lieu de bind mount

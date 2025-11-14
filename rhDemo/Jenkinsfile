@@ -203,9 +203,11 @@ keycloak:
     redirect-uris:
       - https://${TEST_DOMAIN}/*
       - http://localhost:9000/*
+      - http://localhost:80/*
     web-origins:
       - https://${TEST_DOMAIN}
       - http://localhost:9000
+      - http://localhost:80
     roles:
       - ROLE_admin
       - ROLE_consult
@@ -832,10 +834,17 @@ YMLEOF
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
-                        # URLs HTTPS via nginx (tests réels comme en production)
-                        # Firefox résoudra ces domaines grâce aux aliases Docker network
-                        APP_URL="https://rhdemo.staging.local"
-                        KEYCLOAK_URL="https://keycloak.staging.local"
+                        # URLs via ports exposés de nginx (localhost:80)
+                        # Nginx proxie vers rhdemo-app et keycloak selon les routes:
+                        #   - / (catch-all) → rhdemo-app:9000 (handles /front/*, /api/*, /login/oauth2/*)
+                        #   - /realms/* → keycloak:8080/realms/*
+                        APP_URL="http://localhost:80"
+                        KEYCLOAK_URL="http://localhost:80/realms/RHDemo"
+                        
+                        echo "📍 Configuration des URLs de test:"
+                        echo "   APP_URL: \${APP_URL}"
+                        echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
+                        echo "   Les tests accèdent à nginx:80 qui proxie vers les services internes"
                         
                         # Utilisation du wrapper Maven du projet principal
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\

@@ -203,11 +203,13 @@ keycloak:
     redirect-uris:
       - https://${TEST_DOMAIN}/*
       - http://localhost:9000/*
-      - https://rhdemo-staging-nginx/*
+      - https://rhdemo.staging.local/*
+      - https://keycloak.staging.local/*
     web-origins:
       - https://${TEST_DOMAIN}
       - http://localhost:9000
-      - https://rhdemo-staging-nginx
+      - https://rhdemo.staging.local
+      - https://keycloak.staging.local
     roles:
       - ROLE_admin
       - ROLE_consult
@@ -835,17 +837,17 @@ YMLEOF
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
                         
                         # URLs via nginx dans le réseau Docker avec HTTPS
-                        # Firefox dans Jenkins doit utiliser le nom du conteneur nginx, pas localhost
-                        # Car Jenkins container a son propre localhost (127.0.0.1 interne)
-                        # Jenkins est connecté à rhdemo-staging-network → peut résoudre rhdemo-staging-nginx
+                        # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
+                        # Car Jenkins container est connecté à rhdemo-staging-network
+                        # Les aliases rhdemo.staging.local et keycloak.staging.local sont résolus via DNS Docker
                         # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
-                        APP_URL="https://rhdemo-staging-nginx"
-                        KEYCLOAK_URL="https://rhdemo-staging-nginx/realms/RHDemo"
+                        APP_URL="https://rhdemo.staging.local"
+                        KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
                         
                         echo "📍 Configuration des URLs de test:"
                         echo "   APP_URL: \${APP_URL}"
                         echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
-                        echo "   Les tests accèdent à nginx:80 qui proxie vers les services internes"
+                        echo "   Utilisation des network aliases DNS configurés dans docker-compose"
                         
                         # Utilisation du wrapper Maven du projet principal
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\

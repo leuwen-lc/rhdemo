@@ -108,7 +108,7 @@ services:
       # OAuth2/Keycloak
       # Configuration définie dans src/main/resources/application-staging.yml
       # Seuls les secrets sont passés en variables d'environnement
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+      RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
       
       # Actuator
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus

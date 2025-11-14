@@ -584,6 +584,15 @@ YMLEOF
                         echo "✅ Configurations nginx copiées (certificats manquants)"
                     fi
                     
+                    # Recharger la configuration nginx pour appliquer les changements
+                    echo "🔄 Rechargement de la configuration nginx..."
+                    docker exec rhdemo-staging-nginx nginx -t  # Test de la config
+                    docker exec rhdemo-staging-nginx nginx -s reload  # Reload
+                    echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
+                    
+                    # Attendre que nginx soit prêt avec la nouvelle config
+                    sleep 3
+                    
                     echo "✅ Environnement Docker opérationnel:"
                     docker-compose -p ${COMPOSE_PROJECT_NAME} ps
                 """

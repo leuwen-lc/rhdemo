@@ -98,7 +98,7 @@ public class ClientService {
         
         // Configuration d'authentification
         client.setEnabled(true);
-        client.setClientAuthenticatorType("client-secret");
+        client.setClientAuthenticatorType("client-secret-post");  // ✅ POST method pour Spring Boot client-authentication-method
         client.setSecret(properties.getClient().getSecret());
         
         // Flow configuration

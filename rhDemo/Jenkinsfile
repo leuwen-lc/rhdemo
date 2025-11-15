@@ -536,7 +536,8 @@ YMLEOF
                     cd ${STAGING_INFRA_PATH}
                     
                     # Variables d'environnement pour Docker Compose
-                    export RHDEMO_IMAGE=${RHDEMO_IMAGE}
+                    # docker-compose.yml utilise \${APP_VERSION}, on exporte RHDEMO_IMAGE sous ce nom
+                    export APP_VERSION=${RHDEMO_IMAGE}
                     # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
                     export WORKSPACE=\$(pwd)
                     
@@ -559,9 +560,9 @@ YMLEOF
                     docker rm -f keycloak-staging-db rhdemo-staging-db keycloak-staging rhdemo-staging-app rhdemo-staging-nginx 2>/dev/null || true
                     echo "✅ Conteneurs existants supprimés"
                     
-                    # Démarrer les conteneurs SANS bind mounts problématiques
+                    # Démarrer les conteneurs (plus besoin de docker-compose.jenkins.yml override)
                     echo "🚀 Démarrage des conteneurs Docker..."
-                    docker-compose -f docker-compose.yml -f docker-compose.jenkins.yml -p ${COMPOSE_PROJECT_NAME} up -d
+                    docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
                     # Connecter Jenkins au réseau staging pour accès direct aux services
                     echo "🔗 Connexion de Jenkins au réseau staging..."

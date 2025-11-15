@@ -536,8 +536,9 @@ YMLEOF
                     cd ${STAGING_INFRA_PATH}
                     
                     # Variables d'environnement pour Docker Compose
-                    # docker-compose.yml utilise \${APP_VERSION}, on exporte RHDEMO_IMAGE sous ce nom
-                    export APP_VERSION=${RHDEMO_IMAGE}
+                    # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
+                    # On exporte UNIQUEMENT le tag (pas rhdemo-api: qui est déjà dans le YAML)
+                    export APP_VERSION=build-${env.BUILD_NUMBER}
                     # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
                     export WORKSPACE=\$(pwd)
                     

@@ -183,15 +183,8 @@ networks:
         - --health-enabled=true
         - --metrics-enabled=true
       environment:
-        # Admin Keycloak
         KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
         KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-        # Configuration hostname : pas de KC_HOSTNAME_URL fixe
-        # Keycloak utilisera l'URL de la requête entrante (dynamique)
-        # Cela permet aux tokens d'avoir l'issuer correct selon le contexte
-        # - HTTPS pour les requêtes via nginx (frontend)
-        # - HTTP pour les requêtes backend internes
-        # Logging
         KC_LOG_LEVEL: info
       depends_on:
         keycloak-db:

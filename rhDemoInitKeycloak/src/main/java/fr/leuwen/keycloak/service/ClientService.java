@@ -96,18 +96,19 @@ public class ClientService {
         client.setRedirectUris(properties.getClient().getRedirectUris());
         client.setWebOrigins(properties.getClient().getWebOrigins());
         
-        // Configuration d'authentification
-        client.setEnabled(true);
-        client.setClientAuthenticatorType("client-secret-post");  // ✅ POST method pour Spring Boot client-authentication-method
-        client.setSecret(properties.getClient().getSecret());
-        
-        // Flow configuration
-        client.setStandardFlowEnabled(true);
-        client.setImplicitFlowEnabled(false);
-        client.setDirectAccessGrantsEnabled(true);
-        client.setServiceAccountsEnabled(false);
-        client.setPublicClient(false);
-        client.setFrontchannelLogout(true);
+    // Configuration d'authentification
+    client.setEnabled(true);
+    // CRITICAL: Forcer le client authenticator à 'client-secret' (équivalent à 'Client Id and Secret' dans l'admin UI)
+    client.setClientAuthenticatorType("client-secret");
+    client.setSecret(properties.getClient().getSecret());
+
+    // Flow configuration
+    client.setStandardFlowEnabled(true);
+    client.setImplicitFlowEnabled(false);
+    client.setDirectAccessGrantsEnabled(true);
+    client.setServiceAccountsEnabled(false);
+    client.setPublicClient(false);
+    client.setFrontchannelLogout(true);
         
         // Protocol et autres paramètres
         client.setProtocol("openid-connect");

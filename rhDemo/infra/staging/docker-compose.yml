@@ -47,7 +47,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.7
+  image: quay.io/keycloak/keycloak:26.4.2
     container_name: keycloak-staging
     restart: unless-stopped
     command:

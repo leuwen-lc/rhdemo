@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose Override pour OWASP ZAP (CI/CD uniquement)
+# 
+# Ce fichier ajoute OWASP ZAP comme proxy de sécurité entre
+# les tests Selenium et l'application RHDemo pour détecter
+# automatiquement les vulnérabilités (XSS, CSRF, SQLi, etc.)
+#
+# Usage dans Jenkins:
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.jenkins.yml \
+#                  -f docker-compose.zap.yml \
+#                  up -d
+#
+# Architecture de test:
+#   Selenium → ZAP Proxy (8090) → Nginx (443) → RHDemo App
+#                ↓
+#         Analyse passive
+#         + Spider
+#         + Active Scan
+#                ↓
+#         Rapport HTML/JSON
+#
+# Variables attendues:
+#   ZAP_API_KEY=your-secure-api-key (défini dans env-vars.sh)
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # OWASP ZAP - Proxy de sécurité pour analyse automatique
+  # ═══════════════════════════════════════════════════════════════
+  owasp-zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: owasp-zap-staging
+    restart: "no"  # Service temporaire pour CI/CD uniquement
+    
+    # Démarrage en mode daemon avec API activée
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8080
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.key=${ZAP_API_KEY:-changeme}
+      -config api.disablekey=false
+      -config spider.maxDepth=5
+      -config spider.maxChildren=10
+      -config ajaxSpider.browserId=firefox
+    
+    environment:
+      # Logging ZAP
+      - ZAP_LOG_LEVEL=INFO
+      
+      # Configuration proxy
+      - ZAP_PROXY_PORT=8090
+      
+      # Timeout scans
+      - ZAP_TIMEOUT=60
+    
+    ports:
+      # API ZAP (pour curl depuis Jenkins)
+      - "8080:8080"
+      
+      # Proxy ZAP (pour trafic Selenium)
+      - "8090:8090"
+    
+    volumes:
+      # Persistence des sessions ZAP
+      - zap-sessions:/zap/session
+      
+      # Rapports générés
+      - zap-reports:/zap/reports
+      
+      # Scripts personnalisés (optionnel)
+      # - ./zap-scripts:/zap/scripts:ro
+    
+    networks:
+      rhdemo-staging:
+        aliases:
+          - owasp-zap
+          - zap-proxy
+    
+    # Healthcheck : vérifier que l'API ZAP répond
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/JSON/core/view/version/?apikey=${ZAP_API_KEY:-changeme} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    
+    # Limites ressources (éviter surcharge CI)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # ═══════════════════════════════════════════════════════════════
+  # Service Selenium Firefox (override pour proxy ZAP)
+  # Ajouté uniquement si vous avez besoin d'un conteneur Firefox
+  # Sinon, la configuration proxy se fait dans rhDemoAPITestIHM
+  # ═══════════════════════════════════════════════════════════════
+  # selenium-firefox:
+  #   image: selenium/standalone-firefox:latest
+  #   container_name: selenium-firefox-staging
+  #   environment:
+  #     - SE_OPTS=--proxy http://owasp-zap:8090
+  #   depends_on:
+  #     owasp-zap:
+  #       condition: service_healthy
+  #   networks:
+  #     - rhdemo-staging
+
+volumes:
+  # Sessions ZAP (pour réutilisation entre builds)
+  zap-sessions:
+    name: rhdemo-staging-zap-sessions
+  
+  # Rapports ZAP (montés dans Jenkins pour archivage)
+  zap-reports:
+    name: rhdemo-staging-zap-reports

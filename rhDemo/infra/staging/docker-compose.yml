@@ -42,12 +42,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # ═══════════════════════════════════════════════════════════════
-  # Keycloak - Serveur d'authentification
-  # ═══════════════════════════════════════════════════════════════
   keycloak:
-  image: quay.io/keycloak/keycloak:26.4.2
+    image: quay.io/keycloak/keycloak:26.4.2
     container_name: keycloak-staging
     restart: unless-stopped
     command:

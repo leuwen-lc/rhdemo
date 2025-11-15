@@ -14,8 +14,8 @@ services:
       - rhdemo-db-data:/var/lib/postgresql/data
       # Note: pgddl.sql est copié via script init au lieu de bind mount
       # pour éviter les problèmes de layers Docker corrompus
-    networks:
-      - rhdemo-staging
+    keycloak:
+      image: quay.io/keycloak/keycloak:26.4.2
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rhdemo"]
       interval: 10s

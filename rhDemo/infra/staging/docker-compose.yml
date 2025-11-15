@@ -168,12 +168,42 @@ services:
 networks:
   rhdemo-staging:
     name: rhdemo-staging-network
-    driver: bridge
-
-volumes:
-  rhdemo-db-data:
-    name: rhdemo-staging-db-data
-  keycloak-db-data:
-    name: keycloak-staging-db-data
-  nginx-cache:
-    name: rhdemo-staging-nginx-cache
+    keycloak:
+      image: quay.io/keycloak/keycloak:26.4.2
+      container_name: keycloak-staging
+      restart: unless-stopped
+      command:
+        - start-dev
+        - --db=postgres
+        - --db-url=jdbc:postgresql://keycloak-db:5432/keycloak
+        - --db-username=keycloak
+        - --db-password=${KEYCLOAK_DB_PASSWORD}
+        - --proxy-headers=xforwarded
+        - --http-enabled=true
+        - --health-enabled=true
+        - --metrics-enabled=true
+      environment:
+        # Admin Keycloak
+        KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+        KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+        # Configuration hostname : pas de KC_HOSTNAME_URL fixe
+        # Keycloak utilisera l'URL de la requête entrante (dynamique)
+        # Cela permet aux tokens d'avoir l'issuer correct selon le contexte
+        # - HTTPS pour les requêtes via nginx (frontend)
+        # - HTTP pour les requêtes backend internes
+        # Logging
+        KC_LOG_LEVEL: info
+      depends_on:
+        keycloak-db:
+          condition: service_healthy
+      networks:
+        rhdemo-staging:
+          aliases:
+            - keycloak-staging
+            - keycloak.staging.local
+      healthcheck:
+        test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+        interval: 10s
+        timeout: 5s
+        retries: 15
+        start_period: 60s

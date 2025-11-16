@@ -53,6 +53,8 @@ public class ClientService {
             
             // Créer le nouveau client
             ClientRepresentation client = buildClientRepresentation();
+            //debug jenkins
+            logger.info(client.toString());
             
             // Créer le client via l'API
             try (Response response = keycloak.realm(realmName).clients().create(client)) {
@@ -114,11 +116,10 @@ public class ClientService {
         client.setProtocol("openid-connect");
         client.setSurrogateAuthRequired(false);
         client.setBearerOnly(false);
-        // setConsentRequired a été supprimé dans les versions récentes de Keycloak
         client.setAlwaysDisplayInConsole(false);
         client.setFullScopeAllowed(true);
         
-        // Attributs additionnels (comme dans RHDemo.json)
+        // Attributs additionnels
         Map<String, String> attributes = new HashMap<>();
         attributes.put("oidc.ciba.grant.enabled", "false");
         attributes.put("backchannel.logout.session.required", "true");

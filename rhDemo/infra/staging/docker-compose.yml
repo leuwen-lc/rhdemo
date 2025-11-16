@@ -14,8 +14,8 @@ services:
       - rhdemo-db-data:/var/lib/postgresql/data
       # Note: pgddl.sql est copié via script init au lieu de bind mount
       # pour éviter les problèmes de layers Docker corrompus
-    keycloak:
-      image: quay.io/keycloak/keycloak:26.4.2
+    networks:
+      - rhdemo-staging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rhdemo"]
       interval: 10s
@@ -42,6 +42,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Keycloak - Serveur d'authentification
+  # ═══════════════════════════════════════════════════════════════
   keycloak:
     image: quay.io/keycloak/keycloak:26.4.2
     container_name: keycloak-staging
@@ -164,35 +168,12 @@ services:
 networks:
   rhdemo-staging:
     name: rhdemo-staging-network
-    keycloak:
-      image: quay.io/keycloak/keycloak:26.4.2
-      container_name: keycloak-staging
-      restart: unless-stopped
-      command:
-        - start-dev
-        - --db=postgres
-        - --db-url=jdbc:postgresql://keycloak-db:5432/keycloak
-        - --db-username=keycloak
-        - --db-password=${KEYCLOAK_DB_PASSWORD}
-        - --proxy-headers=xforwarded
-        - --http-enabled=true
-        - --health-enabled=true
-        - --metrics-enabled=true
-      environment:
-        KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-        KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-        KC_LOG_LEVEL: info
-      depends_on:
-        keycloak-db:
-          condition: service_healthy
-      networks:
-        rhdemo-staging:
-          aliases:
-            - keycloak-staging
-            - keycloak.staging.local
-      healthcheck:
-        test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
-        interval: 10s
-        timeout: 5s
-        retries: 15
-        start_period: 60s
+    driver: bridge
+
+volumes:
+  rhdemo-db-data:
+    name: rhdemo-staging-db-data
+  keycloak-db-data:
+    name: keycloak-staging-db-data
+  nginx-cache:
+    name: rhdemo-staging-nginx-cache

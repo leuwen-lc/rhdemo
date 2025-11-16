@@ -52,11 +52,11 @@ public class RealmService {
             realm.setRealm(realmName);
             realm.setEnabled(true);
             
-            logger.info("═══════════════════════════════════════════════════════════");
-            logger.info("🔍 DEBUG: RealmRepresentation MINIMAL à envoyer:");
-            logger.info("   - realm: {}", realm.getRealm());
-            logger.info("   - enabled: {}", realm.isEnabled());
-            logger.info("═══════════════════════════════════════════════════════════");
+            logger.debug("═══════════════════════════════════════════════════════════");
+            logger.debug("🔍 DEBUG: RealmRepresentation MINIMAL à envoyer:");
+            logger.debug("   - realm: {}", realm.getRealm());
+            logger.debug("   - enabled: {}", realm.isEnabled());
+            logger.debug("═══════════════════════════════════════════════════════════");
             
             // Créer le realm via l'API (version minimale)
             keycloak.realms().create(realm);

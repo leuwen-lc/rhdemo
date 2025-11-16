@@ -1226,20 +1226,26 @@ YMLEOF
                     }
                     
                     // Nettoyage de l'environnement (A désactiver si besoin pour investigation post-échec)
-                     sh '''
-                         cd ${STAGING_INFRA_PATH} || exit 0
-                         # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
-                         JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
-                         if [ -n "$JENKINS_CONTAINER" ]; then
-                             docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || true
-                             echo "🔌 Jenkins ($JENKINS_CONTAINER) déconnecté du réseau staging"
-                         fi
-                         # Arrêt et suppression des containers/volumes/networks
-                         docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
-                         # Suppression de l'image de build taguée
-                         docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
-                         echo "✅ Environnement nettoyé"
-                     '''
+                    sh '''
+                        cd ${STAGING_INFRA_PATH} || exit 0
+                        
+                        # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
+                        JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                        if [ -n "$JENKINS_CONTAINER" ]; then
+                            docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || true
+                            echo "🔌 Jenkins ($JENKINS_CONTAINER) déconnecté du réseau staging"
+                        fi
+                        
+                        # Arrêt et suppression des containers/volumes/networks Docker Compose
+                        # -v supprime aussi les volumes pour éviter les données résiduelles entre builds
+                        ## docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        
+                        # Suppression de l'image de build taguée spécifiquement pour ce build
+                        # Évite l'accumulation d'images Docker avec des tags build-XXX
+                        ## docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
+                        
+                        ## echo "✅ Environnement nettoyé"
+                    '''
                 }
                 
                 echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'

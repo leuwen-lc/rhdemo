@@ -103,6 +103,7 @@ public class ClientService {
     // CRITICAL: Forcer le client authenticator à 'client-secret' (équivalent à 'Client Id and Secret' dans l'admin UI)
     client.setClientAuthenticatorType("client-secret");
     client.setSecret(properties.getClient().getSecret());
+    logger.info(properties.getClient().getSecret());
 
     // Flow configuration
     client.setStandardFlowEnabled(true);

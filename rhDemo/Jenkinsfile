@@ -1226,7 +1226,7 @@ YMLEOF
                     }
                     
                     // Nettoyage de l'environnement (A désactiver si besoin pour investigation post-échec)
-                     sh """
+                     sh '''
                          cd ${STAGING_INFRA_PATH} || exit 0
                          # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
                          JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
@@ -1239,7 +1239,7 @@ YMLEOF
                          # Suppression de l'image de build taguée
                          docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
                          echo "✅ Environnement nettoyé"
-                     """
+                     '''
                 }
                 
                 echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'

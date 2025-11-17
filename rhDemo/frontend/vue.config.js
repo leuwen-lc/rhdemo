@@ -7,8 +7,10 @@
 const { defineConfig } = require('@vue/cli-service');
 
 module.exports = defineConfig({
-  // Utiliser des chemins relatifs pour compatibilité local/staging
-  publicPath: './',
+  // Utiliser le chemin absolu pour que les scripts soient trouvés depuis toutes les routes
+  // En local (dev): publicPath = '/' (racine)
+  // En prod/staging: publicPath = '/front/' (sous-chemin Spring Boot)
+  publicPath: process.env.NODE_ENV === 'production' ? '/front/' : '/',
 
   // Configuration pour le dev server local
   devServer: {

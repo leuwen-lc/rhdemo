@@ -12,23 +12,19 @@ spring:
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
         provider:
           keycloak:
-            # URLs publiques HTTPS via nginx pour les redirections navigateur (page login)
-            # Cela garantit que le navigateur accède à Keycloak via nginx:443 (HTTPS)
+            # IMPORTANT: Toutes les URLs doivent être cohérentes (HTTPS via nginx)
+            # pour que l'issuer du token JWT corresponde aux URLs de validation
             authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
             token-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/token
+            jwk-set-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/certs
             # PAS de user-info-uri pour éviter l'appel qui échoue avec le 401
             # user-info-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/userinfo
-
-            # JWK en HTTP interne pour la validation JWT rapide (backend-only)
-            # Utilise l'alias Docker interne pour éviter l'overhead SSL
-            jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
             user-name-attribute: preferred_username
       resourceserver:
         jwt:
-          # Pas d'issuer-uri pour éviter la validation HTTPS depuis le container
-          # Spring Security validera l'issuer depuis le JWT lui-même
-          # JWK pour récupération des clés (HTTP interne avec nom du service Docker)
-          jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
+          # JWK doit aussi utiliser HTTPS pour cohérence avec l'issuer du token
+          # Nginx met en cache les réponses pour limiter l'overhead SSL
+          jwk-set-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/certs
 
 # Configuration serveur pour reverse proxy
 server:

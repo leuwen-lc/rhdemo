@@ -18,12 +18,13 @@ public class EmployeListPage {
     private final WebDriverWait wait;
     
     // Locators utilisant data-testid pour une meilleure stabilité
-    private final By employeTable = By.cssSelector("[data-testid='employes-table']");
-    private final By tableRows = By.cssSelector("[data-testid='employes-table'] tbody tr");
+    // Element Plus génère des wrappers, on cherche la vraie table HTML à l'intérieur
+    private final By employeTable = By.cssSelector("[data-testid='employes-table'] table");
+    private final By tableRows = By.cssSelector("[data-testid='employes-table'] table tbody tr");
     private final By addEmployeButton = By.cssSelector("[data-testid='add-employe-button']");
     private final By refreshButton = By.cssSelector("[data-testid='refresh-button']");
     private final By pageTitle = By.xpath("//h2[contains(text(), 'Liste de tous les Employés')]");
-    
+
     // Locators pour la pagination
     private final By pagination = By.cssSelector("[data-testid='pagination']");
     private final By paginationPrevButton = By.cssSelector("[data-testid='pagination'] button.btn-prev");
@@ -33,7 +34,8 @@ public class EmployeListPage {
     
     public EmployeListPage(WebDriver driver) {
         this.driver = driver;
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+        // Augmenter le timeout pour laisser Vue.js le temps de s'initialiser en headless
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
     }
     
     /**

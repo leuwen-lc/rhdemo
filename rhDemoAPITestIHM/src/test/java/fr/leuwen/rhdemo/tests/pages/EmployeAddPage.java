@@ -71,12 +71,20 @@ public class EmployeAddPage {
         }
 
         wait.until(driver -> {
-            String appHtml = driver.findElement(By.id("app")).getAttribute("innerHTML");
-            boolean vueLoaded = appHtml != null && appHtml.length() > 100; // Vue a généré du contenu
-            if (!vueLoaded) {
-                logger.debug("Vue.js pas encore chargé, innerHTML length: {}", appHtml != null ? appHtml.length() : 0);
+            try {
+                // Vérifier si Vue.js a réellement monté l'application
+                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return window.__VUE_APP_MOUNTED__ === true;"
+                );
+                boolean vueLoaded = Boolean.TRUE.equals(mounted);
+                if (!vueLoaded) {
+                    logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
+                }
+                return vueLoaded;
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
+                return false;
             }
-            return vueLoaded;
         });
         logger.info("✅ Vue.js chargé, recherche du formulaire...");
 
@@ -102,6 +110,18 @@ public class EmployeAddPage {
                     "return typeof window.__VUE_DEBUG__;"
                 );
                 logger.error("window.__VUE_DEBUG__ type: {}", vueDebug);
+
+                // Vérifier si Vue.js a monté l'application
+                Object vueMounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return window.__VUE_APP_MOUNTED__;"
+                );
+                logger.error("window.__VUE_APP_MOUNTED__: {}", vueMounted);
+
+                // Récupérer les erreurs de la console si disponibles
+                Object consoleErrors = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return window.__VUE_ERRORS__ || 'Pas d\\'erreurs capturées';"
+                );
+                logger.error("Erreurs console: {}", consoleErrors);
             } catch (Exception jsEx) {
                 logger.error("Erreur lors de l'exécution JS: {}", jsEx.getMessage());
             }

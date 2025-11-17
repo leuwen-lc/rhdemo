@@ -49,12 +49,20 @@ public class EmployeListPage {
         // IMPORTANT: Attendre que Vue.js ait monté l'application
         logger.info("⏳ Attente que Vue.js monte la liste des employés...");
         wait.until(driver -> {
-            String appHtml = driver.findElement(By.id("app")).getAttribute("innerHTML");
-            boolean vueLoaded = appHtml != null && appHtml.length() > 100; // Vue a généré du contenu
-            if (!vueLoaded) {
-                logger.debug("Vue.js pas encore chargé, innerHTML length: {}", appHtml != null ? appHtml.length() : 0);
+            try {
+                // Vérifier si Vue.js a réellement monté l'application
+                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return window.__VUE_APP_MOUNTED__ === true;"
+                );
+                boolean vueLoaded = Boolean.TRUE.equals(mounted);
+                if (!vueLoaded) {
+                    logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
+                }
+                return vueLoaded;
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
+                return false;
             }
-            return vueLoaded;
         });
         logger.info("✅ Vue.js chargé, recherche de la table...");
 

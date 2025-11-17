@@ -7,10 +7,8 @@
 const { defineConfig } = require('@vue/cli-service');
 
 module.exports = defineConfig({
-  // Utiliser le chemin absolu pour que les scripts soient trouvés depuis toutes les routes
-  // En local (dev): publicPath = '/' (racine)
-  // En prod/staging: publicPath = '/front/' (sous-chemin Spring Boot)
-  publicPath: process.env.NODE_ENV === 'production' ? '/front/' : '/',
+  // Ne pas spécifier publicPath - utilise la valeur par défaut '/'
+  // qui génère des chemins absolus depuis la racine
 
   // Configuration pour le dev server local
   devServer: {

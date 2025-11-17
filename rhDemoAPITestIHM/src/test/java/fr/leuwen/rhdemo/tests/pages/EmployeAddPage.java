@@ -59,6 +59,17 @@ public class EmployeAddPage {
         // IMPORTANT: Attendre que Vue.js ait monté l'application
         // En headless, Vue.js peut mettre du temps à s'initialiser
         logger.info("⏳ Attente que Vue.js monte l'application...");
+
+        // DEBUG: Capturer les logs de la console JavaScript
+        try {
+            Object logs = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                "return window.console ? 'Console disponible' : 'Console indisponible';"
+            );
+            logger.info("État console JavaScript: {}", logs);
+        } catch (Exception ex) {
+            logger.warn("Impossible de vérifier la console JS: {}", ex.getMessage());
+        }
+
         wait.until(driver -> {
             String appHtml = driver.findElement(By.id("app")).getAttribute("innerHTML");
             boolean vueLoaded = appHtml != null && appHtml.length() > 100; // Vue a généré du contenu
@@ -78,6 +89,23 @@ public class EmployeAddPage {
             logger.error("Titre de la page: {}", driver.getTitle());
             logger.error("HTML du body (1000 premiers caractères): {}",
                 driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(1000, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
+
+            // Vérifier si les scripts sont chargés
+            try {
+                Long scriptCount = (Long) ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return document.querySelectorAll('script').length;"
+                );
+                logger.error("Nombre de balises <script>: {}", scriptCount);
+
+                // Vérifier si window.__VUE_DEBUG__ est défini (notre variable de debug)
+                Object vueDebug = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return typeof window.__VUE_DEBUG__;"
+                );
+                logger.error("window.__VUE_DEBUG__ type: {}", vueDebug);
+            } catch (Exception jsEx) {
+                logger.error("Erreur lors de l'exécution JS: {}", jsEx.getMessage());
+            }
+
             takeScreenshot("Impossible de trouver le champ prenom.png");
             throw e;
         }

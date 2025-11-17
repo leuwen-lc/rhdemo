@@ -165,7 +165,7 @@ pipeline {
 # Générée automatiquement par Jenkins CI/CD
 # ========================================
 keycloak:
-  server-url: http://keycloak-staging:8080
+  server-url: https://keycloak.staging.local
   
   admin:
     realm: master

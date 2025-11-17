@@ -64,13 +64,16 @@ services:
       # Admin Keycloak
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      
-      # Configuration hostname : pas de KC_HOSTNAME_URL fixe
-      # Keycloak utilisera l'URL de la requête entrante (dynamique)
-      # Cela permet aux tokens d'avoir l'issuer correct selon le contexte
-      # - HTTPS pour les requêtes via nginx (frontend)
-      # - HTTP pour les requêtes backend internes
-      
+
+      # Configuration hostname : URLs publiques via nginx HTTPS
+      # Force Keycloak à générer les URLs publiques avec HTTPS
+      # pour les redirections navigateur (page de login, etc.)
+      KC_HOSTNAME_URL: https://keycloak.staging.local
+      KC_HOSTNAME_ADMIN_URL: https://keycloak.staging.local
+
+      # La communication interne app→keycloak reste en HTTP:8080
+      # via l'alias keycloak-staging pour les performances
+
       # Logging
       KC_LOG_LEVEL: info
     depends_on:

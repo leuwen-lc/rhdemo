@@ -12,13 +12,15 @@ spring:
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
         provider:
           keycloak:
-            # Définir tous les endpoints manuellement (pas d'issuer-uri)
-            # URLs internes HTTP pour communication backend ET redirections navigateur (tests Selenium)
-            # Dans le réseau Docker, on utilise le nom du service (pas HTTPS)
-            authorization-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/auth
-            token-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/token
+            # URLs publiques HTTPS via nginx pour les redirections navigateur (page login)
+            # Cela garantit que le navigateur accède à Keycloak via nginx:443 (HTTPS)
+            authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
+            token-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/token
             # PAS de user-info-uri pour éviter l'appel qui échoue avec le 401
-            # user-info-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/userinfo
+            # user-info-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/userinfo
+
+            # JWK en HTTP interne pour la validation JWT rapide (backend-only)
+            # Utilise l'alias Docker interne pour éviter l'overhead SSL
             jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
             user-name-attribute: preferred_username
       resourceserver:

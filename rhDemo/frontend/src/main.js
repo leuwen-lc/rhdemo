@@ -13,3 +13,7 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 }
 
 app.use(router).use(ElementPlus).mount('#app');
+
+// Debug: Indiquer que Vue.js a monté l'application
+window.__VUE_APP_MOUNTED__ = true;
+console.log('[DEBUG] Vue.js application montée avec succès');

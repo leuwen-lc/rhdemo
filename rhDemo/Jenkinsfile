@@ -165,7 +165,9 @@ pipeline {
 # Générée automatiquement par Jenkins CI/CD
 # ========================================
 keycloak:
-  server-url: https://keycloak.staging.local
+  # URL interne HTTP pour rhDemoInitKeycloak (exécuté dans le réseau Docker)
+  # Pas besoin de HTTPS car communication interne sécurisée par le réseau isolé
+  server-url: http://keycloak-staging:8080
   
   admin:
     realm: master

@@ -3,8 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <title>Gestion des Employés</title>
+    <!-- Debug: Inline script pour vérifier que JS fonctionne -->
+    <script>
+      console.log('[DEBUG] HTML chargé, JS fonctionne');
+      window.__VUE_DEBUG__ = true;
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Placeholder pendant le chargement -->
+      <noscript>JavaScript est désactivé. L'application nécessite JavaScript.</noscript>
+      <div style="padding: 20px; text-align: center;">
+        <p>⏳ Chargement de l'application...</p>
+      </div>
+    </div>
   </body>
 </html>

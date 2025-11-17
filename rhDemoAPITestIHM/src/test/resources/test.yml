@@ -27,5 +27,5 @@ screenshot:
 
 # Authentification Keycloak
 keycloak:
-  url: http://localhost:6080/realms/LeuwenRealm
+  url: http://localhost:6090/realms/LeuwenRealm
   timeout: 20

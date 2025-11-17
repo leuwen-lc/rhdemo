@@ -6,8 +6,8 @@
         </encoder>
     </appender>
 
-    <!-- Nos tests Selenium en INFO -->
-    <logger name="fr.leuwen.rhdemo.tests" level="INFO"/>
+    <!-- Nos tests Selenium en DEBUG pour diagnostiquer problèmes Vue.js -->
+    <logger name="fr.leuwen.rhdemo.tests" level="DEBUG"/>
     
     <!-- Selenium en WARN pour réduire le bruit -->
     <logger name="org.openqa.selenium" level="WARN"/>

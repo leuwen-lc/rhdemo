@@ -48,22 +48,43 @@ public class EmployeListPage {
     public void waitForTableToLoad() {
         // IMPORTANT: Attendre que Vue.js ait monté l'application
         logger.info("⏳ Attente que Vue.js monte la liste des employés...");
-        wait.until(driver -> {
-            try {
-                // Vérifier si Vue.js a réellement monté l'application
-                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return window.__VUE_APP_MOUNTED__ === true;"
-                );
-                boolean vueLoaded = Boolean.TRUE.equals(mounted);
-                if (!vueLoaded) {
-                    logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
+        try {
+            wait.until(driver -> {
+                try {
+                    // Vérifier si Vue.js a réellement monté l'application
+                    Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                        "return window.__VUE_APP_MOUNTED__ === true;"
+                    );
+                    boolean vueLoaded = Boolean.TRUE.equals(mounted);
+                    if (!vueLoaded) {
+                        logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
+                    }
+                    return vueLoaded;
+                } catch (Exception e) {
+                    logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
+                    return false;
                 }
-                return vueLoaded;
-            } catch (Exception e) {
-                logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
-                return false;
+            });
+        } catch (org.openqa.selenium.TimeoutException timeoutEx) {
+            // Le timeout s'est produit, afficher l'état actuel
+            logger.error("⏱️ TIMEOUT: Vue.js n'a pas monté après 30s");
+
+            try {
+                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return window.__VUE_APP_MOUNTED__;"
+                );
+                logger.error("window.__VUE_APP_MOUNTED__ final: {}", mounted);
+
+                Object errors = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "return JSON.stringify(window.__VUE_ERRORS__);"
+                );
+                logger.error("window.__VUE_ERRORS__: {}", errors);
+            } catch (Exception debugEx) {
+                logger.error("Erreur lors du debug timeout: {}", debugEx.getMessage());
             }
-        });
+
+            throw timeoutEx;
+        }
         logger.info("✅ Vue.js chargé, recherche de la table...");
 
         wait.until(ExpectedConditions.visibilityOfElementLocated(employeTable));

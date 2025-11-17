@@ -22,9 +22,8 @@ public class EmployeListPage {
     private final WebDriverWait wait;
     
     // Locators utilisant data-testid pour une meilleure stabilité
-    // Element Plus génère des wrappers, on cherche la vraie table HTML à l'intérieur
-    private final By employeTable = By.cssSelector("[data-testid='employes-table'] table");
-    private final By tableRows = By.cssSelector("[data-testid='employes-table'] table tbody tr");
+    private final By employeTable = By.cssSelector("[data-testid='employes-table']");
+    private final By tableRows = By.cssSelector("[data-testid='employes-table'] tbody tr");
     private final By addEmployeButton = By.cssSelector("[data-testid='add-employe-button']");
     private final By refreshButton = By.cssSelector("[data-testid='refresh-button']");
     private final By pageTitle = By.xpath("//h2[contains(text(), 'Liste de tous les Employés')]");
@@ -38,55 +37,13 @@ public class EmployeListPage {
     
     public EmployeListPage(WebDriver driver) {
         this.driver = driver;
-        // Augmenter le timeout pour laisser Vue.js le temps de s'initialiser en headless
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
     }
     
     /**
      * Attend que la table soit chargée
      */
     public void waitForTableToLoad() {
-        // IMPORTANT: Attendre que Vue.js ait monté l'application
-        logger.info("⏳ Attente que Vue.js monte la liste des employés...");
-        try {
-            wait.until(driver -> {
-                try {
-                    // Vérifier si Vue.js a réellement monté l'application
-                    Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                        "return window.__VUE_APP_MOUNTED__ === true;"
-                    );
-                    boolean vueLoaded = Boolean.TRUE.equals(mounted);
-                    if (!vueLoaded) {
-                        logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
-                    }
-                    return vueLoaded;
-                } catch (Exception e) {
-                    logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
-                    return false;
-                }
-            });
-        } catch (org.openqa.selenium.TimeoutException timeoutEx) {
-            // Le timeout s'est produit, afficher l'état actuel
-            logger.error("⏱️ TIMEOUT: Vue.js n'a pas monté après 30s");
-
-            try {
-                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return window.__VUE_APP_MOUNTED__;"
-                );
-                logger.error("window.__VUE_APP_MOUNTED__ final: {}", mounted);
-
-                Object errors = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return JSON.stringify(window.__VUE_ERRORS__);"
-                );
-                logger.error("window.__VUE_ERRORS__: {}", errors);
-            } catch (Exception debugEx) {
-                logger.error("Erreur lors du debug timeout: {}", debugEx.getMessage());
-            }
-
-            throw timeoutEx;
-        }
-        logger.info("✅ Vue.js chargé, recherche de la table...");
-
         wait.until(ExpectedConditions.visibilityOfElementLocated(employeTable));
     }
     

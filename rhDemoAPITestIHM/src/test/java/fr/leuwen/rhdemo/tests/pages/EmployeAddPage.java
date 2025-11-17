@@ -23,11 +23,10 @@ public class EmployeAddPage {
     private final WebDriverWait wait;
     
     // Locators utilisant data-testid pour une meilleure stabilité
-    // Element Plus génère des wrappers, il faut chercher l'input natif à l'intérieur
-    private final By prenomInput = By.cssSelector("[data-testid='employe-prenom-input'] input");
-    private final By nomInput = By.cssSelector("[data-testid='employe-nom-input'] input");
-    private final By emailInput = By.cssSelector("[data-testid='employe-email-input'] input");
-    private final By adresseTextarea = By.cssSelector("[data-testid='employe-adresse-input'] textarea");
+    private final By prenomInput = By.cssSelector("[data-testid='employe-prenom-input']");
+    private final By nomInput = By.cssSelector("[data-testid='employe-nom-input']");
+    private final By emailInput = By.cssSelector("[data-testid='employe-email-input']");
+    private final By adresseTextarea = By.cssSelector("[data-testid='employe-adresse-input']");
     private final By submitButton = By.cssSelector("[data-testid='employe-submit-button']");
     private final By cancelButton = By.cssSelector("[data-testid='employe-cancel-button']");
     private final By successAlert = By.cssSelector("[data-testid='employe-success-alert']");
@@ -48,112 +47,22 @@ public class EmployeAddPage {
     
     public EmployeAddPage(WebDriver driver) {
         this.driver = driver;
-        // Augmenter le timeout pour laisser Vue.js le temps de s'initialiser en headless
-        this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
+        this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
     }
     
     /**
      * Remplit le formulaire d'ajout d'employé
      */
     public void fillEmployeForm(String prenom, String nom, String email, String adresse) {
-        // IMPORTANT: Attendre que Vue.js ait monté l'application
-        // En headless, Vue.js peut mettre du temps à s'initialiser
-        logger.info("⏳ Attente que Vue.js monte l'application...");
-
-        // DEBUG: Capturer les logs de la console JavaScript
-        try {
-            Object logs = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                "return window.console ? 'Console disponible' : 'Console indisponible';"
-            );
-            logger.info("État console JavaScript: {}", logs);
-        } catch (Exception ex) {
-            logger.warn("Impossible de vérifier la console JS: {}", ex.getMessage());
-        }
-
-        try {
-            wait.until(driver -> {
-                try {
-                    // Vérifier si Vue.js a réellement monté l'application
-                    Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                        "return window.__VUE_APP_MOUNTED__ === true;"
-                    );
-                    boolean vueLoaded = Boolean.TRUE.equals(mounted);
-                    if (!vueLoaded) {
-                        logger.debug("Vue.js pas encore monté, __VUE_APP_MOUNTED__: {}", mounted);
-                    }
-                    return vueLoaded;
-                } catch (Exception e) {
-                    logger.warn("Erreur lors de la vérification Vue.js: {}", e.getMessage());
-                    return false;
-                }
-            });
-        } catch (org.openqa.selenium.TimeoutException timeoutEx) {
-            // Le timeout s'est produit, afficher l'état actuel
-            logger.error("⏱️ TIMEOUT: Vue.js n'a pas monté après 30s");
-
-            try {
-                Object mounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return window.__VUE_APP_MOUNTED__;"
-                );
-                logger.error("window.__VUE_APP_MOUNTED__ final: {}", mounted);
-
-                Object errors = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return JSON.stringify(window.__VUE_ERRORS__);"
-                );
-                logger.error("window.__VUE_ERRORS__: {}", errors);
-
-                // Vérifier si les scripts sont présents
-                Long scriptCount = (Long) ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return document.querySelectorAll('script').length;"
-                );
-                logger.error("Nombre de scripts: {}", scriptCount);
-
-            } catch (Exception debugEx) {
-                logger.error("Erreur lors du debug timeout: {}", debugEx.getMessage());
-            }
-
-            throw timeoutEx;
-        }
-        logger.info("✅ Vue.js chargé, recherche du formulaire...");
-
         try {
             wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
         } catch (Exception e) {
-            // DEBUG: Capturer l'état de la page
+            // DEBUG: Capturer l'état de la page en cas d'échec
             logger.error("❌ Impossible de trouver le champ prenom");
             logger.error("URL actuelle: {}", driver.getCurrentUrl());
             logger.error("Titre de la page: {}", driver.getTitle());
-            logger.error("HTML du body (1000 premiers caractères): {}",
-                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(1000, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
-
-            // Vérifier si les scripts sont chargés
-            try {
-                Long scriptCount = (Long) ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return document.querySelectorAll('script').length;"
-                );
-                logger.error("Nombre de balises <script>: {}", scriptCount);
-
-                // Vérifier si window.__VUE_DEBUG__ est défini (notre variable de debug)
-                Object vueDebug = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return typeof window.__VUE_DEBUG__;"
-                );
-                logger.error("window.__VUE_DEBUG__ type: {}", vueDebug);
-
-                // Vérifier si Vue.js a monté l'application
-                Object vueMounted = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return window.__VUE_APP_MOUNTED__;"
-                );
-                logger.error("window.__VUE_APP_MOUNTED__: {}", vueMounted);
-
-                // Récupérer les erreurs de la console si disponibles
-                Object consoleErrors = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "return window.__VUE_ERRORS__ || 'Pas d\\'erreurs capturées';"
-                );
-                logger.error("Erreurs console: {}", consoleErrors);
-            } catch (Exception jsEx) {
-                logger.error("Erreur lors de l'exécution JS: {}", jsEx.getMessage());
-            }
-
+            logger.error("HTML du body (500 premiers caractères): {}",
+                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(500, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
             takeScreenshot("Impossible de trouver le champ prenom.png");
             throw e;
         }

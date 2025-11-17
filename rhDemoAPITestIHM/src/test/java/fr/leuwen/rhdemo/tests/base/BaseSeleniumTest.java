@@ -1,5 +1,6 @@
 package fr.leuwen.rhdemo.tests.base;
 
+import fr.leuwen.rhdemo.tests.config.CredentialsLoader;
 import fr.leuwen.rhdemo.tests.config.TestConfig;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.AfterAll;
@@ -30,10 +31,11 @@ public abstract class BaseSeleniumTest {
     
     protected static WebDriver driver;
     protected static WebDriverWait wait;
-    
-    // Identifiants de test à positionner dans des variables d'environnement
-    private static String testUsername = System.getenv("RHDEMOTEST_USER");
-    private static String testPwd = System.getenv("RHDEMOTEST_PWD");
+
+    // Chargeur de credentials avec fallback fichier YAML -> variables d'environnement
+    private static final CredentialsLoader credentialsLoader = new CredentialsLoader();
+    private static final String testUsername = credentialsLoader.getUsername();
+    private static final String testPwd = credentialsLoader.getPassword();
     
     @BeforeAll
     public static void setUpClass() {

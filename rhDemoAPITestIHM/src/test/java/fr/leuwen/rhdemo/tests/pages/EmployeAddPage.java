@@ -56,6 +56,19 @@ public class EmployeAddPage {
      * Remplit le formulaire d'ajout d'employé
      */
     public void fillEmployeForm(String prenom, String nom, String email, String adresse) {
+        // IMPORTANT: Attendre que Vue.js ait monté l'application
+        // En headless, Vue.js peut mettre du temps à s'initialiser
+        logger.info("⏳ Attente que Vue.js monte l'application...");
+        wait.until(driver -> {
+            String appHtml = driver.findElement(By.id("app")).getAttribute("innerHTML");
+            boolean vueLoaded = appHtml != null && appHtml.length() > 100; // Vue a généré du contenu
+            if (!vueLoaded) {
+                logger.debug("Vue.js pas encore chargé, innerHTML length: {}", appHtml != null ? appHtml.length() : 0);
+            }
+            return vueLoaded;
+        });
+        logger.info("✅ Vue.js chargé, recherche du formulaire...");
+
         try {
             wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
         } catch (Exception e) {
@@ -63,8 +76,8 @@ public class EmployeAddPage {
             logger.error("❌ Impossible de trouver le champ prenom");
             logger.error("URL actuelle: {}", driver.getCurrentUrl());
             logger.error("Titre de la page: {}", driver.getTitle());
-            logger.error("HTML du body (500 premiers caractères): {}",
-                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(500, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
+            logger.error("HTML du body (1000 premiers caractères): {}",
+                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(1000, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
             takeScreenshot("Impossible de trouver le champ prenom.png");
             throw e;
         }

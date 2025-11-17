@@ -4,7 +4,9 @@
  * Fix pour mode headless Firefox : désactiver defer sur les scripts
  * pour assurer le chargement en environnement staging
  */
-module.exports = {
+const { defineConfig } = require('@vue/cli-service');
+
+module.exports = defineConfig({
   // Utiliser des chemins relatifs pour compatibilité local/staging
   publicPath: './',
 
@@ -23,23 +25,16 @@ module.exports = {
   // Optimisations de build
   productionSourceMap: false,
 
-  // IMPORTANT: Désactiver 'defer' sur les scripts pour fix headless Firefox
-  chainWebpack: config => {
-    // Désactiver les attributs defer sur les scripts
-    // En mode headless, Firefox peut avoir des problèmes avec defer
-    config.plugin('html').tap(args => {
-      args[0].scriptLoading = 'blocking'; // Au lieu de 'defer'
-      return args;
-    });
-  },
-
-  // Configuration des pages (single page app)
+  // Configuration des pages avec scriptLoading
   pages: {
     index: {
       entry: 'src/main.js',
       template: 'public/index.html',
       filename: 'index.html',
-      title: 'Gestion des Employés'
+      title: 'Gestion des Employés',
+      // IMPORTANT: Force le chargement synchrone des scripts (pas defer)
+      // pour fix Firefox headless qui ne charge pas les scripts defer
+      scriptLoading: 'blocking'
     }
   }
-};
+});

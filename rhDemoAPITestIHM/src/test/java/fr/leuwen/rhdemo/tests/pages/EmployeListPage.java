@@ -5,6 +5,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -13,7 +15,9 @@ import java.util.List;
  * Page Object pour la liste des employés
  */
 public class EmployeListPage {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(EmployeListPage.class);
+
     private final WebDriver driver;
     private final WebDriverWait wait;
     
@@ -42,6 +46,18 @@ public class EmployeListPage {
      * Attend que la table soit chargée
      */
     public void waitForTableToLoad() {
+        // IMPORTANT: Attendre que Vue.js ait monté l'application
+        logger.info("⏳ Attente que Vue.js monte la liste des employés...");
+        wait.until(driver -> {
+            String appHtml = driver.findElement(By.id("app")).getAttribute("innerHTML");
+            boolean vueLoaded = appHtml != null && appHtml.length() > 100; // Vue a généré du contenu
+            if (!vueLoaded) {
+                logger.debug("Vue.js pas encore chargé, innerHTML length: {}", appHtml != null ? appHtml.length() : 0);
+            }
+            return vueLoaded;
+        });
+        logger.info("✅ Vue.js chargé, recherche de la table...");
+
         wait.until(ExpectedConditions.visibilityOfElementLocated(employeTable));
     }
     

@@ -21,9 +21,9 @@ spring:
             token-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/token
             jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
 
-            # Configuration de l'issuer attendu dans le JWT
-            # IMPORTANT: Doit correspondre à l'issuer généré par Keycloak (HTTPS public)
-            issuer-uri: https://keycloak.staging.local/realms/RHDemo
+            # NE PAS configurer issuer-uri ici car Spring essaierait de télécharger
+            # /.well-known/openid-configuration en HTTPS (échec SSL certificat auto-signé)
+            # L'issuer sera validé automatiquement depuis le token JWT reçu
 
             user-name-attribute: preferred_username
       resourceserver:
@@ -31,8 +31,8 @@ spring:
           # JWKS en HTTP interne pour validation des signatures JWT
           jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
 
-          # Issuer attendu dans les tokens JWT (doit matcher l'issuer du token)
-          issuer-uri: https://keycloak.staging.local/realms/RHDemo
+          # NE PAS configurer issuer-uri ici non plus
+          # Spring utilisera l'issuer présent dans le token JWT pour validation
 
 # Configuration serveur pour reverse proxy
 server:

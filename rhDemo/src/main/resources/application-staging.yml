@@ -12,19 +12,27 @@ spring:
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
         provider:
           keycloak:
-            # IMPORTANT: Toutes les URLs doivent être cohérentes (HTTPS via nginx)
-            # pour que l'issuer du token JWT corresponde aux URLs de validation
+            # URL publique HTTPS pour le navigateur (redirection login)
             authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
-            token-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/token
-            jwk-set-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/certs
-            # PAS de user-info-uri pour éviter l'appel qui échoue avec le 401
-            # user-info-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/userinfo
+
+            # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
+            # (échange code→token, récupération JWKS)
+            # Utilise l'alias Docker "keycloak-staging" pour accès réseau interne
+            token-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/token
+            jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
+
+            # Configuration de l'issuer attendu dans le JWT
+            # IMPORTANT: Doit correspondre à l'issuer généré par Keycloak (HTTPS public)
+            issuer-uri: https://keycloak.staging.local/realms/RHDemo
+
             user-name-attribute: preferred_username
       resourceserver:
         jwt:
-          # JWK doit aussi utiliser HTTPS pour cohérence avec l'issuer du token
-          # Nginx met en cache les réponses pour limiter l'overhead SSL
-          jwk-set-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/certs
+          # JWKS en HTTP interne pour validation des signatures JWT
+          jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
+
+          # Issuer attendu dans les tokens JWT (doit matcher l'issuer du token)
+          issuer-uri: https://keycloak.staging.local/realms/RHDemo
 
 # Configuration serveur pour reverse proxy
 server:

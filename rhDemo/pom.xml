@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.5</version>
+		<version>3.5.7</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
@@ -105,10 +105,8 @@
 		<dependency>
 			<groupId>com.jayway.jsonpath</groupId>
 			<artifactId>json-path</artifactId>
-			<version>2.9.0</version>
 		</dependency>
 	</dependencies>
-
 	<build>
 		<plugins>
 			<plugin>
@@ -202,9 +200,8 @@
  <!-- Plugin pour copier le build dans le dossier static -->
         <plugin>
             <artifactId>maven-resources-plugin</artifactId>
-            <version>3.3.1</version>
             <executions>
-                <execution>
+				<execution>
                     <id>copy-frontend</id>
                     <phase>process-resources</phase>
                     <goals>

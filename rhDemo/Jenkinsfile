@@ -110,15 +110,21 @@ pipeline {
                         echo "✅ Secrets déchiffrés avec succès"
                         
                         # Extraire les valeurs pour les variables d'environnement
+                        # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets dans les logs
+                        set +x
+
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
                         echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > rhDemo/secrets/env-vars.sh
                         echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        
+
                         # Mots de passe Keycloak pour environnement staging
                         echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+
+                        # Réactiver l'écho des commandes
+                        set -x
                         
                         # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
                         if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
@@ -152,9 +158,15 @@ pipeline {
                 }
                 
                 sh '''
+                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
+                    set +x
+
                     # Source les secrets déchiffrés
                     . rhDemo/secrets/env-vars.sh
-                    
+
+                    # Réactiver l'écho pour les commandes non sensibles
+                    set -x
+
                     # Générer application-staging.yml (sera utilisé directement par Maven)
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
                     
@@ -249,17 +261,13 @@ YMLEOF
                     
                     echo "✅ Configuration générée: ${CONFIG_FILE}"
                     
-                    # Vérifier que les variables sont bien substituées
+                    # Vérifier que les variables sont bien substituées (sans afficher les secrets)
                     echo ""
-                    echo "🔍 Vérification des valeurs substituées:"
-                    echo "   Admin credentials:"
-                    grep -A 2 "admin:" "${CONFIG_FILE}" | head -3
-                    echo ""
-                    echo "   Client secret (20 premiers caractères):"
-                    grep "secret:" "${CONFIG_FILE}" | cut -c1-40
-                    echo ""
+                    echo "🔍 Vérification de la configuration:"
                     echo "   Root URL:"
                     grep "root-url:" "${CONFIG_FILE}"
+                    echo ""
+                    echo "✅ Configuration sensible créée (secrets non affichés pour sécurité)"
                     echo ""
                     
                     # Vérifier qu'il n'y a pas de ${VAR} littérales (non substituées)
@@ -533,10 +541,17 @@ YMLEOF
                     echo '▶ Démarrage de l\'environnement Docker Compose (5 services)...'
                 }
                 sh """
+                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
+                    set +x
+
                     # Source les secrets SOPS
                     . rhDemo/secrets/env-vars.sh
+
+                    # Réactiver l'écho pour les commandes non sensibles
+                    set -x
+
                     cd ${STAGING_INFRA_PATH}
-                    
+
                     # Variables d'environnement pour Docker Compose
                     # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
                     # On exporte UNIQUEMENT le tag (pas rhdemo-api: qui est déjà dans le YAML)
@@ -549,11 +564,9 @@ YMLEOF
                     
                     # OAuth2 Client Secret pour Spring Boot
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
-                    
-                    # DEBUG: Afficher la valeur du client-secret (masqué)
-                    echo "🔍 DEBUG: Client-secret exporté avec succès"
-                    echo "   Longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET} caractères"
-                    echo "   Début (cut): \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)..."
+
+                    # Confirmation (sans afficher les secrets)
+                    echo "✅ Client-secret exporté avec succès (secret non affiché pour sécurité)"
                     
                     # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
                     # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
@@ -722,9 +735,15 @@ YMLEOF
                     echo 'Création du realm RHDemo, client et utilisateurs'
                 }
                 sh """
+                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
+                    set +x
+
                     # Source les secrets
                     . rhDemo/secrets/env-vars.sh
-                    
+
+                    # Réactiver l'écho pour les commandes non sensibles
+                    set -x
+
                     echo "🚀 Exécution de rhDemoInitKeycloak via Maven..."
                     echo "   (Utilise directement application-staging.yml généré, sans packaging)"
                     
@@ -739,13 +758,9 @@ YMLEOF
                     
                     echo "� Configuration trouvée: \${CONFIG_FILE}"
                     echo ""
-                    echo "🔍 Vérification des valeurs (extrait):"
-                    echo "   Admin username:"
-                    grep "username:" "\${CONFIG_FILE}" | head -1
-                    echo "   Client secret (10 premiers caractères):"
-                    grep "secret:" "\${CONFIG_FILE}" | cut -c1-30
+                    echo "✅ Configuration Keycloak préparée (secrets non affichés pour sécurité)"
                     echo ""
-                    
+
                     # Exécution directe via Maven Spring Boot plugin
                     if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging; then
                         echo ""
@@ -753,10 +768,6 @@ YMLEOF
                         echo "   - Realm RHDemo créé"
                         echo "   - Client RHDemo configuré"
                         echo "   - 3 utilisateurs créés (admin, consultant, manager)"
-                        
-                        echo ""
-                        echo "🔍 DEBUG: Vérification du client-secret dans Keycloak..."
-                        echo "   Secret utilisé pour init: \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)... (longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET})"
                     else
                         echo ""
                         echo "❌ Échec de l'initialisation Keycloak"
@@ -1212,7 +1223,30 @@ YMLEOF
                 // Pas de nettoyage DNS nécessaire: les alias Docker network
                 // sont automatiquement supprimés avec le docker-compose down
                 echo '✅ Résolution DNS via Docker network aliases (pas de nettoyage nécessaire)'
-                
+
+                // SÉCURITÉ : Nettoyage des fichiers contenant des secrets
+                echo '▶ Nettoyage sécurisé des fichiers de secrets...'
+                sh '''
+                    # Écraser puis supprimer les fichiers contenant des secrets
+                    if [ -f "rhDemo/secrets/env-vars.sh" ]; then
+                        # Écraser avec des zéros avant suppression (sécurité supplémentaire)
+                        shred -vfz -n 3 rhDemo/secrets/env-vars.sh 2>/dev/null || rm -f rhDemo/secrets/env-vars.sh
+                        echo "✅ env-vars.sh supprimé de manière sécurisée"
+                    fi
+
+                    if [ -f "${SECRETS_DECRYPTED}" ]; then
+                        shred -vfz -n 3 ${SECRETS_DECRYPTED} 2>/dev/null || rm -f ${SECRETS_DECRYPTED}
+                        echo "✅ secrets-decrypted.yml supprimé de manière sécurisée"
+                    fi
+
+                    # Nettoyer aussi le fichier de config Keycloak généré
+                    if [ -f "rhDemoInitKeycloak/src/main/resources/application-staging.yml" ]; then
+                        shred -vfz -n 3 rhDemoInitKeycloak/src/main/resources/application-staging.yml 2>/dev/null || \
+                        rm -f rhDemoInitKeycloak/src/main/resources/application-staging.yml
+                        echo "✅ application-staging.yml supprimé de manière sécurisée"
+                    fi
+                '''
+
                 // PHASE 6 : Nettoyage de l'environnement Docker Compose
                 if (params.RUN_SELENIUM_TESTS == true) {
                     echo '▶ Nettoyage de l\'environnement Docker Compose...'

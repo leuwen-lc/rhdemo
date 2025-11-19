@@ -39,8 +39,6 @@ public class SecurityConfig {
 	)
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
-            // Ressources statiques accessibles sans authentification
-            .requestMatchers("/js/**", "/css/**", "/img/**", "/fonts/**", "/favicon.ico").permitAll()
             .requestMatchers("/front")).hasAnyRole("consult","MAJ")
             .requestMatchers("/actuator/**").hasRole("admin")
             // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur

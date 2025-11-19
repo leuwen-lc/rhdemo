@@ -1240,13 +1240,13 @@ YMLEOF
                         
                         # Arrêt et suppression des containers/volumes/networks Docker Compose
                         # -v supprime aussi les volumes pour éviter les données résiduelles entre builds
-                        ## docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        #docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         
                         # Suppression de l'image de build taguée spécifiquement pour ce build
                         # Évite l'accumulation d'images Docker avec des tags build-XXX
-                        ## docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
+                        #docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
                         
-                        ## echo "✅ Environnement nettoyé"
+                        echo "✅ Environnement nettoyé"
                     '''
                 }
                 

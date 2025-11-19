@@ -211,7 +211,7 @@ cd /home/leno-vo/git/repository/rhDemoAPITestIHM
 
 | Fichier | Emplacement | Taille | Description |
 |---------|-------------|--------|-------------|
-| `DATA_TESTID_GUIDE.md` | `/rhdemo/` | ~700 lignes | Guide complet des data-testid |
+| `DATA_TESTID_GUIDE.md` | `/rhDemo/` | ~700 lignes | Guide complet des data-testid |
 | `TESTID_MIGRATION.md` | `/rhDemoAPITestIHM/` | ~500 lignes | Détails de la migration |
 | `MIGRATION_SUMMARY.md` | `/rhDemoAPITestIHM/` | ~300 lignes | Ce résumé |
 

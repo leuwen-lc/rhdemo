@@ -1,0 +1,22 @@
+# Ignore environment configuration
+.env
+
+# Ignore SSL certificates
+nginx/ssl/*.crt
+nginx/ssl/*.key
+nginx/ssl/*.pem
+
+# Ignore backups
+*.backup
+*.bak
+*.sql.gz
+*.dump
+
+# Ignore logs
+*.log
+logs/
+
+# Ignore temporary files
+*.tmp
+*.swp
+*~

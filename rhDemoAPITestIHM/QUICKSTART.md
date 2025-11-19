@@ -36,7 +36,7 @@ OU manuellement :
 
 ```bash
 cd /home/leno-vo/git/repository/rhDemoAPITestIHM
-/home/leno-vo/git/repository/rhdemo/mvnw clean test
+/home/leno-vo/git/repository/rhDemo/mvnw clean test
 ```
 
 ### 3️⃣ Observer les tests s'exécuter ! 👀
@@ -118,19 +118,19 @@ public static final boolean HEADLESS_MODE = true;
 ### Lancer un test spécifique
 
 ```bash
-/home/leno-vo/git/repository/rhdemo/mvnw test -Dtest=EmployeLifecycleTest
+/home/leno-vo/git/repository/rhDemo/mvnw test -Dtest=EmployeLifecycleTest
 ```
 
 ### Lancer seulement les tests additionnels
 
 ```bash
-/home/leno-vo/git/repository/rhdemo/mvnw test -Dtest=EmployeAdditionalTest
+/home/leno-vo/git/repository/rhDemo/mvnw test -Dtest=EmployeAdditionalTest
 ```
 
 ### Voir les logs détaillés
 
 ```bash
-/home/leno-vo/git/repository/rhdemo/mvnw test -X
+/home/leno-vo/git/repository/rhDemo/mvnw test -X
 ```
 
 ## 🐛 Dépannage

@@ -1,0 +1,124 @@
+FROM jenkins/jenkins:lts-jdk21
+
+# Passer en root pour installer les dépendances
+USER root
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION DES DÉPENDANCES SYSTÈME
+# ═══════════════════════════════════════════════════════════════════
+
+RUN apt-get update && apt-get install -y \
+    # Docker CLI (pour docker-compose)
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    # Outils utiles
+    vim \
+    git \
+    wget \
+    unzip \
+    # Node.js pour build frontend
+    nodejs \
+    npm \
+    # Firefox + dépendances pour tests Selenium headless
+    firefox-esr \
+    # Bibliothèques X11 et graphiques pour Firefox headless
+    xvfb \
+    libgtk-3-0 \
+    libdbus-glib-1-2 \
+    libxt6 \
+    libpci3 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION DOCKER COMPOSE
+# ═══════════════════════════════════════════════════════════════════
+
+RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+    -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose && \
+    docker-compose --version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION MAVEN (dernière version)
+# ═══════════════════════════════════════════════════════════════════
+
+ENV MAVEN_VERSION=3.9.6
+ENV MAVEN_HOME=/opt/maven
+
+RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    tar -xzf apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt && \
+    mv /opt/apache-maven-${MAVEN_VERSION} ${MAVEN_HOME} && \
+    rm apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    ln -s ${MAVEN_HOME}/bin/mvn /usr/local/bin/mvn
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION SOPS (pour déchiffrement secrets)
+# ═══════════════════════════════════════════════════════════════════
+
+ENV SOPS_VERSION=3.8.1
+
+RUN wget -q https://github.com/mozilla/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /usr/local/bin/sops && \
+    chmod +x /usr/local/bin/sops && \
+    sops --version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION YQ (pour parser YAML)
+# ═══════════════════════════════════════════════════════════════════
+
+RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq && \
+    yq --version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION JAVA 21 (déjà inclus dans l'image de base)
+# ═══════════════════════════════════════════════════════════════════
+
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION DES PLUGINS JENKINS
+# ═══════════════════════════════════════════════════════════════════
+
+# Désactiver le wizard de setup initial
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+
+# Liste des plugins à installer automatiquement
+COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
+
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION JENKINS AS CODE (JCasC)
+# ═══════════════════════════════════════════════════════════════════
+
+# Copier la configuration JCasC
+COPY jenkins-casc.yaml /var/jenkins_home/casc_configs/jenkins.yaml
+
+ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+
+# ═══════════════════════════════════════════════════════════════════
+# PERMISSIONS DOCKER
+# ═══════════════════════════════════════════════════════════════════
+
+# Ajouter Jenkins au groupe docker pour accéder au socket Docker
+# Le GID 984 correspond au groupe docker sur l'hôte
+# Si le GID existe déjà, on ajoute simplement jenkins au groupe existant
+RUN (groupadd -g 984 docker || groupadd docker) && \
+    usermod -aG docker jenkins
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION FINALE
+# ═══════════════════════════════════════════════════════════════════
+
+# Retour à l'utilisateur jenkins
+USER jenkins
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+    CMD curl -f http://localhost:8080/login || exit 1
+
+EXPOSE 8080 50000

@@ -1,0 +1,52 @@
+HELP.md
+target/
+bin/
+BOOT-INF/
+META-INF/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### Secrets ###
+# Ne pas commiter les secrets de dev local
+secrets/secrets.yml
+# Autoriser le template et les secrets chiffrés pour CI/CD
+!secrets/secrets.yml.template
+!secrets/secrets-staging.yml
+# Ignorer les backups
+secrets/*.backup
+
+
+### Node ###
+frontend/node_modules/
+frontend/node/
+frontend/dist/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+/replacegit.txt

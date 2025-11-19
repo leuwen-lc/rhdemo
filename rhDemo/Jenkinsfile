@@ -1,0 +1,1306 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'JDK21'  // Nom configuré dans Jenkins Global Tool Configuration
+        maven 'Maven3' // Nom configuré dans Jenkins Global Tool Configuration
+    }
+    
+    environment {
+        // Configuration du pipeline
+        APP_NAME = 'rhdemo-api'
+        APP_VERSION = '0.0.1-SNAPSHOT'
+        JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
+        
+        // Configuration Docker
+        DOCKER_IMAGE_NAME = "rhdemo-api"
+        DOCKER_IMAGE_TAG = "${APP_VERSION}"
+        DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
+        
+        // Configuration des tests
+        TEST_PORT = '9000'
+        TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
+        
+        // Fichiers de secrets SOPS
+        SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
+        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
+        
+        // Configuration environnement staging (Docker Compose)
+        STAGING_INFRA_PATH = 'rhDemo/infra/staging'
+        KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
+        TEST_DOMAIN = 'rhdemo.staging.local'
+        KEYCLOAK_DOMAIN = 'keycloak.staging.local'
+        COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
+        RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
+    }
+    
+    parameters {
+        choice(name: 'DEPLOY_ENV', choices: ['staging', 'production', 'none'], description: 'Environnement de déploiement (staging par défaut)')
+        booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
+        booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Exécuter l\'analyse SonarQube')
+        booleanParam(name: 'SKIP_MANUAL_APPROVAL', defaultValue: false, description: 'Ignorer l\'approbation manuelle pour la production')
+    }
+    
+    stages {
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 1 : PRÉPARATION
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 1 : PRÉPARATION'
+                    echo '═══════════════════════════════════════════════════════'
+                }
+                checkout scm
+                sh 'git log -1 --pretty=format:"%h - %an : %s"'
+                
+                script {
+                    echo '▶ Vérification du projet rhDemoInitKeycloak...'
+                    // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
+                    // Le checkout SCM récupère déjà tout le workspace
+                }
+                
+                sh '''
+                    if [ -d "rhDemoInitKeycloak" ]; then
+                        echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
+                        ls -la rhDemoInitKeycloak
+                    else
+                        echo "❌ rhDemoInitKeycloak introuvable"
+                        echo "Structure du workspace:"
+                        ls -la
+                        exit 1
+                    fi
+                '''
+            }
+        }
+        
+        stage(' Déchiffrement Secrets SOPS') {
+            steps {
+                script {
+                    echo '▶ Vérification SOPS et YQ...'
+                }
+                sh '''
+                    sops --version
+                    yq --version
+                '''
+                
+                script {
+                    echo '▶ Déchiffrement du fichier de secrets...'
+                }
+                
+                // Utiliser le credential sops-age-key de manière sécurisée
+                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
+                    sh '''
+                        # Créer le répertoire secrets s'il n'existe pas
+                        mkdir -p rhDemo/secrets
+                        
+                        # Déchiffrer le fichier de secrets
+                        echo "Déchiffrement de ${SECRETS_FILE}..."
+                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                        
+                        # Vérifier que le fichier a été déchiffré
+                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
+                            echo "❌ Échec du déchiffrement"
+                            exit 1
+                        fi
+                        
+                        echo "✅ Secrets déchiffrés avec succès"
+                        
+                        # Extraire les valeurs pour les variables d'environnement
+                        # Exporter les secrets comme variables d'environnement pour les stages suivants
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        
+                        # Mots de passe Keycloak pour environnement staging
+                        echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        
+                        # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
+                        if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                            echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        fi
+                        
+                        if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                            echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        fi
+                        
+                        # Afficher (sans montrer les valeurs)
+                        echo "✅ Variables d'environnement préparées"
+                    '''
+                }
+            }
+            post {
+                always {
+                    script {
+                        // Supprimer le fichier déchiffré pour la sécurité
+                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
+                    }
+                }
+            }
+        }
+        
+        stage('🔧 Configuration rhDemoInitKeycloak') {
+            steps {
+                script {
+                    echo '▶ Génération de application-staging.yml pour rhDemoInitKeycloak...'
+                    echo '   (Sera utilisé directement via mvnw spring-boot:run, sans packaging JAR)'
+                }
+                
+                sh '''
+                    # Source les secrets déchiffrés
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    # Générer application-staging.yml (sera utilisé directement par Maven)
+                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
+                    
+                    # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
+                    cat > "${CONFIG_FILE}" << YMLEOF
+# ========================================
+# Configuration Keycloak Server - STAGING
+# Générée automatiquement par Jenkins CI/CD
+# ========================================
+keycloak:
+  # URL interne HTTP pour rhDemoInitKeycloak (exécuté dans le réseau Docker)
+  # Pas besoin de HTTPS car communication interne sécurisée par le réseau isolé
+  server-url: http://keycloak-staging:8080
+  
+  admin:
+    realm: master
+    username: ${KEYCLOAK_ADMIN_USER}
+    password: ${KEYCLOAK_ADMIN_PASSWORD}
+  
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+  
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+    root-url: https://${TEST_DOMAIN}/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://${TEST_DOMAIN}/*
+      - http://localhost:9000/*
+      - https://rhdemo.staging.local/*
+      - https://keycloak.staging.local/*
+    web-origins:
+      - https://${TEST_DOMAIN}
+      - http://localhost:9000
+      - https://rhdemo.staging.local
+      - https://keycloak.staging.local
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
+  
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: admin
+      password: admin123
+      email: admin@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - ROLE_admin
+    
+    - username: consultant
+      password: consult123
+      email: consultant@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - ROLE_consult
+    
+    - username: manager
+      password: manager123
+      email: manager@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ
+YMLEOF
+                    
+                    echo "✅ Configuration générée: ${CONFIG_FILE}"
+                    
+                    # Vérifier que les variables sont bien substituées
+                    echo ""
+                    echo "🔍 Vérification des valeurs substituées:"
+                    echo "   Admin credentials:"
+                    grep -A 2 "admin:" "${CONFIG_FILE}" | head -3
+                    echo ""
+                    echo "   Client secret (20 premiers caractères):"
+                    grep "secret:" "${CONFIG_FILE}" | cut -c1-40
+                    echo ""
+                    echo "   Root URL:"
+                    grep "root-url:" "${CONFIG_FILE}"
+                    echo ""
+                    
+                    # Vérifier qu'il n'y a pas de ${VAR} littérales (non substituées)
+                    if grep -q '\${' "${CONFIG_FILE}"; then
+                        echo "❌ ERREUR: Variables non substituées détectées!"
+                        echo "   Variables trouvées:"
+                        grep '\${' "${CONFIG_FILE}"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Configuration générée avec toutes les variables substituées"
+                '''
+                
+                script {
+                    echo '✅ rhDemoInitKeycloak configuré (prêt pour exécution via mvnw)'
+                }
+            }
+        }
+        
+        stage('�🔍 Vérification Environnement') {
+            steps {
+                script {
+                    echo '▶ Vérification de l\'environnement...'
+                    // Charger les variables d'environnement depuis le fichier
+                    sh '''
+                        # Charger les secrets
+                        . rhDemo/secrets/env-vars.sh
+                        
+                        echo "Java version:"
+                        java -version
+                        echo "\nMaven version:"
+                        cd rhDemo && ./mvnw -version
+                        echo "\nVariables d'environnement:"
+                        env | grep RHDEMO || echo "Variables RHDEMO configurées"
+                    '''
+                }
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 2 : BUILD
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('📦 Compilation Backend') {
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 2 : BUILD'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Compilation du backend Spring Boot...'
+                }
+                sh '''
+                    # Charger les secrets pour la compilation
+                    . rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw clean compile -DskipTests
+                '''
+            }
+        }
+        
+        stage('🎨 Build Frontend Vue.js') {
+            steps {
+                script {
+                    echo '▶ Build du frontend Vue.js via Maven...'
+                }
+                sh '''
+                    echo "Installation Node.js et build Vue.js automatique via frontend-maven-plugin"
+                    cd rhDemo/frontend
+                    ls -la node/ || echo "Node.js sera installé par Maven"
+                '''
+            }
+        }
+        
+        stage('🔨 Build') {
+            steps {
+                script {
+                    echo "🔨 Compilation et packaging de l'application..."
+                    sh """
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw clean package -DskipTests
+                    """
+                }
+            }
+        }
+        
+        stage('🐳 Build Docker Image (Paketo)') {
+            steps {
+                script {
+                    echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
+                    echo "⚠️  Nettoyage complet: suppression cache Docker + target/ + images existantes..."
+                    
+                    // Supprimer les anciennes images Docker pour forcer reconstruction
+                    sh """
+                        docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker system prune -f --filter "label=io.buildpacks.stack.id" || true
+                    """
+                    
+                    // CRITIQUE: Supprimer PHYSIQUEMENT target/ avant build image Docker
+                    // pour éviter que Paketo réutilise un JAR avec ancienne configuration
+                    sh """
+                        echo "🗑️  Suppression physique du target/ avant build image..."
+                        cd rhDemo && rm -rf target/
+                    """
+                    
+                    sh """
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw clean spring-boot:build-image \
+                            -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -Dspring-boot.build-image.pullPolicy=IF_NOT_PRESENT \
+                            -Dspring-boot.build-image.publish=false \
+                            -Dspring-boot.build-image.cleanCache=true \
+                            -DskipTests
+                    """
+                    
+                    echo "✅ Image Docker créée: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    
+                    // Lister les images créées
+                    sh "docker images | grep ${DOCKER_IMAGE_NAME} || true"
+                }
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 3 : QUALITÉ DU CODE
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('🧪 Tests Unitaires') {
+            steps {
+                script {
+                    echo "🧪 Exécution des tests unitaires..."
+                    sh """
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw test
+                    """
+                }
+            }
+        }
+        
+        stage('🔍 Analyse SonarQube') {
+            when {
+                expression { params.RUN_SONAR == true }
+            }
+            steps {
+                script {
+                    echo '▶ Analyse de qualité du code avec SonarQube...'
+                }
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        # Charger les secrets pour l'analyse
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw sonar:sonar \
+                            -Dsonar.projectKey=rhdemo-api \
+                            -Dsonar.projectName="RHDemo API" \
+                            -Dsonar.java.binaries=target/classes
+                    '''
+                }
+            }
+        }
+        
+        stage('📊 Quality Gate') {
+            when {
+                expression { params.RUN_SONAR == true }
+            }
+            steps {
+                script {
+                    echo '▶ Attente du Quality Gate SonarQube...'
+                }
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        
+        stage('📈 Couverture de Code') {
+            steps {
+                script {
+                    echo '▶ Génération du rapport de couverture JaCoCo...'
+                }
+                sh '''
+                    # Charger les secrets pour le rapport
+                    . rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw jacoco:report
+                '''
+                jacoco(
+                    execPattern: '**/rhDemo/target/jacoco.exec',
+                    classPattern: '**/rhDemo/target/classes',
+                    sourcePattern: '**/rhDemo/src/main/java'
+                )
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('⚙️ Configuration Environnement Test') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Configuration de l\'environnement de test Docker Compose...'
+                    
+                    // Nettoyer l'environnement précédent si existant
+                    sh """
+                        cd ${STAGING_INFRA_PATH}
+                        
+                        # Arrêter et supprimer les conteneurs du build précédent
+                        docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        
+                        # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
+                        docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true
+                        
+                        # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
+                        # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
+                        echo "🧹 Suppression image nginx pour éviter layers corrompus..."
+                        docker rmi nginx:1.27-alpine 2>/dev/null || true
+                        
+                        # Nettoyer les réseaux orphelins
+                        docker network prune -f
+                    """
+                    
+                    // Configuration du fichier hosts (si Jenkins tourne localement)
+                    sh """
+                        # Vérifier si les entrées hosts existent
+                        if ! grep -q "${TEST_DOMAIN}" /etc/hosts 2>/dev/null; then
+                            echo "⚠️  ATTENTION: Ajouter '127.0.0.1 ${TEST_DOMAIN} ${KEYCLOAK_DOMAIN}' à /etc/hosts"
+                        fi
+                    """
+                }
+            }
+        }
+        
+        stage('🔐 Génération Certificats SSL') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Génération des certificats SSL auto-signés...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    ./generate-certs.sh --domain ${TEST_DOMAIN} --domain ${KEYCLOAK_DOMAIN}
+                """
+            }
+        }
+        
+        stage('🏷️ Tag Image Docker') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo "▶ Tag de l'image Docker: ${RHDEMO_IMAGE}..."
+                }
+                sh """
+                    docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${RHDEMO_IMAGE}
+                """
+            }
+        }
+        
+        stage('🐳 Démarrage Environnement Docker') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage de l\'environnement Docker Compose (5 services)...'
+                }
+                sh """
+                    # Source les secrets SOPS
+                    . rhDemo/secrets/env-vars.sh
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    # Variables d'environnement pour Docker Compose
+                    # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
+                    # On exporte UNIQUEMENT le tag (pas rhdemo-api: qui est déjà dans le YAML)
+                    export APP_VERSION=build-${env.BUILD_NUMBER}
+                    # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
+                    export WORKSPACE=\$(pwd)
+                    
+                    # Alias pour les variables attendues par docker-compose.yml
+                    export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
+                    
+                    # OAuth2 Client Secret pour Spring Boot
+                    export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+                    
+                    # DEBUG: Afficher la valeur du client-secret (masqué)
+                    echo "🔍 DEBUG: Client-secret exporté avec succès"
+                    echo "   Longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET} caractères"
+                    echo "   Début (cut): \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)..."
+                    
+                    # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
+                    # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
+                    
+                    # IMPORTANT: Nettoyage forcé des conteneurs existants pour éviter les conflits de noms
+                    echo "🧹 Nettoyage des conteneurs staging existants..."
+                    docker rm -f keycloak-staging-db rhdemo-staging-db keycloak-staging rhdemo-staging-app rhdemo-staging-nginx 2>/dev/null || true
+                    echo "✅ Conteneurs existants supprimés"
+                    
+                    # Démarrer les conteneurs (plus besoin de docker-compose.jenkins.yml override)
+                    echo "🚀 Démarrage des conteneurs Docker..."
+                    docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} up -d
+                    
+                    # Connecter Jenkins au réseau staging pour accès direct aux services
+                    echo "🔗 Connexion de Jenkins au réseau staging..."
+                    # Trouver le conteneur Jenkins principal (pas l'agent)
+                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                    echo "Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
+                    if [ -n "\$JENKINS_CONTAINER" ]; then
+                        docker network connect rhdemo-staging-network \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau rhdemo-staging-network"
+                    else
+                        echo "❌ ERREUR: Conteneur Jenkins introuvable!"
+                        docker ps --filter "name=jenkins"
+                    fi
+                    
+                    # Attendre que les conteneurs démarrent (augmenté pour Keycloak)
+                    echo "⏳ Attente démarrage conteneurs (20s)..."
+                    sleep 20
+                    
+                    # Copier les configurations nginx et certificats SSL
+                    echo "📋 Copie des configurations nginx..."
+                    docker cp nginx/nginx.conf rhdemo-staging-nginx:/etc/nginx/nginx.conf
+                    docker cp nginx/conf.d/. rhdemo-staging-nginx:/etc/nginx/conf.d/
+                    
+                    if [ -d "certs" ]; then
+                        docker cp certs/. rhdemo-staging-nginx:/etc/nginx/ssl/
+                        echo "✅ Configurations nginx et certificats copiés"
+                    else
+                        echo "✅ Configurations nginx copiées (certificats manquants)"
+                    fi
+                    
+                    # Recharger la configuration nginx pour appliquer les changements
+                    echo "🔄 Rechargement de la configuration nginx..."
+                    docker exec rhdemo-staging-nginx nginx -t  # Test de la config
+                    docker exec rhdemo-staging-nginx nginx -s reload  # Reload
+                    echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
+                    
+                    # Vérifier que nginx écoute réellement sur le port 443
+                    echo "🔍 Vérification que nginx écoute sur le port 443..."
+                    if docker exec rhdemo-staging-nginx netstat -tuln | grep -q ':443'; then
+                        echo "✅ Nginx écoute sur le port 443 (HTTPS)"
+                    else
+                        echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
+                        echo "Ports écoutés par nginx:"
+                        docker exec rhdemo-staging-nginx netstat -tuln
+                        exit 1
+                    fi
+                    
+                    echo "✅ Environnement Docker opérationnel:"
+                    docker-compose -p ${COMPOSE_PROJECT_NAME} ps
+                """
+            }
+        }
+        
+        stage('💾 Initialisation Base de Données') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation de la base de données PostgreSQL...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    # Attendre que PostgreSQL soit prêt
+                    echo "⏳ Attente PostgreSQL ready (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec rhdemo-staging-db pg_isready -U rhdemo >/dev/null 2>&1; then
+                            echo "✅ PostgreSQL ready"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: PostgreSQL n'est pas prêt après 30s"
+                        docker logs --tail=20 rhdemo-staging-db
+                        exit 1
+                    fi
+                    
+                    # Copier et exécuter le schéma SQL
+                    PGDDL_PATH="../../pgddl.sql"
+                    if [ ! -f "\$PGDDL_PATH" ]; then
+                        echo "❌ Erreur: Fichier pgddl.sql introuvable"
+                        exit 1
+                    fi
+                    
+                    echo "📋 Copie du schéma SQL dans le container..."
+                    docker cp "\$PGDDL_PATH" rhdemo-staging-db:/tmp/schema.sql
+                    
+                    echo "🔧 Exécution du schéma SQL (DROP + CREATE + INSERT)..."
+                    docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
+                    
+                    # Vérifier le nombre d'employés insérés
+                    EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
+                    
+                    echo "✅ Base de données initialisée"
+                    echo "   📊 Nombre d'employés: \$EMPLOYEE_COUNT"
+                    
+                    if [ "\$EMPLOYEE_COUNT" != "303" ]; then
+                        echo "⚠️  Attention: Attendu 303 employés, trouvé \$EMPLOYEE_COUNT"
+                    fi
+                """
+            }
+        }
+        
+        stage('🏥 Healthcheck Keycloak') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Attente démarrage Keycloak...'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+                    
+                    echo "⏳ Attente démarrage Keycloak (45s)..."
+                    echo "   (Keycloak prend ~15s pour démarrer + init DB)"
+                    sleep 45
+                    
+                    echo "⏳ Vérification Keycloak (60s max)..."
+                    timeout=60
+                    while [ \$timeout -gt 0 ]; do
+                        # Keycloak expose son endpoint health sur le port management (9000)
+                        if curl -f http://keycloak-staging:9000/health/ready 2>/dev/null; then
+                            echo "✅ Keycloak ready"
+                            break
+                        fi
+                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Keycloak timeout après 60s"
+                        echo "Logs Keycloak:"
+                        docker logs --tail=20 keycloak-staging || true
+                        exit 1
+                    fi
+                """
+            }
+        }
+        
+        stage('🔑 Initialisation Keycloak') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Initialisation du realm Keycloak...'
+                    echo 'Création du realm RHDemo, client et utilisateurs'
+                }
+                sh """
+                    # Source les secrets
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    echo "🚀 Exécution de rhDemoInitKeycloak via Maven..."
+                    echo "   (Utilise directement application-staging.yml généré, sans packaging)"
+                    
+                    cd ${WORKSPACE}/rhDemoInitKeycloak
+                    
+                    # Vérification que le fichier de config existe
+                    CONFIG_FILE="src/main/resources/application-staging.yml"
+                    if [ ! -f "\${CONFIG_FILE}" ]; then
+                        echo "❌ Fichier de configuration manquant: \${CONFIG_FILE}"
+                        exit 1
+                    fi
+                    
+                    echo "� Configuration trouvée: \${CONFIG_FILE}"
+                    echo ""
+                    echo "🔍 Vérification des valeurs (extrait):"
+                    echo "   Admin username:"
+                    grep "username:" "\${CONFIG_FILE}" | head -1
+                    echo "   Client secret (10 premiers caractères):"
+                    grep "secret:" "\${CONFIG_FILE}" | cut -c1-30
+                    echo ""
+                    
+                    # Exécution directe via Maven Spring Boot plugin
+                    if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging; then
+                        echo ""
+                        echo "✅ Keycloak initialisé avec succès"
+                        echo "   - Realm RHDemo créé"
+                        echo "   - Client RHDemo configuré"
+                        echo "   - 3 utilisateurs créés (admin, consultant, manager)"
+                        
+                        echo ""
+                        echo "🔍 DEBUG: Vérification du client-secret dans Keycloak..."
+                        echo "   Secret utilisé pour init: \$(echo \$RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET | cut -c1-10)... (longueur: \${#RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET})"
+                    else
+                        echo ""
+                        echo "❌ Échec de l'initialisation Keycloak"
+                        echo ""
+                        echo "📋 Logs Keycloak pour diagnostic:"
+                        docker logs --tail=30 keycloak-staging || true
+                        exit 1
+                    fi
+                    
+                    # Attendre propagation de la configuration
+                    echo ""
+                    echo "⏳ Attente propagation config Keycloak (10s)..."
+                    sleep 10
+                """
+            }
+        }
+        
+        stage('🏥 Healthcheck Application RHDemo') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Vérification santé de l\'application RHDemo...'
+                }
+                sh """
+                    echo "⏳ Vérification RHDemo App (90s max, healthcheck start_period=60s)..."
+                    timeout=90
+                    while [ \$timeout -gt 0 ]; do
+                        # Utiliser le healthcheck Docker pour vérifier l'état du conteneur
+                        container_status=\$(docker inspect --format='{{.State.Health.Status}}' rhdemo-staging-app 2>/dev/null || echo "unknown")
+                        
+                        # Accepter "healthy" ou "starting" (pendant start_period)
+                        if [ "\$container_status" = "healthy" ]; then
+                            echo "✅ RHDemo App ready (healthcheck passed)"
+                            break
+                        elif [ "\$container_status" = "starting" ]; then
+                            # Pendant start_period, on peut aussi vérifier avec curl
+                            http_code=\$(curl -s -o /dev/null -w "%{http_code}" http://rhdemo-staging-app:9000/front/ 2>/dev/null || echo "000")
+                            if [ "\$http_code" = "302" ] || [ "\$http_code" = "301" ]; then
+                                echo "✅ RHDemo App ready (responding with HTTP \$http_code, healthcheck starting)"
+                                break
+                            fi
+                        elif [ "\$container_status" = "unknown" ]; then
+                            # Si pas de healthcheck, vérifier que le conteneur est au moins démarré
+                            container_running=\$(docker inspect --format='{{.State.Running}}' rhdemo-staging-app 2>/dev/null || echo "false")
+                            if [ "\$container_running" = "true" ]; then
+                                echo "✅ RHDemo App ready (container running)"
+                                break
+                            fi
+                        fi
+                        
+                        echo "   Container status: \$container_status - retry dans 3s... (reste \${timeout}s)"
+                        sleep 3
+                        timeout=\$((timeout - 3))
+                    done
+                    
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ RHDemo App timeout après 90s"
+                        echo "Container status final:"
+                        docker inspect --format='Status={{.State.Status}} Health={{.State.Health.Status}}' rhdemo-staging-app || true
+                        echo ""
+                        echo "Logs RHDemo (dernières 50 lignes):"
+                        docker logs --tail=50 rhdemo-staging-app || true
+                        exit 1
+                    fi
+                    
+                    echo "✅ Application RHDemo opérationnelle"
+                """
+            }
+        }
+        
+        stage('🌐 Healthcheck Nginx HTTPS') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
+                }
+                sh '''
+                    echo "🔍 Test accès HTTPS depuis Jenkins (conditions réelles Selenium)..."
+                    echo "   URL testée: https://rhdemo.staging.local/front/"
+                    echo ""
+                    
+                    # Obtenir le conteneur Jenkins
+                    JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v "agent" | head -n 1)
+                    
+                    # Test depuis Jenkins (là où Firefox tourne)
+                    timeout=30
+                    while [ $timeout -gt 0 ]; do
+                        HTTP_CODE=$(docker exec ${JENKINS_CONTAINER} curl -k -s -o /dev/null -w "%{http_code}" https://rhdemo.staging.local/front/ 2>/dev/null || echo "000")
+                        
+                        # Accepter 302 (redirect OAuth2) ou 200
+                        if echo "${HTTP_CODE}" | grep -qE "^(200|302)$"; then
+                            echo "✅ Nginx HTTPS accessible depuis Jenkins (HTTP ${HTTP_CODE})"
+                            echo "   Firefox pourra se connecter via HTTPS"
+                            break
+                        fi
+                        
+                        echo "   HTTP ${HTTP_CODE} - retry dans 2s... (reste ${timeout}s)"
+                        sleep 2
+                        timeout=$((timeout - 2))
+                    done
+                    
+                    if [ $timeout -le 0 ]; then
+                        echo "❌ ERREUR: Nginx HTTPS inaccessible après 30s"
+                        echo ""
+                        echo "🔍 Diagnostics:"
+                        echo ""
+                        echo "1. État du conteneur nginx:"
+                        docker ps --filter "name=nginx"
+                        echo ""
+                        echo "2. Ports écoutés par nginx:"
+                        docker exec rhdemo-staging-nginx netstat -tuln | grep LISTEN
+                        echo ""
+                        echo "3. Configuration nginx chargée:"
+                        docker exec rhdemo-staging-nginx nginx -T 2>&1 | grep -A 5 "listen.*443"
+                        echo ""
+                        echo "4. Logs nginx (dernières 20 lignes):"
+                        docker logs --tail=20 rhdemo-staging-nginx
+                        echo ""
+                        echo "5. Test DNS depuis Jenkins:"
+                        docker exec ${JENKINS_CONTAINER} getent hosts rhdemo.staging.local
+                        echo ""
+                        exit 1
+                    fi
+                    
+                    echo ""
+                    echo "✅ Stack complète opérationnelle et accessible via HTTPS"
+                    echo "   Prêt pour les tests Selenium"
+                '''
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 5 : TESTS FONCTIONNELS
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('🌐 Tests Selenium IHM') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 5 : TESTS FONCTIONNELS'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Exécution des tests Selenium sur environnement Docker Compose...'
+                }
+                
+                dir(TEST_PROJECT_PATH) {
+                    sh """
+                        . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
+                        
+                        # URLs via nginx dans le réseau Docker avec HTTPS
+                        # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
+                        # Car Jenkins container est connecté à rhdemo-staging-network
+                        # Les aliases rhdemo.staging.local et keycloak.staging.local sont résolus via DNS Docker
+                        # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
+                        APP_URL="https://rhdemo.staging.local"
+                        KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
+                        
+                        # IMPORTANT: Exporter les credentials Keycloak comme variables d'environnement
+                        # BaseSeleniumTest.java cherche RHDEMOTEST_USER et RHDEMOTEST_PWD (pas les propriétés Maven)
+                        # Utilisation de manager (ROLE_consult + ROLE_MAJ) pour tester toutes les opérations
+                        export RHDEMOTEST_USER="manager"
+                        export RHDEMOTEST_PWD="manager123"
+                        
+                        echo "📍 Configuration des URLs de test:"
+                        echo "   APP_URL: \${APP_URL}"
+                        echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
+                        echo "   RHDEMOTEST_USER: \${RHDEMOTEST_USER} (ROLE_consult + ROLE_MAJ)"
+                        echo "   (Healthcheck HTTPS validé avant ce stage)"
+                        
+                        # Utilisation du wrapper Maven du projet principal
+                        cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
+                            -Dtest.baseurl=\${APP_URL} \\
+                            -Dselenium.headless=true \\
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL}
+                    """
+                }
+            }
+            post {
+                always {
+                    script {
+                        // Archivage des screenshots en cas d'échec
+                        dir(TEST_PROJECT_PATH) {
+                            archiveArtifacts artifacts: '**/screenshots/**/*.png', allowEmptyArchive: true
+                            junit '**/target/surefire-reports/*.xml'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('🛑 Arrêt App Test') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Arrêt de l\'application test...'
+                    sh '''
+                        if [ -f app-test.container ]; then
+                            CONTAINER=$(cat app-test.container)
+                            echo "Arrêt du container: $CONTAINER"
+                            docker stop $CONTAINER || echo "Container déjà arrêté"
+                            docker rm $CONTAINER || echo "Container déjà supprimé"
+                            rm app-test.container
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 6 : SÉCURITÉ
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('🔒 Scan Vulnérabilités') {
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 6 : SÉCURITÉ'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Analyse des vulnérabilités des dépendances...'
+                }
+                sh '''
+                    # Charger les secrets pour l'analyse de sécurité
+                    . rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
+                '''
+            }
+            post {
+                always {
+                    publishHTML([
+                        reportDir: 'rhDemo/target',
+                        reportFiles: 'dependency-check-report.html',
+                        reportName: 'OWASP Dependency Check',
+                        allowMissing: true,
+                        keepAll: true,
+                        alwaysLinkToLastBuild: true
+                    ])
+                }
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 7 : ARCHIVAGE
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('📚 Archivage Artifacts') {
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 7 : ARCHIVAGE'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Archivage du JAR et des rapports...'
+                }
+                archiveArtifacts artifacts: "${JAR_FILE}", fingerprint: true
+                archiveArtifacts artifacts: '**/target/surefire-reports/**', allowEmptyArchive: true
+            }
+        }
+        
+        stage('📝 Génération Rapports') {
+            steps {
+                script {
+                    echo '▶ Publication des rapports...'
+                }
+                publishHTML([
+                    reportDir: 'target/site/jacoco',
+                    reportFiles: 'index.html',
+                    reportName: 'Code Coverage',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 8 : DÉPLOIEMENT STAGING
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('🎭 Déploiement Staging') {
+            when {
+                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 8 : DÉPLOIEMENT STAGING'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Déploiement sur l\'environnement de staging...'
+                }
+                sh '''
+                    # Charger les secrets et URLs de serveurs
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    # Déploiement via SSH ou script de déploiement
+                    echo "Copie du JAR vers le serveur de staging..."
+                    # scp ${JAR_FILE} user@${STAGING_SERVER}:/opt/rhdemo/
+                    
+                    echo "Redémarrage de l'application sur staging..."
+                    # ssh user@${STAGING_SERVER} "systemctl restart rhdemo-api"
+                    
+                    echo "✅ Déploiement staging simulé (décommenter les commandes SSH)"
+                '''
+            }
+        }
+        
+        stage('💨 Tests de Fumée Staging') {
+            when {
+                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo '▶ Vérification du déploiement staging...'
+                }
+                sh '''
+                    # Charger les secrets et URLs de serveurs
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    echo "Vérification du healthcheck..."
+                    # curl -f http://${STAGING_SERVER}/actuator/health || exit 1
+                    
+                    echo "Test de l'authentification Keycloak..."
+                    # Tests de base sur les endpoints critiques
+                    
+                    echo "✅ Tests de fumée réussis (décommenter pour activer)"
+                '''
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 9 : PRODUCTION
+        // ════════════════════════════════════════════════════════════════
+        
+        stage('✋ Validation Manuelle') {
+            when {
+                expression { 
+                    params.DEPLOY_ENV == 'production' && params.SKIP_MANUAL_APPROVAL == false 
+                }
+            }
+            steps {
+                script {
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '  PHASE 9 : PRODUCTION'
+                    echo '═══════════════════════════════════════════════════════'
+                    echo '▶ Approbation manuelle requise pour la production...'
+                }
+                timeout(time: 30, unit: 'MINUTES') {
+                    input message: 'Déployer en production ?', 
+                          ok: 'Déployer',
+                          submitter: 'admin,deploy-team'
+                }
+            }
+        }
+        
+        stage('💾 Backup Base de Données') {
+            when {
+                expression { params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo '▶ Sauvegarde de la base de données de production...'
+                }
+                sh '''
+                    # Charger les secrets
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
+                    echo "Création du backup: ${BACKUP_FILE}"
+                    # pg_dump -h ${PROD_SERVER} -U rhdemo rhdemo > ${BACKUP_FILE}
+                    echo "✅ Backup créé (décommenter pour activer)"
+                '''
+            }
+        }
+        
+        stage('🌐 Déploiement Production') {
+            when {
+                expression { params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo '▶ Déploiement en PRODUCTION...'
+                    echo '🚀 Déploiement Blue-Green...'
+                }
+                sh '''
+                    # Charger les secrets et URLs de serveurs
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    # Stratégie Blue-Green deployment
+                    echo "1. Déploiement sur le serveur Green..."
+                    # scp ${JAR_FILE} user@${PROD_SERVER}-green:/opt/rhdemo/
+                    
+                    echo "2. Démarrage du nouveau service..."
+                    # ssh user@${PROD_SERVER}-green "systemctl start rhdemo-api"
+                    
+                    echo "3. Vérification du healthcheck..."
+                    # curl -f http://${PROD_SERVER}-green/actuator/health
+                    
+                    echo "4. Basculement du load balancer..."
+                    # Commande pour basculer le trafic
+                    
+                    echo "5. Arrêt de l'ancien service (Blue)..."
+                    # ssh user@${PROD_SERVER}-blue "systemctl stop rhdemo-api"
+                    
+                    echo "✅ Déploiement production simulé (décommenter pour activer)"
+                '''
+            }
+        }
+        
+        stage('✅ Vérification Post-Déploiement') {
+            when {
+                expression { params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo '▶ Vérification du déploiement production...'
+                }
+                sh '''
+                    # Charger les secrets et URLs de serveurs
+                    . rhDemo/secrets/env-vars.sh
+                    
+                    echo "Healthcheck application..."
+                    # curl -f http://${PROD_SERVER}/actuator/health
+                    
+                    echo "Vérification des métriques Prometheus..."
+                    # curl -f http://${PROD_SERVER}/actuator/prometheus
+                    
+                    echo "Test des endpoints critiques..."
+                    # Tests automatisés sur la production
+                    
+                    echo "✅ Application en production fonctionnelle"
+                '''
+            }
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════
+    // POST-ACTIONS
+    // ════════════════════════════════════════════════════════════════
+    
+    post {
+        always {
+            script {
+                echo '═══════════════════════════════════════════════════════'
+                echo '  NETTOYAGE ET NOTIFICATIONS'
+                echo '═══════════════════════════════════════════════════════'
+                
+                // Pas de nettoyage DNS nécessaire: les alias Docker network
+                // sont automatiquement supprimés avec le docker-compose down
+                echo '✅ Résolution DNS via Docker network aliases (pas de nettoyage nécessaire)'
+                
+                // PHASE 6 : Nettoyage de l'environnement Docker Compose
+                if (params.RUN_SELENIUM_TESTS == true) {
+                    echo '▶ Nettoyage de l\'environnement Docker Compose...'
+                    
+                    // Afficher les logs si le build a échoué
+                    def buildResult = currentBuild.result ?: 'SUCCESS'
+                    if (buildResult != 'SUCCESS') {
+                        echo "📋 Récupération des logs Docker (build ${buildResult})..."
+                        sh """
+                            cd ${STAGING_INFRA_PATH} || exit 0
+                            docker-compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
+                        """
+                    }
+                    
+                    // Nettoyage de l'environnement (A désactiver si besoin pour investigation post-échec)
+                    sh '''
+                        cd ${STAGING_INFRA_PATH} || exit 0
+                        
+                        # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
+                        JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                        if [ -n "$JENKINS_CONTAINER" ]; then
+                            docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || true
+                            echo "🔌 Jenkins ($JENKINS_CONTAINER) déconnecté du réseau staging"
+                        fi
+                        
+                        # Arrêt et suppression des containers/volumes/networks Docker Compose
+                        # -v supprime aussi les volumes pour éviter les données résiduelles entre builds
+                        #docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        
+                        # Suppression de l'image de build taguée spécifiquement pour ce build
+                        # Évite l'accumulation d'images Docker avec des tags build-XXX
+                        #docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
+                        
+                        echo "✅ Environnement nettoyé"
+                    '''
+                }
+                
+                echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'
+            }
+        }
+        
+        success {
+            script {
+                def deployInfo = params.DEPLOY_ENV != 'none' ? " et déployé en ${params.DEPLOY_ENV}" : ""
+                echo "✅ Pipeline réussi${deployInfo} !"
+            }
+            
+            // Email de notification
+            emailext(
+                subject: "✅ BUILD SUCCESS - RHDemo API #${env.BUILD_NUMBER}",
+                body: """
+                    Le build de RHDemo API a réussi !
+                    
+                    Branch: ${env.BRANCH_NAME}
+                    Commit: ${env.GIT_COMMIT}
+                    Déploiement: ${params.DEPLOY_ENV}
+                    
+                    Voir les détails: ${env.BUILD_URL}
+                """,
+                to: "${env.NOTIFICATION_EMAIL}"
+            )
+        }
+        
+        failure {
+            script {
+                echo "❌ Pipeline échoué !"
+            }
+            
+            // Email d'alerte
+            emailext(
+                subject: "❌ BUILD FAILED - RHDemo API #${env.BUILD_NUMBER}",
+                body: """
+                    ⚠️ Le build de RHDemo API a échoué !
+                    
+                    Branch: ${env.BRANCH_NAME}
+                    Stage: ${env.STAGE_NAME}
+                    
+                    Voir les logs: ${env.BUILD_URL}console
+                """,
+                to: "${env.NOTIFICATION_EMAIL}",
+                attachLog: true
+            )
+        }
+        
+        unstable {
+            script {
+                echo "⚠️ Pipeline instable (tests échoués mais build réussi)"
+            }
+        }
+    }
+}

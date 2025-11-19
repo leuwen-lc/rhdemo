@@ -5,6 +5,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.List;
@@ -13,7 +15,9 @@ import java.util.List;
  * Page Object pour la liste des employés
  */
 public class EmployeListPage {
-    
+
+    private static final Logger logger = LoggerFactory.getLogger(EmployeListPage.class);
+
     private final WebDriver driver;
     private final WebDriverWait wait;
     
@@ -23,7 +27,7 @@ public class EmployeListPage {
     private final By addEmployeButton = By.cssSelector("[data-testid='add-employe-button']");
     private final By refreshButton = By.cssSelector("[data-testid='refresh-button']");
     private final By pageTitle = By.xpath("//h2[contains(text(), 'Liste de tous les Employés')]");
-    
+
     // Locators pour la pagination
     private final By pagination = By.cssSelector("[data-testid='pagination']");
     private final By paginationPrevButton = By.cssSelector("[data-testid='pagination'] button.btn-prev");

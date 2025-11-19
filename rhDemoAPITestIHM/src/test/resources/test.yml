@@ -1,0 +1,31 @@
+# Configuration des tests Selenium pour RH Demo
+
+# URL de base de l'application
+app:
+  base:
+    url: http://localhost:9000
+
+# Navigateur (chrome, firefox, edge)
+browser: firefox
+
+# Mode headless (true/false)
+headless:
+  mode: false
+
+# Timeouts (en secondes)
+timeout:
+  implicit: 10
+  explicit: 15
+  page:
+    load: 30
+
+# Capture d'écran en cas d'échec
+screenshot:
+  on:
+    failure: true
+  directory: target/screenshots
+
+# Authentification Keycloak
+keycloak:
+  url: http://localhost:6090/realms/LeuwenRealm
+  timeout: 20

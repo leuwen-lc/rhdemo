@@ -1,0 +1,40 @@
+# Configuration pour les tests d'intégration
+# Utilise H2 au lieu de PostgreSQL
+
+spring:
+  # Import des secrets pour les tests
+  config:
+    import:
+      - optional:file:./secrets/secrets.yml
+      - optional:file:./secrets/secrets-dev.yml
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ${rhdemo.datasource.password.h2:}
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    # Laisse Hibernate créer la structure, puis charge les données
+    hibernate:
+      ddl-auto: create-drop
+    # Charge les données de test APRÈS la création du schéma par Hibernate
+    defer-datasource-initialization: true
+  
+  sql:
+    init:
+      mode: always
+  
+  # IMPORTANT: Désactive complètement l'auto-configuration OAuth2
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration
+
+# Logs pour les tests
+logging:
+  level:
+    root: ERROR
+    fr.leuwen: INFO
+    org.springframework.security: WARN

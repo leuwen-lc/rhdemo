@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} >%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="fr.leuwen.keycloak" level="INFO"/>
+    
+    <!-- Keycloak -->
+    <logger name="org.keycloak" level="INFO"/>
+    
+    <!-- Resteasy pour voir les URLs utilisées -->
+    <logger name="org.jboss.resteasy" level="INFO"/>
+    
+    <!-- HTTP Client -->
+    <logger name="org.apache.http" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

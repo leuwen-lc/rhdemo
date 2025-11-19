@@ -1,0 +1,220 @@
+# ═══════════════════════════════════════════════════════════════════
+# JENKINS CONFIGURATION AS CODE (JCasC)
+# Configuration automatique de Jenkins au démarrage
+# ═══════════════════════════════════════════════════════════════════
+
+jenkins:
+  # ────────────────────────────────────────────────────────────────
+  # CONFIGURATION SYSTÈME
+  # ────────────────────────────────────────────────────────────────
+  systemMessage: |
+    🚀 Jenkins RHDemo - Serveur CI/CD
+    Configuré automatiquement avec Jenkins Configuration as Code
+    
+  numExecutors: 2
+  mode: NORMAL
+  
+  quietPeriod: 5
+  scmCheckoutRetryCount: 3
+  
+  # ────────────────────────────────────────────────────────────────
+  # SÉCURITÉ
+  # ────────────────────────────────────────────────────────────────
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD:-admin123}"
+          name: "Administrator"
+          description: "Jenkins Administrator"
+  
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  
+  # ────────────────────────────────────────────────────────────────
+  # OUTILS GLOBAUX
+  # ────────────────────────────────────────────────────────────────
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "JAVA_HOME"
+            value: "/opt/java/openjdk"
+          - key: "MAVEN_HOME"
+            value: "/opt/maven"
+          - key: "PATH+EXTRA"
+            value: "/opt/java/openjdk/bin:/opt/maven/bin"
+          - key: "NOTIFICATION_EMAIL"
+            value: "${SMTP_USER}"
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION DES OUTILS (JDK, Maven, etc.)
+# ═══════════════════════════════════════════════════════════════════
+tool:
+  # JDK 21 (déjà installé dans l'image Docker)
+  jdk:
+    installations:
+      - name: "JDK21"
+        home: "/opt/java/openjdk"
+  
+  # Maven (déjà installé dans l'image Docker)
+  maven:
+    installations:
+      - name: "Maven3"
+        home: "/opt/maven"
+  
+  # Git (déjà installé sur le système)
+  git:
+    installations:
+      - name: "Default"
+        home: "git"
+
+# ═══════════════════════════════════════════════════════════════════
+# CREDENTIALS
+# ⚠️  Les credentials sont gérés manuellement dans Jenkins UI
+#     pour permettre la persistance entre les redémarrages
+#
+# Liste des credentials à créer manuellement :
+#
+# 1. sops-age-key (Secret file)
+#    - Type: Secret file
+#    - ID: sops-age-key
+#    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
+#    - Description: SOPS AGE Private Key for decrypting secrets
+#
+# 2. keycloak-client-secret (Secret text)
+#    - Type: Secret text
+#    - ID: keycloak-client-secret
+#    - Secret: ${KEYCLOAK_CLIENT_SECRET}
+#    - Description: Keycloak Client Secret
+#
+# 3. h2-db-password (Secret text)
+#    - Type: Secret text
+#    - ID: h2-db-password
+#    - Secret: ${H2_DB_PASSWORD}
+#    - Description: H2 Database Password (tests)
+#
+# 4. postgres-db-password (Secret text)
+#    - Type: Secret text
+#    - ID: postgres-db-password
+#    - Secret: ${POSTGRES_DB_PASSWORD}
+#    - Description: PostgreSQL Database Password
+#
+# 5. staging-server-url (Secret text)
+#    - Type: Secret text
+#    - ID: staging-server-url
+#    - Secret: ${STAGING_SERVER_URL}
+#    - Description: Staging Server URL
+#
+# 6. prod-server-url (Secret text)
+#    - Type: Secret text
+#    - ID: prod-server-url
+#    - Secret: ${PROD_SERVER_URL}
+#    - Description: Production Server URL
+#
+# 7. github-token (Secret text - optionnel)
+#    - Type: Secret text
+#    - ID: github-token
+#    - Secret: ${GITHUB_TOKEN}
+#    - Description: GitHub Personal Access Token
+#
+# 8. sonar-token (Secret text - optionnel)
+#    - Type: Secret text
+#    - ID: sonar-token
+#    - Secret: ${SONAR_TOKEN}
+#    - Description: SonarQube Authentication Token
+# ═══════════════════════════════════════════════════════════════════
+# credentials:
+#   system:
+#     domainCredentials:
+#       - credentials: []
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION SONARQUBE
+# ═══════════════════════════════════════════════════════════════════
+unclassified:
+  sonarGlobalConfiguration:
+    installations:
+      - name: "SonarQube"
+        serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
+        credentialsId: "sonar-token"
+
+  # Configuration Email
+  mailer:
+    smtpHost: "${SMTP_HOST:-smtp.gmail.com}"
+    smtpPort: "${SMTP_PORT:-587}"
+    charset: "UTF-8"
+
+  # Configuration Location
+  location:
+    url: "http://localhost:8080/"
+    adminAddress: "jenkins@example.com"
+
+# ═══════════════════════════════════════════════════════════════════
+# JOBS - Pipeline RHDemo
+# ═══════════════════════════════════════════════════════════════════
+jobs:
+  - script: |
+      pipelineJob('rhdemo-pipeline') {
+        displayName('RHDemo API - Pipeline CI/CD')
+        description('Pipeline complet pour RHDemo API avec SOPS')
+        
+        parameters {
+          choice {
+            name('DEPLOY_ENV')
+            choices(['none', 'staging', 'production'])
+            description('Environnement de déploiement')
+          }
+          booleanParam {
+            name('RUN_SELENIUM_TESTS')
+            defaultValue(true)
+            description('Exécuter les tests Selenium')
+          }
+          booleanParam {
+            name('RUN_SONAR')
+            defaultValue(false)
+            description('Exécuter l\'analyse SonarQube')
+          }
+          booleanParam {
+            name('SKIP_MANUAL_APPROVAL')
+            defaultValue(false)
+            description('Ignorer l\'approbation manuelle pour la production')
+          }
+        }
+        
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://github.com/leuwen-lc/rhdemo.git')
+                }
+                branches('*/packaging-et-déploiement-dans-environnement-séparé')
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile')
+          }
+        }
+        
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('30')
+                daysToKeepStr('90')
+                artifactNumToKeepStr('10')
+                artifactDaysToKeepStr('30')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+        
+        triggers {
+          pollSCM {
+            scmpoll_spec('H/15 * * * *')
+            ignorePostCommitHooks(false)
+          }
+        }
+      }

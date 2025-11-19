@@ -1,0 +1,5 @@
+# Fichiers de credentials de test
+rhDemoAPITestIHM/src/test/resources/test-credentials.yml
+
+# Répertoire d'initialisation Keycloak (peut contenir des secrets)
+rhDemoInitKeycloak/

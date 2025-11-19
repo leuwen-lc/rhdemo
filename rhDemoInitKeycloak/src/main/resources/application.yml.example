@@ -1,0 +1,74 @@
+# Configuration Keycloak pour l'initialisation RHDemo
+# Copier ce fichier vers application.yml et adapter les valeurs
+
+keycloak:
+  # URL du serveur Keycloak
+  server-url: http://localhost:8080
+  
+  # Informations admin Keycloak (pour la connexion initiale)
+  admin:
+    username: admin
+    password: admin
+    realm: master
+  
+  # Configuration du Realm à créer
+  realm:
+    name: LeuwenRealm
+    display-name: "Leuwen Realm"
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800      # 30 minutes
+    sso-session-max-lifespan: 36000     # 10 heures
+    access-token-lifespan: 300          # 5 minutes
+  
+  # Configuration du Client RHDemo
+  client:
+    client-id: RHDemo
+    name: "RHDemo Client"
+    secret: lmax7TDMmHk5g7ZgCCXK9ILpjHHvHYga
+    root-url: http://localhost:9000/
+    base-url: ""
+    admin-url: ""
+    redirect-uris:
+      - http://localhost:9000/*
+    web-origins:
+      - http://localhost:9000/*
+    roles:
+      - admin
+      - consult
+      - MAJ
+  
+  # Utilisateurs à créer
+  users:
+    - username: admil
+      password: Faf4zd89Fc
+      email: admin@example.com
+      first-name: Admin
+      last-name: User
+      roles:
+        - admin
+        - consult
+        - MAJ
+    
+    - username: consuela
+      password: AsTe3FcD
+      email: consuela@example.com
+      first-name: Consuela
+      last-name: Consultant
+      roles:
+        - consult
+    
+    - username: madjid
+      password: Mkze567o
+      email: madjid@example.com
+      first-name: Madjid
+      last-name: Utilisateur
+      roles:
+        - MAJ
+        - consult

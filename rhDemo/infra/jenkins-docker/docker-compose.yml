@@ -1,0 +1,149 @@
+services:
+  # ═══════════════════════════════════════════════════════════════════
+  # JENKINS - Serveur CI/CD
+  # ═══════════════════════════════════════════════════════════════════
+  jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    image: rhdemo-jenkins:latest
+    container_name: rhdemo-jenkins
+    restart: unless-stopped
+    
+    # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
+    # L'accès Docker se fait via le groupe docker (GID 984 de l'hôte)
+    user: jenkins
+    
+    # Ajouter le groupe docker avec le bon GID de l'hôte (984)
+    group_add:
+      - 984
+    
+    ports:
+      - "8080:8080"      # Interface Web Jenkins
+      - "50000:50000"    # Port agents Jenkins
+    
+    volumes:
+      # Persistance des données Jenkins
+      - jenkins_home:/var/jenkins_home
+      
+      # Configuration as Code (JCasC)
+      - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+      
+      # Socket Docker pour Docker-in-Docker (DinD)
+      - /var/run/docker.sock:/var/run/docker.sock
+      
+      # Binaire Docker CLI
+      - /usr/bin/docker:/usr/bin/docker
+      
+      # Maven local repository (cache) - utilisateur jenkins
+      - maven_repository:/var/jenkins_home/.m2
+      
+      # Répertoire de travail partagé (optionnel)
+      - ./workspace:/workspace
+    
+    environment:
+      # Désactiver le setup wizard
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      
+      # Configuration as Code
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
+      
+      # Credentials depuis .env
+      - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
+      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
+      # KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      # H2_DB_PASSWORD=${H2_DB_PASSWORD}
+      # POSTGRES_DB_PASSWORD=${POSTGRES_DB_PASSWORD}
+      - SONAR_TOKEN=${SONAR_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      
+      # Timezone
+      - TZ=${TZ:-Europe/Paris}
+      
+      # Configuration Docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    
+    networks:
+      - jenkins-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/login || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ═══════════════════════════════════════════════════════════════════
+  # JENKINS AGENT (optionnel - pour builds distribués)
+  # ═══════════════════════════════════════════════════════════════════
+  jenkins-agent:
+    image: jenkins/inbound-agent:latest-jdk21
+    container_name: rhdemo-jenkins-agent
+    restart: unless-stopped
+    
+    environment:
+      - JENKINS_URL=http://jenkins:8080
+      - JENKINS_AGENT_NAME=docker-agent
+      - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
+      # À configurer après le premier lancement de Jenkins
+      # - JENKINS_SECRET=<secret-from-jenkins>
+    
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      - jenkins_agent_workspace:/home/jenkins/agent
+    
+    networks:
+      - jenkins-network
+    
+    depends_on:
+      - jenkins
+
+  # ═══════════════════════════════════════════════════════════════════
+  # DOCKER REGISTRY LOCAL (optionnel - pour stocker les images)
+  # ═══════════════════════════════════════════════════════════════════
+  registry:
+    image: registry:2
+    container_name: rhdemo-docker-registry
+    restart: unless-stopped
+    
+    ports:
+      - "5000:5000"
+    
+    volumes:
+      - registry_data:/var/lib/registry
+    
+    environment:
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    
+    networks:
+      - jenkins-network
+
+
+# ═══════════════════════════════════════════════════════════════════
+# VOLUMES PERSISTANTS
+# ═══════════════════════════════════════════════════════════════════
+volumes:
+  jenkins_home:
+    name: rhdemo-jenkins-home
+    driver: local
+  
+  jenkins_agent_workspace:
+    name: rhdemo-jenkins-agent-workspace
+    driver: local
+  
+  maven_repository:
+    name: rhdemo-maven-repository
+    driver: local
+  
+  registry_data:
+    name: rhdemo-docker-registry
+    driver: local
+
+# ═══════════════════════════════════════════════════════════════════
+# RÉSEAU
+# ═══════════════════════════════════════════════════════════════════
+networks:
+  jenkins-network:
+    name: rhdemo-jenkins-network
+    driver: bridge

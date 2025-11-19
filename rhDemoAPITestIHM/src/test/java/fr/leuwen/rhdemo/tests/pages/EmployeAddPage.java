@@ -1,11 +1,17 @@
 package fr.leuwen.rhdemo.tests.pages;
 
+import org.apache.commons.io.FileUtils;
 import org.openqa.selenium.By;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.time.Duration;
 
 /**
@@ -26,6 +32,19 @@ public class EmployeAddPage {
     private final By successAlert = By.cssSelector("[data-testid='employe-success-alert']");
     private final By errorAlert = By.cssSelector("[data-testid='employe-error-alert']");
     
+    private static final Logger logger = LoggerFactory.getLogger(EmployeAddPage.class);
+    
+    private void takeScreenshot(String fileName) {
+        try {
+            File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+            File target = new File("screenshots/" + fileName);
+            FileUtils.copyFile(scrFile, target);
+        } catch (Exception e) {
+            logger.error("Screenshot error: " + e.getMessage());
+        }
+    }
+    
+    
     public EmployeAddPage(WebDriver driver) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
@@ -35,7 +54,18 @@ public class EmployeAddPage {
      * Remplit le formulaire d'ajout d'employé
      */
     public void fillEmployeForm(String prenom, String nom, String email, String adresse) {
-        wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
+        try {
+            wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
+        } catch (Exception e) {
+            // DEBUG: Capturer l'état de la page en cas d'échec
+            logger.error("❌ Impossible de trouver le champ prenom");
+            logger.error("URL actuelle: {}", driver.getCurrentUrl());
+            logger.error("Titre de la page: {}", driver.getTitle());
+            logger.error("HTML du body (500 premiers caractères): {}",
+                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(500, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
+            takeScreenshot("Impossible de trouver le champ prenom.png");
+            throw e;
+        }
         
         driver.findElement(prenomInput).clear();
         driver.findElement(prenomInput).sendKeys(prenom);

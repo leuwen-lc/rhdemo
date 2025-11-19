@@ -228,7 +228,7 @@ cd /home/leno-vo/git/repository/rhDemoAPITestIHM
 ou
 
 ```bash
-/home/leno-vo/git/repository/rhdemo/mvnw test
+/home/leno-vo/git/repository/rhDemo/mvnw test
 ```
 
 ### Sortie attendue

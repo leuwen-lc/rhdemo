@@ -434,14 +434,14 @@ YMLEOF
                                 -Dsonar.java.binaries=target/classes \
                                 -Dsonar.token=${SONAR_TOKEN}
                         '''
-                    }
-                }
 
-                script {
-                    echo '▶ Attente du Quality Gate SonarQube...'
-                }
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                        script {
+                            echo '▶ Attente du Quality Gate SonarQube...'
+                        }
+                        timeout(time: 5, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
+                    }
                 }
             }
         }

@@ -83,45 +83,28 @@ tool:
 #    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
 #    - Description: SOPS AGE Private Key for decrypting secrets
 #
-# 2. keycloak-client-secret (Secret text)
-#    - Type: Secret text
-#    - ID: keycloak-client-secret
-#    - Secret: ${KEYCLOAK_CLIENT_SECRET}
-#    - Description: Keycloak Client Secret
 #
-# 3. h2-db-password (Secret text)
-#    - Type: Secret text
-#    - ID: h2-db-password
-#    - Secret: ${H2_DB_PASSWORD}
-#    - Description: H2 Database Password (tests)
-#
-# 4. postgres-db-password (Secret text)
-#    - Type: Secret text
-#    - ID: postgres-db-password
-#    - Secret: ${POSTGRES_DB_PASSWORD}
-#    - Description: PostgreSQL Database Password
-#
-# 5. staging-server-url (Secret text)
+# 3. staging-server-url (Secret text)
 #    - Type: Secret text
 #    - ID: staging-server-url
 #    - Secret: ${STAGING_SERVER_URL}
 #    - Description: Staging Server URL
 #
-# 6. prod-server-url (Secret text)
+# 4. prod-server-url (Secret text)
 #    - Type: Secret text
 #    - ID: prod-server-url
 #    - Secret: ${PROD_SERVER_URL}
 #    - Description: Production Server URL
 #
-# 7. github-token (Secret text - optionnel)
+# 5. github-token (Secret text - optionnel)
 #    - Type: Secret text
 #    - ID: github-token
 #    - Secret: ${GITHUB_TOKEN}
 #    - Description: GitHub Personal Access Token
 #
-# 8. sonar-token (Secret text - optionnel)
+# 6. jenkins-sonar-token (Secret text - optionnel)
 #    - Type: Secret text
-#    - ID: sonar-token
+#    - ID: jenkins-sonar-token
 #    - Secret: ${SONAR_TOKEN}
 #    - Description: SonarQube Authentication Token
 # ═══════════════════════════════════════════════════════════════════
@@ -138,7 +121,7 @@ unclassified:
     installations:
       - name: "SonarQube"
         serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
-        credentialsId: "sonar-token"
+        credentialsId: "jenkins-sonar-token"
 
   # Configuration Email
   mailer:

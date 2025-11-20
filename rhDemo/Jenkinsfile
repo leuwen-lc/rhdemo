@@ -422,8 +422,7 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Analyse de qualité du code avec SonarQube...'
-                }
-                withCredentials([string(credentialsId: 'jenkins-sonar-token', variable: 'SONAR_TOKEN')]) {
+
                     withSonarQubeEnv('SonarQube') {
                         sh """
                             # Charger les secrets pour l'analyse
@@ -431,17 +430,17 @@ YMLEOF
                             cd rhDemo && ./mvnw sonar:sonar \\
                                 -Dsonar.projectKey=rhdemo-api \\
                                 -Dsonar.projectName="RHDemo API" \\
-                                -Dsonar.java.binaries=target/classes \\
-                                -Dsonar.token=\${SONAR_TOKEN}
+                                -Dsonar.java.binaries=target/classes
                         """
+                    }
 
-                        script {
-                            echo '▶ Attente du Quality Gate SonarQube...'
-                            echo '   (Nécessite un webhook configuré dans SonarQube: http://jenkins:8080/sonarqube-webhook/)'
-                        }
+                    echo '▶ Attente du Quality Gate SonarQube...'
+                    echo '   (Nécessite un webhook configuré dans SonarQube: http://jenkins:8080/sonarqube-webhook/)'
 
-                        timeout(time: 5, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
                         }
                     }
                 }

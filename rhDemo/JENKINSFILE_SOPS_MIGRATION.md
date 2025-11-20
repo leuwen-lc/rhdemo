@@ -157,6 +157,12 @@ Après le stage de déchiffrement, les variables suivantes sont disponibles dans
 | `RHDEMO_DATASOURCE_PASSWORD_PG` | `.rhdemo.datasource.password.pg` |
 | `RHDEMO_DATASOURCE_PASSWORD_H2` | `.rhdemo.datasource.password.h2` |
 | `RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET` | `.rhdemo.client.registration.keycloak.client.secret` |
+| `KEYCLOAK_DB_PASSWORD` | `.keycloak.db.password` |
+| `KEYCLOAK_ADMIN_PASSWORD` | `.keycloak.admin.password` |
+| `KEYCLOAK_ADMIN_USER` | `.keycloak.admin.user` |
+| `RHDEMO_TEST_PWD_USER_ADMIN` | `.rhdemo.test.pwduseradmin` |
+| `RHDEMO_TEST_PWD_USER_MAJ` | `.rhdemo.test.pwdusermaj` |
+| `RHDEMO_TEST_PWD_USER_CONSULT` | `.rhdemo.test.pwduserconsult` |
 | `STAGING_SERVER` | `.rhdemo.servers.staging` (si présent) |
 | `PROD_SERVER` | `.rhdemo.servers.production` (si présent) |
 
@@ -177,8 +183,17 @@ rhdemo:
         staging: staging.example.com # Peut être chiffré ou en clair
         production: prod.example.com # Peut être chiffré ou en clair
     test:
-        user: ENC[AES256_GCM,...] # Chiffré par SOPS
-        pwd: ENC[AES256_GCM,...] # Chiffré par SOPS
+        # Mots de passe des utilisateurs de test Keycloak (staging)
+        pwduseradmin: ENC[AES256_GCM,...] # admin (ROLE_admin)
+        pwdusermaj: ENC[AES256_GCM,...] # manager (ROLE_consult + ROLE_MAJ)
+        pwduserconsult: ENC[AES256_GCM,...] # consultant (ROLE_consult)
+
+keycloak:
+    db:
+        password: ENC[AES256_GCM,...] # Mot de passe PostgreSQL Keycloak
+    admin:
+        user: ENC[AES256_GCM,...] # Utilisateur admin Keycloak
+        password: ENC[AES256_GCM,...] # Mot de passe admin Keycloak
 ```
 
 ## Credentials Jenkins requis
@@ -317,10 +332,78 @@ En cas de problème avec la migration SOPS :
 3. Vérifier le credential Jenkins `sops-age-key`
 4. Consulter le guide de dépannage : [JENKINS_SOPS_GUIDE.md#dépannage](JENKINS_SOPS_GUIDE.md)
 
+## Migration des mots de passe utilisateurs de test
+
+### Contexte
+
+Les mots de passe des utilisateurs Keycloak de test étaient auparavant **codés en dur** dans le Jenkinsfile :
+- `admin123` pour l'utilisateur admin
+- `manager123` pour l'utilisateur manager
+- `consult123` pour l'utilisateur consultant
+
+Ces mots de passe sont désormais **chiffrés dans SOPS** et injectés dynamiquement.
+
+### Utilisateurs créés par rhDemoInitKeycloak
+
+| Utilisateur | Variable | Rôles | Usage |
+|-------------|----------|-------|-------|
+| admin | `RHDEMO_TEST_PWD_USER_ADMIN` | ROLE_admin | Administration complète |
+| manager | `RHDEMO_TEST_PWD_USER_MAJ` | ROLE_consult, ROLE_MAJ | **Tests Selenium (CRUD)** |
+| consultant | `RHDEMO_TEST_PWD_USER_CONSULT` | ROLE_consult | Lecture seule |
+
+### Injection dans rhDemoAPITestIHM
+
+Le mot de passe de l'utilisateur `manager` est injecté dans les tests Selenium ([Jenkinsfile:943](Jenkinsfile#L943)) :
+
+```bash
+export RHDEMOTEST_USER="manager"
+export RHDEMOTEST_PWD="${RHDEMO_TEST_PWD_USER_MAJ}"
+```
+
+**Pourquoi manager ?**
+Cet utilisateur possède les deux rôles nécessaires pour tester toutes les opérations CRUD :
+- `ROLE_consult` : lecture des employés
+- `ROLE_MAJ` : création, modification, suppression
+
+### Comment mettre à jour les mots de passe
+
+```bash
+# 1. Éditer le fichier chiffré
+cd rhDemo
+sops secrets/secrets-staging.yml
+
+# 2. Modifier les valeurs
+# rhdemo:
+#   test:
+#     pwdusermaj: nouveau_mot_de_passe
+
+# 3. Sauvegarder (SOPS re-chiffre automatiquement)
+
+# 4. Commiter
+git add secrets/secrets-staging.yml
+git commit -m "chore: rotation mot de passe utilisateur manager"
+git push
+
+# 5. Le prochain build Jenkins utilisera le nouveau mot de passe
+```
+
+### Sécurité
+
+✅ **Mots de passe chiffrés** : Plus de mots de passe en clair dans le code
+✅ **Rotation facilitée** : Modifier secrets-staging.yml et re-chiffrer
+✅ **Audit trail** : Modifications tracées dans Git (fichier chiffré)
+✅ **Protection logs** : Mots de passe non affichés grâce à `set +x` ([SECURITY_JENKINS_LOGS.md](SECURITY_JENKINS_LOGS.md))
+
 ## Changelog
 
 | Date | Version | Modifications |
 |------|---------|--------------|
+| 2025-11-20 | 1.1.0 | Migration mots de passe utilisateurs test |
+|  |  | - Ajout rhdemo.test.pwduseradmin/maj/consult |
+|  |  | - Injection dans rhDemoInitKeycloak |
+|  |  | - Injection dans rhDemoAPITestIHM (manager) |
+|  |  | - Mise à jour secrets.yml.template |
+|  |  | - Fix erreurs stage "Arrêt App Test" |
 | 2025-01-07 | 1.0.0 | Migration initiale vers SOPS |
 |  |  | - Suppression des 5+ credentials Jenkins |
 |  |  | - Ajout stage déchiffrement SOPS |

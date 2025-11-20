@@ -10,6 +10,10 @@ META-INF/
 ### Secrets ###
 # Ne pas commiter les secrets de dev local
 secrets/secrets.yml
+# Ne pas commiter les fichiers déchiffrés temporaires
+secrets/*-temp.yml
+secrets/*-decrypted.yml
+secrets/env-vars.sh
 # Autoriser le template et les secrets chiffrés pour CI/CD
 !secrets/secrets.yml.template
 !secrets/secrets-staging.yml

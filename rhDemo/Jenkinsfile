@@ -123,6 +123,11 @@ pipeline {
                         echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
                         echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
 
+                        # Mots de passe des utilisateurs de test (chiffrés dans SOPS)
+                        echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+
                         # Réactiver l'écho des commandes
                         set -x
                         
@@ -234,23 +239,23 @@ keycloak:
   # ========================================
   users:
     - username: admin
-      password: admin123
+      password: ${RHDEMO_TEST_PWD_USER_ADMIN}
       email: admin@rhdemo.local
       first-name: Admin
       last-name: RHDemo
       roles:
         - ROLE_admin
-    
+
     - username: consultant
-      password: consult123
+      password: ${RHDEMO_TEST_PWD_USER_CONSULT}
       email: consultant@rhdemo.local
       first-name: Jean
       last-name: Consultant
       roles:
         - ROLE_consult
-    
+
     - username: manager
-      password: manager123
+      password: ${RHDEMO_TEST_PWD_USER_MAJ}
       email: manager@rhdemo.local
       first-name: Marie
       last-name: Manager
@@ -935,7 +940,7 @@ YMLEOF
                         # BaseSeleniumTest.java cherche RHDEMOTEST_USER et RHDEMOTEST_PWD (pas les propriétés Maven)
                         # Utilisation de manager (ROLE_consult + ROLE_MAJ) pour tester toutes les opérations
                         export RHDEMOTEST_USER="manager"
-                        export RHDEMOTEST_PWD="manager123"
+                        export RHDEMOTEST_PWD="\${RHDEMO_TEST_PWD_USER_MAJ}"
                         
                         echo "📍 Configuration des URLs de test:"
                         echo "   APP_URL: \${APP_URL}"
@@ -975,9 +980,11 @@ YMLEOF
                         if [ -f app-test.container ]; then
                             CONTAINER=$(cat app-test.container)
                             echo "Arrêt du container: $CONTAINER"
-                            docker stop $CONTAINER || echo "Container déjà arrêté"
-                            docker rm $CONTAINER || echo "Container déjà supprimé"
+                            docker stop $CONTAINER 2>/dev/null || echo "✅ Container déjà arrêté"
+                            docker rm $CONTAINER 2>/dev/null || echo "✅ Container déjà supprimé"
                             rm app-test.container
+                        else
+                            echo "✅ Pas de container de test à nettoyer"
                         fi
                     '''
                 }
@@ -1274,11 +1281,11 @@ YMLEOF
                         
                         # Arrêt et suppression des containers/volumes/networks Docker Compose
                         # -v supprime aussi les volumes pour éviter les données résiduelles entre builds
-                        #docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         
                         # Suppression de l'image de build taguée spécifiquement pour ce build
                         # Évite l'accumulation d'images Docker avec des tags build-XXX
-                        #docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
+                        docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
                         
                         echo "✅ Environnement nettoyé"
                     '''

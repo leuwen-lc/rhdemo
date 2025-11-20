@@ -425,15 +425,15 @@ YMLEOF
                 }
                 withCredentials([string(credentialsId: 'jenkins-sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('SonarQube') {
-                        sh '''
+                        sh """
                             # Charger les secrets pour l'analyse
                             . rhDemo/secrets/env-vars.sh
-                            cd rhDemo && ./mvnw sonar:sonar \
-                                -Dsonar.projectKey=rhdemo-api \
-                                -Dsonar.projectName="RHDemo API" \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.token=${SONAR_TOKEN}
-                        '''
+                            cd rhDemo && ./mvnw sonar:sonar \\
+                                -Dsonar.projectKey=rhdemo-api \\
+                                -Dsonar.projectName="RHDemo API" \\
+                                -Dsonar.java.binaries=target/classes \\
+                                -Dsonar.token=\${SONAR_TOKEN}
+                        """
 
                         script {
                             echo '▶ Attente du Quality Gate SonarQube...'
@@ -565,17 +565,20 @@ YMLEOF
                     # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
                     export WORKSPACE=\$(pwd)
                     
-                    # Alias pour les variables attendues par docker-compose.yml
+                    # Export explicite des variables critiques (pour éviter que .env les écrase)
+                    # Bases de données
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
-                    
-                    # OAuth2 Client Secret pour Spring Boot
+                    export KEYCLOAK_DB_PASSWORD="\${KEYCLOAK_DB_PASSWORD}"
+
+                    # Keycloak Admin
+                    export KEYCLOAK_ADMIN_USER="\${KEYCLOAK_ADMIN_USER}"
+                    export KEYCLOAK_ADMIN_PASSWORD="\${KEYCLOAK_ADMIN_PASSWORD}"
+
+                    # OAuth2 Client Secrets
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
 
                     # Confirmation (sans afficher les secrets)
-                    echo "✅ Client-secret exporté avec succès (secret non affiché pour sécurité)"
-                    
-                    # Les variables Keycloak sont déjà dans env-vars.sh avec les bons noms:
-                    # KEYCLOAK_DB_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_ADMIN_USER
+                    echo "✅ Secrets exportés avec succès (secrets non affichés pour sécurité)"
                     
                     # IMPORTANT: Nettoyage forcé des conteneurs existants pour éviter les conflits de noms
                     echo "🧹 Nettoyage des conteneurs staging existants..."

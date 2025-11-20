@@ -415,7 +415,7 @@ YMLEOF
             }
         }
         
-        stage('🔍 Analyse SonarQube') {
+        stage('🔍 Analyse SonarQube & Quality Gate') {
             when {
                 expression { params.RUN_SONAR == true }
             }
@@ -436,14 +436,7 @@ YMLEOF
                         '''
                     }
                 }
-            }
-        }
 
-        stage('📊 Quality Gate') {
-            when {
-                expression { params.RUN_SONAR == true }
-            }
-            steps {
                 script {
                     echo '▶ Attente du Quality Gate SonarQube...'
                 }

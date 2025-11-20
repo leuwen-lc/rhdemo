@@ -437,7 +437,9 @@ YMLEOF
 
                         script {
                             echo '▶ Attente du Quality Gate SonarQube...'
+                            echo '   (Nécessite un webhook configuré dans SonarQube: http://jenkins:8080/sonarqube-webhook/)'
                         }
+
                         timeout(time: 5, unit: 'MINUTES') {
                             waitForQualityGate abortPipeline: true
                         }

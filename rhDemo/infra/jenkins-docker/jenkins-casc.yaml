@@ -190,7 +190,7 @@ jobs:
                 remote {
                   url('https://github.com/leuwen-lc/rhdemo.git')
                 }
-                branches('*/packaging-et-déploiement-dans-environnement-séparé')
+                branches('*/evolutions-deploiement')
               }
             }
             scriptPath('rhDemo/Jenkinsfile')

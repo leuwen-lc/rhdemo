@@ -1,6 +1,9 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
 # Script d'initialisation de l'environnement de staging RHDemo
+# Attention en fonctionnement normal cette phase est pilotée
+# par Jenkins via le Jenkinsfile à la racine de rhDemo
+# script à utiliser uniquement pour quelques tests manuels
 # ═══════════════════════════════════════════════════════════════
 
 set -e
@@ -27,7 +30,8 @@ cat << "EOF"
 ║   ██║  ██║██║  ██║██████╔╝███████╗██║ ╚═╝ ██║╚██████╔╝       ║
 ║   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝     ╚═╝ ╚═════╝        ║
 ║                                                               ║
-║        Initialisation environnement de STAGING                ║
+║        Initialisation manuelle environnement de STAGING       ║
+║        Préférez le pilotage par Jenkins via le Jenkinsfile    ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 EOF

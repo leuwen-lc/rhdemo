@@ -38,6 +38,10 @@ nginx:443 (HTTPS reverse proxy)
 - Docker Compose 2.x+
 - Image Docker applicative: `rhdemo-api:0.0.1-SNAPSHOT` (construite via Paketo)
 
+### Tout doit être piloté par la chaine CI/CD Jenkins avec le Jenkinsfile déposé à la racine de rhDemo
+
+### Si besoin d'exécution manuelle voir ci-dessous
+
 ### Étape 1: Construire l'image Docker (si nécessaire)
 
 Depuis la racine du projet **rhdemo**:

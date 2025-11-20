@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: rhdemo-staging-db
     restart: unless-stopped
     environment:
@@ -26,7 +26,7 @@ services:
   # Base de données PostgreSQL pour Keycloak
   # ═══════════════════════════════════════════════════════════════
   keycloak-db:
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: keycloak-staging-db
     restart: unless-stopped
     environment:
@@ -47,7 +47,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.2
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4.2}
     container_name: keycloak-staging
     restart: unless-stopped
     command:
@@ -142,7 +142,7 @@ services:
   # Nginx - Reverse Proxy avec HTTPS
   # ═══════════════════════════════════════════════════════════════
   nginx:
-    image: nginx:1.27-alpine
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
     container_name: rhdemo-staging-nginx
     restart: unless-stopped
     ports:

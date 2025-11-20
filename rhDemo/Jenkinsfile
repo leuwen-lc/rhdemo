@@ -16,6 +16,11 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
         DOCKER_IMAGE_TAG = "${APP_VERSION}"
         DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
+
+        // Versions des images Docker de base
+        NGINX_IMAGE = "nginx:1.27-alpine"
+        POSTGRES_IMAGE = "postgres:16-alpine"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
         
         // Configuration des tests
         TEST_PORT = '9000'
@@ -60,7 +65,7 @@ pipeline {
                 script {
                     echo '▶ Vérification du projet rhDemoInitKeycloak...'
                     // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
-                    // Le checkout SCM récupère déjà tout le workspace
+                    // Le checkout SCM récupère en principe tout le workspace
                 }
                 
                 sh '''
@@ -418,15 +423,18 @@ YMLEOF
                 script {
                     echo '▶ Analyse de qualité du code avec SonarQube...'
                 }
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        # Charger les secrets pour l'analyse
-                        . rhDemo/secrets/env-vars.sh
-                        cd rhDemo && ./mvnw sonar:sonar \
-                            -Dsonar.projectKey=rhdemo-api \
-                            -Dsonar.projectName="RHDemo API" \
-                            -Dsonar.java.binaries=target/classes
-                    '''
+                withCredentials([string(credentialsId: 'jenkins-sonar-token', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                            # Charger les secrets pour l'analyse
+                            . rhDemo/secrets/env-vars.sh
+                            cd rhDemo && ./mvnw sonar:sonar \
+                                -Dsonar.projectKey=rhdemo-api \
+                                -Dsonar.projectName="RHDemo API" \
+                                -Dsonar.java.binaries=target/classes \
+                                -Dsonar.token=${SONAR_TOKEN}
+                        '''
+                    }
                 }
             }
         }
@@ -491,7 +499,7 @@ YMLEOF
                         # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
                         # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
                         echo "🧹 Suppression image nginx pour éviter layers corrompus..."
-                        docker rmi nginx:1.27-alpine 2>/dev/null || true
+                        docker rmi ${NGINX_IMAGE} 2>/dev/null || true
                         
                         # Nettoyer les réseaux orphelins
                         docker network prune -f

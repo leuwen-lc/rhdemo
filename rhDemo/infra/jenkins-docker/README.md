@@ -30,39 +30,73 @@ docker info
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      JENKINS                              │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ Jenkins Master (JDK 21)                           │  │
-│  │ • Port 8080 (Web UI)                              │  │
-│  │ • Port 50000 (Agents)                             │  │
-│  │ • Maven 3.9.6                                     │  │
-│  │ • Docker CLI                                      │  │
-│  │ • Docker Compose                                  │  │
-│  │ • Node.js/npm                                     │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ Plugins (auto-installés)                          │  │
-│  │ • Pipeline & Git                                  │  │
-│  │ • SonarQube & JaCoCo                             │  │
-│  │ • Docker                                          │  │
-│  │ • Slack & Email                                   │  │
-│  │ • BlueOcean                                       │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-                          ↓
-┌──────────────────────────────────────────────────────────┐
-│           DOCKER SOCKET (/var/run/docker.sock)           │
-│  Permet à Jenkins de lancer des conteneurs Docker        │
-└──────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     PLATEFORME CI/CD RHDEMO                             │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌──────────────────────────┐      ┌──────────────────────────┐       │
+│  │       JENKINS            │      │      SONARQUBE           │       │
+│  │   (Port 8080, 50000)     │◄────►│     (Port 9020)          │       │
+│  │                          │      │                          │       │
+│  │ • JDK 21                 │      │ • Community Edition 10   │       │
+│  │ • Maven 3.9.6            │      │ • Analyse qualité code   │       │
+│  │ • Docker CLI             │      │ • Couverture tests       │       │
+│  │ • Node.js/npm            │      │ • Security hotspots      │       │
+│  │                          │      │ • Code smells            │       │
+│  │ Plugins:                 │      │                          │       │
+│  │ • Pipeline & Git         │      └──────────┬───────────────┘       │
+│  │ • SonarQube Scanner      │                 │                       │
+│  │ • Docker Workflow        │                 ▼                       │
+│  │ • JaCoCo                 │      ┌──────────────────────────┐       │
+│  │ • Slack & Email          │      │   PostgreSQL 16          │       │
+│  │ • BlueOcean UI           │      │   (sonarqube-db)         │       │
+│  └──────────┬───────────────┘      │                          │       │
+│             │                      │ • Base de données        │       │
+│             │                      │   SonarQube              │       │
+│             │                      │ • Volume persistant      │       │
+│             ▼                      └──────────────────────────┘       │
+│  ┌──────────────────────────┐                                        │
+│  │    DOCKER SOCKET         │                                        │
+│  │  /var/run/docker.sock    │                                        │
+│  │                          │                                        │
+│  │ • Docker-in-Docker (DinD)│                                        │
+│  │ • Lance conteneurs       │                                        │
+│  │ • Build images           │                                        │
+│  │ • Deploy staging         │                                        │
+│  └──────────────────────────┘                                        │
+│                                                                       │
+│  Services optionnels:                                                │
+│  • jenkins-agent (agents distribués)                                 │
+│  • registry:5000 (Docker Registry local)                             │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                    ┌───────────────────────────────┐
+                    │   Réseau Docker Bridge        │
+                    │   rhdemo-jenkins-network      │
+                    └───────────────────────────────┘
 ```
+
+### Volumes persistants
+
+| Volume | Usage | Taille estimée |
+|--------|-------|----------------|
+| `rhdemo-jenkins-home` | Configuration et jobs Jenkins | ~2 GB |
+| `rhdemo-maven-repository` | Cache Maven (.m2) | ~1 GB |
+| `rhdemo-sonarqube-data` | Données SonarQube | ~500 MB |
+| `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
+| `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
+| `rhdemo-sonarqube-db` | Base PostgreSQL SonarQube | ~200 MB |
+| `rhdemo-docker-registry` | Images Docker locales | Variable |
 
 ### Services inclus
 
 | Service | Description | Port |
 |---------|-------------|------|
 | `jenkins` | Serveur Jenkins principal | 8080, 50000 |
+| `sonarqube` | Analyse qualité du code | 9020 |
+| `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - |
 | `jenkins-agent` | Agent Jenkins (optionnel) | - |
 | `registry` | Docker Registry local | 5000 |
 | `nginx` | Reverse proxy (optionnel) | 80, 443 |
@@ -89,9 +123,9 @@ Ouvrez votre navigateur : **http://localhost:8080**
 
 **Identifiants par défaut :**
 - Utilisateur : `admin`
-- Mot de passe : `admin123` (défini dans `.env`)
+- Mot de passe : `xxxxxxx` (défini dans `.env`)
 
-⚠️ **IMPORTANT** : Changez le mot de passe en production !
+⚠️ **IMPORTANT** : Mettez un mot de passe fort !
 
 ## 📝 Configuration détaillée
 
@@ -303,21 +337,32 @@ docker-compose exec jenkins docker ps
 
 ### SonarQube
 
-Si vous avez SonarQube :
+SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jenkins.
 
-```bash
-# Démarrer SonarQube
-docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
+**Accès à SonarQube :**
+- URL : http://localhost:9020
+- Identifiants par défaut : `admin` / `admin` (changez-les au premier login)
 
-# Ajouter au réseau Jenkins
-docker network connect rhdemo-jenkins-network sonarqube
-```
+**Configuration initiale :**
+1. Connectez-vous à http://localhost:9020
+2. Changez le mot de passe admin
+3. Allez dans **Administration** → **Security** → **Users**
+4. Créez un token pour Jenkins : **My Account** → **Security** → **Generate Token**
+5. Ajoutez le token dans `.env` :
+   ```env
+   SONAR_TOKEN=votre-token-sonar-genere
+   ```
+6. Redémarrez Jenkins : `docker compose restart jenkins`
 
-Configuration dans `.env` :
-```env
-SONAR_URL=http://sonarqube:9000
-SONAR_TOKEN=votre-token-sonar
-```
+**Services SonarQube :**
+- `sonarqube` : Serveur SonarQube Community Edition 10
+- `sonarqube-db` : Base de données PostgreSQL 16 dédiée
+
+**Volumes persistants :**
+- `rhdemo-sonarqube-data` : Données SonarQube
+- `rhdemo-sonarqube-extensions` : Plugins SonarQube
+- `rhdemo-sonarqube-logs` : Logs SonarQube
+- `rhdemo-sonarqube-db` : Base de données PostgreSQL
 
 ### Slack
 

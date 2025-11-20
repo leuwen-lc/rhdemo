@@ -7,7 +7,6 @@
 #
 # Usage dans Jenkins:
 #   docker compose -f docker-compose.yml \
-#                  -f docker-compose.jenkins.yml \
 #                  -f docker-compose.zap.yml \
 #                  up -d
 #

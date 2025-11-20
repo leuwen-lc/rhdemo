@@ -13,6 +13,10 @@ echo "🗑️  Suppression des volumes (reset complet)..."
 docker volume rm rhdemo-jenkins-home 2>/dev/null || true
 docker volume rm rhdemo-maven-repository 2>/dev/null || true
 docker volume rm rhdemo-jenkins-agent-workspace 2>/dev/null || true
+docker volume rm rhdemo-sonarqube-data 2>/dev/null || true
+docker volume rm rhdemo-sonarqube-extensions 2>/dev/null || true
+docker volume rm rhdemo-sonarqube-logs 2>/dev/null || true
+docker volume rm rhdemo-sonarqube-db 2>/dev/null || true
 docker volume rm rhdemo-docker-registry 2>/dev/null || true
 
 echo "🧹 Nettoyage des images Jenkins..."

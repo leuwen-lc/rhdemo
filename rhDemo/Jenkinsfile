@@ -415,33 +415,43 @@ YMLEOF
             }
         }
         
-        stage('🔍 Analyse SonarQube & Quality Gate') {
+        stage('🔍 Analyse SonarQube') {
             when {
                 expression { params.RUN_SONAR == true }
             }
             steps {
                 script {
                     echo '▶ Analyse de qualité du code avec SonarQube...'
+                }
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        # Charger les secrets pour l'analyse
+                        . rhDemo/secrets/env-vars.sh
+                        cd rhDemo && ./mvnw sonar:sonar \\
+                            -Dsonar.projectKey=rhdemo-api \\
+                            -Dsonar.projectName="RHDemo API" \\
+                            -Dsonar.java.binaries=target/classes
+                    """
+                }
+            }
+        }
 
-                    withSonarQubeEnv('SonarQube') {
-                        sh """
-                            # Charger les secrets pour l'analyse
-                            . rhDemo/secrets/env-vars.sh
-                            cd rhDemo && ./mvnw sonar:sonar \\
-                                -Dsonar.projectKey=rhdemo-api \\
-                                -Dsonar.projectName="RHDemo API" \\
-                                -Dsonar.java.binaries=target/classes
-                        """
-                    }
-
+        stage('🎯 Quality Gate SonarQube') {
+            when {
+                expression { params.RUN_SONAR == true }
+            }
+            steps {
+                script {
                     echo '▶ Attente du Quality Gate SonarQube...'
-                    echo '   (Nécessite un webhook configuré dans SonarQube: http://jenkins:8080/sonarqube-webhook/)'
-
-                    timeout(time: 5, unit: 'MINUTES') {
+                    echo '   (Webhook configuré: http://jenkins:8080/sonarqube-webhook/)'
+                }
+                timeout(time: 5, unit: 'MINUTES') {
+                    script {
                         def qg = waitForQualityGate()
                         if (qg.status != 'OK') {
                             error "Pipeline aborted due to quality gate failure: ${qg.status}"
                         }
+                        echo "✅ Quality Gate passed: ${qg.status}"
                     }
                 }
             }

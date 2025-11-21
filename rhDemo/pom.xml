@@ -145,13 +145,10 @@
 				<artifactId>maven-failsafe-plugin</artifactId>
 				<configuration>
 					<argLine>${argLine}</argLine>
-					<!-- Inclure les tests d'intégration qui utilisent @SpringBootTest -->
+					<!-- Inclure uniquement les tests d'intégration avec suffixe IT -->
 					<includes>
 						<include>**/*IT.java</include>
 						<include>**/*ITCase.java</include>
-						<include>**/IT*.java</include>
-						<!-- Inclure aussi les *Test.java qui sont des tests d'intégration -->
-						<include>**/*Test.java</include>
 					</includes>
 				</configuration>
 				<executions>

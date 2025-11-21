@@ -406,13 +406,16 @@ YMLEOF
         // PHASE 3 : QUALITÉ DU CODE
         // ════════════════════════════════════════════════════════════════
         
-        stage('🧪 Tests Unitaires') {
+        stage('🧪 Tests Unitaires et Intégration') {
             steps {
                 script {
-                    echo "🧪 Exécution des tests unitaires..."
+                    echo "🧪 Exécution des tests unitaires et d'intégration..."
+                    echo "   - Tests unitaires (Surefire)"
+                    echo "   - Tests d'intégration (Failsafe)"
+                    echo "   - Génération du rapport JaCoCo agrégé pour SonarQube"
                     sh """
                         . rhDemo/secrets/env-vars.sh
-                        cd rhDemo && ./mvnw test
+                        cd rhDemo && ./mvnw verify
                     """
                 }
             }
@@ -425,6 +428,7 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Analyse de qualité du code avec SonarQube...'
+                    echo '   - Envoi des métriques de couverture (tests unitaires + intégration)'
                 }
                 withSonarQubeEnv('SonarQube') {
                     sh """
@@ -433,7 +437,8 @@ YMLEOF
                         cd rhDemo && ./mvnw sonar:sonar \\
                             -Dsonar.projectKey=rhdemo-api \\
                             -Dsonar.projectName="RHDemo API" \\
-                            -Dsonar.java.binaries=target/classes
+                            -Dsonar.java.binaries=target/classes \\
+                            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                     """
                 }
             }

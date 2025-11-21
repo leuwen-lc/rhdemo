@@ -25,17 +25,21 @@ import java.util.function.Supplier;
 @EnableMethodSecurity
 @Profile("!test") // Désactive cette configuration pour le profil "test"
 public class SecurityConfig {
+    private final GrantedAuthoritiesKeyCloakMapper keycloakmapper;
+
     @Autowired
-    private GrantedAuthoritiesKeyCloakMapper keycloakmapper;
+    public SecurityConfig(GrantedAuthoritiesKeyCloakMapper keycloakmapper) {
+        this.keycloakmapper = keycloakmapper;
+    }
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
 	http 
 	// Active la protection CSRF avec cookie accessible en JavaScript
 	.csrf(csrf -> csrf
-	    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+	    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()) //NOSONAR - Ce cookie doit être lu par le js pour qu'il puisse renvoyer le token attendu par le serveur
 	    .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
 	    // Ignorer CSRF pour les endpoints publics et actuator
-	    .ignoringRequestMatchers("/who", "/error*", "/api-docs", "/actuator/**")
+	    .ignoringRequestMatchers("/who", "/error*", "/api-docs", "/actuator/**") //NOSONAR - désactivation CSRF pour pages spécifiques peu sensibles ou modules annexes prets à l'emploi
 	)
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()

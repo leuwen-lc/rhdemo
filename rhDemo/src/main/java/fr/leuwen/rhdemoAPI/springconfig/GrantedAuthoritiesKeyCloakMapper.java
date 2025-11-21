@@ -33,7 +33,6 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
         Set<GrantedAuthority> mappedAuthorities = new HashSet<>();
 
         authorities.forEach(authority -> {
-           //authority.idtoken.claims(..).key="resource_access"/Value RHDemo={roles=[ROLE_admin]}
             if (OidcUserAuthority.class.isInstance(authority)) {
                 final OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) authority;
                 mappedAuthorities.addAll(extractAuthorities(oidcUserAuthority.getIdToken().getClaims()));

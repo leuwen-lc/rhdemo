@@ -119,31 +119,34 @@ pipeline {
                         set +x
 
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
-                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})" > rhDemo/secrets/env-vars.sh
-                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                        # Utilisation de substitution de variables sans affichage dans stdout
+                        {
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
 
-                        # Mots de passe Keycloak pour environnement staging
-                        echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                            # Mots de passe Keycloak pour environnement staging
+                            echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})"
 
-                        # Mots de passe des utilisateurs de test (chiffrés dans SOPS)
-                        echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
+                            # Mots de passe des utilisateurs de test (chiffrés dans SOPS)
+                            echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})"
+
+                            # URLs des serveurs si elles existent
+                            if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                                echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})"
+                            fi
+
+                            if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                                echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
+                            fi
+                        } > rhDemo/secrets/env-vars.sh 2>&1
 
                         # Réactiver l'écho des commandes
                         set -x
-                        
-                        # Exporter les URLs des serveurs si elles existent dans le fichier de secrets
-                        if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                            echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        fi
-                        
-                        if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                            echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})" >> rhDemo/secrets/env-vars.sh
-                        fi
                         
                         # Afficher (sans montrer les valeurs)
                         echo "✅ Variables d'environnement préparées"
@@ -564,29 +567,22 @@ YMLEOF
                     # Source les secrets SOPS
                     . rhDemo/secrets/env-vars.sh
 
-                    # Réactiver l'écho pour les commandes non sensibles
-                    set -x
-
                     cd ${STAGING_INFRA_PATH}
 
                     # Variables d'environnement pour Docker Compose
                     # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
-                    # On exporte UNIQUEMENT le tag (pas rhdemo-api: qui est déjà dans le YAML)
                     export APP_VERSION=build-${env.BUILD_NUMBER}
-                    # WORKSPACE pour docker-compose.yml (chemin absolu du répertoire infra/staging)
                     export WORKSPACE=\$(pwd)
-                    
+
                     # Export explicite des variables critiques (pour éviter que .env les écrase)
-                    # Bases de données
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"
                     export KEYCLOAK_DB_PASSWORD="\${KEYCLOAK_DB_PASSWORD}"
-
-                    # Keycloak Admin
                     export KEYCLOAK_ADMIN_USER="\${KEYCLOAK_ADMIN_USER}"
                     export KEYCLOAK_ADMIN_PASSWORD="\${KEYCLOAK_ADMIN_PASSWORD}"
-
-                    # OAuth2 Client Secrets
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+
+                    # Réactiver l'écho APRÈS les exports de secrets
+                    set -x
 
                     # Confirmation (sans afficher les secrets)
                     echo "✅ Secrets exportés avec succès (secrets non affichés pour sécurité)"

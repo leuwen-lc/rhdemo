@@ -69,17 +69,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         log.warn("Erreur de type de paramètre: {}", ex.getMessage());
-        
-        String message = String.format("Le paramètre '%s' doit être de type %s", 
-            ex.getName(), 
-            ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "inconnu");
-        
+
+        Class<?> requiredType = ex.getRequiredType();
+        String typeName = requiredType != null ? requiredType.getSimpleName() : "inconnu";
+        String message = String.format("Le paramètre '%s' doit être de type %s",
+            ex.getName(),
+            typeName);
+
         ErrorResponse errorResponse = new ErrorResponse(
             HttpStatus.BAD_REQUEST.value(),
             message,
             LocalDateTime.now()
         );
-        
+
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
     

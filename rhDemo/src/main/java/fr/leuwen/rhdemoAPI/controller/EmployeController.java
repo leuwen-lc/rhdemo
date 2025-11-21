@@ -20,11 +20,15 @@ import jakarta.validation.Valid;
 
 @RestController
 public class EmployeController {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(EmployeController.class);
-    
+
+	private final EmployeService employeservice;
+
 	@Autowired
-	private EmployeService employeservice;
+	public EmployeController(EmployeService employeservice) {
+		this.employeservice = employeservice;
+	}
 	
 	
 	@GetMapping("/api/employes")

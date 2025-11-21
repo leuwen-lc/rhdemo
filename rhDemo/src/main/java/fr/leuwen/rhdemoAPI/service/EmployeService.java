@@ -13,8 +13,12 @@ import fr.leuwen.rhdemoAPI.repository.EmployeRepository;
 
 @Service
 public class EmployeService {
+	private final EmployeRepository employerepository;
+
 	@Autowired
-	private EmployeRepository employerepository;
+	public EmployeService(EmployeRepository employerepository) {
+		this.employerepository = employerepository;
+	}
 	
 	public Employe getEmploye(final Long id) {
         return employerepository.findById(id)

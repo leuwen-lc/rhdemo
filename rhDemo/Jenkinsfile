@@ -951,24 +951,27 @@ YMLEOF
                         # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
                         APP_URL="https://rhdemo.staging.local"
                         KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
-                        
-                        # IMPORTANT: Exporter les credentials Keycloak comme variables d'environnement
-                        # BaseSeleniumTest.java cherche RHDEMOTEST_USER et RHDEMOTEST_PWD (pas les propriétés Maven)
-                        # Utilisation de manager (ROLE_consult + ROLE_MAJ) pour tester toutes les opérations
-                        export RHDEMOTEST_USER="manager"
-                        export RHDEMOTEST_PWD="\${RHDEMO_TEST_PWD_USER_MAJ}"
-                        
-                        echo "📍 Configuration des URLs de test:"
+
+                        # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
+                        # Ces variables seront passées via propriétés Maven à TestConfig
+                        TEST_USERNAME="manager"
+                        TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
+
+                        echo "📍 Configuration des tests Selenium:"
                         echo "   APP_URL: \${APP_URL}"
                         echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
-                        echo "   RHDEMOTEST_USER: \${RHDEMOTEST_USER} (ROLE_consult + ROLE_MAJ)"
+                        echo "   TEST_USERNAME: \${TEST_USERNAME} (ROLE_consult + ROLE_MAJ)"
+                        echo "   Mode: Headless"
                         echo "   (Healthcheck HTTPS validé avant ce stage)"
-                        
-                        # Utilisation du wrapper Maven du projet principal
+
+                        # Lancement des tests avec TOUTES les configs via propriétés Maven
+                        # TestConfig charge dans l'ordre: Maven properties > env vars > YAML
                         cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
                             -Dtest.baseurl=\${APP_URL} \\
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL} \\
                             -Dselenium.headless=true \\
-                            -Dtest.keycloak.url=\${KEYCLOAK_URL}
+                            -Dtest.username=\${TEST_USERNAME} \\
+                            -Dtest.password=\${TEST_PASSWORD}
                     """
                 }
             }

@@ -1,6 +1,5 @@
 package fr.leuwen.rhdemoAPI.springconfig;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -27,7 +26,7 @@ import java.util.function.Supplier;
 public class SecurityConfig {
     private final GrantedAuthoritiesKeyCloakMapper keycloakmapper;
 
-    @Autowired
+    // Autowired par défaut avec Spring Boot
     public SecurityConfig(GrantedAuthoritiesKeyCloakMapper keycloakmapper) {
         this.keycloakmapper = keycloakmapper;
     }

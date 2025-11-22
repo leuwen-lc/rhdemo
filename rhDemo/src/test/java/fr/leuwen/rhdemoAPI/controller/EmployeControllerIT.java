@@ -59,9 +59,9 @@ public class EmployeControllerIT {
         mockMvc.perform(get("/api/employes/page"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.totalElements").value(4))
-                .andExpect(jsonPath("$.size").value(20))
-                .andExpect(jsonPath("$.number").value(0));
+                .andExpect(jsonPath("$.page.totalElements").value(4))
+                .andExpect(jsonPath("$.page.size").value(20))
+                .andExpect(jsonPath("$.page.number").value(0));
     }
 
     @Test
@@ -72,7 +72,7 @@ public class EmployeControllerIT {
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
-                .andExpect(jsonPath("$.size").value(2));
+                .andExpect(jsonPath("$.page.size").value(2));
     }
 
     @Test

@@ -39,7 +39,7 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
 
             } else if (OAuth2UserAuthority.class.isInstance(authority)) {
                     final OAuth2UserAuthority oauth2UserAuthority = (OAuth2UserAuthority) authority;
-                    final Map userAttributes = oauth2UserAuthority.getAttributes();
+                    final Map<String, Object> userAttributes = oauth2UserAuthority.getAttributes();
                     mappedAuthorities.addAll(extractAuthorities(userAttributes));
             }
         });
@@ -47,22 +47,35 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
         return mappedAuthorities;
     }
 
+    /**
+     * Extrait les authorities depuis les claims du token JWT Keycloak
+     * @param claims Les claims du token JWT
+     * @return Collection des authorities extraites
+     */
+    @SuppressWarnings("unchecked") // Les casts sont nécessaires car les claims JWT sont typées Object
     private Collection<GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
-    log.debug("Extraction des authorities depuis les claims: {}", claims);
-	//On va chercher l'information sur le role dans l'arbre de données de toutes les claims
-	Collection<GrantedAuthority> grantedAuths = new ArrayList<GrantedAuthority>();
-    Map<String, Object> ressourceAccess = (Map<String, Object>) claims.get("resource_access");
-    if (ressourceAccess==null) {
-        throw new IllegalStateException("Pas de claim 'resource_access' trouvée dans le ID token, probablement due à un configuration non faite dans Keycloak");
-    }
-	Map<String,Object> clientID=(Map<String,Object>)ressourceAccess.get(rhDemoClientID);
-	List<String> roles=(List<String>)clientID.get("roles");
-    if (roles!=null) {	
-	    grantedAuths=roles.stream().filter(e->e.startsWith("ROLE_"))
-		      .map(SimpleGrantedAuthority::new)
-		      .collect(Collectors.toList());      
-	}
-    return grantedAuths;
+        log.debug("Extraction des authorities depuis les claims: {}", claims);
+        // On va chercher l'information sur le role dans l'arbre de données de toutes les claims
+        Collection<GrantedAuthority> grantedAuths = new ArrayList<>();
+
+        // Cast nécessaire : resource_access est un Map mais claims.get() retourne Object
+        Map<String, Object> ressourceAccess = (Map<String, Object>) claims.get("resource_access");
+        if (ressourceAccess == null) {
+            throw new IllegalStateException("Pas de claim 'resource_access' trouvée dans le ID token, probablement due à un configuration non faite dans Keycloak");
+        }
+
+        // Cast nécessaire : clientID est un Map mais ressourceAccess.get() retourne Object
+        Map<String, Object> clientID = (Map<String, Object>) ressourceAccess.get(rhDemoClientID);
+
+        // Cast nécessaire : roles est une List mais clientID.get() retourne Object
+        List<String> roles = (List<String>) clientID.get("roles");
+        if (roles != null) {
+            grantedAuths = roles.stream()
+                .filter(e -> e.startsWith("ROLE_"))
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+        }
+        return grantedAuths;
     }
 }
 

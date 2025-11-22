@@ -2,7 +2,6 @@ package fr.leuwen.rhdemoAPI.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +24,7 @@ public class EmployeController {
 
 	private final EmployeService employeservice;
 
-	@Autowired
+	//Autowired par défaut avec Spring Boot
 	public EmployeController(EmployeService employeservice) {
 		this.employeservice = employeservice;
 	}

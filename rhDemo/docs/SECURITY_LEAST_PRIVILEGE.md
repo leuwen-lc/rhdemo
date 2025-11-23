@@ -96,18 +96,26 @@ EOF
 Jenkins copie le fichier dans le container avec `docker cp` au lieu d'utiliser un bind mount :
 
 ```bash
-# Créer le répertoire si nécessaire
-docker exec rhdemo-staging-app mkdir -p /workspace/secrets
+# Créer le répertoire en tant que root (l'utilisateur CNB n'a pas les droits)
+docker exec --user root rhdemo-staging-app mkdir -p /workspace/secrets
+docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets
 
-# Copier le fichier avec permissions read-only
+# Copier le fichier
 docker cp secrets-rhdemo.yml rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
-docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+
+# Définir les permissions (read-only) et le propriétaire
+docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets/secrets-rhdemo.yml
+docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 ```
 
 **Pourquoi `docker cp` au lieu de volume mount ?**
 - Évite les problèmes de chemins relatifs entre Jenkins container et Docker host
 - Cohérent avec les autres fichiers (nginx.conf, pgddl.sql)
 - Évite les problèmes de layers Docker corrompus
+
+**Note sur les permissions Paketo** :
+- L'image Paketo utilise l'utilisateur `cnb` (Cloud Native Buildpacks) non-root
+- Les opérations sur `/workspace` nécessitent `--user root` puis `chown cnb:cnb`
 
 ### 3. Spring Boot - Configuration
 

@@ -55,16 +55,20 @@ Message de confirmation :
 echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé"
 ```
 
-#### [Jenkinsfile:706-741](../Jenkinsfile#L706-L741)
+#### [Jenkinsfile:706-747](../Jenkinsfile#L706-L747)
 Injection du fichier dans le container via `docker cp` :
 ```bash
 stage('🔐 Injection secrets rhDemo dans container') {
-    # Créer le répertoire /workspace/secrets
-    docker exec rhdemo-staging-app mkdir -p /workspace/secrets
+    # Créer le répertoire en tant que root (l'utilisateur CNB n'a pas les droits)
+    docker exec --user root rhdemo-staging-app mkdir -p /workspace/secrets
+    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets
 
-    # Copier le fichier avec permissions read-only
+    # Copier le fichier
     docker cp secrets-rhdemo.yml rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
-    docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+
+    # Définir les permissions (read-only) et le propriétaire
+    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets/secrets-rhdemo.yml
+    docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 }
 ```
 

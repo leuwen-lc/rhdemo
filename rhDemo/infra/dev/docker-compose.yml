@@ -1,0 +1,72 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # Base de données PostgreSQL pour l'application RHDemo (dev local)
+  # ═══════════════════════════════════════════════════════════════
+  rhdemo-db-dev:
+    image: postgres:16-alpine
+    container_name: rhdemo-dev-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: dbrhdemo
+      POSTGRES_USER: dbrhdemo
+      POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD:-changeme}
+    volumes:
+      - rhdemo-dev-db-data:/var/lib/postgresql/data
+    networks:
+      - rhdemo-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbrhdemo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Keycloak - Serveur d'authentification (dev local avec H2)
+  # ═══════════════════════════════════════════════════════════════
+  keycloak-dev:
+    image: quay.io/keycloak/keycloak:26.4.2
+    container_name: keycloak-dev
+    restart: unless-stopped
+    ports:
+      - "6090:8080"
+    command:
+      - start-dev
+      - --http-enabled=true
+      - --health-enabled=true
+      - --metrics-enabled=true
+    environment:
+      # Admin Keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+
+      # Hostname configuration
+      KC_HOSTNAME_URL: http://localhost:6090
+      KC_HOSTNAME_ADMIN_URL: http://localhost:6090
+
+      # Logging
+      KC_LOG_LEVEL: info
+
+      # H2 database (par défaut en mode dev)
+      # Pas besoin de configuration explicite, H2 est utilisé automatiquement en mode start-dev
+    networks:
+      rhdemo-dev:
+        aliases:
+          - keycloak-dev
+          - keycloak.dev.local
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+networks:
+  rhdemo-dev:
+    name: rhdemo-dev-network
+    driver: bridge
+
+volumes:
+  rhdemo-dev-db-data:
+    name: rhdemo-dev-db-data

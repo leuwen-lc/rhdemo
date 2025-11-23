@@ -723,16 +723,22 @@ YMLEOF
                     fi
 
                     echo "📋 Copie du fichier secrets dans le container..."
-                    # Créer le répertoire /workspace/secrets s'il n'existe pas
-                    docker exec rhdemo-staging-app mkdir -p /workspace/secrets
 
-                    # Copier le fichier avec les bonnes permissions (read-only)
+                    # Créer le répertoire en tant que root, puis changer le propriétaire
+                    # L'utilisateur CNB (Cloud Native Buildpacks) n'a pas les droits root
+                    docker exec --user root rhdemo-staging-app mkdir -p /workspace/secrets
+                    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets
+
+                    # Copier le fichier
                     docker cp "\$SECRETS_FILE" rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
-                    docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+
+                    # Définir les permissions (read-only) et le propriétaire en tant que root
+                    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 
                     echo "✅ Fichier secrets-rhdemo.yml copié dans le container"
                     echo "   Chemin: /workspace/secrets/secrets-rhdemo.yml"
-                    echo "   Permissions: 400 (read-only pour l'app)"
+                    echo "   Permissions: 400 (read-only, propriétaire: cnb)"
 
                     # Vérification (sans afficher le contenu pour sécurité)
                     docker exec rhdemo-staging-app ls -lh /workspace/secrets/secrets-rhdemo.yml

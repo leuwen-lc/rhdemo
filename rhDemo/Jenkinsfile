@@ -130,9 +130,12 @@ pipeline {
                             echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
                             echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})"
 
-                            # Mots de passe des utilisateurs de test (chiffrés dans SOPS)
+                            # Utilisateurs et mots de passe de test (chiffrés dans SOPS)
+                            echo "export RHDEMO_TEST_ID_USER_ADMIN=$(yq eval '.rhdemo.test.iduseradmin' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_ID_USER_MAJ=$(yq eval '.rhdemo.test.idusermaj' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_ID_USER_CONSULT=$(yq eval '.rhdemo.test.iduserconsult' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})"
 
                             # URLs des serveurs si elles existent
@@ -147,7 +150,7 @@ pipeline {
 
                         # Réactiver l'écho des commandes
                         set -x
-                        
+
                         # Afficher (sans montrer les valeurs)
                         echo "✅ Variables d'environnement préparées"
                     '''
@@ -162,7 +165,54 @@ pipeline {
                 }
             }
         }
-        
+
+        stage('🔐 Extraction secrets rhDemo (moindre privilège)') {
+            steps {
+                script {
+                    echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo (uniquement les secrets nécessaires)...'
+                    echo '   ⚠️  Principe du moindre privilège: rhDemo ne reçoit QUE ses propres secrets'
+                    echo '   ✅ Exclus: mots de passe admin Keycloak, secrets infra, etc.'
+                }
+
+                sh '''
+                    # SÉCURITÉ: Désactiver l'écho des commandes
+                    set +x
+
+                    # Source les secrets
+                    . rhDemo/secrets/env-vars.sh
+
+                    # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
+                    # Ce fichier sera monté dans le container Docker de rhDemo
+                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+# Secrets pour l'application rhDemo (environnement staging)
+# Généré automatiquement par Jenkins
+# ⚠️  Ce fichier ne contient QUE les secrets nécessaires à rhDemo (moindre privilège)
+
+rhdemo:
+  datasource:
+    password:
+      pg: ${RHDEMO_DATASOURCE_PASSWORD_PG}
+      h2: ${RHDEMO_DATASOURCE_PASSWORD_H2}
+  client:
+    registration:
+      keycloak:
+        client:
+          secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+EOF
+
+                    # Réactiver l'écho
+                    set -x
+
+                    echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
+                    echo "   - datasource.password.pg: ✅"
+                    echo "   - datasource.password.h2: ✅"
+                    echo "   - client.registration.keycloak.client.secret: ✅"
+                    echo "   - Keycloak admin password: ❌ (non inclus - sécurité)"
+                    echo "   - Keycloak DB password: ❌ (non inclus - sécurité)"
+                '''
+            }
+        }
+
         stage('🔧 Configuration rhDemoInitKeycloak') {
             steps {
                 script {
@@ -246,25 +296,25 @@ keycloak:
   # Configuration des Utilisateurs de test
   # ========================================
   users:
-    - username: admin
+    - username: ${RHDEMO_TEST_ID_USER_ADMIN}
       password: ${RHDEMO_TEST_PWD_USER_ADMIN}
-      email: admin@rhdemo.local
+      email: ${RHDEMO_TEST_ID_USER_ADMIN}@rhdemo.local
       first-name: Admin
       last-name: RHDemo
       roles:
         - ROLE_admin
 
-    - username: consultant
+    - username: ${RHDEMO_TEST_ID_USER_CONSULT}
       password: ${RHDEMO_TEST_PWD_USER_CONSULT}
-      email: consultant@rhdemo.local
+      email: ${RHDEMO_TEST_ID_USER_CONSULT}@rhdemo.local
       first-name: Jean
       last-name: Consultant
       roles:
         - ROLE_consult
 
-    - username: manager
+    - username: ${RHDEMO_TEST_ID_USER_MAJ}
       password: ${RHDEMO_TEST_PWD_USER_MAJ}
-      email: manager@rhdemo.local
+      email: ${RHDEMO_TEST_ID_USER_MAJ}@rhdemo.local
       first-name: Marie
       last-name: Manager
       roles:
@@ -954,7 +1004,8 @@ YMLEOF
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig
-                        TEST_USERNAME="manager"
+                        # Username chargé depuis secrets-staging.yml (pas de valeur en dur)
+                        TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 
                         echo "📍 Configuration des tests Selenium:"
@@ -1258,6 +1309,12 @@ YMLEOF
                         # Écraser avec des zéros avant suppression (sécurité supplémentaire)
                         shred -vfz -n 3 rhDemo/secrets/env-vars.sh 2>/dev/null || rm -f rhDemo/secrets/env-vars.sh
                         echo "✅ env-vars.sh supprimé de manière sécurisée"
+                    fi
+
+                    if [ -f "rhDemo/secrets/secrets-rhdemo.yml" ]; then
+                        # Nettoyer aussi le fichier secrets-rhdemo.yml généré pour rhDemo (contient secrets limités)
+                        shred -vfz -n 3 rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || rm -f rhDemo/secrets/secrets-rhdemo.yml
+                        echo "✅ secrets-rhdemo.yml (rhDemo) supprimé de manière sécurisée"
                     fi
 
                     if [ -f "${SECRETS_DECRYPTED}" ]; then

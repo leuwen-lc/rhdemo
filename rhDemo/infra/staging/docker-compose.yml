@@ -102,25 +102,29 @@ services:
       # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
       SPRING_PROFILES_ACTIVE: staging
       SERVER_PORT: 9000
-      
+
       # Base de données PostgreSQL
       SPRING_DATASOURCE_URL: jdbc:postgresql://rhdemo-db:5432/rhdemo
       SPRING_DATASOURCE_USERNAME: rhdemo
-      SPRING_DATASOURCE_PASSWORD: ${RHDEMO_DB_PASSWORD}
-      
-      # OAuth2/Keycloak
-      # Configuration définie dans src/main/resources/application-staging.yml
-      # Seuls les secrets sont passés en variables d'environnement
-      RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-      
+
+      # ⚠️  SÉCURITÉ: Les secrets (mot de passe DB, secret Keycloak client)
+      # sont chargés depuis /workspace/secrets/secrets-rhdemo.yml via spring.config.import
+      # au lieu d'être passés en variables d'environnement.
+      # Ce fichier contient UNIQUEMENT les secrets nécessaires à rhDemo (moindre privilège)
+      # Exclus: mots de passe admin Keycloak, secrets infra, etc.
+
       # Actuator
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when_authorized
-      
+
       # JVM Options (Paketo)
       BPL_JVM_THREAD_COUNT: 50
       BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+    volumes:
+      # Montage du fichier secrets-rhdemo.yml généré par Jenkins (principe du moindre privilège)
+      # Ce fichier contient uniquement les secrets rhDemo (pas les secrets admin Keycloak)
+      - ../../secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
     depends_on:
       rhdemo-db:
         condition: service_healthy

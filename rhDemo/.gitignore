@@ -9,7 +9,7 @@ META-INF/
 
 ### Secrets ###
 # Ne pas commiter les secrets de dev local
-secrets/secrets.yml
+secrets/secrets-rhdemo.yml
 # Ne pas commiter les fichiers déchiffrés temporaires
 secrets/*-temp.yml
 secrets/*-decrypted.yml

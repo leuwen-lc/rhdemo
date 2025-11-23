@@ -742,6 +742,12 @@ YMLEOF
 
                     # Vérification (sans afficher le contenu pour sécurité)
                     docker exec rhdemo-staging-app ls -lh /workspace/secrets/secrets-rhdemo.yml
+
+                    # Redémarrer l'application pour charger les secrets
+                    # Spring Boot charge spring.config.import au démarrage uniquement
+                    echo "🔄 Redémarrage de l'application pour charger les secrets..."
+                    docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} restart rhdemo-app
+                    echo "✅ Application redémarrée (healthcheck dans le stage dédié)"
                 """
             }
         }

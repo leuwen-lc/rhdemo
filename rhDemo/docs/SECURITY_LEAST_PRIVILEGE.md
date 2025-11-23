@@ -119,6 +119,8 @@ docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-
 
 ### 3. Spring Boot - Configuration
 
+Le fichier de secrets est chargé via `spring.config.import` :
+
 ```yaml
 # application.yml
 spring:
@@ -127,6 +129,21 @@ spring:
       - optional:file:./secrets/secrets-rhdemo.yml           # Dev local
       - optional:file:/workspace/secrets/secrets-rhdemo.yml  # Docker staging
 ```
+
+Les secrets sont ensuite référencés de manière uniforme dans tous les profils :
+
+```yaml
+# application.yml et application-staging.yml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-secret: ${rhdemo.client.registration.keycloak.client.secret}
+```
+
+**Note importante** : Le fichier est chargé au **démarrage de Spring Boot** uniquement. Après l'injection du fichier dans le container, Jenkins redémarre automatiquement l'application pour charger les secrets.
 
 ### 4. Nettoyage sécurisé
 

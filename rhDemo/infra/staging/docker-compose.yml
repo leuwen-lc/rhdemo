@@ -121,10 +121,9 @@ services:
       BPL_JVM_THREAD_COUNT: 50
       BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
-    volumes:
-      # Montage du fichier secrets-rhdemo.yml généré par Jenkins (principe du moindre privilège)
-      # Ce fichier contient uniquement les secrets rhDemo (pas les secrets admin Keycloak)
-      - ../../secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
+    # Note: secrets-rhdemo.yml est copié via docker cp au lieu de bind mount
+    # pour éviter les problèmes de layers Docker corrompus et de chemins relatifs
+    # Le fichier est injecté par Jenkins dans le stage "Injection secrets rhDemo dans container"
     depends_on:
       rhdemo-db:
         condition: service_healthy

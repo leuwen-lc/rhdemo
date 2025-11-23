@@ -702,7 +702,44 @@ YMLEOF
                 """
             }
         }
-        
+
+        stage('🔐 Injection secrets rhDemo dans container') {
+            steps {
+                script {
+                    echo '▶ Copie du fichier secrets-rhdemo.yml dans le container rhDemo...'
+                    echo '   Ce fichier contient uniquement les secrets nécessaires à rhDemo (moindre privilège)'
+                }
+                sh """
+                    cd ${STAGING_INFRA_PATH}
+
+                    # Chemin du fichier secrets dans le workspace Jenkins
+                    SECRETS_FILE="../../secrets/secrets-rhdemo.yml"
+
+                    if [ ! -f "\$SECRETS_FILE" ]; then
+                        echo "❌ Erreur: Fichier secrets-rhdemo.yml introuvable"
+                        echo "Recherche dans le workspace:"
+                        find ../../ -name "secrets-rhdemo.yml" || echo "Aucun fichier trouvé"
+                        exit 1
+                    fi
+
+                    echo "📋 Copie du fichier secrets dans le container..."
+                    # Créer le répertoire /workspace/secrets s'il n'existe pas
+                    docker exec rhdemo-staging-app mkdir -p /workspace/secrets
+
+                    # Copier le fichier avec les bonnes permissions (read-only)
+                    docker cp "\$SECRETS_FILE" rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
+                    docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+
+                    echo "✅ Fichier secrets-rhdemo.yml copié dans le container"
+                    echo "   Chemin: /workspace/secrets/secrets-rhdemo.yml"
+                    echo "   Permissions: 400 (read-only pour l'app)"
+
+                    # Vérification (sans afficher le contenu pour sécurité)
+                    docker exec rhdemo-staging-app ls -lh /workspace/secrets/secrets-rhdemo.yml
+                """
+            }
+        }
+
         stage('💾 Initialisation Base de Données') {
             when {
                 expression { params.RUN_SELENIUM_TESTS == true }

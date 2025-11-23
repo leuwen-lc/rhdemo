@@ -55,6 +55,19 @@ Message de confirmation :
 echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé"
 ```
 
+#### [Jenkinsfile:706-741](../Jenkinsfile#L706-L741)
+Injection du fichier dans le container via `docker cp` :
+```bash
+stage('🔐 Injection secrets rhDemo dans container') {
+    # Créer le répertoire /workspace/secrets
+    docker exec rhdemo-staging-app mkdir -p /workspace/secrets
+
+    # Copier le fichier avec permissions read-only
+    docker cp secrets-rhdemo.yml rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
+    docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+}
+```
+
 #### [Jenkinsfile:1314-1317](../Jenkinsfile#L1314-L1317)
 Nettoyage sécurisé :
 ```bash
@@ -65,11 +78,12 @@ fi
 
 ### 3. Infrastructure Docker
 
-#### [infra/staging/docker-compose.yml:127](../infra/staging/docker-compose.yml#L127)
-Montage du volume :
+#### [infra/staging/docker-compose.yml:124-126](../infra/staging/docker-compose.yml#L124-L126)
+Note explicative (le fichier est copié via `docker cp` au lieu d'un bind mount) :
 ```yaml
-volumes:
-  - ../../secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
+# Note: secrets-rhdemo.yml est copié via docker cp au lieu de bind mount
+# pour éviter les problèmes de layers Docker corrompus et de chemins relatifs
+# Le fichier est injecté par Jenkins dans le stage "Injection secrets rhDemo dans container"
 ```
 
 ### 4. Configuration Git

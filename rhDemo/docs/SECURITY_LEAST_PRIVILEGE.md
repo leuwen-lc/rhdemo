@@ -91,19 +91,23 @@ EOF
 }
 ```
 
-### 2. Docker Compose - Montage du fichier
+### 2. Injection du fichier dans le container
 
-```yaml
-rhdemo-app:
-  environment:
-    SPRING_PROFILES_ACTIVE: staging
-    SPRING_DATASOURCE_URL: jdbc:postgresql://rhdemo-db:5432/rhdemo
-    SPRING_DATASOURCE_USERNAME: rhdemo
-    # ⚠️  Pas de SPRING_DATASOURCE_PASSWORD ni de secret Keycloak ici
-  volumes:
-    # Montage du fichier secrets filtré (read-only)
-    - ../../secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
+Jenkins copie le fichier dans le container avec `docker cp` au lieu d'utiliser un bind mount :
+
+```bash
+# Créer le répertoire si nécessaire
+docker exec rhdemo-staging-app mkdir -p /workspace/secrets
+
+# Copier le fichier avec permissions read-only
+docker cp secrets-rhdemo.yml rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
+docker exec rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 ```
+
+**Pourquoi `docker cp` au lieu de volume mount ?**
+- Évite les problèmes de chemins relatifs entre Jenkins container et Docker host
+- Cohérent avec les autres fichiers (nginx.conf, pgddl.sql)
+- Évite les problèmes de layers Docker corrompus
 
 ### 3. Spring Boot - Configuration
 

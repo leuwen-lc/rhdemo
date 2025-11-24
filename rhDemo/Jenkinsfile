@@ -1165,7 +1165,7 @@ YMLEOF
                     echo '▶ Publication des rapports...'
                 }
                 publishHTML([
-                    reportDir: 'target/site/jacoco',
+                    reportDir: 'rhDemo/target/site/jacoco',
                     reportFiles: 'index.html',
                     reportName: 'Code Coverage',
                     allowMissing: true,

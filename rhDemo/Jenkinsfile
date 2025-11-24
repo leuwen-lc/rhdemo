@@ -11,7 +11,11 @@ pipeline {
         APP_NAME = 'rhdemo-api'
         APP_VERSION = '0.0.1-SNAPSHOT'
         JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
-        
+
+        // Configuration notifications email
+        // À configurer : remplacer par votre email ou utiliser Jenkins Credentials
+        //NOTIFICATION_EMAIL = 'moi@monserveur.com'
+
         // Configuration Docker
         DOCKER_IMAGE_NAME = "rhdemo-api"
         DOCKER_IMAGE_TAG = "${APP_VERSION}"
@@ -414,7 +418,33 @@ YMLEOF
                 }
             }
         }
-        
+
+        stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
+            steps {
+                script {
+                    echo '▶ Analyse des vulnérabilités des dépendances (OWASP Dependency-Check)...'
+                    echo '   ⚠️  Le build échouera si vulnérabilités CVSS ≥ 7.0 (High/Critical)'
+                }
+                sh '''
+                    # Charger les secrets pour l'analyse de sécurité
+                    . rhDemo/secrets/env-vars.sh
+                    cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
+                '''
+            }
+            post {
+                always {
+                    publishHTML([
+                        reportDir: 'rhDemo/target',
+                        reportFiles: 'dependency-check-report.html',
+                        reportName: 'OWASP Dependency Check',
+                        allowMissing: true,
+                        keepAll: true,
+                        alwaysLinkToLastBuild: true
+                    ])
+                }
+            }
+        }
+
         stage('🐳 Build Docker Image (Paketo)') {
             steps {
                 script {
@@ -1109,48 +1139,16 @@ YMLEOF
                 }
             }
         }
-        
+
         // ════════════════════════════════════════════════════════════════
-        // PHASE 6 : SÉCURITÉ
-        // ════════════════════════════════════════════════════════════════
-        
-        stage('🔒 Scan Vulnérabilités') {
-            steps {
-                script {
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 6 : SÉCURITÉ'
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Analyse des vulnérabilités des dépendances...'
-                }
-                sh '''
-                    # Charger les secrets pour l'analyse de sécurité
-                    . rhDemo/secrets/env-vars.sh
-                    cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
-                '''
-            }
-            post {
-                always {
-                    publishHTML([
-                        reportDir: 'rhDemo/target',
-                        reportFiles: 'dependency-check-report.html',
-                        reportName: 'OWASP Dependency Check',
-                        allowMissing: true,
-                        keepAll: true,
-                        alwaysLinkToLastBuild: true
-                    ])
-                }
-            }
-        }
-        
-        // ════════════════════════════════════════════════════════════════
-        // PHASE 7 : ARCHIVAGE
+        // PHASE 6 : ARCHIVAGE
         // ════════════════════════════════════════════════════════════════
         
         stage('📚 Archivage Artifacts') {
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 7 : ARCHIVAGE'
+                    echo '  PHASE 6 : ARCHIVAGE'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Archivage du JAR et des rapports...'
                 }
@@ -1176,61 +1174,7 @@ YMLEOF
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 8 : DÉPLOIEMENT STAGING
-        // ════════════════════════════════════════════════════════════════
-        
-        stage('🎭 Déploiement Staging') {
-            when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 8 : DÉPLOIEMENT STAGING'
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Déploiement sur l\'environnement de staging...'
-                }
-                sh '''
-                    # Charger les secrets et URLs de serveurs
-                    . rhDemo/secrets/env-vars.sh
-                    
-                    # Déploiement via SSH ou script de déploiement
-                    echo "Copie du JAR vers le serveur de staging..."
-                    # scp ${JAR_FILE} user@${STAGING_SERVER}:/opt/rhdemo/
-                    
-                    echo "Redémarrage de l'application sur staging..."
-                    # ssh user@${STAGING_SERVER} "systemctl restart rhdemo-api"
-                    
-                    echo "✅ Déploiement staging simulé (décommenter les commandes SSH)"
-                '''
-            }
-        }
-        
-        stage('💨 Tests de Fumée Staging') {
-            when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo '▶ Vérification du déploiement staging...'
-                }
-                sh '''
-                    # Charger les secrets et URLs de serveurs
-                    . rhDemo/secrets/env-vars.sh
-                    
-                    echo "Vérification du healthcheck..."
-                    # curl -f http://${STAGING_SERVER}/actuator/health || exit 1
-                    
-                    echo "Test de l'authentification Keycloak..."
-                    # Tests de base sur les endpoints critiques
-                    
-                    echo "✅ Tests de fumée réussis (décommenter pour activer)"
-                '''
-            }
-        }
-        
-        // ════════════════════════════════════════════════════════════════
-        // PHASE 9 : PRODUCTION
+        // PHASE 7 : PRODUCTION (Simulation)
         // ════════════════════════════════════════════════════════════════
         
         stage('✋ Validation Manuelle') {
@@ -1242,25 +1186,25 @@ YMLEOF
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 9 : PRODUCTION'
+                    echo '  PHASE 7 : PRODUCTION (Simulation)'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Approbation manuelle requise pour la production...'
                 }
                 timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Déployer en production ?', 
+                    input message: 'Déployer en production (SIMULATION) ?', 
                           ok: 'Déployer',
                           submitter: 'admin,deploy-team'
                 }
             }
         }
         
-        stage('💾 Backup Base de Données') {
+        stage('💾 Backup Base de Données (SIMULATION)') {
             when {
                 expression { params.DEPLOY_ENV == 'production' }
             }
             steps {
                 script {
-                    echo '▶ Sauvegarde de la base de données de production...'
+                    echo '▶ Sauvegarde de la base de données de production (SIMULATION)...'
                 }
                 sh '''
                     # Charger les secrets
@@ -1269,18 +1213,18 @@ YMLEOF
                     BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
                     echo "Création du backup: ${BACKUP_FILE}"
                     # pg_dump -h ${PROD_SERVER} -U rhdemo rhdemo > ${BACKUP_FILE}
-                    echo "✅ Backup créé (décommenter pour activer)"
+                    echo "✅ Backup créé (SIMULATION)"
                 '''
             }
         }
         
-        stage('🌐 Déploiement Production') {
+        stage('🌐 Déploiement Production (SIMULATION)') {
             when {
                 expression { params.DEPLOY_ENV == 'production' }
             }
             steps {
                 script {
-                    echo '▶ Déploiement en PRODUCTION...'
+                    echo '▶ Déploiement en PRODUCTION (SIMULATION)...'
                     echo '🚀 Déploiement Blue-Green...'
                 }
                 sh '''
@@ -1303,12 +1247,12 @@ YMLEOF
                     echo "5. Arrêt de l'ancien service (Blue)..."
                     # ssh user@${PROD_SERVER}-blue "systemctl stop rhdemo-api"
                     
-                    echo "✅ Déploiement production simulé (décommenter pour activer)"
+                    echo "✅ Déploiement production (SIMULATION)"
                 '''
             }
         }
         
-        stage('✅ Vérification Post-Déploiement') {
+        stage('✅ Vérification Post-Déploiement (SIMULATION)') {
             when {
                 expression { params.DEPLOY_ENV == 'production' }
             }
@@ -1329,7 +1273,7 @@ YMLEOF
                     echo "Test des endpoints critiques..."
                     # Tests automatisés sur la production
                     
-                    echo "✅ Application en production fonctionnelle"
+                    echo "✅ Application en production fonctionnelle (SIMULATION)"
                 '''
             }
         }
@@ -1379,12 +1323,10 @@ YMLEOF
                     fi
                 '''
 
-                // PHASE 6 : Nettoyage de l'environnement Docker Compose
+                // Conservation de l'environnement Docker Compose pour tests manuels
                 if (params.RUN_SELENIUM_TESTS == true) {
-                    echo '▶ Nettoyage de l\'environnement Docker Compose...'
-                    
-                    // Afficher les logs si le build a échoué
                     def buildResult = currentBuild.result ?: 'SUCCESS'
+
                     if (buildResult != 'SUCCESS') {
                         echo "📋 Récupération des logs Docker (build ${buildResult})..."
                         sh """
@@ -1392,31 +1334,22 @@ YMLEOF
                             docker-compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
                         """
                     }
-                    
-                    // Nettoyage de l'environnement (A désactiver si besoin pour investigation post-échec)
-                    sh '''
-                        cd ${STAGING_INFRA_PATH} || exit 0
-                        
-                        # Déconnecter Jenkins du réseau staging (trouver le conteneur principal)
-                        JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
-                        if [ -n "$JENKINS_CONTAINER" ]; then
-                            docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || true
-                            echo "🔌 Jenkins ($JENKINS_CONTAINER) déconnecté du réseau staging"
-                        fi
-                        
-                        # Arrêt et suppression des containers/volumes/networks Docker Compose
-                        # -v supprime aussi les volumes pour éviter les données résiduelles entre builds
-                        docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
-                        
-                        # Suppression de l'image de build taguée spécifiquement pour ce build
-                        # Évite l'accumulation d'images Docker avec des tags build-XXX
-                        docker rmi ${RHDEMO_IMAGE} 2>/dev/null || true
-                        
-                        echo "✅ Environnement nettoyé"
-                    '''
+
+                    echo '✅ Environnement staging conservé pour tests manuels'
+                    echo '📍 Accès à l\'environnement:'
+                    echo '   - Application rhDemo : https://rhdemo.staging.local'
+                    echo '   - Keycloak Admin     : https://keycloak.staging.local'
+                    echo ''
+                    echo '🔧 Commandes utiles:'
+                    echo "   - Logs app     : docker logs -f rhdemo-staging-app"
+                    echo "   - Logs Keycloak: docker logs -f keycloak-staging"
+                    echo "   - Arrêter      : cd ${STAGING_INFRA_PATH} && docker-compose -p ${COMPOSE_PROJECT_NAME} down -v"
+                    echo ''
+                    echo '⚠️  IMPORTANT: L\'environnement sera automatiquement nettoyé au prochain build'
+                    echo '   Le nettoyage se fait en début de pipeline (stage "Configuration Environnement Test")'
                 }
-                
-                echo 'Note: Le nettoyage du workspace se fait automatiquement entre les builds'
+
+                echo 'Note: Le nettoyage du workspace et de Docker se fait automatiquement au début du prochain build'
             }
         }
         

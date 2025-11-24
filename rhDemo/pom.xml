@@ -305,6 +305,44 @@
 				<artifactId>sonar-maven-plugin</artifactId>
 				<version>4.0.0.4121</version>
 			</plugin>
+
+			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités -->
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>11.1.1</version>
+				<configuration>
+					<!-- Échouer le build si des vulnérabilités sont détectées -->
+					<failBuildOnCVSS>7.0</failBuildOnCVSS>
+
+					<!-- Niveau de log -->
+					<failOnError>true</failOnError>
+
+					<!-- Format des rapports -->
+					<formats>
+						<format>HTML</format>
+						<format>JSON</format>
+					</formats>
+
+					<!-- Suppression des faux positifs (optionnel) -->
+					<!-- <suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile> -->
+
+					<!-- Configuration NVD (National Vulnerability Database) -->
+					<nvdApiServerId>nvd-api</nvdApiServerId>
+					<nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+					<nvdMaxRetryCount>3</nvdMaxRetryCount>
+					<nvdApiDelay>2000</nvdApiDelay>
+
+					<!-- Cache pour améliorer les performances -->
+					<dataDirectory>${project.build.directory}/dependency-check-data</dataDirectory>
+
+					<!-- Analyser aussi les dépendances transitives -->
+					<skipTestScope>false</skipTestScope>
+
+					<!-- Timeout -->
+					<connectionTimeout>30000</connectionTimeout>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 

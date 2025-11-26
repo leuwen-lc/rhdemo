@@ -9,9 +9,9 @@ META-INF/
 
 ### Secrets ###
 # Ne pas commiter les secrets de dev local
-secrets/secrets.yml
+secrets/secrets-rhdemo.yml
 # Autoriser le template et les secrets chiffrés pour CI/CD
-!secrets/secrets.yml.template
+!secrets/secrets-rhdemo.yml.template
 !secrets/secrets-staging.yml
 # Ignorer les backups
 secrets/*.backup

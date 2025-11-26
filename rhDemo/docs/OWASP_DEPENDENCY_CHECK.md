@@ -2,6 +2,8 @@
 
 Guide de configuration et d'utilisation de l'analyse de sécurité des dépendances avec OWASP Dependency-Check.
 
+> **⚠️ IMPORTANT** : Le pipeline Jenkins utilise le **plugin Jenkins OWASP Dependency-Check** au lieu du plugin Maven pour une meilleure compatibilité avec CVSS v4.0. Voir [OWASP_JENKINS_PLUGIN.md](OWASP_JENKINS_PLUGIN.md) pour la documentation complète du plugin Jenkins.
+
 ## Table des matières
 
 - [Qu'est-ce que OWASP Dependency-Check ?](#quest-ce-que-owasp-dependency-check-)

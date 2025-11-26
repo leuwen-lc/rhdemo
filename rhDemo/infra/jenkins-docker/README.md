@@ -48,10 +48,10 @@ docker info
 │  │ • SonarQube Scanner      │                 │                       │
 │  │ • Docker Workflow        │                 ▼                       │
 │  │ • JaCoCo                 │      ┌──────────────────────────┐       │
-│  │ • Slack & Email          │      │   PostgreSQL 16          │       │
-│  │ • BlueOcean UI           │      │   (sonarqube-db)         │       │
-│  └──────────┬───────────────┘      │                          │       │
-│             │                      │ • Base de données        │       │
+│  │ • OWASP Dep-Check        │      │   PostgreSQL 16          │       │
+│  │ • Email                  │      │   (sonarqube-db)         │       │
+│  │ • BlueOcean UI           │      │                          │       │
+│  └──────────┬───────────────┘      │ • Base de données        │       │
 │             │                      │   SonarQube              │       │
 │             │                      │ • Volume persistant      │       │
 │             ▼                      └──────────────────────────┘       │
@@ -83,6 +83,7 @@ docker info
 | Volume | Usage | Taille estimée |
 |--------|-------|----------------|
 | `rhdemo-jenkins-home` | Configuration et jobs Jenkins | ~2 GB |
+| `rhdemo-jenkins-home/dependency-check-data` | Cache NVD OWASP (dans jenkins-home) | ~2-3 GB |
 | `rhdemo-maven-repository` | Cache Maven (.m2) | ~1 GB |
 | `rhdemo-sonarqube-data` | Données SonarQube | ~500 MB |
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
@@ -159,22 +160,26 @@ infra/
    ```env
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
-   
+
    # Serveurs
    STAGING_SERVER_URL=staging.exemple.com
    PROD_SERVER_URL=prod.exemple.com
-   
+
    # GitHub
    GITHUB_TOKEN=ghp_votre_token_github
+
+   # OWASP Dependency-Check (recommandé)
+   NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   # Obtenir une clé sur: https://nvd.nist.gov/developers/request-an-api-key
    ```
 
 ### Configuration Jenkins as Code (JCasC)
 
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
-- ✅ Outils (JDK21, Maven3)
+- ✅ Outils (JDK21, Maven3, Git, OWASP Dependency-Check)
 - ✅ Credentials
-- ✅ Intégrations (SonarQube, Slack)
+- ✅ Intégrations (SonarQube)
 - ✅ Jobs pipeline
 
 Pour modifier la configuration :
@@ -256,8 +261,10 @@ docker-compose exec jenkins bash
 - Performance Plugin
 
 ### Sécurité
-- OWASP Dependency Check
-- Aqua Security Scanner
+- OWASP Dependency-Check Jenkins Plugin
+  - Outil configuré : dependency-check-9.2.0
+  - Support CVSS v4.0
+  - Cache NVD partagé entre builds
 
 ### Docker & Kubernetes
 - Docker Workflow
@@ -378,6 +385,58 @@ SMTP_PORT=587
 SMTP_USER=votre-email@gmail.com
 SMTP_PASSWORD=votre-app-password
 ```
+
+### OWASP Dependency-Check
+
+Le plugin OWASP Dependency-Check est préconfiguré pour analyser les vulnérabilités des dépendances.
+
+**Configuration automatique :**
+- ✅ Plugin installé : `dependency-check-jenkins-plugin`
+- ✅ Outil configuré : `dependency-check-9.2.0`
+- ✅ Support CVSS v4.0
+- ✅ Cache NVD partagé dans `JENKINS_HOME/dependency-check-data/`
+
+**Configuration de la clé API NVD (recommandé) :**
+
+Pour éviter les limitations de taux (rate limiting) de l'API NVD :
+
+1. **Obtenir une clé API gratuite :**
+   - Aller sur https://nvd.nist.gov/developers/request-an-api-key
+   - Remplir le formulaire avec votre email professionnel
+   - Confirmer l'email
+   - Vous recevrez une clé au format : `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+
+2. **Ajouter la clé dans `.env` :**
+   ```env
+   NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+   ```
+
+3. **Créer le credential dans Jenkins :**
+   - Aller dans **Manage Jenkins** → **Manage Credentials**
+   - Cliquer sur **(global)** sous **Stores scoped to Jenkins**
+   - **Add Credentials**
+   - Remplir :
+     - **Kind** : Secret text
+     - **Scope** : Global
+     - **Secret** : Coller votre clé API NVD
+     - **ID** : `nvd-api-key`
+     - **Description** : `NVD API Key for OWASP Dependency-Check`
+   - **Create**
+
+4. **Redémarrer Jenkins :**
+   ```bash
+   docker-compose restart jenkins
+   ```
+
+**Sans clé API :**
+- Limite : 10 requêtes / 30 secondes
+- Risque de timeout au premier scan (téléchargement complet NVD ~2-3 GB)
+
+**Avec clé API :**
+- Limite : 50 requêtes / 30 secondes
+- Scans plus rapides et fiables
+
+**Voir la documentation complète :** [../../docs/OWASP_JENKINS_PLUGIN.md](../../docs/OWASP_JENKINS_PLUGIN.md)
 
 ## 🔧 Dépannage
 

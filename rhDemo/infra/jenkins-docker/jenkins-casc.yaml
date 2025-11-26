@@ -70,6 +70,16 @@ tool:
       - name: "Default"
         home: "git"
 
+  # OWASP Dependency-Check
+  dependencyCheck:
+    installations:
+      - name: "dependency-check-9.2.0"
+        properties:
+          - installSource:
+              installers:
+                - dependencyCheckInstaller:
+                    id: "9.2.0"
+
 # ═══════════════════════════════════════════════════════════════════
 # CREDENTIALS
 # ⚠️  Les credentials sont gérés manuellement dans Jenkins UI
@@ -107,6 +117,13 @@ tool:
 #    - ID: jenkins-sonar-token
 #    - Secret: ${SONAR_TOKEN}
 #    - Description: SonarQube Authentication Token
+#
+# 7. nvd-api-key (Secret text - recommandé pour OWASP Dependency-Check)
+#    - Type: Secret text
+#    - ID: nvd-api-key
+#    - Secret: ${NVD_API_KEY}
+#    - Description: NVD API Key for OWASP Dependency-Check
+#    - Obtenir une clé sur: https://nvd.nist.gov/developers/request-an-api-key
 # ═══════════════════════════════════════════════════════════════════
 # credentials:
 #   system:

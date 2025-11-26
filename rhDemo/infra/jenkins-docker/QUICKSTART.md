@@ -41,7 +41,13 @@ POSTGRES_DB_PASSWORD=votre-mdp-postgres
 # Optionnel (pour déploiement)
 STAGING_SERVER_URL=staging.exemple.com
 PROD_SERVER_URL=prod.exemple.com
+
+# Recommandé (pour OWASP Dependency-Check)
+NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# Obtenir sur: https://nvd.nist.gov/developers/request-an-api-key
 ```
+
+**💡 Astuce** : Utilisez `./configure-nvd-key.sh` pour configurer facilement la clé API NVD.
 
 ## 🎯 Créer un pipeline RHDemo
 

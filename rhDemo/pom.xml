@@ -306,7 +306,14 @@
 				<version>4.0.0.4121</version>
 			</plugin>
 
-			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités -->
+			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités
+			     NOTE: Le pipeline Jenkins utilise le plugin Jenkins OWASP Dependency-Check
+			           au lieu de ce plugin Maven pour une meilleure compatibilité CVSS v4.0.
+			           Ce plugin Maven est conservé pour usage local uniquement.
+
+			     Usage local : ./mvnw org.owasp:dependency-check-maven:check
+			     Documentation: docs/OWASP_JENKINS_PLUGIN.md
+			-->
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>

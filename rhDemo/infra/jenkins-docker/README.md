@@ -160,10 +160,6 @@ infra/
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
    
-   # Secrets RHDemo
-   KEYCLOAK_CLIENT_SECRET=votre-secret-keycloak
-   POSTGRES_DB_PASSWORD=votre-mdp-postgres
-   
    # Serveurs
    STAGING_SERVER_URL=staging.exemple.com
    PROD_SERVER_URL=prod.exemple.com

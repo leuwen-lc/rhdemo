@@ -2,7 +2,6 @@ package fr.leuwen.rhdemoAPI.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,11 +19,15 @@ import jakarta.validation.Valid;
 
 @RestController
 public class EmployeController {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(EmployeController.class);
-    
-	@Autowired
-	private EmployeService employeservice;
+
+	private final EmployeService employeservice;
+
+	//Autowired par défaut avec Spring Boot
+	public EmployeController(EmployeService employeservice) {
+		this.employeservice = employeservice;
+	}
 	
 	
 	@GetMapping("/api/employes")

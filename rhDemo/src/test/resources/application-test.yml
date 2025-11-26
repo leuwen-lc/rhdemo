@@ -5,7 +5,7 @@ spring:
   # Import des secrets pour les tests
   config:
     import:
-      - optional:file:./secrets/secrets.yml
+      - optional:file:./secrets/secrets-rhdemo.yml
       - optional:file:./secrets/secrets-dev.yml
   
   datasource:

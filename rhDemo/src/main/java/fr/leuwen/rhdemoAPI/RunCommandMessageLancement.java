@@ -1,20 +1,21 @@
 package fr.leuwen.rhdemoAPI;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-
-import fr.leuwen.rhdemoAPI.service.GenereMessageLancement;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class RunCommandMessageLancement implements CommandLineRunner {
 
-	@Autowired
-	private GenereMessageLancement gml;
+	@Value("${fr.leuwen.rhdemoAPI.messagelancement}")
+	private String ml;
+	private static final Logger logger = LoggerFactory.getLogger(RunCommandMessageLancement.class);
+
 	@Override
 	public void run(String... args) throws Exception {
-		System.out.println(gml.donnerMessageLancement());
-
+		logger.info(ml);
 	}
 
 }

@@ -4,69 +4,19 @@
 
 Les tests Selenium s'authentifient **automatiquement** sur Keycloak au démarrage de la suite de tests (une seule fois pour tous les tests).
 
----
+## ⚙️ Paramétrage
 
-## ⚙️ Configuration
+### 1. Fichiers de configuration
 
-### 1. Fichier de configuration
+#### test.yml
+#### test-credentils.yml (à créer à partir du template fourni)
 
-Les identifiants sont définis dans **deux emplacements** :
-
-#### A. TestConfig.java (configuration en dur)
-
-Fichier : `src/test/java/fr/leuwen/rhdemo/tests/config/TestConfig.java`
-
-```java
-// ========== Authentification Keycloak ==========
-
-// URL de la page de login Keycloak
-public static final String KEYCLOAK_LOGIN_URL = "http://localhost:6080/realms/LeuwenRealm";
-
-// Identifiants de test
-public static final String TEST_USERNAME = "testuser";
-public static final String TEST_PASSWORD = "testpassword";
-
-// Timeout pour l'authentification (secondes)
-public static final int AUTH_TIMEOUT = 20;
-```
-
-#### B. test.properties (configuration externe)
-
-Fichier : `src/test/resources/test.properties`
-
-```properties
-# Authentification Keycloak
-keycloak.url=http://localhost:6080/realms/LeuwenRealm
-keycloak.username=testuser
-keycloak.password=testpassword
-keycloak.timeout=20
-```
-
----
-
-## 🔑 Modifier les identifiants
-
-### Option 1 : Modifier TestConfig.java
-
-```java
-public static final String TEST_USERNAME = "votre-username";
-public static final String TEST_PASSWORD = "votre-password";
-```
-
-### Option 2 : Modifier test.properties
-
-```properties
-keycloak.username=votre-username
-keycloak.password=votre-password
-```
-
-### Option 3 : Variables d'environnement (pour CI/CD)
+### Paramètres initialisables également par variables d'environnement (pour CI/CD)
 
 ```bash
 export KEYCLOAK_USERNAME=votre-username
 export KEYCLOAK_PASSWORD=votre-password
 ```
-
 ---
 
 ## 🚀 Fonctionnement
@@ -95,124 +45,14 @@ export KEYCLOAK_PASSWORD=votre-password
 10. Exécution des tests
 ```
 
-### Code d'authentification
-
-La méthode `authenticateKeycloak()` dans `BaseSeleniumTest.java` :
-
-```java
-private static void authenticateKeycloak() {
-    System.out.println("🔐 Authentification Keycloak en cours...");
-    
-    // 1. Aller sur la page d'accueil
-    driver.get(TestConfig.HOME_URL);
-    
-    // 2. Vérifier si redirection vers Keycloak
-    if (driver.getCurrentUrl().contains("keycloak") || 
-        driver.getCurrentUrl().contains("realms")) {
-        
-        // 3. Attendre le formulaire
-        authWait.until(ExpectedConditions.visibilityOfElementLocated(usernameField));
-        
-        // 4. Remplir les champs
-        driver.findElement(By.id("username")).sendKeys(TEST_USERNAME);
-        driver.findElement(By.id("password")).sendKeys(TEST_PASSWORD);
-        
-        // 5. Soumettre le formulaire
-        driver.findElement(By.id("kc-login")).click();
-        
-        // 6. Attendre la redirection
-        authWait.until(ExpectedConditions.urlContains(BASE_URL));
-    }
-}
-```
-
----
-
-## 📊 Logs d'authentification
-
-### Authentification réussie
-
-```
-🚀 Initialisation du navigateur pour la suite de tests...
-✅ Navigateur firefox initialisé avec succès
-🔐 Authentification Keycloak en cours...
-📋 Page de login Keycloak détectée
-✏️ Username saisi: testuser
-✏️ Password saisi
-🔘 Bouton de connexion cliqué
-✅ Authentification Keycloak réussie !
-🌐 URL actuelle: http://localhost:9000/front/
-```
-
-### Déjà authentifié (cookies présents)
-
-```
-🚀 Initialisation du navigateur pour la suite de tests...
-✅ Navigateur firefox initialisé avec succès
-🔐 Authentification Keycloak en cours...
-ℹ️ Déjà authentifié (pas de redirection vers Keycloak)
-```
-
-### Erreur d'authentification
-
-```
-🚀 Initialisation du navigateur pour la suite de tests...
-✅ Navigateur firefox initialisé avec succès
-🔐 Authentification Keycloak en cours...
-📋 Page de login Keycloak détectée
-✏️ Username saisi: testuser
-✏️ Password saisi
-🔘 Bouton de connexion cliqué
-⚠️ Toujours sur la page Keycloak après authentification
-URL: http://localhost:6080/realms/LeuwenRealm/login-actions/...
-```
-
----
-
-## 🔍 Éléments Keycloak détectés
-
-D'après la page HTML fournie, les éléments suivants sont utilisés :
-
-### Champs de formulaire
-
-| Élément | ID | Type | Description |
-|---------|-----|------|-------------|
-| Username | `username` | `text` | Champ de saisie du nom d'utilisateur |
-| Password | `password` | `password` | Champ de saisie du mot de passe |
-| Submit | `kc-login` | `submit` | Bouton "Sign In" |
-
-### Locators Selenium
-
-```java
-By usernameField = By.id("username");
-By passwordField = By.id("password");
-By loginButton = By.id("kc-login");
-```
-
-### Formulaire complet
-
-```html
-<form id="kc-form-login" 
-      action="http://localhost:6080/realms/LeuwenRealm/login-actions/authenticate?..."
-      method="post">
-    
-    <input id="username" name="username" type="text" />
-    <input id="password" name="password" type="password" />
-    <input id="kc-login" type="submit" value="Sign In"/>
-    
-</form>
-```
-
----
-
 ## 🧪 Test de l'authentification
 
 ### Test manuel
 
 1. **Démarrer Keycloak** (si ce n'est pas déjà fait)
    ```bash
-   # Vérifier que Keycloak tourne sur le port 6080
-   curl -I http://localhost:6080
+   # Vérifier que Keycloak tourne sur le port prévu
+   par exemple curl -I http://localhost:6080
    ```
 
 2. **Démarrer l'application RHDemo**
@@ -263,10 +103,10 @@ By loginButton = By.id("kc-login");
 ```
 
 **Solutions :**
-- Vérifier les identifiants dans `TestConfig.java`
+- Vérifier les identifiants dans les paramètres
 - Tester manuellement dans un navigateur :
   1. Aller sur http://localhost:9000/front/
-  2. Essayer de se connecter avec testuser/testpassword
+  2. Essayer de se connecter avec user/password
 - Créer/vérifier l'utilisateur dans Keycloak Admin Console
 
 ### Problème 3 : Keycloak non démarré
@@ -274,14 +114,6 @@ By loginButton = By.id("kc-login");
 **Symptôme :**
 ```
 java.net.ConnectException: Connection refused
-```
-
-**Solution :**
-```bash
-# Démarrer Keycloak
-docker start keycloak
-# OU
-./keycloak.sh start-dev
 ```
 
 ### Problème 4 : Éléments non trouvés
@@ -292,7 +124,7 @@ NoSuchElementException: Unable to locate element: {"method":"id","selector":"use
 ```
 
 **Solutions :**
-- Vérifier l'URL de Keycloak dans `TestConfig.java`
+- Vérifier l'URL de Keycloak dans le paramétrage
 - Vérifier la structure HTML de la page de login Keycloak
 - Augmenter le timeout d'attente
 
@@ -305,7 +137,7 @@ NoSuchElementException: Unable to locate element: {"method":"id","selector":"use
 1. **Ne JAMAIS commiter les vrais identifiants dans Git**
    ```gitignore
    # .gitignore
-   test.properties
+   test-credentials.yaml
    ```
 
 2. **Utiliser des utilisateurs de test dédiés**
@@ -328,66 +160,12 @@ NoSuchElementException: Unable to locate element: {"method":"id","selector":"use
 
 Avant de lancer les tests :
 
-- [ ] Keycloak est démarré sur http://localhost:6080
-- [ ] L'application RHDemo est démarrée sur http://localhost:9000
+- [ ] Keycloak est démarré par exemple sur http://localhost:6090
+- [ ] L'application RHDemo est démarrée par exemple sur http://localhost:9000
 - [ ] L'utilisateur de test existe dans Keycloak
-- [ ] Les identifiants sont configurés dans TestConfig.java
+- [ ] Les identifiants sont configurés dans test-credentials.yml
 - [ ] Le navigateur (Firefox/Chrome) est installé
 - [ ] WebDriverManager peut télécharger les drivers
-
----
-
-## 🎓 Exemple complet
-
-### 1. Configuration de l'utilisateur Keycloak
-
-```bash
-# Dans Keycloak Admin Console
-1. Aller sur http://localhost:6080/admin
-2. Realm: LeuwenRealm
-3. Users > Add User
-   - Username: testuser
-   - Email: test@example.com
-4. Credentials > Set Password
-   - Password: testpassword
-   - Temporary: OFF
-5. Role Mappings
-   - Ajouter les rôles : consult, MAJ
-```
-
-### 2. Configuration TestConfig.java
-
-```java
-public static final String TEST_USERNAME = "testuser";
-public static final String TEST_PASSWORD = "testpassword";
-```
-
-### 3. Exécution des tests
-
-```bash
-cd /home/leno-vo/git/repository/rhDemoAPITestIHM
-./run-tests.sh
-```
-
-### 4. Résultat attendu
-
-```
-🚀 Initialisation du navigateur pour la suite de tests...
-✅ Navigateur firefox initialisé avec succès
-🔐 Authentification Keycloak en cours...
-📋 Page de login Keycloak détectée
-✏️ Username saisi: testuser
-✏️ Password saisi
-🔘 Bouton de connexion cliqué
-✅ Authentification Keycloak réussie !
-🌐 URL actuelle: http://localhost:9000/front/
-
-[INFO] Running fr.leuwen.rhdemo.tests.EmployeLifecycleTest
-🔵 ÉTAPE 1: Ajout d'un nouvel employé
-✅ Employé ajouté avec succès
-...
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
-```
 
 ---
 

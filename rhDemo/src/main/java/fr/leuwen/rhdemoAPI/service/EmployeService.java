@@ -1,8 +1,5 @@
 package fr.leuwen.rhdemoAPI.service;
 
-import java.util.Optional;
-
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -13,8 +10,12 @@ import fr.leuwen.rhdemoAPI.repository.EmployeRepository;
 
 @Service
 public class EmployeService {
-	@Autowired
-	private EmployeRepository employerepository;
+	private final EmployeRepository employerepository;
+
+	// Autowired par défaut avec Spring Boot
+	public EmployeService(EmployeRepository employerepository) {
+		this.employerepository = employerepository;
+	}
 	
 	public Employe getEmploye(final Long id) {
         return employerepository.findById(id)

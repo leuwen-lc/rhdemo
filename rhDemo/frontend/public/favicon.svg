@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Icône RH : personnage simple -->
+  <!-- Tête -->
+  <circle cx="50" cy="30" r="18" fill="#4A90E2"/>
+  <!-- Corps -->
+  <path d="M50 52c-20 0-35 12-35 27v10h70V79c0-15-15-27-35-27z" fill="#4A90E2"/>
+</svg>

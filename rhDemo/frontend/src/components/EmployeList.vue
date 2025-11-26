@@ -160,7 +160,8 @@ export default {
       try {
         const res = await getEmployesPage(this.currentPage - 1, this.pageSize);
         this.employes = res.data.content;
-        this.totalElements = res.data.totalElements;
+        // Structure PagedModel (VIA_DTO) : les métadonnées sont dans res.data.page
+        this.totalElements = res.data.page.totalElements;
       } catch (e) {
         this.error = 'Erreur de chargement';
       } finally {

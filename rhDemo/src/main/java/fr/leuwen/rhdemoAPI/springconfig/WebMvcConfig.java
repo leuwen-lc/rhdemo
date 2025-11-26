@@ -29,7 +29,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
-    public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
         // Mapper les ressources JavaScript
         registry.addResourceHandler("/js/**")
                 .addResourceLocations("classpath:/static/js/");
@@ -46,8 +46,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/fonts/**")
                 .addResourceLocations("classpath:/static/fonts/");
 
-        // Mapper favicon et autres fichiers à la racine
-        registry.addResourceHandler("/favicon.ico")
-                .addResourceLocations("classpath:/static/favicon.ico");
+        // Mapper favicon et fichiers SVG à la racine
+        registry.addResourceHandler("/favicon.ico", "/favicon.svg")
+                .addResourceLocations("classpath:/static/");
     }
 }

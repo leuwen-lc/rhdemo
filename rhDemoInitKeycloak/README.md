@@ -31,7 +31,7 @@ Cet outil non destiné à la production automatise la configuration minimale de 
 
 Une configuration de Keycloak pour la prod devrait être largement complétée et renforcée. Probablement qu'on fera appel à un Keycloak mutualisé potentiellement déjà existant pour la production.
 
-Cet outil manipule des secrets et crée des utilisateurs fictifs dans l'unique but de test de l'application RHDemo
+Cet outil manipule des secrets et crée des utilisateurs fictifs dans l'unique but de test de l'application RHDemo en dev et en staging
 
 ---
 
@@ -39,8 +39,8 @@ Cet outil manipule des secrets et crée des utilisateurs fictifs dans l'unique b
 
 ### 1. Keycloak en cours d'exécution
 
-- **Keycloak 23.0+** installé et démarré
-- Accessible sur `http://localhost:8080` (ou modifier la configuration)
+- **Keycloak 24.0+** installé et démarré
+- Accessible sur `http://localhost:6090` (ou modifier la configuration)
 - Console d'administration accessible
 
 ### 2. Compte administrateur Keycloak

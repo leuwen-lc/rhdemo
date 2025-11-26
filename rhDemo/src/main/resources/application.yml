@@ -1,13 +1,15 @@
 spring:
   application:
     name: rhdemoAPI
-  
+
   # Import des secrets depuis fichiers externes
-  # En dev local: créer secrets/secrets.yml depuis secrets.yml.template
+  # En dev local: créer secrets/secrets-rhdemo.yml depuis secrets.yml.template
+  # En staging Docker: fichier monté dans /workspace/secrets/secrets-rhdemo.yml
   config:
     import:
-      - optional:file:./secrets/secrets.yml
-  
+      - optional:file:./secrets/secrets-rhdemo.yml
+      - optional:file:/workspace/secrets/secrets-rhdemo.yml
+
   # PostgreSQL (prod)
   datasource:
     url: jdbc:postgresql://localhost:5432/dbrhdemo

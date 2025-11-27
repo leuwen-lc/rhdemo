@@ -34,20 +34,14 @@ nano .env  # Éditer avec vos valeurs
 # OBLIGATOIRE
 JENKINS_ADMIN_PASSWORD=VotreMotDePasseSecurise
 
-# Pour le pipeline RHDemo
-KEYCLOAK_CLIENT_SECRET=votre-secret-keycloak
-POSTGRES_DB_PASSWORD=votre-mdp-postgres
-
-# Optionnel (pour déploiement)
-STAGING_SERVER_URL=staging.exemple.com
-PROD_SERVER_URL=prod.exemple.com
+# Optionnel - SonarQube
+SONAR_TOKEN=votre-token-sonarqube
 
 # Recommandé (pour OWASP Dependency-Check)
 NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 # Obtenir sur: https://nvd.nist.gov/developers/request-an-api-key
 ```
 
-**💡 Astuce** : Utilisez `./configure-nvd-key.sh` pour configurer facilement la clé API NVD.
 
 ## 🎯 Créer un pipeline RHDemo
 
@@ -142,7 +136,7 @@ docker-compose up -d --force-recreate
 
 ⚠️ **CHANGEZ** le mot de passe admin immédiatement !  
 ⚠️ **NE COMMITEZ PAS** le fichier `.env`  
-⚠️ **UTILISEZ HTTPS** en production (nginx fourni)  
+⚠️ **UTILISEZ HTTPS** en production (nginx à ajouter)  
 ⚠️ **SAUVEGARDEZ** régulièrement `/var/jenkins_home`  
 
 ## 📚 Documentation complète

@@ -14,9 +14,9 @@ echo ""
 # ────────────────────────────────────────────────────────────────
 
 echo "1️⃣  Vérification des conteneurs Docker..."
-if docker-compose ps | grep -q "Up"; then
+if docker compose ps | grep -q "Up"; then
     echo "✅ Conteneurs en cours d'exécution"
-    docker-compose ps
+    docker compose ps
 else
     echo "❌ Aucun conteneur en cours d'exécution"
     exit 1
@@ -33,7 +33,7 @@ if curl -sf http://localhost:8080/login > /dev/null; then
     echo "✅ Jenkins accessible sur http://localhost:8080"
 else
     echo "❌ Jenkins non accessible"
-    echo "   Vérifiez les logs: docker-compose logs jenkins"
+    echo "   Vérifiez les logs: docker compose logs jenkins"
     exit 1
 fi
 
@@ -46,16 +46,16 @@ echo ""
 echo "3️⃣  Vérification des outils dans Jenkins..."
 
 echo "   ☕ Java version:"
-docker-compose exec -T jenkins java -version 2>&1 | head -1
+docker compose exec -T jenkins java -version 2>&1 | head -1
 
 echo "   📦 Maven version:"
-docker-compose exec -T jenkins mvn -version | head -1
+docker compose exec -T jenkins mvn -version | head -1
 
 echo "   🐳 Docker version:"
-docker-compose exec -T jenkins docker --version
+docker compose exec -T jenkins docker --version
 
 echo "   🐳 Docker Compose version:"
-docker-compose exec -T jenkins docker-compose --version
+docker compose exec -T jenkins docker compose --version
 
 echo "✅ Tous les outils sont installés"
 
@@ -67,10 +67,10 @@ echo ""
 
 echo "4️⃣  Test Docker-in-Docker..."
 
-if docker-compose exec -T jenkins docker ps > /dev/null 2>&1; then
+if docker compose exec -T jenkins docker ps > /dev/null 2>&1; then
     echo "✅ Docker-in-Docker fonctionne"
     echo "   Conteneurs visibles depuis Jenkins:"
-    docker-compose exec -T jenkins docker ps --format "table {{.Names}}\t{{.Status}}" | head -5
+    docker compose exec -T jenkins docker ps --format "table {{.Names}}\t{{.Status}}" | head -5
 else
     echo "⚠️  Docker-in-Docker ne fonctionne pas correctement"
     echo "   Vérifiez les permissions du socket Docker"
@@ -100,7 +100,7 @@ echo ""
 
 echo "6️⃣  Vérification des plugins Jenkins..."
 
-PLUGINS_COUNT=$(docker-compose exec -T jenkins jenkins-plugin-cli --list 2>/dev/null | wc -l || echo "0")
+PLUGINS_COUNT=$(docker compose exec -T jenkins jenkins-plugin-cli --list 2>/dev/null | wc -l || echo "0")
 if [ "$PLUGINS_COUNT" -gt 50 ]; then
     echo "✅ Plugins installés: $PLUGINS_COUNT plugins"
 else
@@ -116,7 +116,7 @@ echo ""
 
 echo "7️⃣  Vérification Configuration as Code..."
 
-if docker-compose exec -T jenkins test -f /var/jenkins_home/casc_configs/jenkins.yaml; then
+if docker compose exec -T jenkins test -f /var/jenkins_home/casc_configs/jenkins.yaml; then
     echo "✅ Fichier JCasC présent"
 else
     echo "⚠️  Fichier JCasC manquant"
@@ -145,7 +145,7 @@ echo ""
 
 echo "9️⃣  Test Maven (version uniquement)..."
 
-if docker-compose exec -T jenkins mvn --version > /dev/null 2>&1; then
+if docker compose exec -T jenkins mvn --version > /dev/null 2>&1; then
     echo "✅ Maven opérationnel"
 else
     echo "❌ Problème avec Maven"

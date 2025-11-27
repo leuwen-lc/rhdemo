@@ -71,7 +71,7 @@ tool:
         home: "git"
 
   # OWASP Dependency-Check
-  dependencyCheck:
+  dependency-check:
     installations:
       - name: "dependency-check-9.2.0"
         properties:
@@ -93,32 +93,13 @@ tool:
 #    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
 #    - Description: SOPS AGE Private Key for decrypting secrets
 #
-#
-# 3. staging-server-url (Secret text)
-#    - Type: Secret text
-#    - ID: staging-server-url
-#    - Secret: ${STAGING_SERVER_URL}
-#    - Description: Staging Server URL
-#
-# 4. prod-server-url (Secret text)
-#    - Type: Secret text
-#    - ID: prod-server-url
-#    - Secret: ${PROD_SERVER_URL}
-#    - Description: Production Server URL
-#
-# 5. github-token (Secret text - optionnel)
-#    - Type: Secret text
-#    - ID: github-token
-#    - Secret: ${GITHUB_TOKEN}
-#    - Description: GitHub Personal Access Token
-#
-# 6. jenkins-sonar-token (Secret text - optionnel)
+# 2. jenkins-sonar-token (Secret text - optionnel)
 #    - Type: Secret text
 #    - ID: jenkins-sonar-token
 #    - Secret: ${SONAR_TOKEN}
 #    - Description: SonarQube Authentication Token
 #
-# 7. nvd-api-key (Secret text - recommandé pour OWASP Dependency-Check)
+# 3. nvd-api-key (Secret text - recommandé pour OWASP Dependency-Check)
 #    - Type: Secret text
 #    - ID: nvd-api-key
 #    - Secret: ${NVD_API_KEY}
@@ -131,13 +112,14 @@ tool:
 #       - credentials: []
 
 # ═══════════════════════════════════════════════════════════════════
-# CONFIGURATION SONARQUBE
+# CONFIGURATION GLOBALE
 # ═══════════════════════════════════════════════════════════════════
 unclassified:
+  # Configuration SonarQube
   sonarGlobalConfiguration:
     installations:
       - name: "SonarQube"
-        serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
+        serverUrl: "${SONAR_URL:-http://sonarqube:9020}"
         credentialsId: "jenkins-sonar-token"
 
   # Configuration Email
@@ -163,8 +145,8 @@ jobs:
         parameters {
           choice {
             name('DEPLOY_ENV')
-            choices(['none', 'staging', 'production'])
-            description('Environnement de déploiement')
+            choices(['none', 'staging', 'production (simulation)'])
+            description('none=build+tests (sans Docker), staging/production=pipeline complet')
           }
           booleanParam {
             name('RUN_SELENIUM_TESTS')
@@ -190,7 +172,7 @@ jobs:
                 remote {
                   url('https://github.com/leuwen-lc/rhdemo.git')
                 }
-                branches('*/evolutions-deploiement')
+                branches('*/master')
               }
             }
             scriptPath('rhDemo/Jenkinsfile')

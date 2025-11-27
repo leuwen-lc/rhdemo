@@ -149,13 +149,20 @@ NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 
 | Fichier | Type de modification | Lignes modifiées |
 |---------|---------------------|------------------|
-| `plugins.txt` | ✅ Aucune (déjà présent) | - |
-| `jenkins-casc.yaml` | ✏️ Modification | 73-81, 121-126 |
-| `.env.example` | ✏️ Modification | 40-46 |
-| `README.md` | ✏️ Modification | 51, 86, 170-173, 179, 263-266, 388-438 |
-| `QUICKSTART.md` | ✏️ Modification | 45-50 |
+| `plugins.txt` | ✏️ Modification | Ajout `cloudbees-disk-usage-simple` et `dependency-check-jenkins-plugin` |
+| `jenkins-casc.yaml` | ✏️ Modification | 73-81 (outil OWASP), 90-107 (nettoyage credentials) |
+| `.env.example` | ✏️ Modification | 30-35 (OWASP), suppression variables inutilisées |
+| `README.md` | ✏️ Modification | 51, 86, 164-173, 179, 263-266, 388-438 |
+| `QUICKSTART.md` | ✏️ Modification | 37-42 |
 | `configure-nvd-key.sh` | ➕ Nouveau fichier | - |
 | `CHANGELOG_OWASP.md` | ➕ Nouveau fichier | - |
+
+### Variables supprimées (inutilisées)
+
+Les variables suivantes ont été supprimées car non utilisées par le pipeline actuel :
+- `STAGING_SERVER_URL` - Le staging est déployé localement via Docker Compose
+- `PROD_SERVER_URL` - Pas de déploiement en production configuré
+- `GITHUB_TOKEN` - Non utilisé dans le pipeline actuel
 
 ---
 

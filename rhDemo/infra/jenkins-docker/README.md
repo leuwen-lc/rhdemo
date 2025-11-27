@@ -161,12 +161,12 @@ infra/
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
 
-   # Serveurs
-   STAGING_SERVER_URL=staging.exemple.com
-   PROD_SERVER_URL=prod.exemple.com
+   # SonarQube
+   SONAR_TOKEN=votre-token-sonarqube
 
-   # GitHub
-   GITHUB_TOKEN=ghp_votre_token_github
+   # Email notifications
+   SMTP_USER=votre-email@gmail.com
+   SMTP_PASSWORD=votre-mot-de-passe-app
 
    # OWASP Dependency-Check (recommandé)
    NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx

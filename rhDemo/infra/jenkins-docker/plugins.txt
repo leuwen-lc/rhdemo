@@ -28,6 +28,7 @@ maven-plugin:latest
 config-file-provider:latest
 pipeline-maven:latest
 jdk-tool:latest
+cloudbees-disk-usage-simple:latest
 
 # ────────────────────────────────────────────────────────────────
 # QUALITÉ DU CODE

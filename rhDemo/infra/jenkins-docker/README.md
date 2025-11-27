@@ -258,9 +258,9 @@ docker-compose exec jenkins bash
 
 ### Sécurité
 - OWASP Dependency-Check Jenkins Plugin
-  - Outil configuré : dependency-check-9.2.0
-  - Support CVSS v4.0
-  - Cache NVD partagé entre builds
+  - Utilisation : Publication des rapports uniquement (dependencyCheckPublisher)
+  - Exécution : Via plugin Maven 12.1.9 (support CVSS v4.0)
+  - Cache NVD : Local dans target/dependency-check-data/
 
 ### Docker & Kubernetes
 - Docker Workflow
@@ -387,10 +387,10 @@ SMTP_PASSWORD=votre-app-password
 Le plugin OWASP Dependency-Check est préconfiguré pour analyser les vulnérabilités des dépendances.
 
 **Configuration automatique :**
-- ✅ Plugin installé : `dependency-check-jenkins-plugin`
-- ✅ Outil configuré : `dependency-check-9.2.0`
+- ✅ Plugin Maven OWASP : Version 12.1.9 (configuré dans pom.xml)
 - ✅ Support CVSS v4.0
-- ✅ Cache NVD partagé dans `JENKINS_HOME/dependency-check-data/`
+- ✅ Cache NVD local : `rhDemo/target/dependency-check-data/`
+- ✅ Exécution : `./mvnw org.owasp:dependency-check-maven:check`
 
 **Configuration de la clé API NVD (recommandé) :**
 
@@ -401,6 +401,7 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
    - Remplir le formulaire avec votre email professionnel
    - Confirmer l'email
    - Vous recevrez une clé au format : `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
+   - ⚠️ La clé peut prendre 2-24 heures pour être activée
 
 2. **Créer le credential dans Jenkins :**
    - Aller dans **Manage Jenkins** → **Manage Credentials**
@@ -409,22 +410,31 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
    - Remplir :
      - **Kind** : Secret text
      - **Scope** : Global
-     - **Secret** : Coller votre clé API NVD
+     - **Secret** : Coller votre clé API NVD (vérifier qu'il n'y a pas d'espaces)
      - **ID** : `nvd-api-key`
      - **Description** : `NVD API Key for OWASP Dependency-Check`
    - **Create**
 
-3. **Relancer un build** pour vérifier que la clé est bien prise en compte (voir logs Jenkins)
+3. **Tester la clé** avant de relancer Jenkins :
+   ```bash
+   curl -H "apiKey: YOUR_API_KEY" \
+     "https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=1"
+   ```
+   Si la clé est valide, vous verrez un JSON avec `"resultsPerPage": 1`
+
+4. **Relancer un build** pour vérifier que la clé est bien prise en compte (voir logs Jenkins)
 
 **Sans clé API :**
 - Limite : 10 requêtes / 30 secondes
 - Risque de timeout au premier scan (téléchargement complet NVD ~2-3 GB)
+- ✅ Fonctionne avec le cache local si déjà téléchargé
 
 **Avec clé API :**
 - Limite : 50 requêtes / 30 secondes
 - Scans plus rapides et fiables
+- Données NVD à jour
 
-**Voir la documentation complète :** [../../docs/OWASP_JENKINS_PLUGIN.md](../../docs/OWASP_JENKINS_PLUGIN.md)
+**Dépannage clé invalide :** Voir [../../docs/TEST_NVD_API_KEY.md](../../docs/TEST_NVD_API_KEY.md)
 
 ## 🔧 Dépannage
 

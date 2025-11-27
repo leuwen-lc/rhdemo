@@ -444,10 +444,9 @@ YMLEOF
                 // Publier les résultats OWASP
                 dependencyCheckPublisher(
                     pattern: '**/dependency-check-report.xml',
-                    failedTotalCritical: 0,    // Échec si ≥ 1 vulnérabilité Critical (CVSS 9.0-10.0)
-                    failedTotalHigh: 0,         // Échec si ≥ 1 vulnérabilité High (CVSS 7.0-8.9)
-                    unstableTotalCritical: 0,
-                    unstableTotalHigh: 0
+                    failedTotalCritical: 1,    // Échec si ≥ 1 vulnérabilité Critical (CVSS 9.0-10.0)
+                    failedTotalHigh: 1          // Échec si ≥ 1 vulnérabilité High (CVSS 7.0-8.9)
+                    // Pas de seuils unstable* pour éviter la redondance
                 )
             }
         }

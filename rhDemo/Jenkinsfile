@@ -425,27 +425,69 @@ YMLEOF
                     echo '▶ Analyse des vulnérabilités des dépendances (OWASP Dependency-Check)...'
                     echo '   ⚠️  Le build échouera si vulnérabilités CVSS ≥ 7.0 (High/Critical)'
                     echo '   📌 Utilisation du plugin Jenkins OWASP Dependency-Check'
-                }
 
-                // Utiliser le plugin Jenkins au lieu du plugin Maven
-                // (Meilleure compatibilité avec CVSS v4.0 du NVD)
-                dependencyCheck(
-                    additionalArguments: '''
-                        --scan rhDemo/target/classes
-                        --scan rhDemo/pom.xml
-                        --project rhDemo
-                        --format HTML
-                        --format JSON
-                        --format XML
-                        --out rhDemo/target
-                        --failOnCVSS 7.0
-                        --enableExperimental
-                        --nvdValidForHours 24
-                        --nvdMaxRetryCount 5
-                    ''',
-                    odcInstallation: 'dependency-check-9.2.0',
-                    stopBuild: false  // Laisser dependencyCheckPublisher gérer l'échec
-                )
+                    // Tenter de charger la clé API NVD (optionnelle)
+                    def nvdApiKeyArg = ''
+                    try {
+                        withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                            if (env.NVD_API_KEY?.trim()) {
+                                nvdApiKeyArg = "--nvdApiKey ${env.NVD_API_KEY}"
+                                echo '   ✅ Clé API NVD configurée'
+                            }
+                        }
+                    } catch (Exception e) {
+                        echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
+                        echo '   💡 Créez le credential "nvd-api-key" dans Jenkins pour améliorer les performances'
+                    }
+
+                    // Utiliser le plugin Jenkins au lieu du plugin Maven
+                    // (Meilleure compatibilité avec CVSS v4.0 du NVD)
+                    try {
+                        dependencyCheck(
+                            additionalArguments: """
+                                --scan rhDemo/target/classes
+                                --scan rhDemo/pom.xml
+                                --project rhDemo
+                                --format HTML
+                                --format JSON
+                                --format XML
+                                --out rhDemo/target
+                                --failOnCVSS 7.0
+                                --enableExperimental
+                                --nvdValidForHours 24
+                                --nvdMaxRetryCount 5
+                                ${nvdApiKeyArg}
+                            """,
+                            odcInstallation: 'dependency-check-9.2.0',
+                            stopBuild: false  // Laisser dependencyCheckPublisher gérer l'échec
+                        )
+                    } catch (Exception e) {
+                        echo "   ⚠️  Erreur lors de la mise à jour NVD: ${e.message}"
+                        echo '   🔄 Tentative avec les données locales uniquement (--noupdate)...'
+
+                        // Retry sans mise à jour NVD (utilise le cache local)
+                        dependencyCheck(
+                            additionalArguments: """
+                                --scan rhDemo/target/classes
+                                --scan rhDemo/pom.xml
+                                --project rhDemo
+                                --format HTML
+                                --format JSON
+                                --format XML
+                                --out rhDemo/target
+                                --failOnCVSS 7.0
+                                --enableExperimental
+                                --noupdate
+                                ${nvdApiKeyArg}
+                            """,
+                            odcInstallation: 'dependency-check-9.2.0',
+                            stopBuild: false
+                        )
+
+                        echo '   ⚠️  Analyse effectuée avec données NVD locales (potentiellement obsolètes)'
+                        echo '   💡 Configurez une clé API NVD pour obtenir les dernières vulnérabilités'
+                    }
+                }
 
                 // Publier les résultats et définir les seuils
                 dependencyCheckPublisher(

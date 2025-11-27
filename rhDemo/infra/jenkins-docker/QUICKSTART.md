@@ -36,11 +36,9 @@ JENKINS_ADMIN_PASSWORD=VotreMotDePasseSecurise
 
 # Optionnel - SonarQube
 SONAR_TOKEN=votre-token-sonarqube
-
-# Recommandé (pour OWASP Dependency-Check)
-NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-# Obtenir sur: https://nvd.nist.gov/developers/request-an-api-key
 ```
+
+**Note** : La clé NVD API pour OWASP Dependency-Check doit être configurée manuellement dans Jenkins (voir README.md section "Configuration NVD API Key")
 
 
 ## 🎯 Créer un pipeline RHDemo

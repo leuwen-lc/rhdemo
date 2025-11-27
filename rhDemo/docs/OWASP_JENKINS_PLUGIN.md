@@ -56,6 +56,84 @@ Ou via credentials Jenkins :
 
 ## Utilisation dans le Jenkinsfile
 
+### Configuration avec graceful fallback (RECOMMANDÉ)
+
+Cette configuration gère automatiquement les échecs de l'API NVD en utilisant le cache local :
+
+```groovy
+stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
+    steps {
+        script {
+            echo '▶ Analyse des vulnérabilités des dépendances (OWASP Dependency-Check)...'
+            echo '   ⚠️  Le build échouera si vulnérabilités CVSS ≥ 7.0 (High/Critical)'
+
+            // Tenter de charger la clé API NVD (optionnelle)
+            def nvdApiKeyArg = ''
+            try {
+                withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                    if (env.NVD_API_KEY?.trim()) {
+                        nvdApiKeyArg = "--nvdApiKey ${env.NVD_API_KEY}"
+                        echo '   ✅ Clé API NVD configurée'
+                    }
+                }
+            } catch (Exception e) {
+                echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
+            }
+
+            // Tentative avec mise à jour NVD
+            try {
+                dependencyCheck(
+                    additionalArguments: """
+                        --scan rhDemo/target/classes
+                        --scan rhDemo/pom.xml
+                        --project rhDemo
+                        --format HTML --format JSON --format XML
+                        --out rhDemo/target
+                        --failOnCVSS 7.0
+                        --enableExperimental
+                        --nvdValidForHours 24
+                        --nvdMaxRetryCount 5
+                        ${nvdApiKeyArg}
+                    """,
+                    odcInstallation: 'dependency-check-9.2.0',
+                    stopBuild: false
+                )
+            } catch (Exception e) {
+                echo "   ⚠️  Erreur lors de la mise à jour NVD: ${e.message}"
+                echo '   🔄 Tentative avec les données locales uniquement (--noupdate)...'
+
+                // Retry sans mise à jour NVD (utilise le cache local)
+                dependencyCheck(
+                    additionalArguments: """
+                        --scan rhDemo/target/classes
+                        --scan rhDemo/pom.xml
+                        --project rhDemo
+                        --format HTML --format JSON --format XML
+                        --out rhDemo/target
+                        --failOnCVSS 7.0
+                        --enableExperimental
+                        --noupdate
+                        ${nvdApiKeyArg}
+                    """,
+                    odcInstallation: 'dependency-check-9.2.0',
+                    stopBuild: false
+                )
+
+                echo '   ⚠️  Analyse effectuée avec données NVD locales (potentiellement obsolètes)'
+            }
+        }
+
+        dependencyCheckPublisher(
+            pattern: '**/dependency-check-report.xml',
+            failedTotalCritical: 0,
+            failedTotalHigh: 0,
+            unstableTotalCritical: 0,
+            unstableTotalHigh: 0
+        )
+    }
+}
+```
+
 ### Configuration de base
 
 ```groovy
@@ -295,6 +373,28 @@ sh '''
 2. Ajouter dans Jenkins credentials (ID : `nvd-api-key`)
 3. Utiliser `--nvdApiKey ${NVD_API_KEY}` dans le pipeline
 
+### Erreur : "Error updating the NVD Data; the NVD returned a 403 or 404 error"
+
+**Cause** : L'API NVD est indisponible, rate-limitée, ou la clé API n'est pas configurée.
+
+**Solutions** :
+
+1. **Graceful fallback automatique** (recommandé) : Utiliser la configuration avec try-catch qui bascule automatiquement sur `--noupdate` en cas d'échec (voir section "Configuration avec graceful fallback")
+
+2. **Configurer une clé API NVD** :
+   - Obtenir une clé sur https://nvd.nist.gov/developers/request-an-api-key
+   - Créer credential Jenkins : Manage Jenkins → Manage Credentials → Add Credentials
+   - Type : Secret text
+   - ID : `nvd-api-key`
+   - Secret : votre clé API
+
+3. **Forcer l'utilisation du cache local** : Ajouter `--noupdate` aux arguments pour ignorer la mise à jour NVD et utiliser uniquement le cache local
+
+4. **Vérifier la connectivité** :
+   ```bash
+   curl -I https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-2024.json.gz
+   ```
+
 ### Timeout lors du premier scan
 
 **Cause** : Le premier scan télécharge toute la base NVD (~2 GB).
@@ -346,11 +446,12 @@ dependencyCheck(
 ## Recommandations
 
 1. **Utiliser le plugin Jenkins** pour une meilleure compatibilité CVSS v4.0
-2. **Configurer une clé API NVD** pour éviter rate limiting
-3. **Définir `--nvdValidForHours 24`** pour limiter les mises à jour quotidiennes
-4. **Bloquer sur CVSS ≥ 7.0** (High/Critical) uniquement
-5. **Créer un fichier suppression.xml** pour les faux positifs récurrents
-6. **Monitorer le cache** : nettoyer si > 5 GB
+2. **Implémenter le graceful fallback** avec try-catch et `--noupdate` pour gérer les échecs NVD API
+3. **Configurer une clé API NVD** pour éviter rate limiting et améliorer la fiabilité
+4. **Définir `--nvdValidForHours 24`** pour limiter les mises à jour quotidiennes
+5. **Bloquer sur CVSS ≥ 7.0** (High/Critical) uniquement
+6. **Créer un fichier suppression.xml** pour les faux positifs récurrents
+7. **Monitorer le cache** : nettoyer si > 5 GB
 
 ## Références
 

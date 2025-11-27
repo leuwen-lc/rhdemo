@@ -61,10 +61,9 @@ dependencyCheck:
 # ────────────────────────────────────────────────────────────────
 # OWASP DEPENDENCY-CHECK
 # ────────────────────────────────────────────────────────────────
-# NVD API Key pour éviter les limitations de taux
+# NVD API Key : À configurer manuellement dans Jenkins admin/credentials
+# Credential ID : nvd-api-key (Secret text)
 # Obtenir une clé sur: https://nvd.nist.gov/developers/request-an-api-key
-# Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-NVD_API_KEY=your-nvd-api-key
 ```
 
 ---
@@ -81,12 +80,8 @@ NVD_API_KEY=your-nvd-api-key
 2. **Table des volumes** (ligne 86) :
    - Ajout : `rhdemo-jenkins-home/dependency-check-data` | Cache NVD OWASP | ~2-3 GB
 
-3. **Section "Variables importantes"** (lignes 170-173) :
-   ```env
-   # OWASP Dependency-Check (recommandé)
-   NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-   # Obtenir sur: https://nvd.nist.gov/developers/request-an-api-key
-   ```
+3. **Section "Variables importantes"** (lignes 164-170) :
+   - Suppression de `NVD_API_KEY` (doit être configurée comme credential Jenkins, pas via .env)
 
 4. **JCasC description** (ligne 179) :
    - Mise à jour : `Outils (JDK21, Maven3, Git, OWASP Dependency-Check)`
@@ -123,9 +118,9 @@ NVD_API_KEY=your-nvd-api-key
 **Fonctionnalités** :
 - ✅ Détection automatique du fichier `.env`
 - ✅ Validation basique du format de clé
-- ✅ Mise à jour ou ajout de `NVD_API_KEY`
-- ✅ Instructions pour obtenir une clé
+- ✅ Instructions pour obtenir une clé NVD
 - ✅ Option d'ouverture automatique du formulaire NVD
+- ⚠️ **Note** : Le script ne configure plus .env (NVD_API_KEY doit être ajoutée manuellement comme credential Jenkins)
 
 ---
 
@@ -133,15 +128,11 @@ NVD_API_KEY=your-nvd-api-key
 
 **Fichier** : [QUICKSTART.md](QUICKSTART.md)
 
-**Ajout** (lignes 45-50) :
+**Modification** (lignes 41-42) :
+- Suppression de `NVD_API_KEY` de la configuration .env
+- Ajout d'une note indiquant que la clé doit être configurée manuellement dans Jenkins
 
-```env
-# Recommandé (pour OWASP Dependency-Check)
-NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-# Obtenir sur: https://nvd.nist.gov/developers/request-an-api-key
-```
-
-**💡 Astuce** : Utilisez `./configure-nvd-key.sh` pour configurer facilement la clé API NVD.
+**💡 Note** : La clé NVD API doit être configurée comme credential Jenkins (voir README.md)
 
 ---
 
@@ -163,6 +154,7 @@ Les variables suivantes ont été supprimées car non utilisées par le pipeline
 - `STAGING_SERVER_URL` - Le staging est déployé localement via Docker Compose
 - `PROD_SERVER_URL` - Pas de déploiement en production configuré
 - `GITHUB_TOKEN` - Non utilisé dans le pipeline actuel
+- `NVD_API_KEY` - La clé NVD doit être configurée comme credential Jenkins (non injectée via .env)
 
 ---
 
@@ -176,29 +168,14 @@ Les variables suivantes ont été supprimées car non utilisées par le pipeline
    - Confirmer par email
    - Recevoir la clé API
 
-2. **Configurer la clé dans `.env`** :
-   ```bash
-   # Option 1 : Script interactif
-   ./configure-nvd-key.sh
-
-   # Option 2 : Manuellement
-   nano .env
-   # Ajouter : NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-   ```
-
-3. **Créer le credential dans Jenkins** :
+2. **Créer le credential dans Jenkins** :
    - **Manage Jenkins** → **Manage Credentials**
    - **Add Credentials** → **Secret text**
    - **ID** : `nvd-api-key`
    - **Secret** : Coller la clé API NVD
    - **Description** : `NVD API Key for OWASP Dependency-Check`
 
-4. **Redémarrer Jenkins** :
-   ```bash
-   docker-compose restart jenkins
-   ```
-
-5. **Vérifier la configuration** :
+3. **Vérifier la configuration** :
    - **Manage Jenkins** → **Global Tool Configuration**
    - Section **Dependency-Check**
    - Vérifier que `dependency-check-9.2.0` est présent

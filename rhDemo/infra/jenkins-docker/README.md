@@ -161,16 +161,12 @@ infra/
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
 
-   # SonarQube
+   # SonarQube (optionnel)
    SONAR_TOKEN=votre-token-sonarqube
 
-   # Email notifications
+   # Email notifications (optionnel)
    SMTP_USER=votre-email@gmail.com
    SMTP_PASSWORD=votre-mot-de-passe-app
-
-   # OWASP Dependency-Check (recommandé)
-   NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-   # Obtenir une clé sur: https://nvd.nist.gov/developers/request-an-api-key
    ```
 
 ### Configuration Jenkins as Code (JCasC)
@@ -406,12 +402,7 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
    - Confirmer l'email
    - Vous recevrez une clé au format : `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
 
-2. **Ajouter la clé dans `.env` :**
-   ```env
-   NVD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-   ```
-
-3. **Créer le credential dans Jenkins :**
+2. **Créer le credential dans Jenkins :**
    - Aller dans **Manage Jenkins** → **Manage Credentials**
    - Cliquer sur **(global)** sous **Stores scoped to Jenkins**
    - **Add Credentials**
@@ -423,10 +414,7 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
      - **Description** : `NVD API Key for OWASP Dependency-Check`
    - **Create**
 
-4. **Redémarrer Jenkins :**
-   ```bash
-   docker-compose restart jenkins
-   ```
+3. **Relancer un build** pour vérifier que la clé est bien prise en compte (voir logs Jenkins)
 
 **Sans clé API :**
 - Limite : 10 requêtes / 30 secondes

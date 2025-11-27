@@ -341,6 +341,7 @@
 					<formats>
 						<format>HTML</format>
 						<format>JSON</format>
+						<format>XML</format>
 					</formats>
 
 					<!-- Suppression des faux positifs (optionnel) -->

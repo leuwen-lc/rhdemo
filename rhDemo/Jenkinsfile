@@ -426,27 +426,18 @@ YMLEOF
                     echo '   ⚠️  Le build échouera si vulnérabilités CVSS ≥ 7.0 (High/Critical)'
                     echo '   📌 Utilisation du plugin Maven OWASP Dependency-Check 12.1.9'
 
-                    // Charger la clé API NVD depuis Jenkins credentials (optionnel)
-                    def nvdApiKeyParam = ''
-                    try {
-                        withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
-                            if (env.NVD_API_KEY?.trim()) {
-                                nvdApiKeyParam = "-DnvdApiKey=${env.NVD_API_KEY}"
-                                echo '   ✅ Clé API NVD configurée'
-                            } else {
-                                echo '   ⚠️  Credential nvd-api-key trouvé mais vide'
-                            }
-                        }
-                    } catch (Exception e) {
-                        echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
-                        echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
-                    }
-
                     // Exécuter OWASP Dependency-Check via Maven
                     dir('rhDemo') {
-                        sh """
-                            ./mvnw org.owasp:dependency-check-maven:check ${nvdApiKeyParam}
-                        """
+                        try {
+                            withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                                echo '   ✅ Clé API NVD configurée'
+                                sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
+                            }
+                        } catch (Exception e) {
+                            echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
+                            echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
+                            sh './mvnw org.owasp:dependency-check-maven:check'
+                        }
                     }
                 }
 

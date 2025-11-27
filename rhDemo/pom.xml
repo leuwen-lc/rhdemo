@@ -334,8 +334,7 @@
 					<!-- <suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile> -->
 
 					<!-- Configuration NVD (National Vulnerability Database) -->
-					<nvdApiServerId>nvd-api</nvdApiServerId>
-					<nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+					<!-- La clé est passée via -DnvdApiKey en ligne de commande -->
 					<nvdMaxRetryCount>3</nvdMaxRetryCount>
 					<nvdApiDelay>2000</nvdApiDelay>
 

@@ -307,18 +307,17 @@
 			</plugin>
 
 			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités
-			     NOTE: Le pipeline Jenkins utilise le plugin Jenkins OWASP Dependency-Check
-			           au lieu de ce plugin Maven pour une meilleure compatibilité CVSS v4.0.
-			           Ce plugin Maven est conservé pour usage local uniquement.
+			     Version upgradée à 12.1.9 pour support CVSS v4.0
 
-			     Usage local : ./mvnw org.owasp:dependency-check-maven:check
-			     Documentation: docs/OWASP_JENKINS_PLUGIN.md
+			     Usage local : ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+			     Usage Jenkins : Exécuté via Maven avec credential nvd-api-key
 			-->
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
-				<version>12.0.1</version>
+				<version>12.1.9</version>
 				<configuration>
+					<!-- La clé API NVD est passée via -DnvdApiKey en ligne de commande -->
 					<!-- Échouer le build si des vulnérabilités sont détectées -->
 					<failBuildOnCVSS>7.0</failBuildOnCVSS>
 

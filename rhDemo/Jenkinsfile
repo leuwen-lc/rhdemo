@@ -424,72 +424,33 @@ YMLEOF
                 script {
                     echo '▶ Analyse des vulnérabilités des dépendances (OWASP Dependency-Check)...'
                     echo '   ⚠️  Le build échouera si vulnérabilités CVSS ≥ 7.0 (High/Critical)'
-                    echo '   📌 Utilisation du plugin Jenkins OWASP Dependency-Check'
+                    echo '   📌 Utilisation du plugin Maven OWASP Dependency-Check 12.1.9'
 
-                    // Tenter de charger la clé API NVD (optionnelle)
-                    def nvdApiKeyArg = ''
+                    // Charger la clé API NVD depuis Jenkins credentials (optionnel)
+                    def nvdApiKeyParam = ''
                     try {
                         withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
                             if (env.NVD_API_KEY?.trim()) {
-                                nvdApiKeyArg = "--nvdApiKey ${env.NVD_API_KEY}"
+                                nvdApiKeyParam = "-DnvdApiKey=${env.NVD_API_KEY}"
                                 echo '   ✅ Clé API NVD configurée'
+                            } else {
+                                echo '   ⚠️  Credential nvd-api-key trouvé mais vide'
                             }
                         }
                     } catch (Exception e) {
                         echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
-                        echo '   💡 Créez le credential "nvd-api-key" dans Jenkins pour améliorer les performances'
+                        echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
                     }
 
-                    // Utiliser le plugin Jenkins au lieu du plugin Maven
-                    // (Meilleure compatibilité avec CVSS v4.0 du NVD)
-                    try {
-                        dependencyCheck(
-                            additionalArguments: """
-                                --scan rhDemo/target/classes
-                                --scan rhDemo/pom.xml
-                                --project rhDemo
-                                --format HTML
-                                --format JSON
-                                --format XML
-                                --out rhDemo/target
-                                --failOnCVSS 7.0
-                                --enableExperimental
-                                --nvdValidForHours 24
-                                --nvdMaxRetryCount 5
-                                ${nvdApiKeyArg}
-                            """,
-                            odcInstallation: 'dependency-check-9.2.0',
-                            stopBuild: false  // Laisser dependencyCheckPublisher gérer l'échec
-                        )
-                    } catch (Exception e) {
-                        echo "   ⚠️  Erreur lors de la mise à jour NVD: ${e.message}"
-                        echo '   🔄 Tentative avec les données locales uniquement (--noupdate)...'
-
-                        // Retry sans mise à jour NVD (utilise le cache local)
-                        dependencyCheck(
-                            additionalArguments: """
-                                --scan rhDemo/target/classes
-                                --scan rhDemo/pom.xml
-                                --project rhDemo
-                                --format HTML
-                                --format JSON
-                                --format XML
-                                --out rhDemo/target
-                                --failOnCVSS 7.0
-                                --enableExperimental
-                                --noupdate
-                                ${nvdApiKeyArg}
-                            """,
-                            odcInstallation: 'dependency-check-9.2.0',
-                            stopBuild: false
-                        )
-
-                        echo '   ⚠️  Analyse effectuée avec données NVD locales (potentiellement obsolètes)'
-                        echo '   💡 Configurez une clé API NVD pour obtenir les dernières vulnérabilités'
+                    // Exécuter OWASP Dependency-Check via Maven
+                    dir('rhDemo') {
+                        sh """
+                            ./mvnw org.owasp:dependency-check-maven:check ${nvdApiKeyParam}
+                        """
                     }
                 }
 
-                // Publier les résultats et définir les seuils
+                // Publier les résultats OWASP
                 dependencyCheckPublisher(
                     pattern: '**/dependency-check-report.xml',
                     failedTotalCritical: 0,    // Échec si ≥ 1 vulnérabilité Critical (CVSS 9.0-10.0)
@@ -627,7 +588,9 @@ YMLEOF
         
         stage('⚙️ Configuration Environnement Test') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                {
+                    expression { params.DEPLOY_ENV != 'none' }
+                }
             }
             steps {
                 script {
@@ -668,7 +631,7 @@ YMLEOF
         
         stage('🔐 Génération Certificats SSL') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -683,10 +646,7 @@ YMLEOF
         
         stage('🏷️ Tag Image Docker') {
             when {
-                allOf {
-                    expression { params.DEPLOY_ENV != 'none' }
-                    expression { params.RUN_SELENIUM_TESTS == true }
-                }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -700,10 +660,7 @@ YMLEOF
         
         stage('🐳 Démarrage Environnement Docker') {
             when {
-                allOf {
-                    expression { params.DEPLOY_ENV != 'none' }
-                    expression { params.RUN_SELENIUM_TESTS == true }
-                }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -798,6 +755,9 @@ YMLEOF
         }
 
         stage('🔐 Injection secrets rhDemo dans container') {
+            when {
+                expression { params.DEPLOY_ENV != 'none')
+            }
             steps {
                 script {
                     echo '▶ Copie du fichier secrets-rhdemo.yml dans le container rhDemo...'
@@ -848,7 +808,7 @@ YMLEOF
 
         stage('💾 Initialisation Base de Données') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -903,7 +863,7 @@ YMLEOF
         
         stage('🏥 Healthcheck Keycloak') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -941,7 +901,7 @@ YMLEOF
         
         stage('🔑 Initialisation Keycloak') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -1001,7 +961,7 @@ YMLEOF
         
         stage('🏥 Healthcheck Application RHDemo') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -1056,7 +1016,7 @@ YMLEOF
         
         stage('🌐 Healthcheck Nginx HTTPS') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                expression { params.DEPLOY_ENV != 'none')
             }
             steps {
                 script {
@@ -1187,7 +1147,10 @@ YMLEOF
         
         stage('🛑 Arrêt App Test') {
             when {
-                expression { params.RUN_SELENIUM_TESTS == true }
+                allOf {
+                    expression { params.DEPLOY_ENV != 'none' }
+                    expression { params.RUN_SELENIUM_TESTS == true }
+                }
             }
             steps {
                 script {

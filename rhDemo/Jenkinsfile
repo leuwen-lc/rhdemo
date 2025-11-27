@@ -644,7 +644,7 @@ YMLEOF
         
         stage('🏷️ Tag Image Docker') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -658,7 +658,7 @@ YMLEOF
         
         stage('🐳 Démarrage Environnement Docker') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -754,7 +754,7 @@ YMLEOF
 
         stage('🔐 Injection secrets rhDemo dans container') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -806,7 +806,7 @@ YMLEOF
 
         stage('💾 Initialisation Base de Données') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -861,7 +861,7 @@ YMLEOF
         
         stage('🏥 Healthcheck Keycloak') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -899,7 +899,7 @@ YMLEOF
         
         stage('🔑 Initialisation Keycloak') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -959,7 +959,7 @@ YMLEOF
         
         stage('🏥 Healthcheck Application RHDemo') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {
@@ -1014,7 +1014,7 @@ YMLEOF
         
         stage('🌐 Healthcheck Nginx HTTPS') {
             when {
-                expression { params.DEPLOY_ENV != 'none')
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {

@@ -588,9 +588,7 @@ YMLEOF
         
         stage('⚙️ Configuration Environnement Test') {
             when {
-                {
-                    expression { params.DEPLOY_ENV != 'none' }
-                }
+                expression { params.DEPLOY_ENV != 'none' }
             }
             steps {
                 script {

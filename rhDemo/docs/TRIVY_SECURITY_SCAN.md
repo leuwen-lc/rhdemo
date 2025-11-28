@@ -10,7 +10,7 @@ Le stage scanne automatiquement les 4 images Docker du stack staging :
 
 1. **postgres:16-alpine** - Base de données (rhdemo-db et keycloak-db)
 2. **quay.io/keycloak/keycloak:26.4.2** - Serveur d'authentification
-3. **nginx:1.27-alpine** - Reverse proxy HTTPS
+3. **nginx:1.27.3-alpine3.21** - Reverse proxy HTTPS (Alpine 3.21 avec correctif libxml2)
 4. **rhdemo-api:build-${BUILD_NUMBER}** - Application (image Paketo)
 
 ## Critères de succès/échec
@@ -174,3 +174,25 @@ fi
 ## Changelog
 
 - **2025-11-27** : Ajout initial du stage Trivy au pipeline Jenkins
+
+## Historique des vulnérabilités détectées
+
+### 2025-11-27 : CVE-2025-49794 & CVE-2025-49796 (libxml2)
+
+**Première détection par Trivy** : Le stage a immédiatement détecté 2 vulnérabilités CRITICAL dans l'image Nginx.
+
+**Diagnostic** :
+- Image affectée : `nginx:1.27-alpine` (basée sur Alpine 3.20)
+- Package vulnérable : `libxml2` (version < 2.13.6)
+- CVE détectées : CVE-2025-49794 (use-after-free), CVE-2025-49796 (type confusion)
+- Sévérité : CRITICAL (CVSS 9.1)
+
+**Remédiation** :
+- Action : Mise à jour vers `nginx:1.27.3-alpine3.21`
+- Alpine 3.21 inclut libxml2 2.13.6 avec les correctifs
+- Temps de remédiation : < 1 heure après détection
+
+**Résultat** : ✅ 0 vulnérabilités CRITICAL après mise à jour
+
+**Documentation détaillée** : Voir [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md)
+

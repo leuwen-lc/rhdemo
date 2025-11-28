@@ -145,7 +145,7 @@ services:
   # Nginx - Reverse Proxy avec HTTPS
   # ═══════════════════════════════════════════════════════════════
   nginx:
-    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    image: ${NGINX_IMAGE:-nginx:1.27.3-alpine3.21}
     container_name: rhdemo-staging-nginx
     restart: unless-stopped
     ports:

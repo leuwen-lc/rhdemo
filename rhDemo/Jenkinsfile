@@ -1075,7 +1075,7 @@ YMLEOF
                     echo '   Images à scanner :'
                     echo '   - postgres:16-alpine (rhdemo-db, keycloak-db)'
                     echo '   - quay.io/keycloak/keycloak:26.4.2 (keycloak)'
-                    echo '   - nginx:1.27-alpine (nginx)'
+                    echo '   - nginx:1.27.3-alpine3.21 (nginx)'
                     echo '   - rhdemo-api:build-${BUILD_NUMBER} (application)'
                     echo ''
                     echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
@@ -1097,23 +1097,25 @@ YMLEOF
                         local IMAGE=$1
                         local NAME=$2
 
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        echo "🔍 Scan de l'image: $IMAGE"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "🔍 Scan: $IMAGE"
 
-                        # Scan avec génération de rapport JSON
+                        # Scan avec génération de rapport JSON (silencieux)
                         trivy image \
                             --severity CRITICAL,HIGH,MEDIUM \
                             --format json \
                             --output "trivy-reports/${NAME}.json" \
-                            "$IMAGE"
+                            --quiet \
+                            "$IMAGE" 2>/dev/null
 
-                        # Afficher le résumé en format table
-                        trivy image \
-                            --severity CRITICAL,HIGH,MEDIUM \
-                            --format table \
-                            "$IMAGE"
+                        # Extraire uniquement le résumé
+                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "trivy-reports/${NAME}.json")
+                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "trivy-reports/${NAME}.json")
+                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "trivy-reports/${NAME}.json")
 
+                        # Afficher uniquement le résumé
+                        printf "   ├─ CRITICAL: %3d\n" "$CRITICAL"
+                        printf "   ├─ HIGH:     %3d\n" "$HIGH"
+                        printf "   └─ MEDIUM:   %3d\n" "$MEDIUM"
                         echo ""
                     }
 
@@ -1126,12 +1128,12 @@ YMLEOF
 
                     scan_image "postgres:16-alpine" "postgres"
                     scan_image "quay.io/keycloak/keycloak:26.4.2" "keycloak"
-                    scan_image "nginx:1.27-alpine" "nginx"
+                    scan_image "nginx:1.27.3-alpine3.21" "nginx"
                     scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app"
 
-                    # Générer un rapport consolidé
+                    # Calculer les totaux
                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo "📋 RAPPORT CONSOLIDÉ"
+                    echo "📊 RÉSULTATS GLOBAUX"
                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
                     TOTAL_CRITICAL=0
@@ -1139,12 +1141,9 @@ YMLEOF
                     TOTAL_MEDIUM=0
 
                     for REPORT in trivy-reports/*.json; do
-                        IMAGE_NAME=$(basename "$REPORT" .json)
                         CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT")
                         HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT")
                         MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT")
-
-                        printf "%-20s : CRITICAL=%3d, HIGH=%3d, MEDIUM=%3d\\n" "$IMAGE_NAME" "$CRITICAL" "$HIGH" "$MEDIUM"
 
                         TOTAL_CRITICAL=$((TOTAL_CRITICAL + CRITICAL))
                         TOTAL_HIGH=$((TOTAL_HIGH + HIGH))
@@ -1155,8 +1154,9 @@ YMLEOF
                         fi
                     done
 
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    printf "%-20s : CRITICAL=%3d, HIGH=%3d, MEDIUM=%3d\\n" "TOTAL" "$TOTAL_CRITICAL" "$TOTAL_HIGH" "$TOTAL_MEDIUM"
+                    printf "   Total CRITICAL : %3d\n" "$TOTAL_CRITICAL"
+                    printf "   Total HIGH     : %3d\n" "$TOTAL_HIGH"
+                    printf "   Total MEDIUM   : %3d\n" "$TOTAL_MEDIUM"
                     echo ""
 
                     # Vérifier si des vulnérabilités CRITICAL ont été trouvées

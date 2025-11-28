@@ -1064,11 +1064,124 @@ YMLEOF
                 '''
             }
         }
-        
+
+        stage('🔍 Scan Sécurité Images Docker (Trivy)') {
+            when {
+                expression { params.DEPLOY_ENV != 'none' }
+            }
+            steps {
+                script {
+                    echo '▶ Scan de sécurité des images Docker avec Trivy...'
+                    echo '   Images à scanner :'
+                    echo '   - postgres:16-alpine (rhdemo-db, keycloak-db)'
+                    echo '   - quay.io/keycloak/keycloak:26.4.2 (keycloak)'
+                    echo '   - nginx:1.27-alpine (nginx)'
+                    echo '   - rhdemo-api:build-${BUILD_NUMBER} (application)'
+                    echo ''
+                    echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
+                }
+
+                sh '''
+                    # Créer le répertoire pour les rapports
+                    mkdir -p trivy-reports
+
+                    # Variables
+                    APP_VERSION="build-${BUILD_NUMBER}"
+
+                    echo "📥 Version de Trivy installée:"
+                    trivy --version
+                    echo ""
+
+                    # Fonction pour scanner une image
+                    scan_image() {
+                        local IMAGE=$1
+                        local NAME=$2
+
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "🔍 Scan de l'image: $IMAGE"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                        # Scan avec génération de rapport JSON
+                        trivy image \
+                            --severity CRITICAL,HIGH,MEDIUM \
+                            --format json \
+                            --output "trivy-reports/${NAME}.json" \
+                            "$IMAGE"
+
+                        # Afficher le résumé en format table
+                        trivy image \
+                            --severity CRITICAL,HIGH,MEDIUM \
+                            --format table \
+                            "$IMAGE"
+
+                        echo ""
+                    }
+
+                    # Variable pour tracker les échecs
+                    FAILED=false
+
+                    # Scanner toutes les images
+                    echo "🚀 Début du scan des images Docker..."
+                    echo ""
+
+                    scan_image "postgres:16-alpine" "postgres"
+                    scan_image "quay.io/keycloak/keycloak:26.4.2" "keycloak"
+                    scan_image "nginx:1.27-alpine" "nginx"
+                    scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app"
+
+                    # Générer un rapport consolidé
+                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    echo "📋 RAPPORT CONSOLIDÉ"
+                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                    TOTAL_CRITICAL=0
+                    TOTAL_HIGH=0
+                    TOTAL_MEDIUM=0
+
+                    for REPORT in trivy-reports/*.json; do
+                        IMAGE_NAME=$(basename "$REPORT" .json)
+                        CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT")
+                        HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT")
+                        MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT")
+
+                        printf "%-20s : CRITICAL=%3d, HIGH=%3d, MEDIUM=%3d\\n" "$IMAGE_NAME" "$CRITICAL" "$HIGH" "$MEDIUM"
+
+                        TOTAL_CRITICAL=$((TOTAL_CRITICAL + CRITICAL))
+                        TOTAL_HIGH=$((TOTAL_HIGH + HIGH))
+                        TOTAL_MEDIUM=$((TOTAL_MEDIUM + MEDIUM))
+
+                        if [ "$CRITICAL" -gt 0 ]; then
+                            FAILED=true
+                        fi
+                    done
+
+                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    printf "%-20s : CRITICAL=%3d, HIGH=%3d, MEDIUM=%3d\\n" "TOTAL" "$TOTAL_CRITICAL" "$TOTAL_HIGH" "$TOTAL_MEDIUM"
+                    echo ""
+
+                    # Vérifier si des vulnérabilités CRITICAL ont été trouvées
+                    if [ "$FAILED" = true ]; then
+                        echo "❌ ÉCHEC: $TOTAL_CRITICAL vulnérabilités CRITICAL détectées"
+                        echo "   Les rapports détaillés sont disponibles dans trivy-reports/"
+                        echo "   Utilisez 'jq' pour analyser les rapports JSON"
+                        exit 1
+                    else
+                        echo "✅ SUCCÈS: Aucune vulnérabilité CRITICAL détectée"
+                        if [ "$TOTAL_HIGH" -gt 0 ]; then
+                            echo "   ⚠️  Attention: $TOTAL_HIGH vulnérabilités HIGH détectées (non bloquantes)"
+                        fi
+                    fi
+                '''
+
+                // Archiver les rapports Trivy
+                archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS FONCTIONNELS
         // ════════════════════════════════════════════════════════════════
-        
+
         stage('🌐 Tests Selenium IHM') {
             when {
                 allOf {

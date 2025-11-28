@@ -71,6 +71,17 @@ RUN wget -q https://github.com/mozilla/sops/releases/download/v${SOPS_VERSION}/s
 RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && \
     chmod +x /usr/local/bin/yq && \
     yq --version
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION TRIVY (scanner de vulnérabilités pour images Docker)
+# ═══════════════════════════════════════════════════════════════
+
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" > /etc/apt/sources.list.d/trivy.list && \
+    apt-get update && \
+    apt-get install -y trivy && \
+    rm -rf /var/lib/apt/lists/* && \
+    trivy --version
+
 
 # ═══════════════════════════════════════════════════════════════════
 # INSTALLATION JAVA 21 (déjà inclus dans l'image de base)

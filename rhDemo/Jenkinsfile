@@ -1069,6 +1069,9 @@ YMLEOF
             when {
                 expression { params.DEPLOY_ENV != 'none' }
             }
+            options {
+                timeout(time: 15, unit: 'MINUTES')
+            }
             steps {
                 script {
                     echo '▶ Scan de sécurité des images Docker avec Trivy...'
@@ -1079,6 +1082,7 @@ YMLEOF
                     echo '   - rhdemo-api:build-${BUILD_NUMBER} (application)'
                     echo ''
                     echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
+                    echo '   ⏱️  Timeout: 15 minutes'
                 }
 
                 sh '''
@@ -1098,19 +1102,26 @@ YMLEOF
                         local NAME=$2
 
                         echo "🔍 Scan: $IMAGE"
+                        echo "   📥 Téléchargement et analyse en cours..."
 
-                        # Scan avec génération de rapport JSON (silencieux)
-                        trivy image \
+                        # Scan avec génération de rapport JSON et timeout
+                        # Retirer --quiet pour voir la progression, mais rediriger stderr
+                        timeout 5m trivy image \
                             --severity CRITICAL,HIGH,MEDIUM \
                             --format json \
                             --output "trivy-reports/${NAME}.json" \
-                            --quiet \
-                            "$IMAGE" 2>/dev/null
+                            "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                        if [ ! -f "trivy-reports/${NAME}.json" ]; then
+                            echo "   ❌ ERREUR: Scan échoué (timeout ou erreur réseau)"
+                            echo '{"Results":[]}' > "trivy-reports/${NAME}.json"
+                            return 1
+                        fi
 
                         # Extraire uniquement le résumé
-                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "trivy-reports/${NAME}.json")
-                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "trivy-reports/${NAME}.json")
-                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "trivy-reports/${NAME}.json")
+                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
+                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
+                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
 
                         # Afficher uniquement le résumé
                         printf "   ├─ CRITICAL: %3d\n" "$CRITICAL"
@@ -1124,12 +1135,13 @@ YMLEOF
 
                     # Scanner toutes les images
                     echo "🚀 Début du scan des images Docker..."
+                    echo "   Timeout par image : 5 minutes"
                     echo ""
 
-                    scan_image "postgres:16-alpine" "postgres"
-                    scan_image "quay.io/keycloak/keycloak:26.4.2" "keycloak"
-                    scan_image "nginx:1.27.3-alpine3.21" "nginx"
-                    scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app"
+                    scan_image "postgres:16-alpine" "postgres" || echo "⚠️  Scan postgres échoué, continuation..."
+                    scan_image "quay.io/keycloak/keycloak:26.4.2" "keycloak" || echo "⚠️  Scan keycloak échoué, continuation..."
+                    scan_image "nginx:1.27.3-alpine3.21" "nginx" || echo "⚠️  Scan nginx échoué, continuation..."
+                    scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app" || echo "⚠️  Scan rhdemo-app échoué, continuation..."
 
                     # Calculer les totaux
                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

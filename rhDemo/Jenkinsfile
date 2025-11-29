@@ -1206,6 +1206,63 @@ YMLEOF
         // PHASE 5 : TESTS FONCTIONNELS
         // ════════════════════════════════════════════════════════════════
 
+        stage('🔒 Démarrage OWASP ZAP Proxy') {
+            when {
+                allOf {
+                    expression { params.DEPLOY_ENV != 'none' }
+                    expression { params.RUN_SELENIUM_TESTS == true }
+                }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage du proxy OWASP ZAP pour analyse de sécurité...'
+                    echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
+                }
+
+                sh """
+                    # Source les secrets pour ZAP_API_KEY
+                    . rhDemo/secrets/env-vars.sh
+
+                    cd ${STAGING_INFRA_PATH}
+
+                    echo "🔐 Génération de la clé API ZAP..."
+                    export ZAP_API_KEY=\${ZAP_API_KEY:-\$(uuidgen)}
+                    echo "   ZAP_API_KEY: \${ZAP_API_KEY:0:8}..."
+
+                    echo "🚀 Démarrage de ZAP avec docker-compose..."
+                    docker-compose -f docker-compose.yml \\
+                                   -f docker-compose.zap.yml \\
+                                   -p ${COMPOSE_PROJECT_NAME} \\
+                                   up -d owasp-zap
+
+                    echo "⏳ Attente du démarrage de ZAP (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec owasp-zap-staging curl -f http://localhost:8080/JSON/core/view/version/?apikey=\${ZAP_API_KEY} >/dev/null 2>&1; then
+                            echo "✅ ZAP démarré et accessible"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: ZAP n'est pas prêt après 30s"
+                        docker logs --tail=20 owasp-zap-staging
+                        exit 1
+                    fi
+
+                    echo "📊 ZAP Status:"
+                    docker exec owasp-zap-staging curl -s http://localhost:8080/JSON/core/view/version/?apikey=\${ZAP_API_KEY} | jq .
+
+                    echo ""
+                    echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
+                    echo "   Proxy: owasp-zap:8090"
+                    echo "   API: owasp-zap:8080"
+                """
+            }
+        }
+
         stage('🌐 Tests Selenium IHM') {
             when {
                 allOf {
@@ -1224,7 +1281,7 @@ YMLEOF
                 dir(TEST_PROJECT_PATH) {
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
-                        
+
                         # URLs via nginx dans le réseau Docker avec HTTPS
                         # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
                         # Car Jenkins container est connecté à rhdemo-staging-network
@@ -1239,11 +1296,17 @@ YMLEOF
                         TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 
+                        # Configuration du proxy ZAP pour intercepter le trafic Selenium
+                        # BaseSeleniumTest.java détecte ces variables et configure le proxy WebDriver
+                        export ZAP_PROXY_HOST=owasp-zap
+                        export ZAP_PROXY_PORT=8090
+
                         echo "📍 Configuration des tests Selenium:"
                         echo "   APP_URL: \${APP_URL}"
                         echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
                         echo "   TEST_USERNAME: \${TEST_USERNAME} (ROLE_consult + ROLE_MAJ)"
                         echo "   Mode: Headless"
+                        echo "   ZAP Proxy: \${ZAP_PROXY_HOST}:\${ZAP_PROXY_PORT}"
                         echo "   (Healthcheck HTTPS validé avant ce stage)"
 
                         # Lancement des tests avec TOUTES les configs via propriétés Maven

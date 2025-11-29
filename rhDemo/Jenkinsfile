@@ -1075,11 +1075,7 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Scan de sécurité des images Docker avec Trivy...'
-                    echo '   Images à scanner :'
-                    echo '   - postgres:16-alpine (rhdemo-db, keycloak-db)'
-                    echo '   - quay.io/keycloak/keycloak:26.4.2 (keycloak)'
-                    echo '   - nginx:1.27.3-alpine3.21 (nginx)'
-                    echo '   - rhdemo-api:build-${BUILD_NUMBER} (application)'
+                    echo '   ℹ️  Les versions des images sont lues depuis docker-compose.yml'
                     echo ''
                     echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
                     echo '   ⏱️  Timeout: 15 minutes'
@@ -1089,8 +1085,24 @@ YMLEOF
                     # Créer le répertoire pour les rapports
                     mkdir -p trivy-reports
 
-                    # Variables
+                    # Aller dans le répertoire staging pour lire docker-compose.yml
+                    cd ${STAGING_INFRA_PATH}
+
+                    # Extraire les versions des images depuis docker-compose.yml
+                    echo "📋 Lecture des versions depuis docker-compose.yml..."
+                    POSTGRES_IMAGE=$(yq eval '.services.rhdemo-db.image' docker-compose.yml | sed 's/\${POSTGRES_IMAGE:-//' | sed 's/}//')
+                    KEYCLOAK_IMAGE=$(yq eval '.services.keycloak.image' docker-compose.yml | sed 's/\${KEYCLOAK_IMAGE:-//' | sed 's/}//')
+                    NGINX_IMAGE=$(yq eval '.services.nginx.image' docker-compose.yml | sed 's/\${NGINX_IMAGE:-//' | sed 's/}//')
                     APP_VERSION="build-${BUILD_NUMBER}"
+
+                    echo "   PostgreSQL : $POSTGRES_IMAGE"
+                    echo "   Keycloak   : $KEYCLOAK_IMAGE"
+                    echo "   Nginx      : $NGINX_IMAGE"
+                    echo "   RHDemo App : rhdemo-api:$APP_VERSION"
+                    echo ""
+
+                    # Retourner au workspace pour les rapports
+                    cd -
 
                     echo "📥 Version de Trivy installée:"
                     trivy --version
@@ -1133,14 +1145,14 @@ YMLEOF
                     # Variable pour tracker les échecs
                     FAILED=false
 
-                    # Scanner toutes les images
+                    # Scanner toutes les images (versions lues depuis docker-compose.yml)
                     echo "🚀 Début du scan des images Docker..."
                     echo "   Timeout par image : 5 minutes"
                     echo ""
 
-                    scan_image "postgres:16-alpine" "postgres" || echo "⚠️  Scan postgres échoué, continuation..."
-                    scan_image "quay.io/keycloak/keycloak:26.4.2" "keycloak" || echo "⚠️  Scan keycloak échoué, continuation..."
-                    scan_image "nginx:1.27.3-alpine3.21" "nginx" || echo "⚠️  Scan nginx échoué, continuation..."
+                    scan_image "$POSTGRES_IMAGE" "postgres" || echo "⚠️  Scan postgres échoué, continuation..."
+                    scan_image "$KEYCLOAK_IMAGE" "keycloak" || echo "⚠️  Scan keycloak échoué, continuation..."
+                    scan_image "$NGINX_IMAGE" "nginx" || echo "⚠️  Scan nginx échoué, continuation..."
                     scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app" || echo "⚠️  Scan rhdemo-app échoué, continuation..."
 
                     # Calculer les totaux

@@ -135,3 +135,62 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 ---
 
 **Dernière mise à jour** : 2025-11-27
+
+---
+
+## 2025-11-28 : Nouvelles CVE CRITICAL détectées dans nginx:1.27.3-alpine3.21
+
+### Détection supplémentaire
+- **Date** : 2025-11-28
+- **Contexte** : Après migration vers nginx:1.27.3-alpine3.21, Trivy détecte encore 2 CVE CRITICAL
+
+**Résultats du scan** :
+```
+🔍 Scan: nginx:1.27.3-alpine3.21
+   ├─ CRITICAL:   2
+   ├─ HIGH:       4
+   └─ MEDIUM:    18
+```
+
+### Nouvelle remédiation
+
+**Action** : Mise à jour vers Nginx 1.29.3 (dernière version stable au 2025-11-28)
+
+**Changements** :
+```yaml
+# Version précédente (encore vulnérable)
+nginx:
+  image: nginx:1.27.3-alpine3.21
+
+# Nouvelle version (correctif appliqué)
+nginx:
+  image: nginx:1.29.3-alpine
+```
+
+**Fichiers modifiés** :
+- `infra/staging/docker-compose.yml` (ligne 148)
+- `Jenkinsfile` (lignes 1081, 1143)
+
+**Justification** :
+- Nginx 1.29.3 publié le 19 novembre 2025
+- Inclut Alpine Linux avec les derniers correctifs de sécurité
+- Contient libxml2 >= 2.13.6 et autres packages à jour
+
+**Référence** : [Nginx Docker Hub](https://hub.docker.com/_/nginx)
+
+### Timeline mise à jour
+
+| Date | Action |
+|------|--------|
+| 2025-11-27 | Première migration : nginx:1.27-alpine → nginx:1.27.3-alpine3.21 |
+| 2025-11-28 | Détection de 2 CVE CRITICAL supplémentaires |
+| 2025-11-28 | Seconde migration : nginx:1.27.3-alpine3.21 → nginx:1.29.3-alpine |
+
+### Note importante
+
+Cette situation démontre l'importance du **scan continu** avec Trivy :
+- ✅ Les CVE libxml2 (CVE-2025-49794, CVE-2025-49796) ont été corrigées
+- ⚠️ De **nouvelles** vulnérabilités ont été détectées dans d'autres packages
+- 🔄 La mise à jour vers la dernière version stable (1.29.3) devrait résoudre ces nouvelles CVE
+
+**Action de suivi** : Vérifier le prochain scan Trivy après déploiement de nginx:1.29.3-alpine

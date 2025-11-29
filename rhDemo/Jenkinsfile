@@ -1225,9 +1225,15 @@ YMLEOF
 
                     cd ${STAGING_INFRA_PATH}
 
-                    echo "🔐 Génération de la clé API ZAP..."
-                    export ZAP_API_KEY=\${ZAP_API_KEY:-\$(uuidgen)}
-                    echo "   ZAP_API_KEY: \${ZAP_API_KEY:0:8}..."
+                    # Génération d'une clé API aléatoire si non définie dans secrets
+                    if [ -z "\${ZAP_API_KEY}" ]; then
+                        echo "🔐 Génération de la clé API ZAP..."
+                        export ZAP_API_KEY=\$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+                        echo "   Clé générée: \${ZAP_API_KEY:0:8}..."
+                    else
+                        echo "🔐 Utilisation de ZAP_API_KEY depuis les secrets"
+                        echo "   Clé: \${ZAP_API_KEY:0:8}..."
+                    fi
 
                     echo "🚀 Démarrage de ZAP avec docker-compose..."
                     docker-compose -f docker-compose.yml \\

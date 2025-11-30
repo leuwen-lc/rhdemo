@@ -1219,7 +1219,7 @@ YMLEOF
                     echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
                 }
 
-                sh """
+                sh """#!/bin/bash
                     # Source les secrets pour ZAP_API_KEY
                     . rhDemo/secrets/env-vars.sh
 

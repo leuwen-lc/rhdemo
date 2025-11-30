@@ -1223,7 +1223,8 @@ YMLEOF
                     # Source les secrets pour ZAP_API_KEY
                     . rhDemo/secrets/env-vars.sh
 
-                    cd ${STAGING_INFRA_PATH}
+                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas staging
+                    cd rhDemo/infra/jenkins-docker
 
                     # Génération d'une clé API aléatoire si non définie dans secrets
                     if [ -z "\${ZAP_API_KEY}" ]; then
@@ -1235,16 +1236,17 @@ YMLEOF
                         echo "   Clé: \${ZAP_API_KEY:0:8}..."
                     fi
 
-                    echo "🚀 Démarrage de ZAP avec docker-compose..."
+                    echo "🚀 Démarrage de ZAP dans l'environnement Jenkins..."
+                    echo "   ZAP connecté à rhdemo-jenkins-network"
+                    echo "   (accès staging via Jenkins qui est connecté aux 2 réseaux)"
                     docker-compose -f docker-compose.yml \\
                                    -f docker-compose.zap.yml \\
-                                   -p ${COMPOSE_PROJECT_NAME} \\
                                    up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (30s max)..."
                     timeout=30
                     while [ \$timeout -gt 0 ]; do
-                        if docker exec owasp-zap-staging curl -f http://localhost:8080/JSON/core/view/version/?apikey=\${ZAP_API_KEY} >/dev/null 2>&1; then
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8081/JSON/core/view/version/?apikey=\${ZAP_API_KEY} >/dev/null 2>&1; then
                             echo "✅ ZAP démarré et accessible"
                             break
                         fi
@@ -1254,17 +1256,24 @@ YMLEOF
 
                     if [ \$timeout -le 0 ]; then
                         echo "❌ Timeout: ZAP n'est pas prêt après 30s"
-                        docker logs --tail=20 owasp-zap-staging
+                        docker logs --tail=20 rhdemo-jenkins-zap
                         exit 1
                     fi
 
                     echo "📊 ZAP Status:"
-                    docker exec owasp-zap-staging curl -s http://localhost:8080/JSON/core/view/version/?apikey=\${ZAP_API_KEY} | jq .
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8081/JSON/core/view/version/?apikey=\${ZAP_API_KEY} | jq .
+
+                    echo ""
+                    echo "🔗 Connexion de ZAP au réseau staging..."
+                    docker network connect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau staging"
 
                     echo ""
                     echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
+                    echo "   Container: rhdemo-jenkins-zap"
+                    echo "   Réseau 1: rhdemo-jenkins-network (API)"
+                    echo "   Réseau 2: rhdemo-staging-network (accès application via connexion dynamique)"
                     echo "   Proxy: owasp-zap:8090"
-                    echo "   API: owasp-zap:8080"
+                    echo "   API: owasp-zap:8081"
                 """
             }
         }
@@ -1334,6 +1343,28 @@ YMLEOF
                             archiveArtifacts artifacts: '**/screenshots/**/*.png', allowEmptyArchive: true
                             junit '**/target/surefire-reports/*.xml'
                         }
+
+                        // Déconnexion de ZAP du réseau staging après les tests
+                        echo '🔌 Déconnexion de ZAP du réseau staging...'
+                        sh '''
+                            docker network disconnect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau staging"
+                            echo "✅ ZAP déconnecté du réseau staging (reste sur jenkins-network)"
+                        '''
+
+                        // Déconnexion de Jenkins du réseau staging après les tests
+                        echo '🔌 Déconnexion de Jenkins du réseau staging...'
+                        sh '''#!/bin/bash
+                            # Trouver le conteneur Jenkins principal (pas l'agent)
+                            JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                            echo "Conteneur Jenkins trouvé: $JENKINS_CONTAINER"
+
+                            if [ -n "$JENKINS_CONTAINER" ]; then
+                                docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté du réseau staging"
+                                echo "✅ Jenkins ($JENKINS_CONTAINER) déconnecté du réseau rhdemo-staging-network"
+                            else
+                                echo "⚠️ Conteneur Jenkins introuvable pour déconnexion"
+                            fi
+                        '''
                     }
                 }
             }

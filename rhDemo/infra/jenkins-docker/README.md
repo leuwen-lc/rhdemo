@@ -30,51 +30,67 @@ docker info
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     PLATEFORME CI/CD RHDEMO                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────────────────┐      ┌──────────────────────────┐       │
-│  │       JENKINS            │      │      SONARQUBE           │       │
-│  │   (Port 8080, 50000)     │◄────►│     (Port 9020)          │       │
-│  │                          │      │                          │       │
-│  │ • JDK 21                 │      │ • Community Edition 10   │       │
-│  │ • Maven 3.9.6            │      │ • Analyse qualité code   │       │
-│  │ • Docker CLI             │      │ • Couverture tests       │       │
-│  │ • Node.js/npm            │      │ • Security hotspots      │       │
-│  │                          │      │ • Code smells            │       │
-│  │ Plugins:                 │      │                          │       │
-│  │ • Pipeline & Git         │      └──────────┬───────────────┘       │
-│  │ • SonarQube Scanner      │                 │                       │
-│  │ • Docker Workflow        │                 ▼                       │
-│  │ • JaCoCo                 │      ┌──────────────────────────┐       │
-│  │ • OWASP Dep-Check        │      │   PostgreSQL 16          │       │
-│  │ • Email                  │      │   (sonarqube-db)         │       │
-│  │ • BlueOcean UI           │      │                          │       │
-│  └──────────┬───────────────┘      │ • Base de données        │       │
-│             │                      │   SonarQube              │       │
-│             │                      │ • Volume persistant      │       │
-│             ▼                      └──────────────────────────┘       │
-│  ┌──────────────────────────┐                                        │
-│  │    DOCKER SOCKET         │                                        │
-│  │  /var/run/docker.sock    │                                        │
-│  │                          │                                        │
-│  │ • Docker-in-Docker (DinD)│                                        │
-│  │ • Lance conteneurs       │                                        │
-│  │ • Build images           │                                        │
-│  │ • Deploy staging         │                                        │
-│  └──────────────────────────┘                                        │
-│                                                                       │
-│  Services optionnels:                                                │
-│  • jenkins-agent (agents distribués)                                 │
-│  • registry:5000 (Docker Registry local)                             │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                          PLATEFORME CI/CD RHDEMO                                     │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│  ┌──────────────────────────┐      ┌──────────────────────────┐                    │
+│  │       JENKINS            │      │      SONARQUBE           │                    │
+│  │   (Port 8080, 50000)     │◄────►│     (Port 9020)          │                    │
+│  │                          │      │                          │                    │
+│  │ • JDK 21                 │      │ • Community Edition 10   │                    │
+│  │ • Maven 3.9.6            │      │ • Analyse qualité code   │                    │
+│  │ • Docker CLI             │      │ • Couverture tests       │                    │
+│  │ • Node.js/npm            │      │ • Security hotspots      │                    │
+│  │ • Firefox ESR (Selenium) │      │ • Code smells            │                    │
+│  │ • Trivy (scan CVE)       │      │                          │                    │
+│  │ • yq (YAML parser)       │      └──────────┬───────────────┘                    │
+│  │                          │                 │                                    │
+│  │ Plugins:                 │                 ▼                                    │
+│  │ • Pipeline & Git         │      ┌──────────────────────────┐                    │
+│  │ • SonarQube Scanner      │      │   PostgreSQL 16          │                    │
+│  │ • Docker Workflow        │      │   (sonarqube-db)         │                    │
+│  │ • JaCoCo                 │      │                          │                    │
+│  │ • OWASP Dep-Check        │      │ • Base de données        │                    │
+│  │ • Email                  │      │   SonarQube              │                    │
+│  │ • BlueOcean UI           │      │ • Volume persistant      │                    │
+│  └──────────┬───────────────┘      └──────────────────────────┘                    │
+│             │                                                                       │
+│             ▼                                                                       │
+│  ┌──────────────────────────┐      ┌────────────────────────────────────────────┐  │
+│  │    DOCKER SOCKET         │      │       OWASP ZAP (CI/CD uniquement)         │  │
+│  │  /var/run/docker.sock    │      │       rhdemo-jenkins-zap                   │  │
+│  │                          │      │       (Ports 8081, 8090)                   │  │
+│  │ • Docker-in-Docker (DinD)│      │                                            │  │
+│  │ • Lance conteneurs       │      │ • Proxy de sécurité pour tests Selenium    │  │
+│  │ • Build images           │      │ • Détection XSS, CSRF, SQLi, etc.          │  │
+│  │ • Deploy staging         │      │ • Analyse passive + Spider + Active Scan   │  │
+│  │ • Démarrage ZAP          │      │ • Rapports HTML/JSON                       │  │
+│  └──────────────────────────┘      │                                            │  │
+│                                    │ Réseau: rhdemo-jenkins-network             │  │
+│                                    │ (accès staging via Jenkins multi-réseau)   │  │
+│  Services optionnels:              └────────────────────────────────────────────┘  │
+│  • jenkins-agent (agents distribués)                                              │
+│  • registry:5000 (Docker Registry local)                                          │
+│                                                                                   │
+└───────────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
                     ┌───────────────────────────────┐
                     │   Réseau Docker Bridge        │
                     │   rhdemo-jenkins-network      │
+                    └───────────┬───────────────────┘
+                                │
+                                │ Connexion externe
+                                ▼
+                    ┌───────────────────────────────┐
+                    │   Réseau Staging (externe)    │
+                    │   rhdemo-staging-network      │
+                    │                               │
+                    │ • Nginx (443)                 │
+                    │ • RHDemo App (9000)           │
+                    │ • Keycloak (8080)             │
+                    │ • PostgreSQL (5432)           │
                     └───────────────────────────────┘
 ```
 
@@ -90,17 +106,19 @@ docker info
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
 | `rhdemo-sonarqube-db` | Base PostgreSQL SonarQube | ~200 MB |
 | `rhdemo-docker-registry` | Images Docker locales | Variable |
+| `rhdemo-jenkins-zap-sessions` | Sessions ZAP (réutilisation entre builds) | ~50 MB |
+| `rhdemo-jenkins-zap-reports` | Rapports ZAP HTML/JSON | ~100 MB |
 
 ### Services inclus
 
-| Service | Description | Port |
-|---------|-------------|------|
-| `jenkins` | Serveur Jenkins principal | 8080, 50000 |
-| `sonarqube` | Analyse qualité du code | 9020 |
-| `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - |
-| `jenkins-agent` | Agent Jenkins (optionnel) | - |
-| `registry` | Docker Registry local | 5000 |
-| `nginx` | Reverse proxy (optionnel) | 80, 443 |
+| Service | Description | Port | Fichier |
+|---------|-------------|------|---------|
+| `jenkins` | Serveur Jenkins principal | 8080, 50000 | docker-compose.yml |
+| `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
+| `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
+| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8081, 8090 | docker-compose.zap.yml |
+| `jenkins-agent` | Agent Jenkins (optionnel) | - | docker-compose.yml |
+| `registry` | Docker Registry local | 5000 | docker-compose.yml |
 
 ## ⚡ Installation rapide
 
@@ -435,6 +453,112 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
 - Données NVD à jour
 
 **Dépannage clé invalide :** Voir [../../docs/TEST_NVD_API_KEY.md](../../docs/TEST_NVD_API_KEY.md)
+
+### OWASP ZAP - Proxy de sécurité pour tests Selenium
+
+OWASP ZAP (Zed Attack Proxy) est un proxy de sécurité qui intercepte le trafic HTTP/HTTPS entre les tests Selenium et l'application RHDemo pour détecter automatiquement les vulnérabilités web.
+
+**Architecture :**
+```
+Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-staging) → RHDemo App
+                           ↓
+                    Analyse passive
+                    + Spider
+                    + Active Scan
+                           ↓
+                    Rapport HTML/JSON
+```
+
+**Démarrage automatique :**
+
+ZAP démarre automatiquement lors du stage `🔒 Démarrage OWASP ZAP Proxy` dans le Jenkinsfile si :
+- Le paramètre `DEPLOY_ENV` ≠ `none`
+- Le paramètre `RUN_SELENIUM_TESTS` = `true`
+
+**Architecture réseau dynamique :**
+
+Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsfile :
+
+**Jenkins :**
+1. **Réseau permanent** : `rhdemo-jenkins-network`
+   - Défini dans docker-compose.yml
+   - Communication avec SonarQube, Registry, Jenkins Agent
+
+2. **Réseau temporaire** : `rhdemo-staging-network`
+   - Connecté lors du stage `📦 Déploiement ${params.DEPLOY_ENV}` (ligne 699)
+   - Permet l'accès aux alias DNS staging pour orchestration
+   - Déconnecté après les tests Selenium (bloc `post: always`)
+
+**ZAP :**
+1. **Réseau permanent** : `rhdemo-jenkins-network`
+   - Défini dans docker-compose.zap.yml
+   - Permet la communication API avec Jenkins
+
+2. **Réseau temporaire** : `rhdemo-staging-network`
+   - Connecté lors du stage `🔒 Démarrage OWASP ZAP`
+   - Permet l'accès aux alias DNS (`rhdemo.staging.local`, `keycloak.staging.local`)
+   - Déconnecté après les tests Selenium (bloc `post: always`)
+
+**Cycle de vie réseau :**
+```
+Stage "Déploiement"        : Jenkins connecté à rhdemo-staging-network
+Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-staging-network
+Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau staging
+Post "Tests Selenium"      : ZAP déconnecté + Jenkins déconnecté
+```
+
+Cette approche offre :
+- ✅ Accès DNS aux services staging uniquement durant le déploiement/tests
+- ✅ Isolation réseau stricte en dehors des phases actives
+- ✅ Sécurité renforcée (principe du moindre privilège)
+- ✅ Traçabilité complète du cycle de connexion/déconnexion
+
+**Démarrage manuel :**
+
+```bash
+cd infra/jenkins-docker
+
+# Démarrer ZAP
+docker-compose -f docker-compose.yml \
+               -f docker-compose.zap.yml \
+               up -d owasp-zap
+
+# Vérifier l'état
+docker logs rhdemo-jenkins-zap
+
+# Tester l'API ZAP
+docker exec rhdemo-jenkins-zap curl -s http://localhost:8081/JSON/core/view/version/?apikey=changeme
+```
+
+**Configuration Selenium :**
+
+Les tests Selenium détectent automatiquement le proxy ZAP via les variables d'environnement :
+- `ZAP_PROXY_HOST=owasp-zap`
+- `ZAP_PROXY_PORT=8090`
+
+Ces variables sont configurées dans le Jenkinsfile (stage `🌐 Tests Selenium IHM`).
+
+**Rapports ZAP :**
+
+Les rapports sont stockés dans le volume `rhdemo-jenkins-zap-reports` et peuvent être archivés par Jenkins pour consultation ultérieure.
+
+**Arrêt de ZAP :**
+
+```bash
+# Arrêter ZAP
+docker-compose -f docker-compose.yml \
+               -f docker-compose.zap.yml \
+               stop owasp-zap
+
+# Supprimer le container
+docker-compose -f docker-compose.yml \
+               -f docker-compose.zap.yml \
+               rm -f owasp-zap
+```
+
+**Volumes ZAP :**
+- `rhdemo-jenkins-zap-sessions` : Sessions ZAP réutilisables entre builds (~50 MB)
+- `rhdemo-jenkins-zap-reports` : Rapports générés (HTML/JSON) (~100 MB)
 
 ## 🔧 Dépannage
 

@@ -1154,7 +1154,7 @@ YMLEOF
                                 echo 'pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)}'
                                 echo 'h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
                                 echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's/CRITICAL/<span class="critical">CRITICAL<\/span>/g; s/HIGH/<span class="high">HIGH<\/span>/g; s/MEDIUM/<span class="medium">MEDIUM<\/span>/g'
+                                cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
                                 echo '</pre></body></html>'
                             } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
                         fi

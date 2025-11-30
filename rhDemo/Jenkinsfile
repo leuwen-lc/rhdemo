@@ -1249,7 +1249,7 @@ YMLEOF
                     echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
                 }
 
-                sh """#!/bin/bash
+                sh '''#!/bin/bash
                     # Source les secrets pour ZAP_API_KEY
                     . rhDemo/secrets/env-vars.sh
 
@@ -1257,17 +1257,17 @@ YMLEOF
                     cd rhDemo/infra/jenkins-docker
 
                     # Génération d'une clé API aléatoire si non définie dans secrets
-                    if [ -z "\${ZAP_API_KEY}" ]; then
+                    if [ -z "${ZAP_API_KEY}" ]; then
                         echo "🔐 Génération de la clé API ZAP..."
-                        export ZAP_API_KEY=\$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-                        echo "   Clé générée: \${ZAP_API_KEY:0:8}..."
+                        export ZAP_API_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
+                        echo "   Clé générée: ${ZAP_API_KEY:0:8}..."
                     else
                         echo "🔐 Utilisation de ZAP_API_KEY depuis les secrets"
-                        echo "   Clé: \${ZAP_API_KEY:0:8}..."
+                        echo "   Clé: ${ZAP_API_KEY:0:8}..."
                     fi
 
                     # Nettoyage : supprimer le conteneur ZAP existant s'il existe
-                    if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
+                    if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap$'; then
                         echo "🧹 Suppression du conteneur ZAP existant..."
                         docker stop rhdemo-jenkins-zap 2>/dev/null || true
                         docker rm rhdemo-jenkins-zap 2>/dev/null || true
@@ -1277,28 +1277,28 @@ YMLEOF
                     # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
                     echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
                     echo "   Réseau: rhdemo-jenkins-network"
-                    echo "   Clé API: \${ZAP_API_KEY:0:8}..."
-                    ZAP_API_KEY=\${ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+                    echo "   Clé API: ${ZAP_API_KEY:0:8}..."
+                    ZAP_API_KEY=${ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (30s max)..."
                     timeout=30
-                    while [ \$timeout -gt 0 ]; do
-                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=\${ZAP_API_KEY} >/dev/null 2>&1; then
+                    while [ $timeout -gt 0 ]; do
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY} >/dev/null 2>&1; then
                             echo "✅ ZAP démarré et accessible"
                             break
                         fi
                         sleep 2
-                        timeout=\$((timeout - 2))
+                        timeout=$((timeout - 2))
                     done
 
-                    if [ \$timeout -le 0 ]; then
+                    if [ $timeout -le 0 ]; then
                         echo "❌ Timeout: ZAP n'est pas prêt après 30s"
                         docker logs --tail=20 rhdemo-jenkins-zap
                         exit 1
                     fi
 
                     echo "📊 ZAP Status:"
-                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=\${ZAP_API_KEY} | jq .
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY} | jq .
 
                     echo ""
                     echo "🔗 Connexion de ZAP au réseau staging..."

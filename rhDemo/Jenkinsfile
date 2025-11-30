@@ -442,12 +442,16 @@ YMLEOF
                 }
 
                 // Publier les résultats OWASP
+                // Note: Le rapport est généré dans rhDemo/target/dependency-check-report.xml
                 dependencyCheckPublisher(
-                    pattern: '**/dependency-check-report.xml',
+                    pattern: 'rhDemo/target/dependency-check-report.xml',
                     failedTotalCritical: 1,    // Échec si ≥ 1 vulnérabilité Critical (CVSS 9.0-10.0)
                     failedTotalHigh: 1          // Échec si ≥ 1 vulnérabilité High (CVSS 7.0-8.9)
                     // Pas de seuils unstable* pour éviter la redondance
                 )
+
+                // Archiver aussi les rapports HTML et JSON pour consultation
+                archiveArtifacts artifacts: 'rhDemo/target/dependency-check-report.*', fingerprint: true, allowEmptyArchive: true
             }
         }
 
@@ -1082,8 +1086,11 @@ YMLEOF
                 }
 
                 sh '''
-                    # Créer le répertoire pour les rapports
-                    mkdir -p trivy-reports
+                    # Sauvegarder le workspace actuel
+                    WORKSPACE_DIR=$(pwd)
+
+                    # Créer le répertoire pour les rapports dans le workspace
+                    mkdir -p "${WORKSPACE_DIR}/trivy-reports"
 
                     # Aller dans le répertoire staging pour lire docker-compose.yml
                     cd ${STAGING_INFRA_PATH}
@@ -1102,7 +1109,7 @@ YMLEOF
                     echo ""
 
                     # Retourner au workspace pour les rapports
-                    cd -
+                    cd "${WORKSPACE_DIR}"
 
                     echo "📥 Version de Trivy installée:"
                     trivy --version
@@ -1121,27 +1128,41 @@ YMLEOF
                         timeout 5m trivy image \
                             --severity CRITICAL,HIGH,MEDIUM \
                             --format json \
-                            --output "trivy-reports/${NAME}.json" \
+                            --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
                             "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
 
-                        if [ ! -f "trivy-reports/${NAME}.json" ]; then
+                        if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
                             echo "   ❌ ERREUR: Scan échoué (timeout ou erreur réseau)"
-                            echo '{"Results":[]}' > "trivy-reports/${NAME}.json"
+                            echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
                             return 1
                         fi
 
-                        # Générer également un rapport HTML pour visualisation dans Jenkins
+                        # Générer un rapport table pour affichage HTML
+                        # Le format 'table' est plus lisible et garanti de fonctionner
                         timeout 1m trivy image \
                             --severity CRITICAL,HIGH,MEDIUM \
-                            --format template \
-                            --template "@contrib/html.tpl" \
-                            --output "trivy-reports/${NAME}.html" \
-                            "$IMAGE" 2>&1 > /dev/null || echo "   ⚠️  Rapport HTML non généré"
+                            --format table \
+                            --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                            "$IMAGE" 2>&1 || true
+
+                        # Wrapper le rapport table dans un HTML simple mais propre
+                        if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                            {
+                                echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                echo '<title>Trivy Report - '"$IMAGE"'</title>'
+                                echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5}'
+                                echo 'pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)}'
+                                echo 'h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                echo '<body><h1>🔒 Trivy Security Report</h1><h2>Image: '"$IMAGE"'</h2><pre>'
+                                cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's/CRITICAL/<span class="critical">CRITICAL<\/span>/g; s/HIGH/<span class="high">HIGH<\/span>/g; s/MEDIUM/<span class="medium">MEDIUM<\/span>/g'
+                                echo '</pre></body></html>'
+                            } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                        fi
 
                         # Extraire uniquement le résumé
-                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
-                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
-                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
+                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
+                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
+                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
 
                         # Afficher uniquement le résumé
                         printf "   ├─ CRITICAL: %3d\n" "$CRITICAL"
@@ -1362,35 +1383,47 @@ YMLEOF
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'
                         sh '''#!/bin/bash
-                            # Créer le répertoire pour les rapports ZAP
-                            mkdir -p zap-reports
+                            # Sauvegarder le workspace actuel
+                            WORKSPACE_DIR=$(pwd)
 
-                            # Générer le rapport HTML via l'API ZAP
-                            # Note: ZAP_API_KEY devrait être la même que celle utilisée au démarrage
+                            # Créer le répertoire pour les rapports ZAP dans le workspace
+                            mkdir -p "${WORKSPACE_DIR}/zap-reports"
+
+                            # Source les secrets pour récupérer ZAP_API_KEY
+                            if [ -f "rhDemo/secrets/env-vars.sh" ]; then
+                                . rhDemo/secrets/env-vars.sh
+                            fi
+
+                            # Utiliser la même clé que celle utilisée au démarrage de ZAP
                             ZAP_API_KEY=${ZAP_API_KEY:-changeme}
                             ZAP_HOST="owasp-zap"
                             ZAP_PORT="8090"
 
                             echo "🔍 Récupération du rapport ZAP depuis http://${ZAP_HOST}:${ZAP_PORT}"
+                            echo "   Clé API utilisée: ${ZAP_API_KEY:0:8}..."
 
-                            # Générer le rapport HTML
-                            curl -f -o zap-reports/zap-report.html \
-                                "http://${ZAP_HOST}:${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=${ZAP_API_KEY}" \
-                                2>&1 || echo "⚠️  Échec de génération du rapport HTML ZAP"
+                            # Tester d'abord la connexion à ZAP
+                            if curl -s -f "http://${ZAP_HOST}:${ZAP_PORT}/JSON/core/view/version/?apikey=${ZAP_API_KEY}" >/dev/null 2>&1; then
+                                echo "✅ Connexion à ZAP réussie"
 
-                            # Générer également le rapport JSON pour analyse
-                            curl -f -o zap-reports/zap-report.json \
-                                "http://${ZAP_HOST}:${ZAP_PORT}/JSON/core/view/alerts/?apikey=${ZAP_API_KEY}" \
-                                2>&1 || echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                # Générer le rapport HTML
+                                if curl -f -o "${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                    "http://${ZAP_HOST}:${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=${ZAP_API_KEY}" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP généré: $(du -h ${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                else
+                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                fi
 
-                            # Vérifier si les rapports ont été générés
-                            if [ -f "zap-reports/zap-report.html" ]; then
-                                echo "✅ Rapport HTML ZAP généré: $(du -h zap-reports/zap-report.html | cut -f1)"
-                            fi
-
-                            if [ -f "zap-reports/zap-report.json" ]; then
-                                ALERT_COUNT=$(jq '. | length' zap-reports/zap-report.json 2>/dev/null || echo "?")
-                                echo "✅ Rapport JSON ZAP généré: ${ALERT_COUNT} alertes détectées"
+                                # Générer également le rapport JSON pour analyse
+                                if curl -f -o "${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                    "http://${ZAP_HOST}:${ZAP_PORT}/JSON/core/view/alerts/?apikey=${ZAP_API_KEY}" 2>&1; then
+                                    ALERT_COUNT=$(jq '. | length' "${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON ZAP généré: ${ALERT_COUNT} alertes détectées"
+                                else
+                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                fi
+                            else
+                                echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
                             fi
                         '''
 
@@ -1510,6 +1543,16 @@ YMLEOF
                     reportDir: 'trivy-reports',
                     reportFiles: 'rhdemo-app.html',
                     reportName: 'Trivy - RHDemo App',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+
+                // Rapport OWASP Dependency-Check (vulnérabilités des dépendances Maven)
+                publishHTML([
+                    reportDir: 'rhDemo/target',
+                    reportFiles: 'dependency-check-report.html',
+                    reportName: 'OWASP Dependency-Check',
                     allowMissing: true,
                     keepAll: true,
                     alwaysLinkToLastBuild: true

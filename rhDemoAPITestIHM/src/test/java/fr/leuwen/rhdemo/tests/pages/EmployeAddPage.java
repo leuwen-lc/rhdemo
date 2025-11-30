@@ -54,6 +54,22 @@ public class EmployeAddPage {
      */
     public void fillEmployeForm(String prenom, String nom, String email, String adresse) {
         try {
+            // Attendre que la page soit complètement chargée
+            // Vérifier d'abord si un loader/spinner est présent et attendre qu'il disparaisse
+            By loadingIndicator = By.cssSelector(".loading, .spinner, [class*='loading'], [class*='spinner']");
+            try {
+                // Si un loader est présent, attendre qu'il disparaisse (max 5 secondes)
+                WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(5));
+                if (!driver.findElements(loadingIndicator).isEmpty()) {
+                    logger.info("⏳ Page de chargement détectée, attente de sa disparition...");
+                    shortWait.until(ExpectedConditions.invisibilityOfElementLocated(loadingIndicator));
+                    logger.info("✅ Page de chargement terminée");
+                }
+            } catch (Exception ignored) {
+                // Pas de loader ou déjà disparu, continuer
+            }
+
+            // Attendre que le champ prenom soit visible
             wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
         } catch (Exception e) {
             // DEBUG: Capturer l'état de la page en cas d'échec

@@ -46,7 +46,7 @@ pipeline {
     parameters {
         choice(name: 'DEPLOY_ENV', choices: ['staging', 'production', 'none'], description: 'none=build+tests unitaires/intégration+SonarQube (sans Docker/Selenium), staging/production=pipeline complet')
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium (ignoré si DEPLOY_ENV=none)')
-        booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Exécuter l\'analyse SonarQube')
+        booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'SKIP_MANUAL_APPROVAL', defaultValue: false, description: 'Ignorer l\'approbation manuelle pour la production')
     }
     
@@ -85,8 +85,37 @@ pipeline {
                 '''
             }
         }
-        
-        stage(' Déchiffrement Secrets SOPS') {
+
+        stage('🔑 Initialisation Variables Dynamiques') {
+            steps {
+                script {
+                    echo '▶ Génération de la clé API OWASP ZAP...'
+
+                    // Générer une clé API aléatoire pour ZAP ou récupérer depuis secrets
+                    def zapApiKey = sh(
+                        script: '''
+                            # Essayer de charger depuis secrets si disponible
+                            if [ -f "rhDemo/secrets/env-vars.sh" ]; then
+                                . rhDemo/secrets/env-vars.sh
+                                if [ -n "$ZAP_API_KEY" ]; then
+                                    echo "$ZAP_API_KEY"
+                                    exit 0
+                                fi
+                            fi
+                            # Sinon générer une nouvelle clé
+                            cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    // Stocker comme variable d'environnement globale du pipeline
+                    env.ZAP_API_KEY = zapApiKey
+                    echo "✅ Clé API ZAP initialisée: ${zapApiKey.take(8)}..."
+                }
+            }
+        }
+
+        stage('🔓 Déchiffrement Secrets SOPS') {
             steps {
                 script {
                     echo '▶ Vérification SOPS et YQ...'
@@ -1250,21 +1279,11 @@ YMLEOF
                 }
 
                 sh """#!/bin/bash
-                    # Source les secrets pour ZAP_API_KEY
-                    . rhDemo/secrets/env-vars.sh
+                    # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                    echo "🔐 Utilisation de ZAP_API_KEY: ${env.ZAP_API_KEY.take(8)}..."
 
                     # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas staging
                     cd rhDemo/infra/jenkins-docker
-
-                    # Génération d'une clé API aléatoire si non définie dans secrets
-                    if [ -z "\${ZAP_API_KEY}" ]; then
-                        echo "🔐 Génération de la clé API ZAP..."
-                        export ZAP_API_KEY=\$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-                        echo "   Clé générée: \${ZAP_API_KEY:0:8}..."
-                    else
-                        echo "🔐 Utilisation de ZAP_API_KEY depuis les secrets"
-                        echo "   Clé: \${ZAP_API_KEY:0:8}..."
-                    fi
 
                     # Nettoyage : supprimer le conteneur ZAP existant s'il existe
                     if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
@@ -1277,13 +1296,13 @@ YMLEOF
                     # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
                     echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
                     echo "   Réseau: rhdemo-jenkins-network"
-                    echo "   Clé API: \${ZAP_API_KEY:0:8}..."
-                    ZAP_API_KEY=\${ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+                    echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (30s max)..."
                     timeout=30
                     while [ \$timeout -gt 0 ]; do
-                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=\${ZAP_API_KEY} >/dev/null 2>&1; then
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
                             echo "✅ ZAP démarré et accessible"
                             break
                         fi
@@ -1298,7 +1317,7 @@ YMLEOF
                     fi
 
                     echo "📊 ZAP Status:"
-                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=\${ZAP_API_KEY} | jq .
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} | jq .
 
                     echo ""
                     echo "🔗 Connexion de ZAP au réseau staging..."
@@ -1382,50 +1401,45 @@ YMLEOF
 
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'
-                        sh '''#!/bin/bash
+                        sh """#!/bin/bash
                             # Sauvegarder le workspace actuel
-                            WORKSPACE_DIR=$(pwd)
+                            WORKSPACE_DIR=\$(pwd)
 
                             # Créer le répertoire pour les rapports ZAP dans le workspace
-                            mkdir -p "${WORKSPACE_DIR}/zap-reports"
+                            mkdir -p "\${WORKSPACE_DIR}/zap-reports"
 
-                            # Source les secrets pour récupérer ZAP_API_KEY
-                            if [ -f "rhDemo/secrets/env-vars.sh" ]; then
-                                . rhDemo/secrets/env-vars.sh
-                            fi
-
-                            # Utiliser la même clé que celle utilisée au démarrage de ZAP
-                            ZAP_API_KEY=${ZAP_API_KEY:-changeme}
+                            # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                            ZAP_API_KEY="${env.ZAP_API_KEY}"
                             ZAP_HOST="owasp-zap"
                             ZAP_PORT="8090"
 
-                            echo "🔍 Récupération du rapport ZAP depuis http://${ZAP_HOST}:${ZAP_PORT}"
-                            echo "   Clé API utilisée: ${ZAP_API_KEY:0:8}..."
+                            echo "🔍 Récupération du rapport ZAP depuis http://\${ZAP_HOST}:\${ZAP_PORT}"
+                            echo "   Clé API utilisée: \${ZAP_API_KEY:0:8}..."
 
                             # Tester d'abord la connexion à ZAP
-                            if curl -s -f "http://${ZAP_HOST}:${ZAP_PORT}/JSON/core/view/version/?apikey=${ZAP_API_KEY}" >/dev/null 2>&1; then
+                            if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
                                 echo "✅ Connexion à ZAP réussie"
 
                                 # Générer le rapport HTML
-                                if curl -f -o "${WORKSPACE_DIR}/zap-reports/zap-report.html" \
-                                    "http://${ZAP_HOST}:${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=${ZAP_API_KEY}" 2>&1; then
-                                    echo "✅ Rapport HTML ZAP généré: $(du -h ${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
                                 else
                                     echo "⚠️  Échec de génération du rapport HTML ZAP"
                                 fi
 
                                 # Générer également le rapport JSON pour analyse
-                                if curl -f -o "${WORKSPACE_DIR}/zap-reports/zap-report.json" \
-                                    "http://${ZAP_HOST}:${ZAP_PORT}/JSON/core/view/alerts/?apikey=${ZAP_API_KEY}" 2>&1; then
-                                    ALERT_COUNT=$(jq '. | length' "${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
-                                    echo "✅ Rapport JSON ZAP généré: ${ALERT_COUNT} alertes détectées"
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
                                 else
                                     echo "⚠️  Échec de génération du rapport JSON ZAP"
                                 fi
                             else
                                 echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
                             fi
-                        '''
+                        """
 
                         // Archiver les rapports ZAP
                         archiveArtifacts artifacts: 'zap-reports/*', fingerprint: true, allowEmptyArchive: true

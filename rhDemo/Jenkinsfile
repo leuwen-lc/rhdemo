@@ -1245,24 +1245,21 @@ YMLEOF
                         echo "   Clé: \${ZAP_API_KEY:0:8}..."
                     fi
 
-                    # Vérifier si ZAP existe déjà
+                    # Nettoyage : supprimer le conteneur ZAP existant s'il existe
                     if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
-                        echo "⚠️  Conteneur ZAP existant détecté"
-
-                        # Vérifier s'il est en cours d'exécution
-                        if docker ps --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
-                            echo "✅ ZAP déjà en cours d'exécution, réutilisation du conteneur"
-                        else
-                            echo "🔄 Redémarrage du conteneur ZAP existant..."
-                            docker start rhdemo-jenkins-zap
-                        fi
-                    else
-                        echo "🚀 Démarrage de ZAP dans l'environnement Jenkins..."
-                        echo "   ZAP connecté à rhdemo-jenkins-network"
-                        docker compose -f docker-compose.yml \\
-                                       -f docker-compose.zap.yml \\
-                                       up -d owasp-zap
+                        echo "🧹 Suppression du conteneur ZAP existant..."
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Conteneur ZAP supprimé"
                     fi
+
+                    # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
+                    echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
+                    echo "   Réseau: rhdemo-jenkins-network"
+                    echo "   Clé API: \${ZAP_API_KEY:0:8}..."
+                    docker compose -f docker-compose.yml \\
+                                   -f docker-compose.zap.yml \\
+                                   up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (30s max)..."
                     timeout=30

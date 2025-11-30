@@ -60,7 +60,7 @@ docker info
 │  ┌──────────────────────────┐      ┌────────────────────────────────────────────┐  │
 │  │    DOCKER SOCKET         │      │       OWASP ZAP (CI/CD uniquement)         │  │
 │  │  /var/run/docker.sock    │      │       rhdemo-jenkins-zap                   │  │
-│  │                          │      │       (Ports 8081, 8090)                   │  │
+│  │                          │      │       (Port 8090 - API + Proxy)            │  │
 │  │ • Docker-in-Docker (DinD)│      │                                            │  │
 │  │ • Lance conteneurs       │      │ • Proxy de sécurité pour tests Selenium    │  │
 │  │ • Build images           │      │ • Détection XSS, CSRF, SQLi, etc.          │  │
@@ -116,7 +116,7 @@ docker info
 | `jenkins` | Serveur Jenkins principal | 8080, 50000 | docker-compose.yml |
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
-| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8081, 8090 | docker-compose.zap.yml |
+| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
 | `jenkins-agent` | Agent Jenkins (optionnel) | - | docker-compose.yml |
 | `registry` | Docker Registry local | 5000 | docker-compose.yml |
 
@@ -527,7 +527,7 @@ docker-compose -f docker-compose.yml \
 docker logs rhdemo-jenkins-zap
 
 # Tester l'API ZAP
-docker exec rhdemo-jenkins-zap curl -s http://localhost:8081/JSON/core/view/version/?apikey=changeme
+docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=changeme
 ```
 
 **Configuration Selenium :**

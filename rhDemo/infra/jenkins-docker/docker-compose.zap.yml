@@ -52,10 +52,12 @@ services:
     restart: "no"  # Service temporaire pour CI/CD uniquement
 
     # Démarrage en mode daemon avec API activée
+    # Note: Le port principal (-port) est utilisé pour le PROXY et l'API web
+    # Il n'y a pas de séparation API/Proxy dans ZAP - un seul port pour les deux
     command: >
       zap.sh -daemon
       -host 0.0.0.0
-      -port 8081
+      -port 8090
       -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true
       -config api.key=${ZAP_API_KEY:-changeme}
@@ -75,10 +77,8 @@ services:
       - ZAP_TIMEOUT=60
 
     ports:
-      # API ZAP (pour curl depuis Jenkins) - Port 8081 pour éviter conflit avec Jenkins (8080)
-      - "8081:8081"
-
-      # Proxy ZAP (pour trafic Selenium)
+      # Port unique ZAP (API + Proxy sur le même port)
+      # Port 8090 pour éviter conflit avec Jenkins (8080)
       - "8090:8090"
 
     volumes:
@@ -102,7 +102,7 @@ services:
 
     # Healthcheck : vérifier que l'API ZAP répond
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/JSON/core/view/version/?apikey=${ZAP_API_KEY:-changeme} || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY:-changeme} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -124,10 +124,12 @@ services:
 volumes:
   # Sessions ZAP (pour réutilisation entre builds)
   zap-sessions:
+    external: true
     name: rhdemo-jenkins-zap-sessions
 
   # Rapports ZAP (montés dans Jenkins pour archivage)
   zap-reports:
+    external: true
     name: rhdemo-jenkins-zap-reports
 
 # ═══════════════════════════════════════════════════════════════

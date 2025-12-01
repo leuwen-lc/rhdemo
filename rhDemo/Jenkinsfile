@@ -510,11 +510,11 @@ YMLEOF
                         } else {
                             withCredentials(credentialsList) {
                                 if (nvdKeyAvailable && ossIndexAvailable) {
-                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}" -Dossindex.username="${OSSINDEX_USER}" -Dossindex.password="${OSSINDEX_PASS}"'
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}" -DossIndexUsername="${OSSINDEX_USER}" -DossIndexPassword="${OSSINDEX_PASS}"'
                                 } else if (nvdKeyAvailable) {
                                     sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
                                 } else if (ossIndexAvailable) {
-                                    sh './mvnw org.owasp:dependency-check-maven:check -Dossindex.username="${OSSINDEX_USER}" -Dossindex.password="${OSSINDEX_PASS}"'
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DossIndexUsername="${OSSINDEX_USER}" -DossIndexPassword="${OSSINDEX_PASS}"'
                                 }
                             }
                         }

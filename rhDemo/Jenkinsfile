@@ -1,11 +1,22 @@
 pipeline {
     agent any
-    
+
+    options {
+        // Timeout global : échoue si le pipeline dépasse 2 heures
+        timeout(time: 2, unit: 'HOURS')
+
+        // Ajoute des timestamps dans les logs console
+        timestamps()
+
+        // Conservation des builds (garde les 30 derniers)
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+    }
+
     tools {
         jdk 'JDK21'  // Nom configuré dans Jenkins Global Tool Configuration
         maven 'Maven3' // Nom configuré dans Jenkins Global Tool Configuration
     }
-    
+
     environment {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
@@ -457,46 +468,127 @@ YMLEOF
 
                     // Exécuter OWASP Dependency-Check via Maven
                     dir('rhDemo') {
+                        // Tenter d'utiliser à la fois NVD API key et OSS Index credentials
+                        def nvdKeyAvailable = false
+                        def ossIndexAvailable = false
+
                         try {
                             withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                                nvdKeyAvailable = true
                                 echo '   ✅ Clé API NVD configurée'
-                                sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
                             }
                         } catch (Exception e) {
-                            echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
-                            echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
-                            sh './mvnw org.owasp:dependency-check-maven:check'
+                            echo '   ⚠️  Clé API NVD non configurée - l\'analyse NVD sera plus lente'
                         }
 
-                        // Afficher un résumé des vulnérabilités trouvées depuis le JSON
+                        try {
+                            withCredentials([usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASS')]) {
+                                ossIndexAvailable = true
+                                echo '   ✅ Credentials OSS Index configurés'
+                            }
+                        } catch (Exception e) {
+                            echo '   ⚠️  Credentials OSS Index non configurés'
+                            echo '   💡 Créez un compte sur https://ossindex.sonatype.org/'
+                            echo '   💡 Puis créez le credential "ossindex-credentials" (Username with password) dans Jenkins'
+                        }
+
+                        // Construire la commande Maven avec les credentials disponibles
+                        def mavenCmd = './mvnw org.owasp:dependency-check-maven:check'
+                        def credentialsList = []
+
+                        if (nvdKeyAvailable) {
+                            credentialsList.add(string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'))
+                        }
+
+                        if (ossIndexAvailable) {
+                            credentialsList.add(usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASS'))
+                        }
+
+                        if (credentialsList.isEmpty()) {
+                            echo '   ⚠️  ATTENTION: Aucun credential configuré - l\'analyse sera limitée'
+                            sh mavenCmd
+                        } else {
+                            withCredentials(credentialsList) {
+                                if (nvdKeyAvailable && ossIndexAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}" -Dossindex.username="${OSSINDEX_USER}" -Dossindex.password="${OSSINDEX_PASS}"'
+                                } else if (nvdKeyAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
+                                } else if (ossIndexAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -Dossindex.username="${OSSINDEX_USER}" -Dossindex.password="${OSSINDEX_PASS}"'
+                                }
+                            }
+                        }
+
+                        // Afficher un résumé des vulnérabilités et valider le rapport
                         sh '''#!/bin/bash
-                            if [ -f "target/dependency-check-report.json" ]; then
-                                echo ""
-                                echo "📊 Résumé des vulnérabilités détectées:"
+                            set -e  # Échouer immédiatement en cas d'erreur
 
-                                TOTAL_DEPS=$(jq '.dependencies | length' target/dependency-check-report.json)
-                                echo "   Dépendances analysées: ${TOTAL_DEPS}"
-
-                                DEPS_WITH_VULNS=$(jq '[.dependencies[] | select(.vulnerabilities != null)] | length' target/dependency-check-report.json)
-                                echo "   Dépendances avec vulnérabilités: ${DEPS_WITH_VULNS}"
-
-                                if [ "$DEPS_WITH_VULNS" -gt 0 ]; then
-                                    CRITICAL=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "CRITICAL")] | length' target/dependency-check-report.json)
-                                    HIGH=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "HIGH")] | length' target/dependency-check-report.json)
-                                    MEDIUM=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "MEDIUM")] | length' target/dependency-check-report.json)
-                                    LOW=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "LOW")] | length' target/dependency-check-report.json)
-
-                                    echo "   ├─ CRITICAL: ${CRITICAL}"
-                                    echo "   ├─ HIGH:     ${HIGH}"
-                                    echo "   ├─ MEDIUM:   ${MEDIUM}"
-                                    echo "   └─ LOW:      ${LOW}"
-                                else
-                                    echo "   ✅ Aucune vulnérabilité détectée"
-                                fi
-                                echo ""
-                            else
-                                echo "⚠️  Rapport JSON non trouvé"
+                            if [ ! -f "target/dependency-check-report.json" ]; then
+                                echo "❌ ERREUR: Rapport JSON non généré"
+                                echo "   L'analyse OWASP Dependency-Check a échoué"
+                                exit 1
                             fi
+
+                            echo ""
+                            echo "📊 Résumé des vulnérabilités détectées:"
+
+                            TOTAL_DEPS=$(jq '.dependencies | length' target/dependency-check-report.json)
+                            echo "   Dépendances analysées: ${TOTAL_DEPS}"
+
+                            # Valider que des dépendances ont été analysées
+                            if [ "$TOTAL_DEPS" -eq 0 ]; then
+                                echo "❌ ERREUR: Aucune dépendance analysée"
+                                echo "   Vérifiez la configuration OWASP Dependency-Check"
+                                exit 1
+                            fi
+
+                            DEPS_WITH_VULNS=$(jq '[.dependencies[] | select(.vulnerabilities != null)] | length' target/dependency-check-report.json)
+                            echo "   Dépendances avec vulnérabilités: ${DEPS_WITH_VULNS}"
+
+                            if [ "$DEPS_WITH_VULNS" -gt 0 ]; then
+                                CRITICAL=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "CRITICAL")] | length' target/dependency-check-report.json)
+                                HIGH=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "HIGH")] | length' target/dependency-check-report.json)
+                                MEDIUM=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "MEDIUM")] | length' target/dependency-check-report.json)
+                                LOW=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "LOW")] | length' target/dependency-check-report.json)
+
+                                echo "   ├─ CRITICAL: ${CRITICAL}"
+                                echo "   ├─ HIGH:     ${HIGH}"
+                                echo "   ├─ MEDIUM:   ${MEDIUM}"
+                                echo "   └─ LOW:      ${LOW}"
+                            else
+                                echo "   ✅ Aucune vulnérabilité détectée"
+                            fi
+
+                            # Vérifier si l'analyse a réellement fonctionné en cherchant les CPE/CVE identifiés
+                            TOTAL_CVES=$(jq '[.dependencies[].vulnerabilities[]?.name // empty] | length' target/dependency-check-report.json 2>/dev/null || echo "0")
+                            TOTAL_CPES=$(jq '[.dependencies[].packages[]?.id // empty] | length' target/dependency-check-report.json 2>/dev/null || echo "0")
+
+                            echo ""
+                            echo "🔍 Validation de l'analyse:"
+                            echo "   CVEs identifiées: ${TOTAL_CVES}"
+                            echo "   CPEs identifiées: ${TOTAL_CPES}"
+
+                            # Si on a analysé plus de 50 dépendances mais trouvé 0 CVE, c'est suspect
+                            if [ "$TOTAL_DEPS" -gt 50 ] && [ "$TOTAL_CVES" -eq 0 ]; then
+                                echo ""
+                                echo "⚠️  ATTENTION: Analyse suspecte détectée"
+                                echo "   ${TOTAL_DEPS} dépendances analysées mais 0 CVE trouvée"
+                                echo "   Cela indique probablement un problème de configuration:"
+                                echo "   - OSS Index credentials manquants"
+                                echo "   - NVD API key manquante ou invalide"
+                                echo "   - Cache corrompue"
+                                echo ""
+                                echo "💡 Actions recommandées:"
+                                echo "   1. Configurez les credentials OSS Index (ossindex-credentials)"
+                                echo "   2. Vérifiez la clé NVD API (nvd-api-key)"
+                                echo "   3. Nettoyez le cache: rm -rf ~/.m2/dependency-check-data"
+                                echo ""
+                                echo "❌ ÉCHEC: Rapport non fiable - analyse incomplète"
+                                exit 1
+                            fi
+
+                            echo "✅ Analyse validée avec succès"
+                            echo ""
                         '''
                     }
                 }
@@ -1137,129 +1229,219 @@ YMLEOF
                 expression { params.DEPLOY_ENV != 'none' }
             }
             options {
-                timeout(time: 15, unit: 'MINUTES')
+                timeout(time: 8, unit: 'MINUTES')  // Réduit de 15min à 8min grâce à la parallélisation
             }
             steps {
                 script {
-                    echo '▶ Scan de sécurité des images Docker avec Trivy...'
-                    echo '   ℹ️  Les versions des images sont lues depuis docker-compose.yml'
+                    echo '▶ Scan de sécurité des images Docker avec Trivy (parallélisé)...'
+                    echo '   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps'
                     echo ''
                     echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
-                    echo '   ⏱️  Timeout: 15 minutes'
+                    echo '   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)'
                 }
 
+                // Préparation : extraire les versions des images
                 sh '''
-                    # Sauvegarder le workspace actuel
-                    WORKSPACE_DIR=$(pwd)
-
-                    # Créer le répertoire pour les rapports dans le workspace
-                    mkdir -p "${WORKSPACE_DIR}/trivy-reports"
-
-                    # Aller dans le répertoire staging pour lire docker-compose.yml
-                    cd ${STAGING_INFRA_PATH}
+                    # Créer le répertoire pour les rapports
+                    mkdir -p trivy-reports
 
                     # Extraire les versions des images depuis docker-compose.yml
+                    cd ${STAGING_INFRA_PATH}
+
                     echo "📋 Lecture des versions depuis docker-compose.yml..."
                     POSTGRES_IMAGE=$(yq eval '.services.rhdemo-db.image' docker-compose.yml | sed 's/\${POSTGRES_IMAGE:-//' | sed 's/}//')
                     KEYCLOAK_IMAGE=$(yq eval '.services.keycloak.image' docker-compose.yml | sed 's/\${KEYCLOAK_IMAGE:-//' | sed 's/}//')
                     NGINX_IMAGE=$(yq eval '.services.nginx.image' docker-compose.yml | sed 's/\${NGINX_IMAGE:-//' | sed 's/}//')
-                    APP_VERSION="build-${BUILD_NUMBER}"
 
                     echo "   PostgreSQL : $POSTGRES_IMAGE"
                     echo "   Keycloak   : $KEYCLOAK_IMAGE"
                     echo "   Nginx      : $NGINX_IMAGE"
-                    echo "   RHDemo App : rhdemo-api:$APP_VERSION"
+                    echo "   RHDemo App : rhdemo-api:build-${BUILD_NUMBER}"
+
+                    # Sauvegarder dans un fichier pour les stages parallèles
+                    cd ${WORKSPACE}
+                    echo "$POSTGRES_IMAGE" > trivy-reports/postgres-image.txt
+                    echo "$KEYCLOAK_IMAGE" > trivy-reports/keycloak-image.txt
+                    echo "$NGINX_IMAGE" > trivy-reports/nginx-image.txt
+                    echo "rhdemo-api:build-${BUILD_NUMBER}" > trivy-reports/app-image.txt
+                '''
+
+                // Scans parallèles
+                script {
+                    parallel(
+                        "Scan PostgreSQL": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/postgres-image.txt)
+                                NAME="postgres"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan PostgreSQL terminé"
+                            '''
+                        },
+                        "Scan Keycloak": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/keycloak-image.txt)
+                                NAME="keycloak"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan Keycloak terminé"
+                            '''
+                        },
+                        "Scan Nginx": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/nginx-image.txt)
+                                NAME="nginx"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan Nginx terminé"
+                            '''
+                        },
+                        "Scan RHDemo App": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/app-image.txt)
+                                NAME="rhdemo-app"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan RHDemo App terminé"
+                            '''
+                        },
+                        failFast: false  // Continue même si un scan échoue
+                    )
+                }
+
+                // Agrégation des résultats
+                sh '''
                     echo ""
-
-                    # Retourner au workspace pour les rapports
-                    cd "${WORKSPACE_DIR}"
-
-                    echo "📥 Version de Trivy installée:"
-                    trivy --version
-                    echo ""
-
-                    # Fonction pour scanner une image
-                    scan_image() {
-                        local IMAGE=$1
-                        local NAME=$2
-
-                        echo "🔍 Scan: $IMAGE"
-                        echo "   📥 Téléchargement et analyse en cours..."
-
-                        # Scan avec génération de rapport JSON et timeout
-                        # Retirer --quiet pour voir la progression, mais rediriger stderr
-                        timeout 5m trivy image \
-                            --severity CRITICAL,HIGH,MEDIUM \
-                            --format json \
-                            --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
-                            "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
-
-                        if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
-                            echo "   ❌ ERREUR: Scan échoué (timeout ou erreur réseau)"
-                            echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
-                            return 1
-                        fi
-
-                        # Générer un rapport table pour affichage HTML
-                        # Le format 'table' est plus lisible et garanti de fonctionner
-                        timeout 1m trivy image \
-                            --severity CRITICAL,HIGH,MEDIUM \
-                            --format table \
-                            --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
-                            "$IMAGE" 2>&1 || true
-
-                        # Wrapper le rapport table dans un HTML simple mais propre
-                        if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
-                            {
-                                echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-                                echo "<title>Trivy Report - $IMAGE</title>"
-                                echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5}'
-                                echo 'pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)}'
-                                echo 'h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
-                                echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
-                                echo '</pre></body></html>'
-                            } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
-                        fi
-
-                        # Extraire uniquement le résumé
-                        local CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
-                        local HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
-                        local MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" 2>/dev/null || echo "0")
-
-                        # Afficher uniquement le résumé
-                        printf "   ├─ CRITICAL: %3d\n" "$CRITICAL"
-                        printf "   ├─ HIGH:     %3d\n" "$HIGH"
-                        printf "   └─ MEDIUM:   %3d\n" "$MEDIUM"
-                        echo ""
-                    }
-
-                    # Variable pour tracker les échecs
-                    FAILED=false
-
-                    # Scanner toutes les images (versions lues depuis docker-compose.yml)
-                    echo "🚀 Début du scan des images Docker..."
-                    echo "   Timeout par image : 5 minutes"
-                    echo ""
-
-                    scan_image "$POSTGRES_IMAGE" "postgres" || echo "⚠️  Scan postgres échoué, continuation..."
-                    scan_image "$KEYCLOAK_IMAGE" "keycloak" || echo "⚠️  Scan keycloak échoué, continuation..."
-                    scan_image "$NGINX_IMAGE" "nginx" || echo "⚠️  Scan nginx échoué, continuation..."
-                    scan_image "rhdemo-api:${APP_VERSION}" "rhdemo-app" || echo "⚠️  Scan rhdemo-app échoué, continuation..."
-
-                    # Calculer les totaux
                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo "📊 RÉSULTATS GLOBAUX"
+                    echo "📊 RÉSULTATS GLOBAUX TRIVY"
                     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
                     TOTAL_CRITICAL=0
                     TOTAL_HIGH=0
                     TOTAL_MEDIUM=0
+                    FAILED=false
 
                     for REPORT in trivy-reports/*.json; do
-                        CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT")
-                        HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT")
-                        MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT")
+                        [ -f "$REPORT" ] || continue
+                        CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT" 2>/dev/null || echo "0")
+                        HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT" 2>/dev/null || echo "0")
+                        MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT" 2>/dev/null || echo "0")
 
                         TOTAL_CRITICAL=$((TOTAL_CRITICAL + CRITICAL))
                         TOTAL_HIGH=$((TOTAL_HIGH + HIGH))
@@ -1275,11 +1457,9 @@ YMLEOF
                     printf "   Total MEDIUM   : %3d\n" "$TOTAL_MEDIUM"
                     echo ""
 
-                    # Vérifier si des vulnérabilités CRITICAL ont été trouvées
                     if [ "$FAILED" = true ]; then
                         echo "❌ ÉCHEC: $TOTAL_CRITICAL vulnérabilités CRITICAL détectées"
                         echo "   Les rapports détaillés sont disponibles dans trivy-reports/"
-                        echo "   Utilisez 'jq' pour analyser les rapports JSON"
                         exit 1
                     else
                         echo "✅ SUCCÈS: Aucune vulnérabilité CRITICAL détectée"

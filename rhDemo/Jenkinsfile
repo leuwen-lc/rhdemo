@@ -467,6 +467,37 @@ YMLEOF
                             echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
                             sh './mvnw org.owasp:dependency-check-maven:check'
                         }
+
+                        // Afficher un résumé des vulnérabilités trouvées depuis le JSON
+                        sh '''#!/bin/bash
+                            if [ -f "target/dependency-check-report.json" ]; then
+                                echo ""
+                                echo "📊 Résumé des vulnérabilités détectées:"
+
+                                TOTAL_DEPS=$(jq '.dependencies | length' target/dependency-check-report.json)
+                                echo "   Dépendances analysées: ${TOTAL_DEPS}"
+
+                                DEPS_WITH_VULNS=$(jq '[.dependencies[] | select(.vulnerabilities != null)] | length' target/dependency-check-report.json)
+                                echo "   Dépendances avec vulnérabilités: ${DEPS_WITH_VULNS}"
+
+                                if [ "$DEPS_WITH_VULNS" -gt 0 ]; then
+                                    CRITICAL=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "CRITICAL")] | length' target/dependency-check-report.json)
+                                    HIGH=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "HIGH")] | length' target/dependency-check-report.json)
+                                    MEDIUM=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "MEDIUM")] | length' target/dependency-check-report.json)
+                                    LOW=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "LOW")] | length' target/dependency-check-report.json)
+
+                                    echo "   ├─ CRITICAL: ${CRITICAL}"
+                                    echo "   ├─ HIGH:     ${HIGH}"
+                                    echo "   ├─ MEDIUM:   ${MEDIUM}"
+                                    echo "   └─ LOW:      ${LOW}"
+                                else
+                                    echo "   ✅ Aucune vulnérabilité détectée"
+                                fi
+                                echo ""
+                            else
+                                echo "⚠️  Rapport JSON non trouvé"
+                            fi
+                        '''
                     }
                 }
 
@@ -481,6 +512,9 @@ YMLEOF
 
                 // Archiver aussi les rapports HTML et JSON pour consultation
                 archiveArtifacts artifacts: 'rhDemo/target/dependency-check-report.*', fingerprint: true, allowEmptyArchive: true
+
+                // Archiver le log détaillé pour diagnostic
+                archiveArtifacts artifacts: 'rhDemo/target/dependency-check.log', fingerprint: true, allowEmptyArchive: true
             }
         }
 

@@ -334,8 +334,9 @@
 					<!-- Échouer le build si des vulnérabilités sont détectées -->
 					<failBuildOnCVSS>7.0</failBuildOnCVSS>
 
-					<!-- Niveau de log -->
+					<!-- Niveau de log (DEBUG pour plus de détails) -->
 					<failOnError>true</failOnError>
+					<logFile>${project.build.directory}/dependency-check.log</logFile>
 
 					<!-- Format des rapports -->
 					<formats>
@@ -353,7 +354,11 @@
 					<nvdApiDelay>2000</nvdApiDelay>
 
 					<!-- Cache pour améliorer les performances -->
-					<dataDirectory>${project.build.directory}/dependency-check-data</dataDirectory>
+					<!-- IMPORTANT: Cache en dehors de target/ pour éviter suppression à chaque clean -->
+					<dataDirectory>${user.home}/.m2/dependency-check-data</dataDirectory>
+
+					<!-- Forcer mise à jour quotidienne de la base CVE -->
+					<cveValidForHours>24</cveValidForHours>
 
 					<!-- Analyser aussi les dépendances transitives -->
 					<skipTestScope>false</skipTestScope>

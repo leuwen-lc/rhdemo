@@ -44,11 +44,25 @@ public abstract class BaseSeleniumTest {
         if (TestConfig.BROWSER.equalsIgnoreCase("chrome")) {
             WebDriverManager.chromedriver().setup();
             ChromeOptions options = new ChromeOptions();
-            
+
             // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
             // Permet à Chrome de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
             options.setAcceptInsecureCerts(true);
-            
+
+            // Configuration du proxy ZAP (si activé via variable d'environnement)
+            String zapProxyHost = System.getenv("ZAP_PROXY_HOST");
+            String zapProxyPort = System.getenv("ZAP_PROXY_PORT");
+            if (zapProxyHost != null && zapProxyPort != null) {
+                log.info("🔒 Configuration du proxy OWASP ZAP: {}:{}", zapProxyHost, zapProxyPort);
+                org.openqa.selenium.Proxy proxy = new org.openqa.selenium.Proxy();
+                String proxyAddress = zapProxyHost + ":" + zapProxyPort;
+                proxy.setHttpProxy(proxyAddress);
+                proxy.setSslProxy(proxyAddress);
+                proxy.setNoProxy(""); // Tout passe par ZAP
+                options.setProxy(proxy);
+                log.info("✅ Proxy ZAP configuré: {}", proxyAddress);
+            }
+
             if (TestConfig.HEADLESS_MODE) {
                 options.addArguments("--headless");
                 options.addArguments("--disable-gpu");
@@ -61,11 +75,25 @@ public abstract class BaseSeleniumTest {
         } else if (TestConfig.BROWSER.equalsIgnoreCase("firefox")) {
             WebDriverManager.firefoxdriver().setup();
             FirefoxOptions options = new FirefoxOptions();
-            
+
             // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
             // Permet à Firefox de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
             options.setAcceptInsecureCerts(true);
-            
+
+            // Configuration du proxy ZAP (si activé via variable d'environnement)
+            String zapProxyHost = System.getenv("ZAP_PROXY_HOST");
+            String zapProxyPort = System.getenv("ZAP_PROXY_PORT");
+            if (zapProxyHost != null && zapProxyPort != null) {
+                log.info("🔒 Configuration du proxy OWASP ZAP: {}:{}", zapProxyHost, zapProxyPort);
+                org.openqa.selenium.Proxy proxy = new org.openqa.selenium.Proxy();
+                String proxyAddress = zapProxyHost + ":" + zapProxyPort;
+                proxy.setHttpProxy(proxyAddress);
+                proxy.setSslProxy(proxyAddress);
+                proxy.setNoProxy(""); // Tout passe par ZAP
+                options.setProxy(proxy);
+                log.info("✅ Proxy ZAP configuré: {}", proxyAddress);
+            }
+
             if (TestConfig.HEADLESS_MODE) {
                 options.addArguments("-headless");  // Firefox utilise -headless (un seul tiret)
                 // Options supplémentaires pour environnement conteneur Docker

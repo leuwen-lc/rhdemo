@@ -1,0 +1,147 @@
+# ═══════════════════════════════════════════════════════════════
+# Docker Compose Override pour OWASP ZAP (CI/CD - Environnement Jenkins)
+#
+# Ce fichier ajoute OWASP ZAP comme proxy de sécurité entre
+# les tests Selenium (exécutés dans Jenkins) et l'application RHDemo
+# pour détecter automatiquement les vulnérabilités (XSS, CSRF, SQLi, etc.)
+#
+# Usage dans Jenkins:
+#   cd infra/jenkins-docker
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.zap.yml \
+#                  up -d owasp-zap
+#
+# Architecture de test:
+#   Jenkins et ZAP : Connexion dynamique multi-réseau
+#
+#   Jenkins :
+#     - rhdemo-jenkins-network (permanent)
+#     - rhdemo-staging-network (temporaire - connecté/déconnecté par Jenkinsfile)
+#
+#   ZAP :
+#     - rhdemo-jenkins-network (permanent - défini dans ce fichier)
+#     - rhdemo-staging-network (temporaire - connecté/déconnecté par Jenkinsfile)
+#
+#   Jenkinsfile gère le cycle de vie réseau :
+#     1. Stage "📦 Déploiement" : Jenkins se connecte à rhdemo-staging-network
+#     2. Stage "🔒 Démarrage OWASP ZAP" : ZAP se connecte à rhdemo-staging-network
+#     3. Stage "🌐 Tests Selenium" : Tests avec accès aux alias DNS staging
+#     4. Post Selenium (always) : ZAP et Jenkins se déconnectent de rhdemo-staging-network
+#
+#   Flux de données durant les tests :
+#   Selenium (dans Jenkins) → ZAP Proxy (8090) →
+#                             Nginx (rhdemo.staging.local via alias DNS) → RHDemo App
+#                                        ↓
+#                                Analyse passive
+#                                + Spider
+#                                + Active Scan
+#                                        ↓
+#                                Rapport HTML/JSON
+#
+# Variables attendues:
+#   ZAP_API_KEY=your-secure-api-key (généré automatiquement si absent)
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # OWASP ZAP - Proxy de sécurité pour analyse automatique
+  # ═══════════════════════════════════════════════════════════════
+  owasp-zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: rhdemo-jenkins-zap
+    restart: "no"  # Service temporaire pour CI/CD uniquement
+
+    # Démarrage en mode daemon avec API activée
+    # Note: Le port principal (-port) est utilisé pour le PROXY et l'API web
+    # Il n'y a pas de séparation API/Proxy dans ZAP - un seul port pour les deux
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8090
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.key=${ZAP_API_KEY:-changeme}
+      -config api.disablekey=false
+      -config spider.maxDepth=5
+      -config spider.maxChildren=10
+      -config ajaxSpider.browserId=firefox
+
+    environment:
+      # Logging ZAP
+      - ZAP_LOG_LEVEL=INFO
+
+      # Configuration proxy
+      - ZAP_PROXY_PORT=8090
+
+      # Timeout scans
+      - ZAP_TIMEOUT=60
+
+    ports:
+      # Port unique ZAP (API + Proxy sur le même port)
+      # Port 8090 pour éviter conflit avec Jenkins (8080)
+      - "8090:8090"
+
+    volumes:
+      # Persistence des sessions ZAP (dans le même volume que Jenkins)
+      - zap-sessions:/zap/session
+
+      # Rapports générés (accessible depuis Jenkins pour archivage)
+      - zap-reports:/zap/reports
+
+      # Scripts personnalisés (optionnel)
+      # - ./zap-scripts:/zap/scripts:ro
+
+    networks:
+      # Réseau Jenkins (permanent)
+      # Note: ZAP sera connecté dynamiquement à rhdemo-staging-network par le Jenkinsfile
+      # lors du stage de démarrage ZAP, puis déconnecté après les tests Selenium
+      jenkins-network:
+        aliases:
+          - owasp-zap
+          - zap-proxy
+
+    # Healthcheck : vérifier que l'API ZAP répond
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY:-changeme} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+    # Limites ressources (éviter surcharge CI)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+# ═══════════════════════════════════════════════════════════════
+# VOLUMES PERSISTANTS
+# ═══════════════════════════════════════════════════════════════
+volumes:
+  # Sessions ZAP (pour réutilisation entre builds)
+  zap-sessions:
+    external: true
+    name: rhdemo-jenkins-zap-sessions
+
+  # Rapports ZAP (montés dans Jenkins pour archivage)
+  zap-reports:
+    external: true
+    name: rhdemo-jenkins-zap-reports
+
+# ═══════════════════════════════════════════════════════════════
+# RÉSEAUX
+# ═══════════════════════════════════════════════════════════════
+networks:
+  # Réseau Jenkins (déjà défini dans docker-compose.yml principal)
+  # ZAP démarre sur ce réseau uniquement
+  #
+  # Connexion dynamique à rhdemo-staging-network gérée par Jenkinsfile :
+  #   - Connexion : Stage "🔒 Démarrage OWASP ZAP" (après healthcheck)
+  #   - Déconnexion : Post "🌐 Tests Selenium IHM" (always block)
+  jenkins-network:
+    external: true
+    name: rhdemo-jenkins-network

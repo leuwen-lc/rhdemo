@@ -334,7 +334,7 @@
 					<!-- Échouer le build si des vulnérabilités sont détectées -->
 					<failBuildOnCVSS>7.0</failBuildOnCVSS>
 
-					<!-- Niveau de log -->
+					<!-- Échouer explicitement si l'analyse rencontre des erreurs -->
 					<failOnError>true</failOnError>
 
 					<!-- Format des rapports -->
@@ -353,13 +353,17 @@
 					<nvdApiDelay>2000</nvdApiDelay>
 
 					<!-- Cache pour améliorer les performances -->
-					<dataDirectory>${project.build.directory}/dependency-check-data</dataDirectory>
+					<!-- IMPORTANT: Cache en dehors de target/ pour éviter suppression à chaque clean -->
+					<dataDirectory>${user.home}/.m2/dependency-check-data</dataDirectory>
 
 					<!-- Analyser aussi les dépendances transitives -->
 					<skipTestScope>false</skipTestScope>
 
 					<!-- Timeout -->
 					<connectionTimeout>30000</connectionTimeout>
+
+					<!-- Désactiver les analyseurs non pertinents pour réduire les warnings -->
+					<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
 				</configuration>
 			</plugin>
 		</plugins>

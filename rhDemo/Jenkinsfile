@@ -1,11 +1,22 @@
 pipeline {
     agent any
-    
+
+    options {
+        // Timeout global : échoue si le pipeline dépasse 2 heures
+        timeout(time: 2, unit: 'HOURS')
+
+        // Ajoute des timestamps dans les logs console
+        timestamps()
+
+        // Conservation des builds (garde les 30 derniers)
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+    }
+
     tools {
         jdk 'JDK21'  // Nom configuré dans Jenkins Global Tool Configuration
         maven 'Maven3' // Nom configuré dans Jenkins Global Tool Configuration
     }
-    
+
     environment {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
@@ -46,7 +57,7 @@ pipeline {
     parameters {
         choice(name: 'DEPLOY_ENV', choices: ['staging', 'production', 'none'], description: 'none=build+tests unitaires/intégration+SonarQube (sans Docker/Selenium), staging/production=pipeline complet')
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium (ignoré si DEPLOY_ENV=none)')
-        booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Exécuter l\'analyse SonarQube')
+        booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'SKIP_MANUAL_APPROVAL', defaultValue: false, description: 'Ignorer l\'approbation manuelle pour la production')
     }
     
@@ -85,8 +96,37 @@ pipeline {
                 '''
             }
         }
-        
-        stage(' Déchiffrement Secrets SOPS') {
+
+        stage('🔑 Initialisation Variables Dynamiques') {
+            steps {
+                script {
+                    echo '▶ Génération de la clé API OWASP ZAP...'
+
+                    // Générer une clé API aléatoire pour ZAP ou récupérer depuis secrets
+                    def zapApiKey = sh(
+                        script: '''
+                            # Essayer de charger depuis secrets si disponible
+                            if [ -f "rhDemo/secrets/env-vars.sh" ]; then
+                                . rhDemo/secrets/env-vars.sh
+                                if [ -n "$ZAP_API_KEY" ]; then
+                                    echo "$ZAP_API_KEY"
+                                    exit 0
+                                fi
+                            fi
+                            # Sinon générer une nouvelle clé
+                            cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    // Stocker comme variable d'environnement globale du pipeline
+                    env.ZAP_API_KEY = zapApiKey
+                    echo "✅ Clé API ZAP initialisée: ${zapApiKey.take(8)}..."
+                }
+            }
+        }
+
+        stage('🔓 Déchiffrement Secrets SOPS') {
             steps {
                 script {
                     echo '▶ Vérification SOPS et YQ...'
@@ -428,26 +468,145 @@ YMLEOF
 
                     // Exécuter OWASP Dependency-Check via Maven
                     dir('rhDemo') {
+                        // Tenter d'utiliser à la fois NVD API key et OSS Index credentials
+                        def nvdKeyAvailable = false
+                        def ossIndexAvailable = false
+
                         try {
                             withCredentials([string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')]) {
+                                nvdKeyAvailable = true
                                 echo '   ✅ Clé API NVD configurée'
-                                sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
                             }
                         } catch (Exception e) {
-                            echo '   ⚠️  Clé API NVD non configurée - l\'analyse sera plus lente'
-                            echo '   💡 Créez le credential "nvd-api-key" (Secret text) dans Jenkins'
-                            sh './mvnw org.owasp:dependency-check-maven:check'
+                            echo '   ⚠️  Clé API NVD non configurée - l\'analyse NVD sera plus lente'
                         }
+
+                        try {
+                            withCredentials([usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASS')]) {
+                                ossIndexAvailable = true
+                                echo '   ✅ Credentials OSS Index configurés'
+                            }
+                        } catch (Exception e) {
+                            echo '   ⚠️  Credentials OSS Index non configurés'
+                            echo '   💡 Créez un compte sur https://ossindex.sonatype.org/'
+                            echo '   💡 Puis créez le credential "ossindex-credentials" (Username with password) dans Jenkins'
+                        }
+
+                        // Construire la commande Maven avec les credentials disponibles
+                        def mavenCmd = './mvnw org.owasp:dependency-check-maven:check'
+                        def credentialsList = []
+
+                        if (nvdKeyAvailable) {
+                            credentialsList.add(string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'))
+                        }
+
+                        if (ossIndexAvailable) {
+                            credentialsList.add(usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASS'))
+                        }
+
+                        if (credentialsList.isEmpty()) {
+                            echo '   ⚠️  ATTENTION: Aucun credential configuré - l\'analyse sera limitée'
+                            sh mavenCmd
+                        } else {
+                            withCredentials(credentialsList) {
+                                if (nvdKeyAvailable && ossIndexAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}" -DossIndexUsername="${OSSINDEX_USER}" -DossIndexPassword="${OSSINDEX_PASS}"'
+                                } else if (nvdKeyAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey="${NVD_API_KEY}"'
+                                } else if (ossIndexAvailable) {
+                                    sh './mvnw org.owasp:dependency-check-maven:check -DossIndexUsername="${OSSINDEX_USER}" -DossIndexPassword="${OSSINDEX_PASS}"'
+                                }
+                            }
+                        }
+
+                        // Afficher un résumé des vulnérabilités et valider le rapport
+                        sh '''#!/bin/bash
+                            set -e  # Échouer immédiatement en cas d'erreur
+
+                            if [ ! -f "target/dependency-check-report.json" ]; then
+                                echo "❌ ERREUR: Rapport JSON non généré"
+                                echo "   L'analyse OWASP Dependency-Check a échoué"
+                                exit 1
+                            fi
+
+                            echo ""
+                            echo "📊 Résumé des vulnérabilités détectées:"
+
+                            TOTAL_DEPS=$(jq '.dependencies | length' target/dependency-check-report.json)
+                            echo "   Dépendances analysées: ${TOTAL_DEPS}"
+
+                            # Valider que des dépendances ont été analysées
+                            if [ "$TOTAL_DEPS" -eq 0 ]; then
+                                echo "❌ ERREUR: Aucune dépendance analysée"
+                                echo "   Vérifiez la configuration OWASP Dependency-Check"
+                                exit 1
+                            fi
+
+                            DEPS_WITH_VULNS=$(jq '[.dependencies[] | select(.vulnerabilities != null)] | length' target/dependency-check-report.json)
+                            echo "   Dépendances avec vulnérabilités: ${DEPS_WITH_VULNS}"
+
+                            if [ "$DEPS_WITH_VULNS" -gt 0 ]; then
+                                CRITICAL=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "CRITICAL")] | length' target/dependency-check-report.json)
+                                HIGH=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "HIGH")] | length' target/dependency-check-report.json)
+                                MEDIUM=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "MEDIUM")] | length' target/dependency-check-report.json)
+                                LOW=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity == "LOW")] | length' target/dependency-check-report.json)
+
+                                echo "   ├─ CRITICAL: ${CRITICAL}"
+                                echo "   ├─ HIGH:     ${HIGH}"
+                                echo "   ├─ MEDIUM:   ${MEDIUM}"
+                                echo "   └─ LOW:      ${LOW}"
+                            else
+                                echo "   ✅ Aucune vulnérabilité détectée"
+                            fi
+
+                            # Vérifier si l'analyse a réellement fonctionné en cherchant les CPE/CVE identifiés
+                            TOTAL_CVES=$(jq '[.dependencies[].vulnerabilities[]?.name // empty] | length' target/dependency-check-report.json 2>/dev/null || echo "0")
+                            TOTAL_CPES=$(jq '[.dependencies[].packages[]?.id // empty] | length' target/dependency-check-report.json 2>/dev/null || echo "0")
+
+                            echo ""
+                            echo "🔍 Validation de l'analyse:"
+                            echo "   CVEs identifiées: ${TOTAL_CVES}"
+                            echo "   CPEs identifiées: ${TOTAL_CPES}"
+
+                            # Si on a analysé plus de 50 dépendances mais trouvé 0 CVE, c'est suspect
+                            if [ "$TOTAL_DEPS" -gt 50 ] && [ "$TOTAL_CVES" -eq 0 ]; then
+                                echo ""
+                                echo "⚠️  ATTENTION: Analyse suspecte détectée"
+                                echo "   ${TOTAL_DEPS} dépendances analysées mais 0 CVE trouvée"
+                                echo "   Cela indique probablement un problème de configuration:"
+                                echo "   - OSS Index credentials manquants"
+                                echo "   - NVD API key manquante ou invalide"
+                                echo "   - Cache corrompue"
+                                echo ""
+                                echo "💡 Actions recommandées:"
+                                echo "   1. Configurez les credentials OSS Index (ossindex-credentials)"
+                                echo "   2. Vérifiez la clé NVD API (nvd-api-key)"
+                                echo "   3. Nettoyez le cache: rm -rf ~/.m2/dependency-check-data"
+                                echo ""
+                                echo "❌ ÉCHEC: Rapport non fiable - analyse incomplète"
+                                exit 1
+                            fi
+
+                            echo "✅ Analyse validée avec succès"
+                            echo ""
+                        '''
                     }
                 }
 
                 // Publier les résultats OWASP
+                // Note: Le rapport est généré dans rhDemo/target/dependency-check-report.xml
                 dependencyCheckPublisher(
-                    pattern: '**/dependency-check-report.xml',
+                    pattern: 'rhDemo/target/dependency-check-report.xml',
                     failedTotalCritical: 1,    // Échec si ≥ 1 vulnérabilité Critical (CVSS 9.0-10.0)
                     failedTotalHigh: 1          // Échec si ≥ 1 vulnérabilité High (CVSS 7.0-8.9)
                     // Pas de seuils unstable* pour éviter la redondance
                 )
+
+                // Archiver aussi les rapports HTML et JSON pour consultation
+                archiveArtifacts artifacts: 'rhDemo/target/dependency-check-report.*', fingerprint: true, allowEmptyArchive: true
+
+                // Archiver le log détaillé pour diagnostic
+                archiveArtifacts artifacts: 'rhDemo/target/dependency-check.log', fingerprint: true, allowEmptyArchive: true
             }
         }
 
@@ -1064,11 +1223,330 @@ YMLEOF
                 '''
             }
         }
-        
+
+        stage('🔍 Scan Sécurité Images Docker (Trivy)') {
+            when {
+                expression { params.DEPLOY_ENV != 'none' }
+            }
+            options {
+                timeout(time: 8, unit: 'MINUTES')  // Réduit de 15min à 8min grâce à la parallélisation
+            }
+            steps {
+                script {
+                    echo '▶ Scan de sécurité des images Docker avec Trivy (parallélisé)...'
+                    echo '   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps'
+                    echo ''
+                    echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
+                    echo '   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)'
+                }
+
+                // Préparation : extraire les versions des images
+                sh '''
+                    # Créer le répertoire pour les rapports
+                    mkdir -p trivy-reports
+
+                    # Extraire les versions des images depuis docker-compose.yml
+                    cd ${STAGING_INFRA_PATH}
+
+                    echo "📋 Lecture des versions depuis docker-compose.yml..."
+                    POSTGRES_IMAGE=$(yq eval '.services.rhdemo-db.image' docker-compose.yml | sed 's/\${POSTGRES_IMAGE:-//' | sed 's/}//')
+                    KEYCLOAK_IMAGE=$(yq eval '.services.keycloak.image' docker-compose.yml | sed 's/\${KEYCLOAK_IMAGE:-//' | sed 's/}//')
+                    NGINX_IMAGE=$(yq eval '.services.nginx.image' docker-compose.yml | sed 's/\${NGINX_IMAGE:-//' | sed 's/}//')
+
+                    echo "   PostgreSQL : $POSTGRES_IMAGE"
+                    echo "   Keycloak   : $KEYCLOAK_IMAGE"
+                    echo "   Nginx      : $NGINX_IMAGE"
+                    echo "   RHDemo App : rhdemo-api:build-${BUILD_NUMBER}"
+
+                    # Sauvegarder dans un fichier pour les stages parallèles
+                    cd ${WORKSPACE}
+                    echo "$POSTGRES_IMAGE" > trivy-reports/postgres-image.txt
+                    echo "$KEYCLOAK_IMAGE" > trivy-reports/keycloak-image.txt
+                    echo "$NGINX_IMAGE" > trivy-reports/nginx-image.txt
+                    echo "rhdemo-api:build-${BUILD_NUMBER}" > trivy-reports/app-image.txt
+                '''
+
+                // Scans parallèles
+                script {
+                    parallel(
+                        "Scan PostgreSQL": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/postgres-image.txt)
+                                NAME="postgres"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan PostgreSQL terminé"
+                            '''
+                        },
+                        "Scan Keycloak": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/keycloak-image.txt)
+                                NAME="keycloak"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan Keycloak terminé"
+                            '''
+                        },
+                        "Scan Nginx": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/nginx-image.txt)
+                                NAME="nginx"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan Nginx terminé"
+                            '''
+                        },
+                        "Scan RHDemo App": {
+                            sh '''#!/bin/bash
+                                WORKSPACE_DIR=$(pwd)
+                                IMAGE=$(cat trivy-reports/app-image.txt)
+                                NAME="rhdemo-app"
+
+                                echo "🔍 Scan: $IMAGE"
+
+                                timeout 5m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format json \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
+                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+
+                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
+                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
+                                fi
+
+                                timeout 1m trivy image \
+                                    --severity CRITICAL,HIGH,MEDIUM \
+                                    --format table \
+                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
+                                    "$IMAGE" 2>&1 || true
+
+                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
+                                    {
+                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                                        echo "<title>Trivy Report - $IMAGE</title>"
+                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
+                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
+                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
+                                        echo '</pre></body></html>'
+                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
+                                fi
+
+                                echo "✅ Scan RHDemo App terminé"
+                            '''
+                        },
+                        failFast: false  // Continue même si un scan échoue
+                    )
+                }
+
+                // Agrégation des résultats
+                sh '''
+                    echo ""
+                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    echo "📊 RÉSULTATS GLOBAUX TRIVY"
+                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+                    TOTAL_CRITICAL=0
+                    TOTAL_HIGH=0
+                    TOTAL_MEDIUM=0
+                    FAILED=false
+
+                    for REPORT in trivy-reports/*.json; do
+                        [ -f "$REPORT" ] || continue
+                        CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT" 2>/dev/null || echo "0")
+                        HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT" 2>/dev/null || echo "0")
+                        MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT" 2>/dev/null || echo "0")
+
+                        TOTAL_CRITICAL=$((TOTAL_CRITICAL + CRITICAL))
+                        TOTAL_HIGH=$((TOTAL_HIGH + HIGH))
+                        TOTAL_MEDIUM=$((TOTAL_MEDIUM + MEDIUM))
+
+                        if [ "$CRITICAL" -gt 0 ]; then
+                            FAILED=true
+                        fi
+                    done
+
+                    printf "   Total CRITICAL : %3d\n" "$TOTAL_CRITICAL"
+                    printf "   Total HIGH     : %3d\n" "$TOTAL_HIGH"
+                    printf "   Total MEDIUM   : %3d\n" "$TOTAL_MEDIUM"
+                    echo ""
+
+                    if [ "$FAILED" = true ]; then
+                        echo "❌ ÉCHEC: $TOTAL_CRITICAL vulnérabilités CRITICAL détectées"
+                        echo "   Les rapports détaillés sont disponibles dans trivy-reports/"
+                        exit 1
+                    else
+                        echo "✅ SUCCÈS: Aucune vulnérabilité CRITICAL détectée"
+                        if [ "$TOTAL_HIGH" -gt 0 ]; then
+                            echo "   ⚠️  Attention: $TOTAL_HIGH vulnérabilités HIGH détectées (non bloquantes)"
+                        fi
+                    fi
+                '''
+
+                // Archiver les rapports Trivy (JSON et HTML)
+                archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true, allowEmptyArchive: true
+                archiveArtifacts artifacts: 'trivy-reports/*.html', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS FONCTIONNELS
         // ════════════════════════════════════════════════════════════════
-        
+
+        stage('🔒 Démarrage OWASP ZAP Proxy') {
+            when {
+                allOf {
+                    expression { params.DEPLOY_ENV != 'none' }
+                    expression { params.RUN_SELENIUM_TESTS == true }
+                }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage du proxy OWASP ZAP pour analyse de sécurité...'
+                    echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
+                }
+
+                sh """#!/bin/bash
+                    # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                    echo "🔐 Utilisation de ZAP_API_KEY: ${env.ZAP_API_KEY.take(8)}..."
+
+                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas staging
+                    cd rhDemo/infra/jenkins-docker
+
+                    # Nettoyage : supprimer le conteneur ZAP existant s'il existe
+                    if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
+                        echo "🧹 Suppression du conteneur ZAP existant..."
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Conteneur ZAP supprimé"
+                    fi
+
+                    # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
+                    echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
+                    echo "   Réseau: rhdemo-jenkins-network"
+                    echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+
+                    echo "⏳ Attente du démarrage de ZAP (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
+                            echo "✅ ZAP démarré et accessible"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: ZAP n'est pas prêt après 30s"
+                        docker logs --tail=20 rhdemo-jenkins-zap
+                        exit 1
+                    fi
+
+                    echo "📊 ZAP Status:"
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} | jq .
+
+                    echo ""
+                    echo "🔗 Connexion de ZAP au réseau staging..."
+                    docker network connect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau staging"
+
+                    echo ""
+                    echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
+                    echo "   Container: rhdemo-jenkins-zap"
+                    echo "   Réseau 1: rhdemo-jenkins-network (API + Proxy)"
+                    echo "   Réseau 2: rhdemo-staging-network (accès application via connexion dynamique)"
+                    echo "   Port unique (API + Proxy): owasp-zap:8090"
+                """
+            }
+        }
+
         stage('🌐 Tests Selenium IHM') {
             when {
                 allOf {
@@ -1087,7 +1565,7 @@ YMLEOF
                 dir(TEST_PROJECT_PATH) {
                     sh """
                         . \${WORKSPACE}/rhDemo/secrets/env-vars.sh
-                        
+
                         # URLs via nginx dans le réseau Docker avec HTTPS
                         # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
                         # Car Jenkins container est connecté à rhdemo-staging-network
@@ -1102,11 +1580,17 @@ YMLEOF
                         TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 
+                        # Configuration du proxy ZAP pour intercepter le trafic Selenium
+                        # BaseSeleniumTest.java détecte ces variables et configure le proxy WebDriver
+                        export ZAP_PROXY_HOST=owasp-zap
+                        export ZAP_PROXY_PORT=8090
+
                         echo "📍 Configuration des tests Selenium:"
                         echo "   APP_URL: \${APP_URL}"
                         echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
                         echo "   TEST_USERNAME: \${TEST_USERNAME} (ROLE_consult + ROLE_MAJ)"
                         echo "   Mode: Headless"
+                        echo "   ZAP Proxy: \${ZAP_PROXY_HOST}:\${ZAP_PROXY_PORT}"
                         echo "   (Healthcheck HTTPS validé avant ce stage)"
 
                         # Lancement des tests avec TOUTES les configs via propriétés Maven
@@ -1128,6 +1612,73 @@ YMLEOF
                             archiveArtifacts artifacts: '**/screenshots/**/*.png', allowEmptyArchive: true
                             junit '**/target/surefire-reports/*.xml'
                         }
+
+                        // Génération du rapport OWASP ZAP avant déconnexion
+                        echo '📊 Génération du rapport OWASP ZAP...'
+                        sh """#!/bin/bash
+                            # Sauvegarder le workspace actuel
+                            WORKSPACE_DIR=\$(pwd)
+
+                            # Créer le répertoire pour les rapports ZAP dans le workspace
+                            mkdir -p "\${WORKSPACE_DIR}/zap-reports"
+
+                            # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                            ZAP_API_KEY="${env.ZAP_API_KEY}"
+                            ZAP_HOST="owasp-zap"
+                            ZAP_PORT="8090"
+
+                            echo "🔍 Récupération du rapport ZAP depuis http://\${ZAP_HOST}:\${ZAP_PORT}"
+                            echo "   Clé API utilisée: \${ZAP_API_KEY:0:8}..."
+
+                            # Tester d'abord la connexion à ZAP
+                            if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
+                                echo "✅ Connexion à ZAP réussie"
+
+                                # Générer le rapport HTML
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                else
+                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                fi
+
+                                # Générer également le rapport JSON pour analyse
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
+                                else
+                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                fi
+                            else
+                                echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
+                            fi
+                        """
+
+                        // Archiver les rapports ZAP
+                        archiveArtifacts artifacts: 'zap-reports/*', fingerprint: true, allowEmptyArchive: true
+
+                        // Déconnexion de ZAP du réseau staging après les tests
+                        echo '🔌 Déconnexion de ZAP du réseau staging...'
+                        sh '''
+                            docker network disconnect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau staging"
+                            echo "✅ ZAP déconnecté du réseau staging (reste sur jenkins-network)"
+                        '''
+
+                        // Déconnexion de Jenkins du réseau staging après les tests
+                        echo '🔌 Déconnexion de Jenkins du réseau staging...'
+                        sh '''#!/bin/bash
+                            # Trouver le conteneur Jenkins principal (pas l'agent)
+                            JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                            echo "Conteneur Jenkins trouvé: $JENKINS_CONTAINER"
+
+                            if [ -n "$JENKINS_CONTAINER" ]; then
+                                docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté du réseau staging"
+                                echo "✅ Jenkins ($JENKINS_CONTAINER) déconnecté du réseau rhdemo-staging-network"
+                            else
+                                echo "⚠️ Conteneur Jenkins introuvable pour déconnexion"
+                            fi
+                        '''
                     }
                 }
             }
@@ -1180,10 +1731,66 @@ YMLEOF
                 script {
                     echo '▶ Publication des rapports...'
                 }
+
+                // Rapport de couverture de code (JaCoCo)
                 publishHTML([
                     reportDir: 'rhDemo/target/site/jacoco',
                     reportFiles: 'index.html',
-                    reportName: 'Code Coverage',
+                    reportName: 'Code Coverage (JaCoCo)',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+
+                // Rapports Trivy (scan de sécurité des images Docker)
+                publishHTML([
+                    reportDir: 'trivy-reports',
+                    reportFiles: 'nginx.html',
+                    reportName: 'Trivy - Nginx',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+                publishHTML([
+                    reportDir: 'trivy-reports',
+                    reportFiles: 'postgres.html',
+                    reportName: 'Trivy - PostgreSQL',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+                publishHTML([
+                    reportDir: 'trivy-reports',
+                    reportFiles: 'keycloak.html',
+                    reportName: 'Trivy - Keycloak',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+                publishHTML([
+                    reportDir: 'trivy-reports',
+                    reportFiles: 'rhdemo-app.html',
+                    reportName: 'Trivy - RHDemo App',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+
+                // Rapport OWASP Dependency-Check (vulnérabilités des dépendances Maven)
+                publishHTML([
+                    reportDir: 'rhDemo/target',
+                    reportFiles: 'dependency-check-report.html',
+                    reportName: 'OWASP Dependency-Check',
+                    allowMissing: true,
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true
+                ])
+
+                // Rapport OWASP ZAP (scan de sécurité web dynamique)
+                publishHTML([
+                    reportDir: 'zap-reports',
+                    reportFiles: 'zap-report.html',
+                    reportName: 'OWASP ZAP Security Report',
                     allowMissing: true,
                     keepAll: true,
                     alwaysLinkToLastBuild: true

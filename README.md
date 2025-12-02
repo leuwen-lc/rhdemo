@@ -38,7 +38,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse.
 - Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
 
-## Accent mis sur le DevSecOps, mise en place des briques de sécurité liées à l'applicatif dès le début du projet, remontée des vulnérabilités au plus tôt 
+## Accent mis sur le DevSecOps 
 - Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Utilisation de Spring Security : Inteface Keycloak OIDC (custom pour récupérer les roles des utilisateurs dans l'idtoken), activation de l'anti-CSRF (via cookie spécialisé) sur le module principal lié à l'utilisation du pattern BFF. Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes (Spring actuator, documentation Open API/swagger, etc...)
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisaiton d'un outil centralisé de type Hashicorp Vault demande une expertise plus spécialisée mais reste possible sans modifier l'applicatif (TODO).
@@ -62,7 +62,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Le fait de déployer via CI/CD dans un premier environnement de staging permet de démontrer la portabilité de l'application
 - Par contre par nature ce projet n'est pas pret pour la production. il resterait un travail important de configuration de tous les composants en cible production : 
    - élimination des modules périphériques de l'application (comme le module de documentation et test openapi voir http://localhost:9000 sur l'application)
-   - passage en mode production et durcissement de la configuration KeyCloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...)
+   - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...)
    - durcissement de la configuration postgresql, mise au point des procédures de sauvegarde/restauration
    - réduire la verbosité de l'applicatif par configuration (niveau de log info par défaut)
    - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins et probablement utilisation d'un Jenkins dédié production pour éviter qu'il soit pollué par les reconstructions permanentes en dev/staging et qu'il faille faire une gestion fine gestion de droits reposant uniquement sur Jenkins pour interdire les opérations de déploiement en production à certains profils. 
@@ -77,21 +77,20 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 ### En dev ou test local : 
    - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base. 
    
-   Attention pour diminuer l'empreinte Keycloack n'a pas de stockage persistant, ce qui oblige à réinitialiser ses données à chaque relance (via le batch rhDemoInitKeyCloak)  vous pouvez lui associer un Postgresql dédié en enrichissant le docker compose.
+   Attention pour diminuer l'empreinte Keycloak n'a pas de stockage persistant, ce qui oblige à réinitialiser ses données à chaque relance (via le batch rhDemoInitKeyCloak)  vous pouvez lui associer un Postgresql dédié en enrichissant le docker compose.
   
    - Connectez vous (par défaut sur http;//localhost:9000/front)
 
 ### Utiliser la chaine CI/CD et déployer l'environnement de staging :
-   - Allez dans rhDemo/infra/jenkins-docker et suivez la doc d'install Jenkins avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
-   - Installez SOPS et une clé age 
+   - Allez dans rhDemo/infra/jenkins-docker et suivez la doc d'install Jenkins/SonarQube/Zap avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
+   - Installez SOPS et une clé age (voir dans rhDemo/docs/SOPS_SETUP.md)
    - Fabriquez un fichier de secrets de l'environnement de staging à partir du template secrets-staging.yml.template puis chiffrez le avec SOPS sous secrets-staging.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)
    - Référencez au niveau des credentials Jenkins : 
       - sous l'id "sops-age-key" votre fichier contenant la paire de clés age nécessaire au déchiffrage de secrets-staging.yml
       - sous l'id "jenkins-sonar-token" la clé d'échange avec sonarQube (à générer sur sonarQube)
+      - sous l'id "nvd-api-key" et "ossindex-credentials" deux clés à obtenir pour accélérer les téléchargement des dépendances et CVE liées à OWASP Dependency Check (voir le README.me)
       - (facultatif) sous l'id "mail.credentials" un compte sur un serveur de mails permettant l'envoi SMTP
    - Lancez le pipeline rhDemo/Jenkinsfile
-
-- Lancer directement l'environnement de staging en chargeant le conteneur applicatif depuis docker-hub (TODO)
 
 
 ## Contribuer

@@ -1,6 +1,8 @@
-# Environnement de développement local
+    # Environnement de développement local
 
-Docker Compose pour exécuter l'infrastructure nécessaire au développement local de rhDemo.
+Prérequis 
+- Git en version récente
+- Docker Compose en version récente pour exécuter l'infrastructure nécessaire au développement local de rhDemo.
 
 ## Services fournis
 
@@ -20,6 +22,17 @@ Docker Compose pour exécuter l'infrastructure nécessaire au développement loc
 - **Admin password**: Configurable via `.env` (défaut: `admin`)
 - **Container**: `keycloak-dev`
 
+## Conflits de ports
+
+En cas de conflit de ports avec des services existants sur votre poste et qui ne peuvent pas être stoppés, vous pouvez reconfigurer en changeant dans le fichier docker-compose.yml de rhDemo/infra/dev
+
+Vous pouvez également changer le port de lancement 9000 par défaut de l'application
+
+il faudra par contre répercuter ces changements dans les différents fichiers de configuration
+- rhDemoInitKeycloak/src/main/application.yml (créé en étape 3 ci-dessou)
+- rhDemo/src/main/application.yml
+- rhDemoAPITestIHM/src/main/test.yml si besoin de lancer les tests Selenium
+
 ## Installation
 
 ### 1. Configurer les variables d'environnement
@@ -30,21 +43,23 @@ cd infra/dev
 # Copier le template
 cp .env.template .env
 
-# Éditer avec vos valeurs (optionnel, les valeurs par défaut fonctionnent)
-vim .env
+# Éditer avec vos valeurs pour les différents secrets
+nano .env
 ```
+
+NB : le fichier .env contenant des secrets à usage uniquement local, il est dans le .gitignore
 
 ### 2. Démarrer les services
 
 ```bash
 # Démarrer tous les services
-docker-compose up -d
+docker compose up -d
 
 # Vérifier les logs
-docker-compose logs -f
+docker compose logs -f
 
 # Vérifier l'état des services
-docker-compose ps
+docker compose ps
 ```
 
 ### 3. Initialiser Keycloak (première utilisation)
@@ -53,13 +68,18 @@ Une fois Keycloak démarré, vous devez créer le realm et les clients:
 
 **Option 1**: Utiliser `rhDemoInitKeycloak` (recommandé)
 
-```bash
-cd ../../rhDemoInitKeycloak
+- copier le template rhDemoInitKeycloak/src/main/resources/application.yml.template pour créer un fichier application.yml
+- editez ce fichier application.yml
+- reporter le secret KEYCLOAK_ADMIN_PASSWORD choisi dans rhDemo/infra/dev.env dans le champ correspondant
+- choisir un client secret pour le client keycloak (sert à l'application rhDemo à s'authentifier pour gérer le dialogue OIDC avec keycloak),
+- choisir des secrets pour vos utilisateurs de test 
 
-# Créer application-dev.yml avec la configuration Keycloak
-# (voir template dans rhDemoInitKeycloak/src/main/resources/)
+NB : le fichier application.yml de rhDemoInitKeycloak contenant des secrets à usage uniquement local, il est dans le .gitignore
 
 # Exécuter l'initialisation
+
+```bash
+cd monCheminGit/rhDemoInitKeycloak
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
@@ -71,42 +91,58 @@ cd ../../rhDemoInitKeycloak
 4. Créer le client OAuth2 pour l'application
 5. Créer les utilisateurs de test
 
-### 4. Initialiser la base de données
+### 4. Initialiser la base de données (schéma + jeu de données fictif)
 
-```bash
-cd ../..
 
 # Exécuter le script SQL de création du schéma
+
+```bash
+cd monCheminGit/rhDemo
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgddl.sql
 ```
 
-## Utilisation
+### 5. Créez un fichier secrets-rhdemo.yml
 
-### Démarrer l'application rhDemo
+- copier le template rhDemo/secrets/secrets.rhdemo.yml.template pour créer un fichier secrets.rhdemo.yml
+- editez ce fichier application.yml et saisissez les secrets en cohérences avec 
+    - Le secret Postgresql défini en étape 1
+    - Le client secret Keycloack défini en étape 3 
+- Saisissez un mot de passe quelconque pour la base de données H2 (tests d'intégration Spring uniquement)
 
-Une fois l'infrastructure démarrée, vous pouvez lancer l'application:
+NB : le fichier secrets-rhdemo.yml contenant des secrets à usage uniquement local, il est dans le .gitignore contrairement au fichier secrets-staging.yml utilisé pour le déploiement mais qui est chiffré avec SOPS.
+
+### 6.Démarrer l'application rhDemo
+
+
+Une fois l'infrastructure démarrée, et l'ensemble des secrets configurés vous pouvez lancer l'application
+
 
 ```bash
-cd rhDemo
-
-# S'assurer que secrets/secrets-rhdemo.yml existe et contient:
-# rhdemo:
-#   datasource:
-#     password:
-#       pg: changeme  # (ou votre mot de passe PostgreSQL)
-#   client:
-#     registration:
-#       keycloak:
-#         client:
-#           secret: <votre-secret-client-keycloak>
+cd monCheminGit/rhDemo
 
 # Démarrer l'application
 ./mvnw spring-boot:run
 ```
 
-L'application se connectera automatiquement à:
+Par défaut l'application se connectera automatiquement à:
 - PostgreSQL sur `localhost:5432`
 - Keycloak sur `localhost:6090`
+
+Elle est ensuite accessible sur http://localhost:9000/front
+
+### 7.Démarrer les tests Selenium```bash
+
+Vérifiez que l'application est accessible puis
+
+```bash
+cd monCheminGit/rhDemoAPITestIHM
+# Démarrer les tests (ouvre un firefox)
+./mvnw test
+```
+Le test cherche Firefox sous divers emplacements (Snap, apt, installations manuelle)
+Pour une raison non complétement élucidée, la version snap(lié à ubuntu) n'était pas pilotable par les tests Selenium quand je l'ai essayée.
+
+La solution testée nécessite d'installer manuellement Firefox (téléchargement direct sur le site FF) sous mon répertoire home ~/firefox
 
 ### Arrêter les services
 
@@ -129,7 +165,7 @@ docker-compose down -v
 |---------|-----|-------------|
 | Keycloak Admin Console | http://localhost:6090 | admin / admin |
 | PostgreSQL | localhost:5432 | dbrhdemo / changeme |
-| Application rhDemo | http://localhost:8080 | (démarrer séparément) |
+| Application rhDemo | http://localhost:9000 | (démarrer séparément) |
 
 ## Différences avec l'environnement staging
 
@@ -146,11 +182,11 @@ docker-compose down -v
 
 ```bash
 # Voir les logs de tous les services
-docker-compose logs -f
+docker compose logs -f
 
 # Logs d'un service spécifique
-docker-compose logs -f keycloak-dev
-docker-compose logs -f rhdemo-db-dev
+docker compose logs -f keycloak-dev
+docker compose logs -f rhdemo-db-dev
 
 # Se connecter à PostgreSQL
 docker exec -it rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo

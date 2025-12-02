@@ -81,7 +81,7 @@ credentials:
 **Lancer les tests :**
 
 ```bash
-mvn test
+mvnw test
 ```
 
 ### 2. Jenkins / CI
@@ -113,24 +113,6 @@ export SELENIUM_HEADLESS="true"
 
 mvn test -Dtest.baseurl=https://app.example.com
 ```
-
-## Migration depuis l'ancien système
-
-### Changements effectués
-
-| Avant | Après |
-|-------|-------|
-| `TestConfig` + `CredentialsLoader` séparés | `TestConfig` unifié |
-| Credentials via env vars uniquement | Maven properties > env vars > YAML |
-| Jenkins : `export RHDEMOTEST_USER=...` | Jenkins : `-Dtest.username=...` |
-
-### Compatibilité
-
-✅ **Rétrocompatible** : Les variables d'environnement `RHDEMOTEST_USER` et `RHDEMOTEST_PWD` fonctionnent toujours (fallback).
-
-### Fichiers obsolètes
-
-- `CredentialsLoader.java` → **Supprimé** (logique intégrée dans `TestConfig`)
 
 ## Exemples
 
@@ -248,5 +230,4 @@ TestConfig (classe unifiée)
 
 ---
 
-**Date de migration** : 22 novembre 2025
 **Version** : 2.0.0 (Configuration unifiée)

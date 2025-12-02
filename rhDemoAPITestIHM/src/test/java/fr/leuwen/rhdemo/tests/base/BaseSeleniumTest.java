@@ -76,6 +76,34 @@ public abstract class BaseSeleniumTest {
             WebDriverManager.firefoxdriver().setup();
             FirefoxOptions options = new FirefoxOptions();
 
+            // Configuration du binaire Firefox pour éviter les problèmes de détection automatique
+            // Selenium cherche parfois dans /snap/firefox qui n'existe pas toujours
+            String firefoxBinary = System.getProperty("webdriver.firefox.bin");
+            if (firefoxBinary == null || firefoxBinary.isEmpty()) {
+                // Auto-détection : essayer plusieurs emplacements standards
+                String[] possiblePaths = {
+                    "/usr/bin/firefox-esr",             // Jenkins + conteneurs Debian/Ubuntu (apt)
+                    "/usr/bin/firefox",                 // Installation apt standard
+                    "/usr/local/bin/firefox",           // Installation manuelle dans /usr/local
+                    "/opt/firefox/firefox"              // Installation manuelle dans /opt
+                };
+                boolean foundFirefox = false;
+                for (String path : possiblePaths) {
+                    if (new java.io.File(path).exists()) {
+                        log.info("🦊 Firefox détecté: {}", path);
+                        options.setBinary(path);
+                        foundFirefox = true;
+                        break;
+                    }
+                }
+                if (!foundFirefox) {
+                    log.warn("⚠️  Aucun Firefox détecté aux emplacements standards, utilisation de la détection par défaut");
+                }
+            } else {
+                log.info("🦊 Utilisation du binaire Firefox spécifié: {}", firefoxBinary);
+                options.setBinary(firefoxBinary);
+            }
+
             // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
             // Permet à Firefox de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
             options.setAcceptInsecureCerts(true);

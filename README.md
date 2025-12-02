@@ -59,24 +59,31 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de staging.
 - Pour déploiement env de staging : Docker Compose avec un réseau dédié dans un premier temps. Evolution possible sur un Kubernetes light  
 
-## Utiliser le projet
-- En dev ou test local : 
-   - Allez dans rhDemo/infra/dev et installez a minima un Postgresql et un Keycloak local
-   - Initialisez Keycloak en lançant le projet rhDemoInitKeycloak depuis l'ide ou via mvnw clean spring-boot:run
-   - Initialisez la base de données DBRHDemo, par exemple en vous connectant via le client psql. 
-      sudo -u postgres psql
-      CREATE ROLE dbrhdemo WITH LOGIN ENCRYPTED PASSWORD 'My_password';
-      CREATE DATABASE dbrhdemo OWNER dbrhdemo ENCODING 'UTF8' TEMPLATE template0;
-   - Se connecter sur la base de données créer
-      psql -U dbrhdemo -d dbrhdemo -W
-      utiliser le contenu du fichier rhDemo\pgddl pour créer le schéma et alimenter la base.
-   - Créer un fichier rhDemo/secrets-rhdemo.yml à partir du template fourni.
-   - Mettre à jour le cas échéant les autres paramètres dans le fichier rhDemo/src/main/ressources/application.yml
-   - Lancer le projet mvnw clean spring-boot:run
-   - Connectez vous (par défaut sur http;//localhost:9000)
+## Limites 
+- Le fait de déployer via CI/CD dans un premier environnement de staging permet de démontrer la portabilité de l'application
+- Par contre par nature ce projet n'est pas pret pour la production. il resterait un travail important de configuration de tous les composants en cible production : 
+   - élimination des modules périphériques de l'application (comme le module de documentation et test openapi voir http://localhost:9000 sur l'application)
+   - passage en mode production et durcissement de la configuration KeyCloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...)
+   - durcissement de la configuration postgresql, mise au point des procédures de sauvegarde/restauration
+   - réduire la verbosité de l'applicatif par configuration (niveau de log info par défaut)
+   - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins et probablement utilisation d'un Jenkins dédié production pour éviter qu'il soit pollué par les reconstructions permanentes en dev/staging et qu'il faille faire une gestion fine gestion de droits reposant uniquement sur Jenkins pour interdire les opérations de déploiement en production à certains profils. 
+   - docker compose assez limité dans le cadre d'une production scalable et à forte exigence de cloisonnement
 
-- Utiliser la chaine CI/CD et déployer l'environnement de staging :
-   - Allez dans rhDemo/infra/jenkisn-docker et suivez la doc d'install Jenkins avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
+## Utiliser le projet
+- Prérequis : un PC sur Linux avec 16Go de RAM
+- Docker et Docker compose installés dans des versions récentes (notamment syntaxe docker compose v2)
+- Git dans une version récente avec lequel on va cloner le repository 
+<pre>git clone https://github.com/leuwen-lc/rhdemo.git</pre>
+
+# En dev ou test local : 
+   - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base. 
+   
+   Attention pour diminuer l'empreinte Keycloack n'a pas de stockage persistant, ce qui oblige à réinitialiser ses données à chaque relance (via le batch rhDemoInitKeyCloak)  vous pouvez lui associer un Postgresql dédié en enrichissant le docker compose.
+  
+   - Connectez vous (par défaut sur http;//localhost:9000/front)
+
+# Utiliser la chaine CI/CD et déployer l'environnement de staging :
+   - Allez dans rhDemo/infra/jenkins-docker et suivez la doc d'install Jenkins avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
    - Installez SOPS et une clé age 
    - Fabriquez un fichier de secrets de l'environnement de staging à partir du template secrets-staging.yml.template puis chiffrez le avec SOPS sous secrets-staging.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)
    - Référencez au niveau des credentials Jenkins : 

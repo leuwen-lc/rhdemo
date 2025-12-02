@@ -381,15 +381,6 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 - `rhdemo-sonarqube-logs` : Logs SonarQube
 - `rhdemo-sonarqube-db` : Base de données PostgreSQL
 
-### Slack
-
-Configuration dans `.env` :
-```env
-SLACK_TEAM=votre-team
-SLACK_TOKEN=xoxb-votre-token
-SLACK_CHANNEL=#rhdemo-ci
-```
-
 ### Email
 
 Configuration dans `.env` :

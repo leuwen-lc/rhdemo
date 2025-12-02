@@ -38,17 +38,16 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse.
 - Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
 
-## DevSecOps — checklist
-- Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO)
+## Accent mis sur le DevSecOps, mise en place des briques de sécurité liées à l'applicatif dès le début du projet, remontée des vulnérabilités au plus tôt 
+- Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Utilisation de Spring Security : Inteface Keycloak OIDC (custom pour récupérer les roles des utilisateurs dans l'idtoken), activation de l'anti-CSRF (via cookie spécialisé) sur le module principal lié à l'utilisation du pattern BFF. Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes (Spring actuator, documentation Open API/swagger, etc...)
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisaiton d'un outil centralisé de type Hashicorp Vault demande une expertise plus spécialisée mais reste possible sans modifier l'applicatif (TODO).
 - Dépendances : Scan par OWASP Dependency‑Check, échec de la chaine si CVSS >=7.
-- Scans des images docker utilisées dans le stagign avec Trivy et/ou vérifications qu'il s'agit d'images officielles (TODO)
-- CI : Sonar avec quality gate mais profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut).
-- Activation d'un proxy ZAP pour pentest intégré au CI/CD durant les tests Selenium (TODO).
+- Scans des images docker utilisées dans le staging avec Trivy 
+- CI : Sonar avec quality gate mais profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut, sécurité faille potentielle doit être revue).
+- Activation d'un proxy ZAP pour analyse dynamique intégrée au CI/CD durant le stage de tests en Selenium.
 - TLS : activer TLS sur les endpoints publics sur le staging (certificats auto-signés sur cet env).
 - Logging / monitoring basique : succès/échecs d'authentification, erreurs applicatives, métriques de disponibilité (TODO).
-- Politique de mots de passe et MFA (TODO en mettant en oeuvre les fonctionnalités plus avancées de Keycloak).
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
 
 ## Installation 
@@ -75,14 +74,14 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Git dans une version récente avec lequel on va cloner le repository 
 <pre>git clone https://github.com/leuwen-lc/rhdemo.git</pre>
 
-# En dev ou test local : 
+### En dev ou test local : 
    - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base. 
    
    Attention pour diminuer l'empreinte Keycloack n'a pas de stockage persistant, ce qui oblige à réinitialiser ses données à chaque relance (via le batch rhDemoInitKeyCloak)  vous pouvez lui associer un Postgresql dédié en enrichissant le docker compose.
   
    - Connectez vous (par défaut sur http;//localhost:9000/front)
 
-# Utiliser la chaine CI/CD et déployer l'environnement de staging :
+### Utiliser la chaine CI/CD et déployer l'environnement de staging :
    - Allez dans rhDemo/infra/jenkins-docker et suivez la doc d'install Jenkins avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
    - Installez SOPS et une clé age 
    - Fabriquez un fichier de secrets de l'environnement de staging à partir du template secrets-staging.yml.template puis chiffrez le avec SOPS sous secrets-staging.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)

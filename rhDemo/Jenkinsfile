@@ -181,9 +181,8 @@ pipeline {
                         {
                             # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
                             echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
-                            echo "# Sauvegarder l'état actuel de set -x"
-                            echo "_PREV_XTRACE=\$(set +o | grep xtrace)"
-                            echo "set +x  # Désactiver le tracing pour ne pas logger les secrets"
+                            echo "# Désactiver le tracing pour ne pas logger les secrets"
+                            echo "{ set +x; } 2>/dev/null"
                             echo ""
 
                             echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
@@ -211,10 +210,6 @@ pipeline {
                             if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
                                 echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
                             fi
-
-                            echo ""
-                            echo "# Restaurer l'état précédent de set -x"
-                            echo "eval \"\$_PREV_XTRACE\""
                         } > rhDemo/secrets/env-vars.sh 2>&1
 
                         # Réactiver l'écho des commandes
@@ -235,7 +230,7 @@ pipeline {
             }
         }
 
-        stage('🔐 Extraction secrets rhDemo (moindre privilège)') {
+        stage('🔐 Extraction secrets rhDemo') {
             steps {
                 script {
                     echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo (uniquement les secrets nécessaires)...'

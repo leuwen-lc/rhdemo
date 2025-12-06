@@ -1031,7 +1031,7 @@ YMLEOF
                     echo '▶ Attente démarrage Keycloak...'
 
                     // Charger la bibliothèque
-                    def lib = load 'vars/rhDemoLib.groovy'
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Healthcheck Keycloak avec attente initiale
                     lib.waitForHealthcheck([
@@ -1114,7 +1114,7 @@ YMLEOF
                     echo '▶ Vérification santé de l\'application RHDemo...'
 
                     // Charger la bibliothèque
-                    def lib = load 'vars/rhDemoLib.groovy'
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Healthcheck RHDemo App (accepte 301/302 car redirection OAuth2)
                     lib.waitForHealthcheck([
@@ -1137,7 +1137,7 @@ YMLEOF
                     echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
 
                     // Charger la bibliothèque
-                    def lib = load 'vars/rhDemoLib.groovy'
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Healthcheck Nginx HTTPS (test depuis Jenkins où Firefox tourne)
                     lib.waitForHealthcheck([
@@ -1171,7 +1171,7 @@ YMLEOF
                     echo '   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)'
 
                     // Charger la bibliothèque
-                    def lib = load 'vars/rhDemoLib.groovy'
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Créer le répertoire pour les rapports
                     sh 'mkdir -p trivy-reports'
@@ -1468,7 +1468,7 @@ YMLEOF
                     echo '▶ Publication des rapports...'
 
                     // Utilisation de la fonction centralisée pour publier tous les rapports
-                    def lib = load 'vars/rhDemoLib.groovy'
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     def reports = [
                         ['rhDemo/target/site/jacoco', 'index.html', 'Code Coverage (JaCoCo)'],

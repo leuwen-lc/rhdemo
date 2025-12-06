@@ -179,6 +179,13 @@ pipeline {
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
                         # Utilisation de substitution de variables sans affichage dans stdout
                         {
+                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
+                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
+                            echo "# Sauvegarder l'état actuel de set -x"
+                            echo "_PREV_XTRACE=\$(set +o | grep xtrace)"
+                            echo "set +x  # Désactiver le tracing pour ne pas logger les secrets"
+                            echo ""
+
                             echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
@@ -204,6 +211,10 @@ pipeline {
                             if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
                                 echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
                             fi
+
+                            echo ""
+                            echo "# Restaurer l'état précédent de set -x"
+                            echo "eval \"\$_PREV_XTRACE\""
                         } > rhDemo/secrets/env-vars.sh 2>&1
 
                         # Réactiver l'écho des commandes
@@ -228,8 +239,6 @@ pipeline {
             steps {
                 script {
                     echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo (uniquement les secrets nécessaires)...'
-                    echo '   ⚠️  Principe du moindre privilège: rhDemo ne reçoit QUE ses propres secrets'
-                    echo '   ✅ Exclus: mots de passe admin Keycloak, secrets infra, etc.'
                 }
 
                 sh '''
@@ -242,9 +251,6 @@ pipeline {
                     # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
                     # Ce fichier sera monté dans le container Docker de rhDemo
                     cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
-# Secrets pour l'application rhDemo (environnement staging)
-# Généré automatiquement par Jenkins
-# ⚠️  Ce fichier ne contient QUE les secrets nécessaires à rhDemo (moindre privilège)
 
 rhdemo:
   datasource:
@@ -262,11 +268,6 @@ EOF
                     set -x
 
                     echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
-                    echo "   - datasource.password.pg: ✅"
-                    echo "   - datasource.password.h2: ✅"
-                    echo "   - client.registration.keycloak.client.secret: ✅"
-                    echo "   - Keycloak admin password: ❌ (non inclus - sécurité)"
-                    echo "   - Keycloak DB password: ❌ (non inclus - sécurité)"
                 '''
             }
         }
@@ -285,12 +286,10 @@ EOF
                     # Source les secrets déchiffrés
                     . rhDemo/secrets/env-vars.sh
 
-                    # Réactiver l'écho pour les commandes non sensibles
-                    set -x
-
                     # Générer application-staging.yml (sera utilisé directement par Maven)
+                    # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
-                    
+
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
                     cat > "${CONFIG_FILE}" << YMLEOF
 # ========================================
@@ -379,7 +378,10 @@ keycloak:
         - ROLE_consult
         - ROLE_MAJ
 YMLEOF
-                    
+
+                    # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
+                    set -x
+
                     echo "✅ Configuration générée: ${CONFIG_FILE}"
                     
                     # Vérifier que les variables sont bien substituées (sans afficher les secrets)
@@ -387,9 +389,6 @@ YMLEOF
                     echo "🔍 Vérification de la configuration:"
                     echo "   Root URL:"
                     grep "root-url:" "${CONFIG_FILE}"
-                    echo ""
-                    echo "✅ Configuration sensible créée (secrets non affichés pour sécurité)"
-                    echo ""
                     
                     # Vérifier qu'il n'y a pas de ${VAR} littérales (non substituées)
                     if grep -q '\${' "${CONFIG_FILE}"; then
@@ -422,7 +421,9 @@ YMLEOF
                         echo "\nMaven version:"
                         cd rhDemo && ./mvnw -version
                         echo "\nVariables d'environnement:"
-                        env | grep RHDEMO || echo "Variables RHDEMO configurées"
+                        # Compter les variables RHDEMO sans afficher leurs valeurs (sécurité)
+                        RHDEMO_VAR_COUNT=$(env | grep -c "^RHDEMO_" || echo "0")
+                        echo "✅ $RHDEMO_VAR_COUNT variables RHDEMO configurées (valeurs masquées pour sécurité)"
                     '''
                 }
             }

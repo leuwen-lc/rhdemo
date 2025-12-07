@@ -1,40 +1,37 @@
-# Configuration pour les tests d'intégration
-# Utilise H2 au lieu de PostgreSQL
-
+# Configuration Spring Boot pour les tests
 spring:
-  # Import des secrets pour les tests
-  config:
-    import:
-      - optional:file:./secrets/secrets-rhdemo.yml
-      - optional:file:./secrets/secrets-dev.yml
-  
+  # Base de données H2 en mémoire pour les tests
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
-    password: ${rhdemo.datasource.password.h2:}
-  
+    password:
+
+  # JPA configuration pour H2
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
-    # Laisse Hibernate créer la structure, puis charge les données
     hibernate:
       ddl-auto: create-drop
-    # Charge les données de test APRÈS la création du schéma par Hibernate
-    defer-datasource-initialization: true
-  
-  sql:
-    init:
-      mode: always
-  
-  # IMPORTANT: Désactive complètement l'auto-configuration OAuth2
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
-      - org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration
+    show-sql: false
 
-# Logs pour les tests
-logging:
-  level:
-    root: ERROR
-    fr.leuwen: INFO
-    org.springframework.security: WARN
+  # Désactiver OAuth2 pour les tests (pas de Keycloak disponible)
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: test-client
+            client-secret: test-secret
+        provider:
+          keycloak:
+            authorization-uri: http://localhost:8080/realms/test/protocol/openid-connect/auth
+            token-uri: http://localhost:8080/realms/test/protocol/openid-connect/token
+            user-info-uri: http://localhost:8080/realms/test/protocol/openid-connect/userinfo
+            jwk-set-uri: http://localhost:8080/realms/test/protocol/openid-connect/certs
+
+# Actuator configuration pour les tests
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

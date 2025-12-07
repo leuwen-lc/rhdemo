@@ -45,6 +45,10 @@ public class SecurityConfig {
         }
         try {
             java.net.URI uri = java.net.URI.create(keycloakAuthorizationUri);
+            // Vérifier que l'URI est valide (scheme et host non null)
+            if (uri.getScheme() == null || uri.getHost() == null) {
+                return "";
+            }
             return uri.getScheme() + "://" + uri.getHost() + (uri.getPort() > 0 && uri.getPort() != 80 && uri.getPort() != 443 ? ":" + uri.getPort() : "");
         } catch (Exception e) {
             return "";

@@ -1,6 +1,7 @@
 package fr.leuwen.rhdemoAPI.controller;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -136,6 +137,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
                 .andExpect(status().isOk())
@@ -158,6 +160,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
                 .andExpect(status().isBadRequest())
@@ -178,6 +181,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
                 .andExpect(status().isBadRequest())
@@ -198,6 +202,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
                 .andExpect(status().isForbidden());
@@ -222,6 +227,7 @@ public class EmployeControllerIT {
                 """;
 
         String createResponse = mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(newEmployeJson))
                 .andExpect(status().isOk())
@@ -233,7 +239,9 @@ public class EmployeControllerIT {
         String id = createResponse.split("\"id\":")[1].split(",")[0];
 
         // Supprimer l'employé
-        mockMvc.perform(delete("/api/employe").param("id", id))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", id))
                 .andExpect(status().isOk());
 
         // Vérifier que l'employé n'existe plus (avec authentification)
@@ -246,7 +254,9 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
     public void testDeleteEmploye_WithInvalidId_ShouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/employe").param("id", "999"))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", "999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
     }
@@ -254,7 +264,9 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testDeleteEmploye_WithConsultRole_ShouldReturn403() throws Exception {
-        mockMvc.perform(delete("/api/employe").param("id", "1"))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", "1"))
                 .andExpect(status().isForbidden());
     }
 }

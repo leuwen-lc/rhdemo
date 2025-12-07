@@ -1,5 +1,6 @@
 package fr.leuwen.rhdemoAPI.exception;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -58,6 +59,7 @@ public class GlobalExceptionHandlerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
@@ -83,6 +85,7 @@ public class GlobalExceptionHandlerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
@@ -105,6 +108,7 @@ public class GlobalExceptionHandlerIT {
                 """, tooLongString);
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())

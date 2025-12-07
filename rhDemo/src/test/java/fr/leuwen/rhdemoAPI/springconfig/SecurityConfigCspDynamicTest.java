@@ -2,6 +2,10 @@ package fr.leuwen.rhdemoAPI.springconfig;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,45 +20,40 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("SecurityConfig - Tests de génération dynamique CSP")
 class SecurityConfigCspDynamicTest {
 
-    @Test
-    @DisplayName("extractKeycloakBaseUrl doit extraire l'URL de base depuis une URI HTTPS avec port standard")
-    void testExtractKeycloakBaseUrl_WithHttpsStandardPort() throws Exception {
+    // ==================== Tests extractKeycloakBaseUrl avec différents ports ====================
+
+    @ParameterizedTest(name = "extractKeycloakBaseUrl avec URI: {0}")
+    @CsvSource({
+        "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.staging.local",
+        "http://localhost:8080/realms/rhdemo/protocol/openid-connect/auth, http://localhost:8080",
+        "http://keycloak.example.com:80/realms/rhdemo/protocol/openid-connect/auth, http://keycloak.example.com",
+        "https://keycloak.example.com:443/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.example.com"
+    })
+    @DisplayName("extractKeycloakBaseUrl doit extraire correctement l'URL de base avec différents ports")
+    void testExtractKeycloakBaseUrl_WithVariousPorts(String inputUri, String expectedUrl) throws Exception {
         // Arrange
         GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
         SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth");
+        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", inputUri);
 
         // Act
         String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
 
         // Assert
-        assertThat(result).isEqualTo("https://keycloak.staging.local");
+        assertThat(result).isEqualTo(expectedUrl);
     }
 
-    @Test
-    @DisplayName("extractKeycloakBaseUrl doit extraire l'URL de base avec port personnalisé")
-    void testExtractKeycloakBaseUrl_WithCustomPort() throws Exception {
+    // ==================== Tests extractKeycloakBaseUrl avec URIs invalides ====================
+
+    @ParameterizedTest(name = "extractKeycloakBaseUrl avec URI invalide/vide: [{0}]")
+    @NullAndEmptySource
+    @ValueSource(strings = {"invalid-uri"})
+    @DisplayName("extractKeycloakBaseUrl doit retourner une chaîne vide pour les URIs null, vides ou invalides")
+    void testExtractKeycloakBaseUrl_WithInvalidUris(String invalidUri) throws Exception {
         // Arrange
         GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
         SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "http://localhost:8080/realms/rhdemo/protocol/openid-connect/auth");
-
-        // Act
-        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
-
-        // Assert
-        assertThat(result).isEqualTo("http://localhost:8080");
-    }
-
-    @Test
-    @DisplayName("extractKeycloakBaseUrl doit retourner une chaîne vide si l'URI est null")
-    void testExtractKeycloakBaseUrl_WithNullUri() throws Exception {
-        // Arrange
-        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
-        SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", null);
+        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", invalidUri);
 
         // Act
         String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
@@ -63,67 +62,7 @@ class SecurityConfigCspDynamicTest {
         assertThat(result).isEmpty();
     }
 
-    @Test
-    @DisplayName("extractKeycloakBaseUrl doit retourner une chaîne vide si l'URI est vide")
-    void testExtractKeycloakBaseUrl_WithEmptyUri() throws Exception {
-        // Arrange
-        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
-        SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", "");
-
-        // Act
-        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
-
-        // Assert
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    @DisplayName("extractKeycloakBaseUrl doit gérer une URI invalide en retournant une chaîne vide")
-    void testExtractKeycloakBaseUrl_WithInvalidUri() throws Exception {
-        // Arrange
-        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
-        SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", "invalid-uri");
-
-        // Act
-        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
-
-        // Assert
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    @DisplayName("extractKeycloakBaseUrl ne doit pas inclure le port 80 pour HTTP")
-    void testExtractKeycloakBaseUrl_WithPort80() throws Exception {
-        // Arrange
-        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
-        SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "http://keycloak.example.com:80/realms/rhdemo/protocol/openid-connect/auth");
-
-        // Act
-        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
-
-        // Assert - Port 80 ne doit pas être inclus dans l'URL
-        assertThat(result).isEqualTo("http://keycloak.example.com");
-    }
-
-    @Test
-    @DisplayName("extractKeycloakBaseUrl ne doit pas inclure le port 443 pour HTTPS")
-    void testExtractKeycloakBaseUrl_WithPort443() throws Exception {
-        // Arrange
-        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
-        SecurityConfig config = new SecurityConfig(mockMapper);
-        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "https://keycloak.example.com:443/realms/rhdemo/protocol/openid-connect/auth");
-
-        // Act
-        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
-
-        // Assert - Port 443 ne doit pas être inclus dans l'URL
-        assertThat(result).isEqualTo("https://keycloak.example.com");
-    }
+    // ==================== Tests buildCspDirectives ====================
 
     @Test
     @DisplayName("buildCspDirectives doit inclure Keycloak dans connect-src si configuré")

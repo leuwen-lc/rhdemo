@@ -14,16 +14,21 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * Tests d'intégration pour EmployeController
  * Teste les endpoints REST avec autorisation et validation
+ *
+ * Note: Les données de test sont chargées via @Sql avant chaque méthode de test
+ * pour garantir un état cohérent de la base de données.
  */
 @SpringBootTest
 @TestPropertySource(locations = "classpath:application-test.yml")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Sql(scripts = "/employe-test-data.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 public class EmployeControllerIT {
 
     @Autowired

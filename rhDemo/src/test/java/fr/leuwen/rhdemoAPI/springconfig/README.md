@@ -18,7 +18,7 @@ cd /home/leno-vo/git/repository/rhDemo
 
 **Tests de SecurityConfig (intégration) :**
 ```bash
-./mvnw test -Dtest=SecurityConfigTest
+./mvnw test -Dtest=SecurityConfigIT
 ```
 
 **Tests de génération CSP dynamique :**
@@ -31,7 +31,7 @@ cd /home/leno-vo/git/repository/rhDemo
 | Fichier | Description | Nombre de tests |
 |---------|-------------|-----------------|
 | `GrantedAuthoritiesKeyCloakMapperTest.java` | Tests unitaires du mapper de rôles | 10 |
-| `SecurityConfigTest.java` | Tests d'intégration de la sécurité | 15 |
+| `SecurityConfigIT.java` | Tests d'intégration de la sécurité | 15 |
 | `SecurityConfigCspDynamicTest.java` | Tests de génération CSP | 12 |
 | `TestSecurityConfig.java` (dans `config/`) | Configuration de sécurité pour tests | N/A |
 

@@ -7,37 +7,16 @@
     <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <!-- Debug: Inline script pour vérifier que JS fonctionne -->
-    <script>
-      console.log('[DEBUG] HTML chargé, JS fonctionne');
-      window.__VUE_DEBUG__ = true;
-      window.__VUE_ERRORS__ = [];
-
-      // Capturer les erreurs JavaScript
-      window.addEventListener('error', function(e) {
-        console.error('[ERROR]', e.message, e.filename, e.lineno, e.colno);
-        window.__VUE_ERRORS__.push({
-          message: e.message,
-          file: e.filename,
-          line: e.lineno,
-          col: e.colno
-        });
-      });
-
-      // Capturer les erreurs non gérées des promises
-      window.addEventListener('unhandledrejection', function(e) {
-        console.error('[PROMISE ERROR]', e.reason);
-        window.__VUE_ERRORS__.push({
-          message: 'Promise rejection: ' + e.reason
-        });
-      });
-    </script>
+    <!-- CSS pour le placeholder de chargement -->
+    <link rel="stylesheet" href="/css/loading.css" />
+    <!-- Script de debug et gestion d'erreurs (externalisé pour CSP) -->
+    <script src="/js/error-handler.js"></script>
   </head>
   <body>
     <div id="app">
       <!-- Placeholder pendant le chargement -->
       <noscript>JavaScript est désactivé. L'application nécessite JavaScript.</noscript>
-      <div style="padding: 20px; text-align: center;">
+      <div class="loading-placeholder">
         <p>⏳ Chargement de l'application...</p>
       </div>
     </div>

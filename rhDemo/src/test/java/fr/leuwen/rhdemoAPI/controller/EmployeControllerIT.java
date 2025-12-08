@@ -1,6 +1,7 @@
 package fr.leuwen.rhdemoAPI.controller;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
@@ -15,14 +17,19 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import fr.leuwen.rhdemoAPI.config.TestDataLoader;
+
 /**
  * Tests d'intégration pour EmployeController
  * Teste les endpoints REST avec autorisation et validation
+ *
+ * Note: Les données de test sont chargées via TestDataLoader au démarrage du contexte Spring.
  */
 @SpringBootTest
 @TestPropertySource(locations = "classpath:application-test.yml")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Import(TestDataLoader.class)
 public class EmployeControllerIT {
 
     @Autowired
@@ -136,6 +143,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
                 .andExpect(status().isOk())
@@ -158,6 +166,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
                 .andExpect(status().isBadRequest())
@@ -178,6 +187,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
                 .andExpect(status().isBadRequest())
@@ -198,6 +208,7 @@ public class EmployeControllerIT {
                 """;
 
         mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
                 .andExpect(status().isForbidden());
@@ -222,6 +233,7 @@ public class EmployeControllerIT {
                 """;
 
         String createResponse = mockMvc.perform(post("/api/employe")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(newEmployeJson))
                 .andExpect(status().isOk())
@@ -233,7 +245,9 @@ public class EmployeControllerIT {
         String id = createResponse.split("\"id\":")[1].split(",")[0];
 
         // Supprimer l'employé
-        mockMvc.perform(delete("/api/employe").param("id", id))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", id))
                 .andExpect(status().isOk());
 
         // Vérifier que l'employé n'existe plus (avec authentification)
@@ -246,7 +260,9 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
     public void testDeleteEmploye_WithInvalidId_ShouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/employe").param("id", "999"))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", "999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
     }
@@ -254,7 +270,9 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testDeleteEmploye_WithConsultRole_ShouldReturn403() throws Exception {
-        mockMvc.perform(delete("/api/employe").param("id", "1"))
+        mockMvc.perform(delete("/api/employe")
+                        .with(csrf())
+                        .param("id", "1"))
                 .andExpect(status().isForbidden());
     }
 }

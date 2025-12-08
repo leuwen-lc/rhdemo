@@ -36,15 +36,17 @@ pipeline {
         NGINX_IMAGE = "nginx:1.27-alpine"
         POSTGRES_IMAGE = "postgres:16-alpine"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
-        
+
         // Configuration des tests
         TEST_PORT = '9000'
         TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
-        
+
         // Fichiers de secrets SOPS
         SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
         SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
-        
+        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
+        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+
         // Configuration environnement staging (Docker Compose)
         STAGING_INFRA_PATH = 'rhDemo/infra/staging'
         KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
@@ -52,6 +54,18 @@ pipeline {
         KEYCLOAK_DOMAIN = 'keycloak.staging.local'
         COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
         RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
+
+        // Noms des conteneurs Docker (centralisés pour faciliter maintenance)
+        CONTAINER_NGINX = 'rhdemo-staging-nginx'
+        CONTAINER_APP = 'rhdemo-staging-app'
+        CONTAINER_KEYCLOAK = 'keycloak-staging'
+        CONTAINER_KEYCLOAK_DB = 'keycloak-staging-db'
+        CONTAINER_DB = 'rhdemo-staging-db'
+        CONTAINER_ZAP = 'rhdemo-jenkins-zap'
+
+        // Noms des réseaux Docker
+        NETWORK_STAGING = 'rhdemo-staging-network'
+        NETWORK_JENKINS = 'rhdemo-jenkins-network'
     }
     
     parameters {
@@ -165,6 +179,12 @@ pipeline {
                         # Exporter les secrets comme variables d'environnement pour les stages suivants
                         # Utilisation de substitution de variables sans affichage dans stdout
                         {
+                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
+                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
+                            echo "# Désactiver le tracing pour ne pas logger les secrets"
+                            echo "{ set +x; } 2>/dev/null"
+                            echo ""
+
                             echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
@@ -210,12 +230,10 @@ pipeline {
             }
         }
 
-        stage('🔐 Extraction secrets rhDemo (moindre privilège)') {
+        stage('🔐 Extraction secrets rhDemo') {
             steps {
                 script {
                     echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo (uniquement les secrets nécessaires)...'
-                    echo '   ⚠️  Principe du moindre privilège: rhDemo ne reçoit QUE ses propres secrets'
-                    echo '   ✅ Exclus: mots de passe admin Keycloak, secrets infra, etc.'
                 }
 
                 sh '''
@@ -228,9 +246,6 @@ pipeline {
                     # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
                     # Ce fichier sera monté dans le container Docker de rhDemo
                     cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
-# Secrets pour l'application rhDemo (environnement staging)
-# Généré automatiquement par Jenkins
-# ⚠️  Ce fichier ne contient QUE les secrets nécessaires à rhDemo (moindre privilège)
 
 rhdemo:
   datasource:
@@ -248,11 +263,6 @@ EOF
                     set -x
 
                     echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
-                    echo "   - datasource.password.pg: ✅"
-                    echo "   - datasource.password.h2: ✅"
-                    echo "   - client.registration.keycloak.client.secret: ✅"
-                    echo "   - Keycloak admin password: ❌ (non inclus - sécurité)"
-                    echo "   - Keycloak DB password: ❌ (non inclus - sécurité)"
                 '''
             }
         }
@@ -271,12 +281,10 @@ EOF
                     # Source les secrets déchiffrés
                     . rhDemo/secrets/env-vars.sh
 
-                    # Réactiver l'écho pour les commandes non sensibles
-                    set -x
-
                     # Générer application-staging.yml (sera utilisé directement par Maven)
+                    # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
-                    
+
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
                     cat > "${CONFIG_FILE}" << YMLEOF
 # ========================================
@@ -365,7 +373,10 @@ keycloak:
         - ROLE_consult
         - ROLE_MAJ
 YMLEOF
-                    
+
+                    # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
+                    set -x
+
                     echo "✅ Configuration générée: ${CONFIG_FILE}"
                     
                     # Vérifier que les variables sont bien substituées (sans afficher les secrets)
@@ -373,9 +384,6 @@ YMLEOF
                     echo "🔍 Vérification de la configuration:"
                     echo "   Root URL:"
                     grep "root-url:" "${CONFIG_FILE}"
-                    echo ""
-                    echo "✅ Configuration sensible créée (secrets non affichés pour sécurité)"
-                    echo ""
                     
                     # Vérifier qu'il n'y a pas de ${VAR} littérales (non substituées)
                     if grep -q '\${' "${CONFIG_FILE}"; then
@@ -408,7 +416,9 @@ YMLEOF
                         echo "\nMaven version:"
                         cd rhDemo && ./mvnw -version
                         echo "\nVariables d'environnement:"
-                        env | grep RHDEMO || echo "Variables RHDEMO configurées"
+                        # Compter les variables RHDEMO sans afficher leurs valeurs (sécurité)
+                        RHDEMO_VAR_COUNT=$(env | grep -c "^RHDEMO_" || echo "0")
+                        echo "✅ $RHDEMO_VAR_COUNT variables RHDEMO configurées (valeurs masquées pour sécurité)"
                     '''
                 }
             }
@@ -1015,34 +1025,19 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Attente démarrage Keycloak...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Keycloak avec attente initiale
+                    lib.waitForHealthcheck([
+                        name: 'Keycloak',
+                        url: "http://${env.CONTAINER_KEYCLOAK}:9000/health/ready",
+                        timeout: 60,
+                        initialWait: 45,
+                        container: env.CONTAINER_KEYCLOAK
+                    ])
                 }
-                sh """
-                    cd ${STAGING_INFRA_PATH}
-                    
-                    echo "⏳ Attente démarrage Keycloak (45s)..."
-                    echo "   (Keycloak prend ~15s pour démarrer + init DB)"
-                    sleep 45
-                    
-                    echo "⏳ Vérification Keycloak (60s max)..."
-                    timeout=60
-                    while [ \$timeout -gt 0 ]; do
-                        # Keycloak expose son endpoint health sur le port management (9000)
-                        if curl -f http://keycloak-staging:9000/health/ready 2>/dev/null; then
-                            echo "✅ Keycloak ready"
-                            break
-                        fi
-                        echo "   Tentative échouée, retry dans 2s... (reste \${timeout}s)"
-                        sleep 2
-                        timeout=\$((timeout - 2))
-                    done
-                    
-                    if [ \$timeout -le 0 ]; then
-                        echo "❌ Keycloak timeout après 60s"
-                        echo "Logs Keycloak:"
-                        docker logs --tail=20 keycloak-staging || true
-                        exit 1
-                    fi
-                """
             }
         }
         
@@ -1113,51 +1108,19 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Vérification santé de l\'application RHDemo...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck RHDemo App (accepte 301/302 car redirection OAuth2)
+                    lib.waitForHealthcheck([
+                        name: 'RHDemo App',
+                        url: "http://${env.CONTAINER_APP}:9000/front/",
+                        timeout: 90,
+                        acceptedCodes: [200, 301, 302],
+                        container: env.CONTAINER_APP
+                    ])
                 }
-                sh """
-                    echo "⏳ Vérification RHDemo App (90s max, healthcheck start_period=60s)..."
-                    timeout=90
-                    while [ \$timeout -gt 0 ]; do
-                        # Utiliser le healthcheck Docker pour vérifier l'état du conteneur
-                        container_status=\$(docker inspect --format='{{.State.Health.Status}}' rhdemo-staging-app 2>/dev/null || echo "unknown")
-                        
-                        # Accepter "healthy" ou "starting" (pendant start_period)
-                        if [ "\$container_status" = "healthy" ]; then
-                            echo "✅ RHDemo App ready (healthcheck passed)"
-                            break
-                        elif [ "\$container_status" = "starting" ]; then
-                            # Pendant start_period, on peut aussi vérifier avec curl
-                            http_code=\$(curl -s -o /dev/null -w "%{http_code}" http://rhdemo-staging-app:9000/front/ 2>/dev/null || echo "000")
-                            if [ "\$http_code" = "302" ] || [ "\$http_code" = "301" ]; then
-                                echo "✅ RHDemo App ready (responding with HTTP \$http_code, healthcheck starting)"
-                                break
-                            fi
-                        elif [ "\$container_status" = "unknown" ]; then
-                            # Si pas de healthcheck, vérifier que le conteneur est au moins démarré
-                            container_running=\$(docker inspect --format='{{.State.Running}}' rhdemo-staging-app 2>/dev/null || echo "false")
-                            if [ "\$container_running" = "true" ]; then
-                                echo "✅ RHDemo App ready (container running)"
-                                break
-                            fi
-                        fi
-                        
-                        echo "   Container status: \$container_status - retry dans 3s... (reste \${timeout}s)"
-                        sleep 3
-                        timeout=\$((timeout - 3))
-                    done
-                    
-                    if [ \$timeout -le 0 ]; then
-                        echo "❌ RHDemo App timeout après 90s"
-                        echo "Container status final:"
-                        docker inspect --format='Status={{.State.Status}} Health={{.State.Health.Status}}' rhdemo-staging-app || true
-                        echo ""
-                        echo "Logs RHDemo (dernières 50 lignes):"
-                        docker logs --tail=50 rhdemo-staging-app || true
-                        exit 1
-                    fi
-                    
-                    echo "✅ Application RHDemo opérationnelle"
-                """
             }
         }
         
@@ -1168,59 +1131,23 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
-                }
-                sh '''
-                    echo "🔍 Test accès HTTPS depuis Jenkins (conditions réelles Selenium)..."
-                    echo "   URL testée: https://rhdemo.staging.local/front/"
-                    echo ""
-                    
-                    # Obtenir le conteneur Jenkins
-                    JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v "agent" | head -n 1)
-                    
-                    # Test depuis Jenkins (là où Firefox tourne)
-                    timeout=30
-                    while [ $timeout -gt 0 ]; do
-                        HTTP_CODE=$(docker exec ${JENKINS_CONTAINER} curl -k -s -o /dev/null -w "%{http_code}" https://rhdemo.staging.local/front/ 2>/dev/null || echo "000")
-                        
-                        # Accepter 302 (redirect OAuth2) ou 200
-                        if echo "${HTTP_CODE}" | grep -qE "^(200|302)$"; then
-                            echo "✅ Nginx HTTPS accessible depuis Jenkins (HTTP ${HTTP_CODE})"
-                            echo "   Firefox pourra se connecter via HTTPS"
-                            break
-                        fi
-                        
-                        echo "   HTTP ${HTTP_CODE} - retry dans 2s... (reste ${timeout}s)"
-                        sleep 2
-                        timeout=$((timeout - 2))
-                    done
-                    
-                    if [ $timeout -le 0 ]; then
-                        echo "❌ ERREUR: Nginx HTTPS inaccessible après 30s"
-                        echo ""
-                        echo "🔍 Diagnostics:"
-                        echo ""
-                        echo "1. État du conteneur nginx:"
-                        docker ps --filter "name=nginx"
-                        echo ""
-                        echo "2. Ports écoutés par nginx:"
-                        docker exec rhdemo-staging-nginx netstat -tuln | grep LISTEN
-                        echo ""
-                        echo "3. Configuration nginx chargée:"
-                        docker exec rhdemo-staging-nginx nginx -T 2>&1 | grep -A 5 "listen.*443"
-                        echo ""
-                        echo "4. Logs nginx (dernières 20 lignes):"
-                        docker logs --tail=20 rhdemo-staging-nginx
-                        echo ""
-                        echo "5. Test DNS depuis Jenkins:"
-                        docker exec ${JENKINS_CONTAINER} getent hosts rhdemo.staging.local
-                        echo ""
-                        exit 1
-                    fi
-                    
-                    echo ""
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Nginx HTTPS (test depuis Jenkins où Firefox tourne)
+                    lib.waitForHealthcheck([
+                        name: 'Nginx HTTPS',
+                        url: 'https://rhdemo.staging.local/front/',
+                        timeout: 30,
+                        acceptedCodes: [200, 302],
+                        insecure: true,  // Certificat auto-signé
+                        container: env.CONTAINER_NGINX
+                    ])
+
                     echo "✅ Stack complète opérationnelle et accessible via HTTPS"
                     echo "   Prêt pour les tests Selenium"
-                '''
+                }
             }
         }
 
@@ -1238,236 +1165,41 @@ YMLEOF
                     echo ''
                     echo '   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées'
                     echo '   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Créer le répertoire pour les rapports
+                    sh 'mkdir -p trivy-reports'
+
+                    // Définir les images à scanner avec leurs noms de rapports
+                    def imagesToScan = [
+                        [image: env.POSTGRES_IMAGE, name: 'postgres'],
+                        [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
+                        [image: env.NGINX_IMAGE, name: 'nginx'],
+                        [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
+                    ]
+
+                    echo "📋 Images à scanner:"
+                    imagesToScan.each { img ->
+                        echo "   - ${img.name}: ${img.image}"
+                    }
+
+                    // Créer les stages parallèles de scan
+                    def scanStages = imagesToScan.collectEntries { img ->
+                        ["Scan ${img.name}": {
+                            lib.generateTrivyReport(img.image, img.name)
+                        }]
+                    }
+
+                    // Exécuter tous les scans en parallèle
+                    parallel(scanStages + [failFast: false])
+
+                    // Agrégation des résultats et vérification des seuils
+                    if (!lib.aggregateTrivyResults()) {
+                        error("Trivy a détecté des vulnérabilités CRITICAL bloquantes")
+                    }
                 }
-
-                // Préparation : extraire les versions des images
-                sh '''
-                    # Créer le répertoire pour les rapports
-                    mkdir -p trivy-reports
-
-                    # Extraire les versions des images depuis docker-compose.yml
-                    cd ${STAGING_INFRA_PATH}
-
-                    echo "📋 Lecture des versions depuis docker-compose.yml..."
-                    POSTGRES_IMAGE=$(yq eval '.services.rhdemo-db.image' docker-compose.yml | sed 's/\${POSTGRES_IMAGE:-//' | sed 's/}//')
-                    KEYCLOAK_IMAGE=$(yq eval '.services.keycloak.image' docker-compose.yml | sed 's/\${KEYCLOAK_IMAGE:-//' | sed 's/}//')
-                    NGINX_IMAGE=$(yq eval '.services.nginx.image' docker-compose.yml | sed 's/\${NGINX_IMAGE:-//' | sed 's/}//')
-
-                    echo "   PostgreSQL : $POSTGRES_IMAGE"
-                    echo "   Keycloak   : $KEYCLOAK_IMAGE"
-                    echo "   Nginx      : $NGINX_IMAGE"
-                    echo "   RHDemo App : rhdemo-api:build-${BUILD_NUMBER}"
-
-                    # Sauvegarder dans un fichier pour les stages parallèles
-                    cd ${WORKSPACE}
-                    echo "$POSTGRES_IMAGE" > trivy-reports/postgres-image.txt
-                    echo "$KEYCLOAK_IMAGE" > trivy-reports/keycloak-image.txt
-                    echo "$NGINX_IMAGE" > trivy-reports/nginx-image.txt
-                    echo "rhdemo-api:build-${BUILD_NUMBER}" > trivy-reports/app-image.txt
-                '''
-
-                // Scans parallèles
-                script {
-                    parallel(
-                        "Scan PostgreSQL": {
-                            sh '''#!/bin/bash
-                                WORKSPACE_DIR=$(pwd)
-                                IMAGE=$(cat trivy-reports/postgres-image.txt)
-                                NAME="postgres"
-
-                                echo "🔍 Scan: $IMAGE"
-
-                                timeout 5m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format json \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
-                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
-
-                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
-                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
-                                fi
-
-                                timeout 1m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format table \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
-                                    "$IMAGE" 2>&1 || true
-
-                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
-                                    {
-                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-                                        echo "<title>Trivy Report - $IMAGE</title>"
-                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
-                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
-                                        echo '</pre></body></html>'
-                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
-                                fi
-
-                                echo "✅ Scan PostgreSQL terminé"
-                            '''
-                        },
-                        "Scan Keycloak": {
-                            sh '''#!/bin/bash
-                                WORKSPACE_DIR=$(pwd)
-                                IMAGE=$(cat trivy-reports/keycloak-image.txt)
-                                NAME="keycloak"
-
-                                echo "🔍 Scan: $IMAGE"
-
-                                timeout 5m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format json \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
-                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
-
-                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
-                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
-                                fi
-
-                                timeout 1m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format table \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
-                                    "$IMAGE" 2>&1 || true
-
-                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
-                                    {
-                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-                                        echo "<title>Trivy Report - $IMAGE</title>"
-                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
-                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
-                                        echo '</pre></body></html>'
-                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
-                                fi
-
-                                echo "✅ Scan Keycloak terminé"
-                            '''
-                        },
-                        "Scan Nginx": {
-                            sh '''#!/bin/bash
-                                WORKSPACE_DIR=$(pwd)
-                                IMAGE=$(cat trivy-reports/nginx-image.txt)
-                                NAME="nginx"
-
-                                echo "🔍 Scan: $IMAGE"
-
-                                timeout 5m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format json \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
-                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
-
-                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
-                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
-                                fi
-
-                                timeout 1m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format table \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
-                                    "$IMAGE" 2>&1 || true
-
-                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
-                                    {
-                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-                                        echo "<title>Trivy Report - $IMAGE</title>"
-                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
-                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
-                                        echo '</pre></body></html>'
-                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
-                                fi
-
-                                echo "✅ Scan Nginx terminé"
-                            '''
-                        },
-                        "Scan RHDemo App": {
-                            sh '''#!/bin/bash
-                                WORKSPACE_DIR=$(pwd)
-                                IMAGE=$(cat trivy-reports/app-image.txt)
-                                NAME="rhdemo-app"
-
-                                echo "🔍 Scan: $IMAGE"
-
-                                timeout 5m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format json \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" \
-                                    "$IMAGE" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
-
-                                if [ ! -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.json" ]; then
-                                    echo '{"Results":[]}' > "${WORKSPACE_DIR}/trivy-reports/${NAME}.json"
-                                fi
-
-                                timeout 1m trivy image \
-                                    --severity CRITICAL,HIGH,MEDIUM \
-                                    --format table \
-                                    --output "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" \
-                                    "$IMAGE" 2>&1 || true
-
-                                if [ -f "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" ]; then
-                                    {
-                                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
-                                        echo "<title>Trivy Report - $IMAGE</title>"
-                                        echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5} pre{background:white;padding:20px;border-radius:5px;overflow-x:auto;box-shadow:0 2px 4px rgba(0,0,0,0.1)} h1{color:#333}.critical{color:#d32f2f}.high{color:#f57c00}.medium{color:#fbc02d}</style></head>'
-                                        echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: $IMAGE</h2><pre>"
-                                        cat "${WORKSPACE_DIR}/trivy-reports/${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
-                                        echo '</pre></body></html>'
-                                    } > "${WORKSPACE_DIR}/trivy-reports/${NAME}.html"
-                                fi
-
-                                echo "✅ Scan RHDemo App terminé"
-                            '''
-                        },
-                        failFast: false  // Continue même si un scan échoue
-                    )
-                }
-
-                // Agrégation des résultats
-                sh '''
-                    echo ""
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    echo "📊 RÉSULTATS GLOBAUX TRIVY"
-                    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-                    TOTAL_CRITICAL=0
-                    TOTAL_HIGH=0
-                    TOTAL_MEDIUM=0
-                    FAILED=false
-
-                    for REPORT in trivy-reports/*.json; do
-                        [ -f "$REPORT" ] || continue
-                        CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT" 2>/dev/null || echo "0")
-                        HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT" 2>/dev/null || echo "0")
-                        MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT" 2>/dev/null || echo "0")
-
-                        TOTAL_CRITICAL=$((TOTAL_CRITICAL + CRITICAL))
-                        TOTAL_HIGH=$((TOTAL_HIGH + HIGH))
-                        TOTAL_MEDIUM=$((TOTAL_MEDIUM + MEDIUM))
-
-                        if [ "$CRITICAL" -gt 0 ]; then
-                            FAILED=true
-                        fi
-                    done
-
-                    printf "   Total CRITICAL : %3d\n" "$TOTAL_CRITICAL"
-                    printf "   Total HIGH     : %3d\n" "$TOTAL_HIGH"
-                    printf "   Total MEDIUM   : %3d\n" "$TOTAL_MEDIUM"
-                    echo ""
-
-                    if [ "$FAILED" = true ]; then
-                        echo "❌ ÉCHEC: $TOTAL_CRITICAL vulnérabilités CRITICAL détectées"
-                        echo "   Les rapports détaillés sont disponibles dans trivy-reports/"
-                        exit 1
-                    else
-                        echo "✅ SUCCÈS: Aucune vulnérabilité CRITICAL détectée"
-                        if [ "$TOTAL_HIGH" -gt 0 ]; then
-                            echo "   ⚠️  Attention: $TOTAL_HIGH vulnérabilités HIGH détectées (non bloquantes)"
-                        fi
-                    fi
-                '''
 
                 // Archiver les rapports Trivy (JSON et HTML)
                 archiveArtifacts artifacts: 'trivy-reports/*.json', fingerprint: true, allowEmptyArchive: true
@@ -1730,71 +1462,22 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Publication des rapports...'
+
+                    // Utilisation de la fonction centralisée pour publier tous les rapports
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    def reports = [
+                        ['rhDemo/target/site/jacoco', 'index.html', 'Code Coverage (JaCoCo)'],
+                        ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
+                        ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
+                        ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
+                        ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
+                        ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
+                        ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']
+                    ]
+
+                    lib.publishHTMLReports(reports)
                 }
-
-                // Rapport de couverture de code (JaCoCo)
-                publishHTML([
-                    reportDir: 'rhDemo/target/site/jacoco',
-                    reportFiles: 'index.html',
-                    reportName: 'Code Coverage (JaCoCo)',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-
-                // Rapports Trivy (scan de sécurité des images Docker)
-                publishHTML([
-                    reportDir: 'trivy-reports',
-                    reportFiles: 'nginx.html',
-                    reportName: 'Trivy - Nginx',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-                publishHTML([
-                    reportDir: 'trivy-reports',
-                    reportFiles: 'postgres.html',
-                    reportName: 'Trivy - PostgreSQL',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-                publishHTML([
-                    reportDir: 'trivy-reports',
-                    reportFiles: 'keycloak.html',
-                    reportName: 'Trivy - Keycloak',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-                publishHTML([
-                    reportDir: 'trivy-reports',
-                    reportFiles: 'rhdemo-app.html',
-                    reportName: 'Trivy - RHDemo App',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-
-                // Rapport OWASP Dependency-Check (vulnérabilités des dépendances Maven)
-                publishHTML([
-                    reportDir: 'rhDemo/target',
-                    reportFiles: 'dependency-check-report.html',
-                    reportName: 'OWASP Dependency-Check',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
-
-                // Rapport OWASP ZAP (scan de sécurité web dynamique)
-                publishHTML([
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap-report.html',
-                    reportName: 'OWASP ZAP Security Report',
-                    allowMissing: true,
-                    keepAll: true,
-                    alwaysLinkToLastBuild: true
-                ])
             }
         }
         

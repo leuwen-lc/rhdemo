@@ -1,0 +1,40 @@
+/* Styles pour la page d'erreur */
+body {
+    font-family: Arial, sans-serif;
+    background: #f8d7da;
+    color: #721c24;
+    margin: 30px;
+}
+
+h1 {
+    color: #d9534f;
+}
+
+pre {
+    background: #f3f3f3;
+    border: 1px solid #e0e0e0;
+    padding: 10px;
+    overflow-x: auto;
+}
+
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 20px;
+}
+
+.label {
+    font-weight: bold;
+}
+
+.section {
+    margin-bottom: 20px;
+}
+
+.error-link {
+    color: #d9534f;
+    text-decoration: underline;
+}

@@ -67,6 +67,12 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
         // Cast nécessaire : clientID est un Map mais ressourceAccess.get() retourne Object
         Map<String, Object> clientID = (Map<String, Object>) ressourceAccess.get(rhDemoClientID);
 
+        // Vérifier que le client ID existe dans resource_access
+        if (clientID == null) {
+            log.warn("Client ID '{}' non trouvé dans resource_access. Clients disponibles: {}", rhDemoClientID, ressourceAccess.keySet());
+            return grantedAuths; // Retourner liste vide au lieu de NPE
+        }
+
         // Cast nécessaire : roles est une List mais clientID.get() retourne Object
         List<String> roles = (List<String>) clientID.get("roles");
         if (roles != null) {

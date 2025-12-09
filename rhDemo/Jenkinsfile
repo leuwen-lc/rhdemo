@@ -651,13 +651,19 @@ YMLEOF
             }
             steps {
                 script {
+                    // Vérifier que APP_VERSION est définie
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
+                        error("❌ APP_VERSION non définie ! Le stage 'Lecture Version Maven' a échoué.")
+                    }
+
                     echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
-                    echo "   Version: ${env.APP_VERSION}"
+                    echo "   Version détectée: ${env.APP_VERSION}"
+                    echo "   Image à construire: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
                     echo "⚠️  Nettoyage complet: suppression cache Docker + target/ + images existantes..."
 
                     // Supprimer les anciennes images Docker pour forcer reconstruction
                     sh """
-                        docker rmi ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker rmi ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} 2>/dev/null || echo "Image n'existe pas encore"
                         docker system prune -f --filter "label=io.buildpacks.stack.id" || true
                     """
 
@@ -671,14 +677,14 @@ YMLEOF
                     sh """
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean spring-boot:build-image \
-                            -Dspring-boot.build-image.imageName=${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} \
+                            -Dspring-boot.build-image.imageName=${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
                             -Dspring-boot.build-image.pullPolicy=IF_NOT_PRESENT \
                             -Dspring-boot.build-image.publish=false \
                             -Dspring-boot.build-image.cleanCache=true \
                             -DskipTests
                     """
 
-                    echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+                    echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
 
                     // Lister les images créées
                     sh "docker images | grep ${env.DOCKER_IMAGE_NAME} || true"
@@ -833,10 +839,12 @@ YMLEOF
             }
             steps {
                 script {
-                    echo "▶ Tag de l'image Docker: ${env.RHDEMO_IMAGE}..."
+                    echo "▶ Tag de l'image Docker..."
+                    echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Cible:  ${env.RHDEMO_IMAGE}"
                 }
                 sh """
-                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} ${env.RHDEMO_IMAGE}
+                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
                 """
             }
         }

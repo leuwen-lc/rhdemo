@@ -30,7 +30,7 @@ pipeline {
 
         // Configuration Docker
         DOCKER_IMAGE_NAME = "rhdemo-api"
-        DOCKER_IMAGE_TAG = "${APP_VERSION}"
+        DOCKER_IMAGE_TAG = ''
         DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
 
         // Versions des images Docker de base

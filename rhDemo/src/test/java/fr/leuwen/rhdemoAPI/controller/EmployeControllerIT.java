@@ -89,6 +89,45 @@ public class EmployeControllerIT {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_WithSort_ShouldReturnSortedList() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("sort", "nom")
+                        .param("order", "ASC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].nom").value("Bernard"))
+                .andExpect(jsonPath("$.content[1].nom").value("Dubois"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_WithSortDesc_ShouldReturnSortedListDescending() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("page", "0")
+                        .param("size", "20")
+                        .param("sort", "prenom")
+                        .param("order", "DESC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].prenom").value("Sophie"))
+                .andExpect(jsonPath("$.content[1].prenom").value("Pierre"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_WithoutSort_ShouldReturnUnsortedList() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(4));
+    }
+
     // ════════════════════════════════════════════════════════════════
     // Tests GET /api/employe?id=X (récupération)
     // ════════════════════════════════════════════════════════════════

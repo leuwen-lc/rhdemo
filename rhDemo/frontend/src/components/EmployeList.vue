@@ -44,19 +44,20 @@
             style="margin-bottom: 20px;"
           />
           
-          <el-table 
+          <el-table
             v-if="employes.length > 0"
-            :data="employes" 
+            :data="employes"
             style="width: 100%"
             stripe
             border
             data-testid="employes-table"
+            @sort-change="handleSort"
           >
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="prenom" label="Prénom" sortable />
-            <el-table-column prop="nom" label="Nom" sortable />
-            <el-table-column prop="mail" label="Email" />
-            <el-table-column prop="adresse" label="Adresse" />
+            <el-table-column prop="prenom" label="Prénom" sortable="custom" />
+            <el-table-column prop="nom" label="Nom" sortable="custom" />
+            <el-table-column prop="mail" label="Email" sortable="custom" />
+            <el-table-column prop="adresse" label="Adresse" sortable="custom" />
             <el-table-column label="Actions" width="300">
               <template #default="scope">
                 <el-space>
@@ -150,7 +151,9 @@ export default {
       error: '',
       currentPage: 1,
       pageSize: 20,
-      totalElements: 0
+      totalElements: 0,
+      sortField: null,
+      sortOrder: 'ASC'
     };
   },
   methods: {
@@ -158,7 +161,12 @@ export default {
       this.loading = true;
       this.error = '';
       try {
-        const res = await getEmployesPage(this.currentPage - 1, this.pageSize);
+        const res = await getEmployesPage(
+          this.currentPage - 1,
+          this.pageSize,
+          this.sortField,
+          this.sortOrder
+        );
         this.employes = res.data.content;
         // Structure PagedModel (VIA_DTO) : les métadonnées sont dans res.data.page
         this.totalElements = res.data.page.totalElements;
@@ -186,6 +194,19 @@ export default {
     handleSizeChange(size) {
       this.pageSize = size;
       this.currentPage = 1;
+      this.fetchEmployes();
+    },
+    handleSort({ prop, order }) {
+      // Element Plus renvoie : order = 'ascending', 'descending' ou null
+      if (order) {
+        this.sortField = prop;
+        this.sortOrder = order === 'ascending' ? 'ASC' : 'DESC';
+      } else {
+        // Pas de tri (clic pour annuler le tri)
+        this.sortField = null;
+        this.sortOrder = 'ASC';
+      }
+      this.currentPage = 1; // Retour à la première page lors d'un tri
       this.fetchEmployes();
     }
   },

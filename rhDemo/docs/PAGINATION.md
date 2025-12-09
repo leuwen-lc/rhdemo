@@ -17,12 +17,14 @@ Le système utilise une architecture en 3 couches :
 ### Endpoint de pagination
 
 ```
-GET /api/employes/page?page=0&size=20
+GET /api/employes/page?page=0&size=20&sort=nom&order=ASC
 ```
 
 **Paramètres :**
 - `page` : Numéro de la page (commence à 0), défaut : 0
 - `size` : Nombre d'éléments par page, défaut : 20
+- `sort` : Nom de la colonne pour le tri (prenom, nom, mail, adresse), optionnel
+- `order` : Direction du tri (`ASC` ou `DESC`), défaut : ASC
 
 ### Format de réponse (PagedModel - VIA_DTO)
 
@@ -67,9 +69,28 @@ La réponse utilise le format **PagedModel** avec sérialisation `VIA_DTO` pour 
 - **Champ "Aller à"** : Saut direct à une page spécifique
 - **Sélecteur de taille** : Changement dynamique du nombre d'éléments par page
 
+### Tri des colonnes
+
+Le système de tri permet de trier l'ensemble de la table (pas seulement la page en cours) :
+
+- **Colonnes triables** : Prénom, Nom, Email, Adresse
+- **Tri côté serveur** : Exécuté via SQL `ORDER BY` pour des performances optimales
+- **Modes de tri** :
+  - 1er clic : Tri ascendant (A→Z)
+  - 2ème clic : Tri descendant (Z→A)
+  - 3ème clic : Annulation du tri
+- **Indicateur visuel** : Flèche dans l'entête de colonne indiquant la direction du tri
+- **Pagination préservée** : Le tri est maintenu lors du changement de page
+
+**Exemple de requête :**
+```
+GET /api/employes/page?page=0&size=20&sort=nom&order=ASC
+```
+
 ### Comportement
 
 - Retour automatique à la page 1 lors d'un changement de taille de page
+- Retour automatique à la page 1 lors d'un changement de tri
 - Indicateur de chargement pendant les requêtes
 - Affichage du nombre total d'éléments
 - Gestion des cas limites (0 employé, 1 seul employé)
@@ -80,11 +101,85 @@ L'endpoint de pagination est protégé par Spring Security et requiert :
 - **Authentification** : Via Keycloak OAuth2/OIDC
 - **Autorisation** : Rôle `consult` minimum
 
+## Implémentation technique
+
+### Backend (EmployeController.java)
+
+```java
+@GetMapping("/api/employes/page")
+@PreAuthorize("hasRole('consult')")
+public Page<Employe> getEmployesPage(
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size,
+        @RequestParam(required = false) String sort,
+        @RequestParam(defaultValue = "ASC") String order) {
+
+    Pageable pageable;
+    if (sort != null && !sort.isEmpty()) {
+        Sort.Direction direction = "DESC".equalsIgnoreCase(order)
+            ? Sort.Direction.DESC
+            : Sort.Direction.ASC;
+        pageable = PageRequest.of(page, size, Sort.by(direction, sort));
+    } else {
+        pageable = PageRequest.of(page, size);
+    }
+
+    return employeservice.getEmployesPage(pageable);
+}
+```
+
+### Frontend (EmployeList.vue)
+
+**Configuration du tableau :**
+```vue
+<el-table
+  :data="employes"
+  @sort-change="handleSort"
+>
+  <el-table-column prop="prenom" label="Prénom" sortable="custom" />
+  <el-table-column prop="nom" label="Nom" sortable="custom" />
+  <el-table-column prop="mail" label="Email" sortable="custom" />
+  <el-table-column prop="adresse" label="Adresse" sortable="custom" />
+</el-table>
+```
+
+**Gestion du tri :**
+```javascript
+data() {
+  return {
+    sortField: null,
+    sortOrder: 'ASC'
+  };
+},
+methods: {
+  handleSort({ prop, order }) {
+    if (order) {
+      this.sortField = prop;
+      this.sortOrder = order === 'ascending' ? 'ASC' : 'DESC';
+    } else {
+      this.sortField = null;
+      this.sortOrder = 'ASC';
+    }
+    this.currentPage = 1;
+    this.fetchEmployes();
+  }
+}
+```
+
+### API Service (api.js)
+
+```javascript
+export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC') {
+  const params = { page, size };
+  if (sort) {
+    params.sort = sort;
+    params.order = order;
+  }
+  return api.get('/employes/page', { params });
+}
+```
+
 ## Évolutions futures
-
-### Tri des colonnes
-
-L'ajout de tri sur les colonnes (prénom, nom, etc.) est prévu via le paramètre `sort` dans l'API Spring Data.
 
 ### Filtres de recherche
 
@@ -126,9 +221,14 @@ Implémentation future de filtres combinés avec la pagination pour rechercher d
 
 ### Fichiers impactés
 
-- **Backend** : `RhdemoApplication.java` - Annotation `@EnableSpringDataWebSupport`
-- **Frontend** : `EmployeList.vue` - Accès aux métadonnées de pagination
-- **Tests** : `EmployeControllerIT.java` - Assertions JSON mises à jour
+- **Backend** :
+  - `RhdemoApplication.java` - Annotation `@EnableSpringDataWebSupport`
+  - `EmployeController.java` - Paramètres `sort` et `order`
+- **Frontend** :
+  - `EmployeList.vue` - Accès aux métadonnées de pagination et gestion du tri
+  - `api.js` - Paramètres de tri dans `getEmployesPage()`
+- **Tests** :
+  - `EmployeControllerIT.java` - Assertions JSON mises à jour + tests de tri
 
 ## Dépendances techniques
 
@@ -147,7 +247,32 @@ Implémentation future de filtres combinés avec la pagination pour rechercher d
 - [Element Plus Pagination](https://element-plus.org/en-US/component/pagination.html)
 - [REST API Best Practices - Pagination](https://www.moesif.com/blog/technical/api-design/REST-API-Design-Filtering-Sorting-and-Pagination/)
 
+## Historique des modifications
+
+### Version 2.1.0 - Tri côté serveur (8 décembre 2025)
+
+**Ajout :** Système de tri global sur l'ensemble de la table
+
+**Nouveautés :**
+- Tri côté serveur via Spring Data `Sort` et SQL `ORDER BY`
+- Colonnes triables : Prénom, Nom, Email, Adresse
+- Interface utilisateur avec `sortable="custom"` sur Element Plus
+- 3 modes de tri : ascendant, descendant, annulation
+- Tests d'intégration pour le tri
+
+**Fichiers modifiés :**
+- `EmployeController.java` : Paramètres `sort` et `order`
+- `EmployeList.vue` : Méthode `handleSort()` et état `sortField`/`sortOrder`
+- `api.js` : Signature de `getEmployesPage()`
+- `EmployeControllerIT.java` : 3 nouveaux tests de tri
+
+### Version 2.0.0 - PagedModel/VIA_DTO (22 novembre 2025)
+
+**Breaking change :** Migration vers PagedModel avec sérialisation VIA_DTO
+
+**Impact :** Les métadonnées de pagination sont désormais dans `response.data.page.*`
+
 ---
 
-**Dernière mise à jour** : 22 novembre 2025
-**Version** : 2.0.0 (PagedModel/VIA_DTO)
+**Dernière mise à jour** : 8 décembre 2025
+**Version** : 2.1.0 (Tri côté serveur)

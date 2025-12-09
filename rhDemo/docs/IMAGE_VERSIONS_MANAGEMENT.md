@@ -20,8 +20,10 @@ services:
     image: ${NGINX_IMAGE:-nginx:1.29.3-alpine}
   
   rhdemo-app:
-    image: rhdemo-api:${APP_VERSION:-0.0.1-SNAPSHOT}
+    image: rhdemo-api:${APP_VERSION}
 ```
+
+**Note :** La version de `rhdemo-api` est maintenant lue dynamiquement depuis `pom.xml` au lieu d'être codée en dur.
 
 ## Lecture automatique dans le Jenkinsfile
 
@@ -55,7 +57,54 @@ stage('🔍 Scan Sécurité Images Docker (Trivy)') {
 ✅ **Cohérence garantie** : Trivy scanne exactement les mêmes versions que celles déployées  
 ✅ **Pas de duplication** : Évite les erreurs de synchronisation entre fichiers  
 
-## Comment mettre à jour une image
+## Gestion de la version de RHDemo API
+
+### Version lue depuis pom.xml
+
+La version de l'application RHDemo est **automatiquement lue depuis `pom.xml`** dans le stage `🔢 Lecture Version Maven` :
+
+```groovy
+stage('🔢 Lecture Version Maven') {
+    steps {
+        script {
+            // Lire la version depuis le pom.xml
+            env.APP_VERSION = sh(
+                script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                returnStdout: true
+            ).trim()
+
+            // Mettre à jour les variables Docker
+            env.DOCKER_IMAGE_TAG = env.APP_VERSION
+
+            echo "✅ Version Maven détectée: ${env.APP_VERSION}"
+        }
+    }
+}
+```
+
+### Workflow de version
+
+1. **Développement** : Version `X.Y.Z-SNAPSHOT` dans `pom.xml`
+2. **Release** :
+   - Créer un tag git : `git tag -a vX.Y.Z -m "Release X.Y.Z"`
+   - Mettre à jour `pom.xml` : `<version>X.Y.Z</version>`
+   - Commit et push : `git push && git push --tags`
+3. **Jenkins** : Lit automatiquement la version et construit l'image `rhdemo-api:X.Y.Z`
+
+### Exemple de mise à jour de version
+
+```bash
+# Passer de 1.0.0-RELEASE à 1.1.0-SNAPSHOT
+cd rhDemo
+./mvnw versions:set -DnewVersion=1.1.0-SNAPSHOT
+git add pom.xml
+git commit -m "chore: bump version to 1.1.0-SNAPSHOT"
+git push
+```
+
+Le prochain build Jenkins utilisera automatiquement `1.1.0-SNAPSHOT`.
+
+## Comment mettre à jour une image externe
 
 ### 1. Modifier docker-compose.yml
 
@@ -187,6 +236,32 @@ export NGINX_IMAGE="nginx:custom-version"  # ← Peut écraser la valeur par dé
 - [Docker Compose variable substitution](https://docs.docker.com/compose/environment-variables/set-environment-variables/)
 - [Trivy image scanning](https://aquasecurity.github.io/trivy/)
 
+## Historique des modifications
+
+### Version 2.0 - Lecture automatique depuis pom.xml (8 décembre 2025)
+
+**Changement majeur** : La version de RHDemo API n'est plus codée en dur dans le Jenkinsfile.
+
+**Avant** :
+```groovy
+environment {
+    APP_VERSION = '0.0.1-SNAPSHOT'  // ❌ Codé en dur
+}
+```
+
+**Après** :
+```groovy
+stage('🔢 Lecture Version Maven') {
+    env.APP_VERSION = sh(script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout', returnStdout: true).trim()
+}
+```
+
+**Avantages** :
+- ✅ Source unique de vérité : `pom.xml`
+- ✅ Pas de synchronisation manuelle
+- ✅ Les tags Docker correspondent exactement aux versions Maven
+- ✅ Facilite les releases (changer uniquement `pom.xml`)
+
 ---
 
-**Dernière mise à jour** : 2025-11-28
+**Dernière mise à jour** : 8 décembre 2025

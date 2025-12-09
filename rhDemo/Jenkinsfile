@@ -20,8 +20,9 @@ pipeline {
     environment {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
-        APP_VERSION = '0.0.1-SNAPSHOT'
-        JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
+        // La version est lue dynamiquement depuis pom.xml (voir stage 'Lecture Version')
+        APP_VERSION = ''
+        JAR_FILE = ''
 
         // Configuration notifications email
         // À configurer : remplacer par votre email ou utiliser Jenkins Credentials
@@ -90,13 +91,13 @@ pipeline {
                 }
                 checkout scm
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
-                
+
                 script {
                     echo '▶ Vérification du projet rhDemoInitKeycloak...'
                     // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
                     // Le checkout SCM récupère en principe tout le workspace
                 }
-                
+
                 sh '''
                     if [ -d "rhDemoInitKeycloak" ]; then
                         echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
@@ -108,6 +109,30 @@ pipeline {
                         exit 1
                     fi
                 '''
+            }
+        }
+
+        stage('🔢 Lecture Version Maven') {
+            steps {
+                script {
+                    echo '▶ Lecture de la version depuis pom.xml...'
+
+                    // Lire la version depuis le pom.xml
+                    env.APP_VERSION = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                        returnStdout: true
+                    ).trim()
+
+                    // Construire le nom du fichier JAR avec la version lue
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
+
+                    // Mettre à jour les variables Docker
+                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
+
+                    echo "✅ Version Maven détectée: ${env.APP_VERSION}"
+                    echo "   JAR attendu: ${env.JAR_FILE}"
+                    echo "   Docker tag: ${env.DOCKER_IMAGE_TAG}"
+                }
             }
         }
 

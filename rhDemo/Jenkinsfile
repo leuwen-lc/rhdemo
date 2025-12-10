@@ -20,8 +20,9 @@ pipeline {
     environment {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
-        APP_VERSION = '0.0.1-SNAPSHOT'
-        JAR_FILE = "rhDemo/target/rhdemoAPI-${APP_VERSION}.jar"
+        // La version est lue dynamiquement depuis pom.xml (voir stage 'Lecture Version')
+        // NOTE: APP_VERSION, JAR_FILE et DOCKER_IMAGE_TAG ne sont PAS déclarés ici
+        // car ils doivent être modifiables dynamiquement dans les stages
 
         // Configuration notifications email
         // À configurer : remplacer par votre email ou utiliser Jenkins Credentials
@@ -29,7 +30,6 @@ pipeline {
 
         // Configuration Docker
         DOCKER_IMAGE_NAME = "rhdemo-api"
-        DOCKER_IMAGE_TAG = "${APP_VERSION}"
         DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
 
         // Versions des images Docker de base
@@ -90,13 +90,13 @@ pipeline {
                 }
                 checkout scm
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
-                
+
                 script {
                     echo '▶ Vérification du projet rhDemoInitKeycloak...'
                     // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
                     // Le checkout SCM récupère en principe tout le workspace
                 }
-                
+
                 sh '''
                     if [ -d "rhDemoInitKeycloak" ]; then
                         echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
@@ -108,6 +108,37 @@ pipeline {
                         exit 1
                     fi
                 '''
+            }
+        }
+
+        stage('🔢 Lecture Version Maven') {
+            steps {
+                script {
+                    echo '▶ Lecture de la version depuis pom.xml...'
+
+                    // Lire la version depuis le pom.xml avec Maven
+                    // NOTE: APP_VERSION, JAR_FILE et DOCKER_IMAGE_TAG ne sont PAS dans le bloc environment{}
+                    // car les variables du bloc environment{} sont read-only en pipeline déclaratif
+                    env.APP_VERSION = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                        returnStdout: true
+                    ).trim()
+
+                    // Vérifier que la lecture a réussi
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
+                        error("❌ Impossible de lire la version depuis pom.xml")
+                    }
+
+                    // Construire le nom du fichier JAR avec la version lue
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
+
+                    // Mettre à jour les variables Docker
+                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
+
+                    echo "✅ Version Maven détectée: ${env.APP_VERSION}"
+                    echo "   JAR attendu: ${env.JAR_FILE}"
+                    echo "   Docker tag: ${env.DOCKER_IMAGE_TAG}"
+                }
             }
         }
 
@@ -626,36 +657,43 @@ YMLEOF
             }
             steps {
                 script {
+                    // Vérifier que APP_VERSION est définie
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
+                        error("❌ APP_VERSION non définie ! Le stage 'Lecture Version Maven' a échoué.")
+                    }
+
                     echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
+                    echo "   Version détectée: ${env.APP_VERSION}"
+                    echo "   Image à construire: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
                     echo "⚠️  Nettoyage complet: suppression cache Docker + target/ + images existantes..."
-                    
+
                     // Supprimer les anciennes images Docker pour forcer reconstruction
                     sh """
-                        docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker rmi ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} 2>/dev/null || echo "Image n'existe pas encore"
                         docker system prune -f --filter "label=io.buildpacks.stack.id" || true
                     """
-                    
+
                     // CRITIQUE: Supprimer PHYSIQUEMENT target/ avant build image Docker
                     // pour éviter que Paketo réutilise un JAR avec ancienne configuration
                     sh """
                         echo "🗑️  Suppression physique du target/ avant build image..."
                         cd rhDemo && rm -rf target/
                     """
-                    
+
                     sh """
                         . rhDemo/secrets/env-vars.sh
                         cd rhDemo && ./mvnw clean spring-boot:build-image \
-                            -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} \
+                            -Dspring-boot.build-image.imageName=${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
                             -Dspring-boot.build-image.pullPolicy=IF_NOT_PRESENT \
                             -Dspring-boot.build-image.publish=false \
                             -Dspring-boot.build-image.cleanCache=true \
                             -DskipTests
                     """
-                    
-                    echo "✅ Image Docker créée: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
-                    
+
+                    echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+
                     // Lister les images créées
-                    sh "docker images | grep ${DOCKER_IMAGE_NAME} || true"
+                    sh "docker images | grep ${env.DOCKER_IMAGE_NAME} || true"
                 }
             }
         }
@@ -807,10 +845,12 @@ YMLEOF
             }
             steps {
                 script {
-                    echo "▶ Tag de l'image Docker: ${RHDEMO_IMAGE}..."
+                    echo "▶ Tag de l'image Docker..."
+                    echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Cible:  ${env.RHDEMO_IMAGE}"
                 }
                 sh """
-                    docker tag ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ${RHDEMO_IMAGE}
+                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
                 """
             }
         }

@@ -21,8 +21,8 @@ pipeline {
         // Configuration du pipeline
         APP_NAME = 'rhdemo-api'
         // La version est lue dynamiquement depuis pom.xml (voir stage 'Lecture Version')
-        APP_VERSION = ''
-        JAR_FILE = ''
+        // NOTE: APP_VERSION, JAR_FILE et DOCKER_IMAGE_TAG ne sont PAS déclarés ici
+        // car ils doivent être modifiables dynamiquement dans les stages
 
         // Configuration notifications email
         // À configurer : remplacer par votre email ou utiliser Jenkins Credentials
@@ -30,7 +30,6 @@ pipeline {
 
         // Configuration Docker
         DOCKER_IMAGE_NAME = "rhdemo-api"
-        DOCKER_IMAGE_TAG = ''
         DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
 
         // Versions des images Docker de base
@@ -118,31 +117,23 @@ pipeline {
                     echo '▶ Lecture de la version depuis pom.xml...'
 
                     // Lire la version depuis le pom.xml avec Maven
-                    // Rediriger stderr vers /dev/null pour éviter pollution de stdout
-                    def versionOutput = sh(
-                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null',
+                    // NOTE: APP_VERSION, JAR_FILE et DOCKER_IMAGE_TAG ne sont PAS dans le bloc environment{}
+                    // car les variables du bloc environment{} sont read-only en pipeline déclaratif
+                    env.APP_VERSION = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
                         returnStdout: true
                     ).trim()
 
-                    echo "🔍 Debug - Version brute lue: '${versionOutput}'"
-                    echo "🔍 Debug - Longueur: ${versionOutput.length()}"
-                    echo "🔍 Debug - Type: ${versionOutput.getClass()}"
-
-                    // Forcer la conversion en String et l'affectation
-                    env.APP_VERSION = versionOutput.toString()
-
-                    echo "🔍 Debug - Après affectation env.APP_VERSION: '${env.APP_VERSION}'"
-
                     // Vérifier que la lecture a réussi
-                    if (!env.APP_VERSION || env.APP_VERSION == '' || env.APP_VERSION == 'null') {
-                        error("❌ Impossible de lire la version depuis pom.xml. Version détectée: '${env.APP_VERSION}'")
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
+                        error("❌ Impossible de lire la version depuis pom.xml")
                     }
 
                     // Construire le nom du fichier JAR avec la version lue
-                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${versionOutput}.jar"
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
 
-                    // Mettre à jour les variables Docker (utiliser versionOutput directement)
-                    env.DOCKER_IMAGE_TAG = versionOutput.toString()
+                    // Mettre à jour les variables Docker
+                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
 
                     echo "✅ Version Maven détectée: ${env.APP_VERSION}"
                     echo "   JAR attendu: ${env.JAR_FILE}"

@@ -117,11 +117,22 @@ pipeline {
                 script {
                     echo '▶ Lecture de la version depuis pom.xml...'
 
-                    // Lire la version depuis le pom.xml
-                    env.APP_VERSION = sh(
-                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                    // Lire la version depuis le pom.xml avec Maven
+                    // Rediriger stderr vers /dev/null pour éviter pollution de stdout
+                    def versionOutput = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null',
                         returnStdout: true
                     ).trim()
+
+                    echo "🔍 Debug - Version brute lue: '${versionOutput}'"
+                    echo "🔍 Debug - Longueur: ${versionOutput.length()}"
+
+                    env.APP_VERSION = versionOutput
+
+                    // Vérifier que la lecture a réussi
+                    if (!env.APP_VERSION || env.APP_VERSION == '' || env.APP_VERSION == 'null') {
+                        error("❌ Impossible de lire la version depuis pom.xml. Version détectée: '${env.APP_VERSION}'")
+                    }
 
                     // Construire le nom du fichier JAR avec la version lue
                     env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"

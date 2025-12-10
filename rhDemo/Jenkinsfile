@@ -126,8 +126,12 @@ pipeline {
 
                     echo "🔍 Debug - Version brute lue: '${versionOutput}'"
                     echo "🔍 Debug - Longueur: ${versionOutput.length()}"
+                    echo "🔍 Debug - Type: ${versionOutput.getClass()}"
 
-                    env.APP_VERSION = versionOutput
+                    // Forcer la conversion en String et l'affectation
+                    env.APP_VERSION = versionOutput.toString()
+
+                    echo "🔍 Debug - Après affectation env.APP_VERSION: '${env.APP_VERSION}'"
 
                     // Vérifier que la lecture a réussi
                     if (!env.APP_VERSION || env.APP_VERSION == '' || env.APP_VERSION == 'null') {
@@ -135,10 +139,10 @@ pipeline {
                     }
 
                     // Construire le nom du fichier JAR avec la version lue
-                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${versionOutput}.jar"
 
-                    // Mettre à jour les variables Docker
-                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
+                    // Mettre à jour les variables Docker (utiliser versionOutput directement)
+                    env.DOCKER_IMAGE_TAG = versionOutput.toString()
 
                     echo "✅ Version Maven détectée: ${env.APP_VERSION}"
                     echo "   JAR attendu: ${env.JAR_FILE}"

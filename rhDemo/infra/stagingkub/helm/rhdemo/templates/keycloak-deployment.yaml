@@ -61,7 +61,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health/live
-            port: http
+            port: 9000
           initialDelaySeconds: {{ .Values.keycloak.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.keycloak.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.keycloak.livenessProbe.timeoutSeconds }}
@@ -69,7 +69,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health/ready
-            port: http
+            port: 9000
           initialDelaySeconds: {{ .Values.keycloak.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.keycloak.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.keycloak.readinessProbe.timeoutSeconds }}

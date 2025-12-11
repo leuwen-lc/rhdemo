@@ -662,38 +662,34 @@ YMLEOF
                         error("❌ APP_VERSION non définie ! Le stage 'Lecture Version Maven' a échoué.")
                     }
 
-                    echo "🐳 Construction de l'image Docker avec Paketo Buildpacks..."
+                    echo "🐳 Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
                     echo "   Version détectée: ${env.APP_VERSION}"
                     echo "   Image à construire: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
-                    echo "⚠️  Nettoyage complet: suppression cache Docker + target/ + images existantes..."
+                    echo "⚠️  Nettoyage complet: suppression images existantes..."
 
                     // Supprimer les anciennes images Docker pour forcer reconstruction
                     sh """
                         docker rmi ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} 2>/dev/null || echo "Image n'existe pas encore"
-                        docker system prune -f --filter "label=io.buildpacks.stack.id" || true
-                    """
-
-                    // CRITIQUE: Supprimer PHYSIQUEMENT target/ avant build image Docker
-                    // pour éviter que Paketo réutilise un JAR avec ancienne configuration
-                    sh """
-                        echo "🗑️  Suppression physique du target/ avant build image..."
-                        cd rhDemo && rm -rf target/
+                        docker rmi ${env.DOCKER_IMAGE_NAME}:latest 2>/dev/null || echo "Image latest n'existe pas encore"
                     """
 
                     sh """
-                        . rhDemo/secrets/env-vars.sh
-                        cd rhDemo && ./mvnw clean spring-boot:build-image \
-                            -Dspring-boot.build-image.imageName=${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
-                            -Dspring-boot.build-image.pullPolicy=IF_NOT_PRESENT \
-                            -Dspring-boot.build-image.publish=false \
-                            -Dspring-boot.build-image.cleanCache=true \
-                            -DskipTests
+                        cd rhDemo
+                        docker build -t ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
+                                     -t ${env.DOCKER_IMAGE_NAME}:latest \
+                                     --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                                     --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                                     --build-arg VERSION=${env.APP_VERSION} \
+                                     .
                     """
 
                     echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
 
-                    // Lister les images créées
-                    sh "docker images | grep ${env.DOCKER_IMAGE_NAME} || true"
+                    // Lister les images créées et afficher la taille
+                    sh """
+                        echo "📊 Images créées:"
+                        docker images ${env.DOCKER_IMAGE_NAME} --format "table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}"
+                    """
                 }
             }
         }

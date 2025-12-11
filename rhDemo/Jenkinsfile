@@ -1058,9 +1058,9 @@ YMLEOF
 
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Utiliser localhost:5000 comme repository pour pointer vers le registry local
+                    # Note: Le namespace rhdemo-staging doit déjà exister (créé par init-stagingkub.sh)
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace rhdemo-staging \\
-                      --create-namespace \\
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.APP_VERSION} \\
                       --wait \\

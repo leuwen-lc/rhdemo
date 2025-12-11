@@ -186,10 +186,20 @@ else
     KEYCLOAK_ADMIN_PASSWORD="admin"
 fi
 
-# Créer le namespace si nécessaire
+# Créer le namespace si nécessaire avec les labels Helm
 echo -e "${YELLOW}▶ Création du namespace rhdemo-staging...${NC}"
-kubectl create namespace rhdemo-staging --dry-run=client -o yaml | kubectl apply -f -
-echo -e "${GREEN}✅ Namespace créé${NC}"
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rhdemo-staging
+  labels:
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    meta.helm.sh/release-name: rhdemo
+    meta.helm.sh/release-namespace: rhdemo-staging
+EOF
+echo -e "${GREEN}✅ Namespace créé avec labels Helm${NC}"
 
 # Créer les secrets Kubernetes
 echo -e "${YELLOW}▶ Création des secrets Kubernetes...${NC}"

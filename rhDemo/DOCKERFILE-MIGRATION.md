@@ -310,10 +310,24 @@ rhdemo:
     JAVA_OPTS: "-XX:MaxRAMPercentage=80.0 -XX:+UseG1GC -Xlog:gc*"
 ```
 
+## ⚠️ Changements de configuration
+
+### Utilisateur container : `cnb` → `spring`
+
+Avec Paketo Buildpacks, l'image utilisait l'utilisateur `cnb:cnb` (Cloud Native Buildpacks).
+Avec le nouveau Dockerfile, l'utilisateur est `spring:spring` (UID 1000).
+
+**Fichiers modifiés** :
+- **Jenkinsfile** (lignes 1238-1246) : Scripts de copie secrets pour environnement staging
+  - Ancien : `chown cnb:cnb`
+  - Nouveau : `chown spring:spring`
+
+**Impact** : Si vous avez des scripts personnalisés qui référencent l'utilisateur `cnb`, ils doivent être mis à jour vers `spring`.
+
 ## 📖 Documentation associée
 
 - [Dockerfile](../Dockerfile) : Fichier de construction
-- [Jenkinsfile](../Jenkinsfile) : Pipeline modifié (lignes 665-695)
+- [Jenkinsfile](../Jenkinsfile) : Pipeline modifié (lignes 665-695, 1238-1246)
 - [CHANGELOG-JENKINS-STAGINGKUB.md](infra/stagingkub/CHANGELOG-JENKINS-STAGINGKUB.md) : Historique complet des modifications Jenkins
 - [JENKINS-NETWORK-ANALYSIS.md](infra/stagingkub/JENKINS-NETWORK-ANALYSIS.md) : Analyse réseau Jenkins ↔ stagingkub
 

@@ -651,7 +651,7 @@ YMLEOF
             }
         }
 
-        stage('🐳 Build Docker Image (Paketo)') {
+        stage('🐳 Build Docker Image') {
             when {
                 expression { params.DEPLOY_ENV != 'none' }
             }
@@ -1235,20 +1235,20 @@ YMLEOF
                     echo "📋 Copie du fichier secrets dans le container..."
 
                     # Créer le répertoire en tant que root, puis changer le propriétaire
-                    # L'utilisateur CNB (Cloud Native Buildpacks) n'a pas les droits root
+                    # L'utilisateur spring n'a pas les droits root
                     docker exec --user root rhdemo-staging-app mkdir -p /workspace/secrets
-                    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets
+                    docker exec --user root rhdemo-staging-app chown spring:spring /workspace/secrets
 
                     # Copier le fichier
                     docker cp "\$SECRETS_FILE" rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
 
                     # Définir les permissions (read-only) et le propriétaire en tant que root
-                    docker exec --user root rhdemo-staging-app chown cnb:cnb /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root rhdemo-staging-app chown spring:spring /workspace/secrets/secrets-rhdemo.yml
                     docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 
                     echo "✅ Fichier secrets-rhdemo.yml copié dans le container"
                     echo "   Chemin: /workspace/secrets/secrets-rhdemo.yml"
-                    echo "   Permissions: 400 (read-only, propriétaire: cnb)"
+                    echo "   Permissions: 400 (read-only, propriétaire: spring)"
 
                     # Vérification (sans afficher le contenu pour sécurité)
                     docker exec rhdemo-staging-app ls -lh /workspace/secrets/secrets-rhdemo.yml

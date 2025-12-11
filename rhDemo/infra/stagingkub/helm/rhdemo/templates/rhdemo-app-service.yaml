@@ -1,0 +1,19 @@
+{{- if .Values.rhdemo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: rhdemo-app
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo-app.labels" . | nindent 4 }}
+    app: rhdemo-app
+spec:
+  type: {{ .Values.rhdemo.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.rhdemo.service.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: rhdemo-app
+{{- end }}

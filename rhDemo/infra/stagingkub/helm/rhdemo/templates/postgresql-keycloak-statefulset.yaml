@@ -1,0 +1,81 @@
+{{- if .Values.postgresql-keycloak.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql-keycloak
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-keycloak.labels" . | nindent 4 }}
+    app: postgresql-keycloak
+spec:
+  serviceName: postgresql-keycloak
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql-keycloak
+  template:
+    metadata:
+      labels:
+        app: postgresql-keycloak
+        {{- include "postgresql-keycloak.labels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: postgresql
+        image: "{{ .Values.postgresql-keycloak.image.repository }}:{{ .Values.postgresql-keycloak.image.tag }}"
+        imagePullPolicy: {{ .Values.postgresql-keycloak.image.pullPolicy }}
+        ports:
+        - name: postgresql
+          containerPort: {{ .Values.postgresql-keycloak.service.port }}
+          protocol: TCP
+        env:
+        - name: POSTGRES_DB
+          value: {{ .Values.postgresql-keycloak.database.name }}
+        - name: POSTGRES_USER
+          value: {{ .Values.postgresql-keycloak.database.user }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.postgresql-keycloak.database.passwordSecret.name }}
+              key: {{ .Values.postgresql-keycloak.database.passwordSecret.key }}
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql/data
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U {{ .Values.postgresql-keycloak.database.user }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U {{ .Values.postgresql-keycloak.database.user }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+        resources:
+          {{- toYaml .Values.postgresql-keycloak.resources | nindent 10 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: postgresql-data
+      labels:
+        app: postgresql-keycloak
+    spec:
+      accessModes:
+      - {{ .Values.postgresql-keycloak.persistence.accessMode }}
+      {{- if .Values.postgresql-keycloak.persistence.storageClass }}
+      storageClassName: {{ .Values.postgresql-keycloak.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.postgresql-keycloak.persistence.size }}
+{{- end }}

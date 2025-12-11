@@ -1,0 +1,22 @@
+{{- if .Values.postgresql-rhdemo.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-rhdemo-init
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app: postgresql-rhdemo
+data:
+  # Script d'initialisation de la base de données
+  # Ce script sera exécuté automatiquement par PostgreSQL au premier démarrage
+  init-db.sql: |
+    -- Script d'initialisation pour la base de données RHDemo
+    -- Ce fichier sera copié depuis rhDemo/src/main/resources/data/pgddl.sql
+    -- par le script d'initialisation Jenkins
+
+    -- Note: Le contenu réel sera injecté par le script init-stagingkub.sh
+    -- lors du déploiement initial
+
+    \echo 'Database rhdemo initialized'
+{{- end }}

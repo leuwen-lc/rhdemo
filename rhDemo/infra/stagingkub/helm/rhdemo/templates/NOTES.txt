@@ -1,0 +1,87 @@
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║   🎉 RHDemo déployé avec succès sur Kubernetes !             ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+📦 Release: {{ .Release.Name }}
+🏷️  Version: {{ .Chart.AppVersion }}
+📂 Namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 URLS D'ACCÈS
+
+{{- if .Values.ingress.enabled }}
+  Application RHDemo:
+    https://rhdemo.{{ .Values.global.domain }}
+
+  Keycloak Admin Console:
+    https://keycloak.{{ .Values.global.domain }}
+    👤 Admin: {{ .Values.keycloak.admin.user }}
+{{- else }}
+  Ingress désactivé. Utilisez port-forward pour accéder aux services:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/rhdemo-app 9000:9000
+  kubectl port-forward -n {{ .Release.Namespace }} svc/keycloak 8080:8080
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 VÉRIFIER LE STATUT
+
+  # Statut des pods
+  kubectl get pods -n {{ .Release.Namespace }}
+
+  # Logs de l'application
+  kubectl logs -f -n {{ .Release.Namespace }} -l app=rhdemo-app
+
+  # Logs de Keycloak
+  kubectl logs -f -n {{ .Release.Namespace }} -l app=keycloak
+
+  # Statut des services
+  kubectl get svc -n {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+  # Statut de l'ingress
+  kubectl get ingress -n {{ .Release.Namespace }}
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 METTRE À JOUR LE DÉPLOIEMENT
+
+  helm upgrade {{ .Release.Name }} ./helm/rhdemo \
+    --namespace {{ .Release.Namespace }} \
+    --set rhdemo.image.tag=NOUVELLE_VERSION
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🗑️  SUPPRIMER LE DÉPLOIEMENT
+
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+  Consultez le README pour plus d'informations:
+  rhDemo/infra/stagingkub/README.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  NOTES IMPORTANTES
+
+{{- if not .Values.ingress.tls.enabled }}
+  ⚠️  TLS désactivé - Les connexions HTTP ne sont pas sécurisées
+{{- end }}
+
+{{- if eq .Values.global.environment "production" }}
+  🔒 Environnement PRODUCTION détecté
+     Assurez-vous que les secrets sont correctement configurés !
+{{- end }}
+
+  💡 Pour les tests locaux avec KinD, assurez-vous que /etc/hosts
+     contient les entrées pour *.{{ .Values.global.domain }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,0 +1,79 @@
+{{- if .Values.keycloak.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    app: keycloak
+spec:
+  replicas: {{ .Values.keycloak.replicaCount }}
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+        {{- include "keycloak.labels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z {{ .Values.keycloak.database.host }} {{ .Values.keycloak.database.port }}; do echo waiting for postgresql-keycloak; sleep 2; done;']
+      containers:
+      - name: keycloak
+        image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+        imagePullPolicy: {{ .Values.keycloak.image.pullPolicy }}
+        args:
+        - start-dev
+        - --db=postgres
+        - --db-url=jdbc:postgresql://{{ .Values.keycloak.database.host }}:{{ .Values.keycloak.database.port }}/{{ .Values.keycloak.database.name }}
+        - --db-username={{ .Values.keycloak.database.user }}
+        - --proxy-headers={{ .Values.keycloak.proxyHeaders }}
+        - --http-enabled={{ .Values.keycloak.httpEnabled }}
+        - --health-enabled={{ .Values.keycloak.healthEnabled }}
+        - --metrics-enabled={{ .Values.keycloak.metricsEnabled }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.keycloak.service.port }}
+          protocol: TCP
+        env:
+        - name: KEYCLOAK_ADMIN
+          value: {{ .Values.keycloak.admin.user }}
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.keycloak.admin.passwordSecret.name }}
+              key: {{ .Values.keycloak.admin.passwordSecret.key }}
+        - name: KC_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.keycloak.database.passwordSecret.name }}
+              key: {{ .Values.keycloak.database.passwordSecret.key }}
+        - name: KC_HOSTNAME_URL
+          value: {{ .Values.keycloak.hostname.url }}
+        - name: KC_HOSTNAME_ADMIN_URL
+          value: {{ .Values.keycloak.hostname.adminUrl }}
+        - name: KC_LOG_LEVEL
+          value: {{ .Values.keycloak.logLevel }}
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: {{ .Values.keycloak.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.keycloak.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.keycloak.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.keycloak.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: {{ .Values.keycloak.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.keycloak.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.keycloak.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.keycloak.readinessProbe.failureThreshold }}
+        resources:
+          {{- toYaml .Values.keycloak.resources | nindent 10 }}
+{{- end }}

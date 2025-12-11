@@ -55,7 +55,54 @@ check_command "helm" "Helm"
 check_command "kind" "KinD"
 echo ""
 
-# 2. Vérification du cluster KinD
+# 2. Vérification du registry local
+echo -e "${YELLOW}▶ Vérification du registry Docker local${NC}"
+
+# Détecter le registry sur le port 5000
+REGISTRY_NAME=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+echo -n "Vérification du registry sur le port 5000... "
+if [ -n "$REGISTRY_NAME" ]; then
+    echo -e "${GREEN}✅ OK (en cours d'exécution: $REGISTRY_NAME)${NC}"
+else
+    # Chercher un registry arrêté
+    STOPPED_REGISTRY=$(docker ps -a --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+    if [ -n "$STOPPED_REGISTRY" ]; then
+        echo -e "${YELLOW}⚠️  Registry existe mais n'est pas démarré: $STOPPED_REGISTRY${NC}"
+        echo -e "${YELLOW}Démarrez-le avec: docker start $STOPPED_REGISTRY${NC}"
+        REGISTRY_NAME="$STOPPED_REGISTRY"
+        ((ERRORS++))
+    else
+        echo -e "${RED}❌ MANQUANT${NC}"
+        echo -e "${YELLOW}Exécutez: ./scripts/init-stagingkub.sh${NC}"
+        ((ERRORS++))
+    fi
+fi
+
+echo -n "Vérification de l'accessibilité du registry... "
+if curl -f http://localhost:5000/v2/ &> /dev/null; then
+    echo -e "${GREEN}✅ OK${NC}"
+else
+    echo -e "${RED}❌ Non accessible${NC}"
+    if [ -n "$REGISTRY_NAME" ]; then
+        echo -e "${YELLOW}Vérifiez les logs: docker logs $REGISTRY_NAME${NC}"
+    fi
+    ((ERRORS++))
+fi
+
+if [ -n "$REGISTRY_NAME" ]; then
+    echo -n "Vérification de la connexion au réseau kind... "
+    if docker network inspect kind 2>/dev/null | grep -q "$REGISTRY_NAME"; then
+        echo -e "${GREEN}✅ OK${NC}"
+    else
+        echo -e "${RED}❌ Registry non connecté au réseau kind${NC}"
+        echo -e "${YELLOW}Connectez-le avec: docker network connect kind $REGISTRY_NAME${NC}"
+        ((ERRORS++))
+    fi
+fi
+echo ""
+
+# 3. Vérification du cluster KinD
 echo -e "${YELLOW}▶ Vérification du cluster KinD${NC}"
 echo -n "Vérification du cluster 'rhdemo'... "
 if kind get clusters | grep -q "^rhdemo$"; then

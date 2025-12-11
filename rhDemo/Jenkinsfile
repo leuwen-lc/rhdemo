@@ -859,7 +859,7 @@ YMLEOF
         // DÉPLOIEMENT KUBERNETES (STAGINGKUB)
         // ════════════════════════════════════════════════════════════════
 
-        stage('☸️ Load Image to KinD') {
+        stage('☸️ Push Image to Local Registry') {
             when {
                 expression { params.DEPLOY_ENV == 'stagingkub' }
             }
@@ -868,15 +868,60 @@ YMLEOF
                     echo "═══════════════════════════════════════════════════════"
                     echo "  DÉPLOIEMENT KUBERNETES (STAGINGKUB)"
                     echo "═══════════════════════════════════════════════════════"
-                    echo "▶ Chargement de l'image dans le cluster KinD..."
-                    echo "   Image: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "▶ Push de l'image vers le registry local..."
+                    echo "   Image source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Image cible: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
                 }
                 sh """
-                    kind load docker-image ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} --name rhdemo
+                    # Détection du registry sur le port 5000
+                    REGISTRY_NAME=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+                    if [ -z "\$REGISTRY_NAME" ]; then
+                        echo "❌ Aucun registry actif sur le port 5000"
+
+                        # Chercher un registry existant (même arrêté)
+                        EXISTING_REGISTRY=\$(docker ps -a --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+                        if [ -n "\$EXISTING_REGISTRY" ]; then
+                            echo "▶ Registry trouvé mais arrêté: \$EXISTING_REGISTRY"
+                            echo "  Démarrage du registry..."
+                            docker start \$EXISTING_REGISTRY
+                            REGISTRY_NAME="\$EXISTING_REGISTRY"
+                        else
+                            # Créer un nouveau registry
+                            echo "▶ Aucun registry trouvé, création d'un nouveau..."
+                            REGISTRY_NAME="kind-registry"
+                            docker run -d --name \$REGISTRY_NAME --restart=always -p 5000:5000 registry:2
+                            docker network connect kind \$REGISTRY_NAME 2>/dev/null || true
+                        fi
+                        sleep 2
+                    fi
+
+                    echo "✅ Registry local accessible: \$REGISTRY_NAME"
+
+                    # Vérifier l'accessibilité HTTP
+                    if ! curl -f http://localhost:5000/v2/ 2>/dev/null; then
+                        echo "❌ Erreur: Registry sur le port 5000 mais pas accessible via HTTP"
+                        exit 1
+                    fi
+
+                    # Tagger l'image pour le registry local
+                    echo "▶ Tag de l'image..."
+                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \\
+                        localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}
+
+                    # Pousser l'image vers le registry
+                    echo "▶ Push vers le registry..."
+                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}
+
+                    echo "✅ Image poussée vers le registry local"
+
+                    # Vérifier que l'image est bien dans le registry
+                    echo "▶ Vérification de l'image dans le registry..."
+                    curl -s http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep ${env.APP_VERSION} || {
+                        echo "⚠️  Avertissement: Image non visible dans le catalogue du registry"
+                    }
                 """
-                script {
-                    echo "✅ Image chargée dans KinD"
-                }
             }
         }
 
@@ -933,7 +978,7 @@ YMLEOF
                 script {
                     echo "▶ Déploiement avec Helm..."
                     echo "   Chart: rhDemo/infra/stagingkub/helm/rhdemo"
-                    echo "   Version: ${env.APP_VERSION}"
+                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
                     echo "   Namespace: rhdemo-staging"
                 }
                 sh """
@@ -941,9 +986,11 @@ YMLEOF
                     kubectl config use-context kind-rhdemo
 
                     # Déployer ou mettre à jour avec Helm
+                    # IMPORTANT: Utiliser localhost:5000 comme repository pour pointer vers le registry local
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace rhdemo-staging \\
                       --create-namespace \\
+                      --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.APP_VERSION} \\
                       --wait \\
                       --timeout 10m

@@ -39,17 +39,70 @@ if ! command -v helm &> /dev/null; then
     exit 1
 fi
 
+# Créer et configurer le registry Docker local
+echo -e "${YELLOW}▶ Configuration du registry Docker local...${NC}"
+REGISTRY_NAME="kind-registry"
+REGISTRY_PORT="5000"
+
+# Vérifier si un registry tourne déjà sur le port 5000
+EXISTING_REGISTRY=$(docker ps --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
+
+if [ -n "$EXISTING_REGISTRY" ]; then
+    echo -e "${GREEN}✅ Un registry Docker est déjà actif sur le port ${REGISTRY_PORT} : '${EXISTING_REGISTRY}'${NC}"
+    REGISTRY_NAME="$EXISTING_REGISTRY"
+else
+    # Vérifier si le registry 'kind-registry' existe mais est arrêté
+    if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
+        echo -e "${YELLOW}Registry '${REGISTRY_NAME}' existe mais est arrêté${NC}"
+        echo -e "${YELLOW}Démarrage du registry...${NC}"
+        docker start ${REGISTRY_NAME}
+        sleep 2
+        echo -e "${GREEN}✅ Registry Docker local démarré${NC}"
+    else
+        # Aucun registry n'existe, on en crée un nouveau
+        echo -e "${YELLOW}Création du registry Docker local sur le port ${REGISTRY_PORT}...${NC}"
+        if docker run -d \
+            --name ${REGISTRY_NAME} \
+            --restart=always \
+            -p ${REGISTRY_PORT}:5000 \
+            registry:2 > /dev/null; then
+            sleep 2
+            echo -e "${GREEN}✅ Registry Docker local créé et actif${NC}"
+        else
+            echo -e "${RED}❌ Erreur lors de la création du registry${NC}"
+            echo -e "${YELLOW}Le port ${REGISTRY_PORT} est peut-être occupé. Vérifiez avec :${NC}"
+            echo "  docker ps -a --filter 'publish=${REGISTRY_PORT}'"
+            echo "  sudo ss -ltnp 'sport = :${REGISTRY_PORT}'"
+            exit 1
+        fi
+    fi
+fi
+
+# Vérifier que le registry est accessible
+echo -n "Vérification de l'accessibilité du registry... "
+if curl -f http://localhost:${REGISTRY_PORT}/v2/ &> /dev/null; then
+    echo -e "${GREEN}✅ OK${NC}"
+else
+    echo -e "${RED}❌ ERREUR${NC}"
+    echo -e "${RED}Le registry n'est pas accessible sur http://localhost:${REGISTRY_PORT}${NC}"
+    exit 1
+fi
+
 # Vérifier que le cluster KinD 'rhdemo' existe
 echo -e "${YELLOW}▶ Vérification du cluster KinD 'rhdemo'...${NC}"
 if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${RED}❌ Le cluster KinD 'rhdemo' n'existe pas.${NC}"
     echo -e "${YELLOW}Création du cluster KinD 'rhdemo'...${NC}"
 
-    # Créer un fichier de configuration KinD temporaire
+    # Créer un fichier de configuration KinD avec support du registry local
     cat <<EOF > /tmp/kind-config.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: rhdemo
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
+    endpoint = ["http://${REGISTRY_NAME}:5000"]
 nodes:
 - role: control-plane
   extraPortMappings:
@@ -64,8 +117,22 @@ EOF
     kind create cluster --config /tmp/kind-config.yaml
     rm /tmp/kind-config.yaml
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé${NC}"
+
+    # Connecter le registry au réseau KinD
+    echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
+    docker network connect kind ${REGISTRY_NAME} 2>/dev/null || echo "Registry déjà connecté au réseau kind"
+    echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
+
+    # Vérifier si le registry est connecté au réseau kind
+    if ! docker network inspect kind | grep -q "${REGISTRY_NAME}"; then
+        echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
+        docker network connect kind ${REGISTRY_NAME}
+        echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
+    else
+        echo -e "${GREEN}✅ Registry déjà connecté au réseau KinD${NC}"
+    fi
 fi
 
 # Définir le contexte kubectl
@@ -206,8 +273,18 @@ echo -e "${BLUE}═════════════════════�
 echo -e "${GREEN}✅ Initialisation de stagingkub terminée${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
+echo -e "${YELLOW}📦 Registry Docker local configuré :${NC}"
+echo -e "  • Nom: ${BLUE}${REGISTRY_NAME}${NC}"
+echo -e "  • URL: ${BLUE}http://localhost:${REGISTRY_PORT}${NC}"
+echo -e "  • Status: ${GREEN}Actif et connecté au cluster KinD${NC}"
+echo ""
 echo -e "${YELLOW}Prochaines étapes :${NC}"
 echo -e "  1. Construire l'image Docker de l'application"
-echo -e "  2. Charger l'image dans KinD : ${BLUE}kind load docker-image rhdemo-api:VERSION --name rhdemo${NC}"
-echo -e "  3. Déployer avec Helm : ${BLUE}helm install rhdemo $HELM_CHART_DIR -n rhdemo-staging${NC}"
+echo -e "  2. Tagger pour le registry : ${BLUE}docker tag rhdemo-api:VERSION localhost:5000/rhdemo-api:VERSION${NC}"
+echo -e "  3. Pousser vers le registry : ${BLUE}docker push localhost:5000/rhdemo-api:VERSION${NC}"
+echo -e "  4. Déployer avec Helm : ${BLUE}./scripts/deploy.sh VERSION${NC}"
+echo ""
+echo -e "${YELLOW}💡 Commandes utiles du registry :${NC}"
+echo -e "  • Voir les images : ${BLUE}curl http://localhost:5000/v2/_catalog${NC}"
+echo -e "  • Voir les tags : ${BLUE}curl http://localhost:5000/v2/rhdemo-api/tags/list${NC}"
 echo ""

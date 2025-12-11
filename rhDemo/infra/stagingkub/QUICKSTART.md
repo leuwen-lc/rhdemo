@@ -14,7 +14,9 @@ cd rhDemo/infra/stagingkub
 ```
 
 Cette commande :
+- ✅ Crée un registry Docker local (localhost:5000)
 - ✅ Crée le cluster KinD "rhdemo"
+- ✅ Connecte le registry au cluster KinD
 - ✅ Installe Nginx Ingress Controller
 - ✅ Crée les secrets Kubernetes
 - ✅ Génère les certificats SSL
@@ -44,7 +46,8 @@ cd infra/stagingkub
 ```
 
 Cette commande :
-- ✅ Charge l'image dans KinD
+- ✅ Tag l'image pour le registry local
+- ✅ Push l'image vers le registry
 - ✅ Déploie avec Helm
 - ✅ Attend que tous les services soient prêts
 
@@ -94,14 +97,26 @@ cd infra/stagingkub
 ### Mise à jour rapide (sans rebuild complet)
 
 ```bash
-# Charger nouvelle image dans KinD
-kind load docker-image rhdemo-api:1.2.0-SNAPSHOT --name rhdemo
+# Tag et push vers le registry local
+docker tag rhdemo-api:1.2.0-SNAPSHOT localhost:5000/rhdemo-api:1.2.0-SNAPSHOT
+docker push localhost:5000/rhdemo-api:1.2.0-SNAPSHOT
 
 # Mettre à jour via Helm
 helm upgrade rhdemo ./helm/rhdemo \
   --namespace rhdemo-staging \
+  --set rhdemo.image.repository=localhost:5000/rhdemo-api \
   --set rhdemo.image.tag=1.2.0-SNAPSHOT \
   --wait
+```
+
+### 📦 Vérifier les images dans le registry
+
+```bash
+# Lister toutes les images
+curl http://localhost:5000/v2/_catalog
+
+# Voir les tags d'une image
+curl http://localhost:5000/v2/rhdemo-api/tags/list
 ```
 
 ---

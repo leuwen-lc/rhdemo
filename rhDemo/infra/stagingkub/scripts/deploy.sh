@@ -48,16 +48,42 @@ if ! docker image inspect rhdemo-api:${APP_VERSION} &> /dev/null; then
 fi
 echo -e "${GREEN}✅ Image Docker trouvée${NC}"
 
-# Charger l'image dans KinD
-echo -e "${YELLOW}▶ Chargement de l'image dans KinD...${NC}"
-kind load docker-image rhdemo-api:${APP_VERSION} --name rhdemo
-echo -e "${GREEN}✅ Image chargée dans KinD${NC}"
+# Vérifier que le registry local est accessible
+echo -e "${YELLOW}▶ Vérification du registry local...${NC}"
+REGISTRY_NAME=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+if [ -z "$REGISTRY_NAME" ]; then
+    echo -e "${RED}❌ Aucun registry actif sur le port 5000${NC}"
+    echo -e "${YELLOW}Options :${NC}"
+    echo -e "  1. Réinitialisez l'environnement : ./scripts/init-stagingkub.sh"
+    echo -e "  2. Démarrez un registry existant : docker ps -a --filter 'publish=5000'"
+    exit 1
+fi
+
+if ! curl -f http://localhost:5000/v2/ &> /dev/null; then
+    echo -e "${RED}❌ Registry '$REGISTRY_NAME' actif mais non accessible sur http://localhost:5000${NC}"
+    echo -e "${YELLOW}Vérifiez l'état avec : docker logs $REGISTRY_NAME${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Registry local accessible : $REGISTRY_NAME${NC}"
+
+# Tagger l'image pour le registry local
+echo -e "${YELLOW}▶ Tag de l'image pour le registry local...${NC}"
+docker tag rhdemo-api:${APP_VERSION} localhost:5000/rhdemo-api:${APP_VERSION}
+echo -e "${GREEN}✅ Image taguée : localhost:5000/rhdemo-api:${APP_VERSION}${NC}"
+
+# Pousser l'image vers le registry local
+echo -e "${YELLOW}▶ Push de l'image vers le registry local...${NC}"
+docker push localhost:5000/rhdemo-api:${APP_VERSION}
+echo -e "${GREEN}✅ Image poussée vers le registry local${NC}"
 
 # Déployer ou mettre à jour avec Helm
 echo -e "${YELLOW}▶ Déploiement avec Helm...${NC}"
 helm upgrade --install ${RELEASE_NAME} ${HELM_CHART_DIR} \
   --namespace ${NAMESPACE} \
   --create-namespace \
+  --set rhdemo.image.repository=localhost:5000/rhdemo-api \
   --set rhdemo.image.tag=${APP_VERSION} \
   --wait \
   --timeout 10m

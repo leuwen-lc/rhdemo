@@ -859,6 +859,65 @@ YMLEOF
         // DÉPLOIEMENT KUBERNETES (STAGINGKUB)
         // ════════════════════════════════════════════════════════════════
 
+        stage('☸️ Configure Kubernetes Access') {
+            when {
+                expression { params.DEPLOY_ENV == 'stagingkub' }
+            }
+            steps {
+                script {
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  CONFIGURATION DE L'ACCÈS KUBERNETES"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "▶ Configuration de kubectl pour le cluster KinD..."
+                }
+                sh """
+                    # Vérifier que le cluster KinD existe
+                    if ! kind get clusters | grep -q "^rhdemo\$"; then
+                        echo "❌ Cluster KinD 'rhdemo' non trouvé"
+                        echo "   Exécutez d'abord: rhDemo/infra/stagingkub/scripts/init-stagingkub.sh"
+                        exit 1
+                    fi
+
+                    echo "✅ Cluster KinD 'rhdemo' trouvé"
+
+                    # Connecter Jenkins au réseau kind si nécessaire
+                    JENKINS_CONTAINER=\$(hostname)
+                    if ! docker network inspect kind 2>/dev/null | grep -q "\$JENKINS_CONTAINER"; then
+                        echo "▶ Connexion de Jenkins au réseau kind..."
+                        docker network connect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins connecté au réseau kind" || echo "⚠️  Impossible de connecter Jenkins au réseau kind"
+                    else
+                        echo "✅ Jenkins déjà connecté au réseau kind"
+                    fi
+
+                    # Générer une kubeconfig adaptée pour Jenkins
+                    # Remplace l'adresse localhost par le nom DNS du container control-plane
+                    echo "▶ Génération de la configuration kubectl..."
+                    kind get kubeconfig --name rhdemo | sed 's|https://127.0.0.1:[0-9]*|https://rhdemo-control-plane:6443|g' > /tmp/kubeconfig-kind
+
+                    # Installer la kubeconfig
+                    mkdir -p \$HOME/.kube
+                    cp /tmp/kubeconfig-kind \$HOME/.kube/config
+                    chmod 600 \$HOME/.kube/config
+                    rm /tmp/kubeconfig-kind
+
+                    echo "✅ Configuration kubectl installée"
+
+                    # Vérifier l'accès au cluster
+                    echo "▶ Vérification de l'accès au cluster..."
+                    if kubectl cluster-info 2>&1 | grep -q "is running"; then
+                        echo "✅ Accès au cluster KinD confirmé"
+                        kubectl config use-context kind-rhdemo
+                        echo "✅ Contexte 'kind-rhdemo' activé"
+                    else
+                        echo "❌ Impossible d'accéder au cluster KinD"
+                        echo "   Logs de débogage:"
+                        kubectl cluster-info || true
+                        exit 1
+                    fi
+                """
+            }
+        }
+
         stage('☸️ Push Image to Local Registry') {
             when {
                 expression { params.DEPLOY_ENV == 'stagingkub' }
@@ -897,12 +956,24 @@ YMLEOF
                         sleep 2
                     fi
 
-                    echo "✅ Registry local accessible: \$REGISTRY_NAME"
+                    echo "✅ Registry détecté: \$REGISTRY_NAME"
 
-                    # Vérifier l'accessibilité HTTP
-                    if ! curl -f http://localhost:5000/v2/ 2>/dev/null; then
-                        echo "❌ Erreur: Registry sur le port 5000 mais pas accessible via HTTP"
-                        exit 1
+                    # Déterminer l'URL d'accès au registry
+                    # Depuis Jenkins (container), on doit utiliser le nom du container, pas localhost
+                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
+
+                    # Vérifier l'accessibilité HTTP via le nom du container
+                    echo "▶ Vérification de l'accessibilité via \$REGISTRY_URL..."
+                    if curl -f \$REGISTRY_URL/v2/ 2>/dev/null; then
+                        echo "✅ Registry accessible via le réseau Docker"
+                    else
+                        echo "⚠️  Registry non accessible via \$REGISTRY_URL, tentative avec localhost..."
+                        REGISTRY_URL="http://localhost:5000"
+                        if ! curl -f \$REGISTRY_URL/v2/ 2>/dev/null; then
+                            echo "❌ Erreur: Registry introuvable"
+                            echo "   Vérifiez que Jenkins et le registry sont sur le même réseau Docker"
+                            exit 1
+                        fi
                     fi
 
                     # Tagger l'image pour le registry local
@@ -918,7 +989,7 @@ YMLEOF
 
                     # Vérifier que l'image est bien dans le registry
                     echo "▶ Vérification de l'image dans le registry..."
-                    curl -s http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep ${env.APP_VERSION} || {
+                    curl -s \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep ${env.APP_VERSION} || {
                         echo "⚠️  Avertissement: Image non visible dans le catalogue du registry"
                     }
                 """

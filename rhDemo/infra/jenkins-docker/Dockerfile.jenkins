@@ -83,6 +83,36 @@ RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --
     rm -rf /var/lib/apt/lists/* && \
     trivy --version
 
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION KUBECTL (client Kubernetes)
+# ═══════════════════════════════════════════════════════════════
+
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/kubectl && \
+    kubectl version --client
+
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION HELM (gestionnaire de packages Kubernetes)
+# ═══════════════════════════════════════════════════════════════
+
+ENV HELM_VERSION=3.13.3
+
+RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
+    tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
+    mv linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf helm-v${HELM_VERSION}-linux-amd64.tar.gz linux-amd64 && \
+    helm version
+
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION KIND (Kubernetes in Docker - CLI uniquement)
+# ═══════════════════════════════════════════════════════════════
+
+ENV KIND_VERSION=0.20.0
+
+RUN wget -q https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-amd64 -O /usr/local/bin/kind && \
+    chmod +x /usr/local/bin/kind && \
+    kind --version
 
 # ═══════════════════════════════════════════════════════════════════
 # INSTALLATION JAVA 21 (déjà inclus dans l'image de base)

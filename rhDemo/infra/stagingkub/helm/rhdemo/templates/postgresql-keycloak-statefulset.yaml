@@ -1,4 +1,4 @@
-{{- if .Values.postgresql-keycloak.enabled }}
+{{- if (index .Values "postgresql-keycloak").enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -21,22 +21,22 @@ spec:
     spec:
       containers:
       - name: postgresql
-        image: "{{ .Values.postgresql-keycloak.image.repository }}:{{ .Values.postgresql-keycloak.image.tag }}"
-        imagePullPolicy: {{ .Values.postgresql-keycloak.image.pullPolicy }}
+        image: "{{ (index .Values "postgresql-keycloak").image.repository }}:{{ (index .Values "postgresql-keycloak").image.tag }}"
+        imagePullPolicy: {{ (index .Values "postgresql-keycloak").image.pullPolicy }}
         ports:
         - name: postgresql
-          containerPort: {{ .Values.postgresql-keycloak.service.port }}
+          containerPort: {{ (index .Values "postgresql-keycloak").service.port }}
           protocol: TCP
         env:
         - name: POSTGRES_DB
-          value: {{ .Values.postgresql-keycloak.database.name }}
+          value: {{ (index .Values "postgresql-keycloak").database.name }}
         - name: POSTGRES_USER
-          value: {{ .Values.postgresql-keycloak.database.user }}
+          value: {{ (index .Values "postgresql-keycloak").database.user }}
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.postgresql-keycloak.database.passwordSecret.name }}
-              key: {{ .Values.postgresql-keycloak.database.passwordSecret.key }}
+              name: {{ (index .Values "postgresql-keycloak").database.passwordSecret.name }}
+              key: {{ (index .Values "postgresql-keycloak").database.passwordSecret.key }}
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
         volumeMounts:
@@ -47,7 +47,7 @@ spec:
             command:
             - /bin/sh
             - -c
-            - pg_isready -U {{ .Values.postgresql-keycloak.database.user }}
+            - pg_isready -U {{ (index .Values "postgresql-keycloak").database.user }}
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -57,13 +57,13 @@ spec:
             command:
             - /bin/sh
             - -c
-            - pg_isready -U {{ .Values.postgresql-keycloak.database.user }}
+            - pg_isready -U {{ (index .Values "postgresql-keycloak").database.user }}
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 5
         resources:
-          {{- toYaml .Values.postgresql-keycloak.resources | nindent 10 }}
+          {{- toYaml (index .Values "postgresql-keycloak").resources | nindent 10 }}
   volumeClaimTemplates:
   - metadata:
       name: postgresql-data
@@ -71,11 +71,11 @@ spec:
         app: postgresql-keycloak
     spec:
       accessModes:
-      - {{ .Values.postgresql-keycloak.persistence.accessMode }}
-      {{- if .Values.postgresql-keycloak.persistence.storageClass }}
-      storageClassName: {{ .Values.postgresql-keycloak.persistence.storageClass }}
+      - {{ (index .Values "postgresql-keycloak").persistence.accessMode }}
+      {{- if (index .Values "postgresql-keycloak").persistence.storageClass }}
+      storageClassName: {{ (index .Values "postgresql-keycloak").persistence.storageClass }}
       {{- end }}
       resources:
         requests:
-          storage: {{ .Values.postgresql-keycloak.persistence.size }}
+          storage: {{ (index .Values "postgresql-keycloak").persistence.size }}
 {{- end }}

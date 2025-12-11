@@ -1,4 +1,4 @@
-{{- if .Values.postgresql-keycloak.enabled }}
+{{- if (index .Values "postgresql-keycloak").enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,10 +8,10 @@ metadata:
     {{- include "postgresql-keycloak.labels" . | nindent 4 }}
     app: postgresql-keycloak
 spec:
-  type: {{ .Values.postgresql-keycloak.service.type }}
+  type: {{ (index .Values "postgresql-keycloak").service.type }}
   ports:
   - name: postgresql
-    port: {{ .Values.postgresql-keycloak.service.port }}
+    port: {{ (index .Values "postgresql-keycloak").service.port }}
     targetPort: postgresql
     protocol: TCP
   selector:

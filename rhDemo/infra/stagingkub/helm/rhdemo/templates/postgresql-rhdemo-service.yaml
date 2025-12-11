@@ -1,4 +1,4 @@
-{{- if .Values.postgresql-rhdemo.enabled }}
+{{- if (index .Values "postgresql-rhdemo").enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,10 +8,10 @@ metadata:
     {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
     app: postgresql-rhdemo
 spec:
-  type: {{ .Values.postgresql-rhdemo.service.type }}
+  type: {{ (index .Values "postgresql-rhdemo").service.type }}
   ports:
   - name: postgresql
-    port: {{ .Values.postgresql-rhdemo.service.port }}
+    port: {{ (index .Values "postgresql-rhdemo").service.port }}
     targetPort: postgresql
     protocol: TCP
   selector:

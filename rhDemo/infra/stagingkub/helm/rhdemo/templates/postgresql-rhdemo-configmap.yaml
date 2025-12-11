@@ -1,4 +1,4 @@
-{{- if .Values.postgresql-rhdemo.enabled }}
+{{- if (index .Values "postgresql-rhdemo").enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

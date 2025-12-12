@@ -55,10 +55,15 @@ def waitForHealthcheck(Map config) {
 
     echo "⏳ Healthcheck ${name} (${timeout}s max)..."
 
+    // Déterminer si on doit utiliser docker exec ou curl direct
+    def curlCommand = config.container
+        ? "docker exec ${config.container} curl ${insecure} -s -o /dev/null -w \"%{http_code}\" ${config.url}"
+        : "curl ${insecure} -s -o /dev/null -w \"%{http_code}\" ${config.url}"
+
     sh """#!/bin/bash
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
-            HTTP_CODE=\$(curl ${insecure} -s -o /dev/null -w "%{http_code}" ${config.url} 2>/dev/null || echo "000")
+            HTTP_CODE=\$(${curlCommand} 2>/dev/null || echo "000")
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"

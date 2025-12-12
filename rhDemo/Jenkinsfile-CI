@@ -710,7 +710,7 @@ YMLEOF
                     // Healthcheck Keycloak avec attente initiale
                     lib.waitForHealthcheck([
                         name: 'Keycloak',
-                        url: "http://${env.CONTAINER_KEYCLOAK}:9000/health/ready",
+                        url: "http://localhost:9000/health/ready",
                         timeout: 60,
                         initialWait: 45,
                         container: env.CONTAINER_KEYCLOAK
@@ -787,7 +787,7 @@ YMLEOF
                     // Healthcheck Application RHDemo
                     lib.waitForHealthcheck([
                         name: 'RHDemo App',
-                        url: "http://${env.CONTAINER_APP}:9000/front/",
+                        url: "http://localhost:9000/front/",
                         timeout: 90,
                         acceptedCodes: [200, 301, 302],
                         container: env.CONTAINER_APP
@@ -804,14 +804,14 @@ YMLEOF
                     // Charger la bibliothèque
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                    // Healthcheck Nginx HTTPS avec certificat auto-signé
+                    // Healthcheck Nginx HTTPS avec certificat auto-signé (test end-to-end depuis Jenkins)
                     lib.waitForHealthcheck([
                         name: 'Nginx HTTPS',
                         url: "https://${env.TEST_DOMAIN}/front/",
                         timeout: 30,
                         acceptedCodes: [200, 302],
-                        insecure: true,
-                        container: env.CONTAINER_NGINX
+                        insecure: true
+                        // Pas de container: on teste depuis Jenkins, pas depuis l'intérieur de Nginx
                     ])
 
                     echo '✅ Stack complète opérationnelle et accessible via HTTPS'

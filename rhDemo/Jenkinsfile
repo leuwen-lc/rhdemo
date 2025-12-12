@@ -1,3 +1,19 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠️  FICHIER DÉPRÉCIÉ - NE PLUS UTILISER
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Ce fichier est conservé pour compatibilité mais NE DOIT PLUS ÊTRE UTILISÉ.
+ *
+ * NOUVEAUX PIPELINES À UTILISER :
+ *   - Jenkinsfile-CI : Pipeline d'Intégration Continue (build, tests, publish)
+ *   - Jenkinsfile-CD : Pipeline de Déploiement Continu (deploy to stagingkub)
+ *
+ * Ce fichier sera supprimé dans une version future.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
 pipeline {
     agent any
 
@@ -1791,111 +1807,14 @@ YMLEOF
                 }
             }
         }
-        
+
         // ════════════════════════════════════════════════════════════════
-        // PHASE 7 : PRODUCTION (Simulation)
+        // STAGES DE PRODUCTION SUPPRIMÉS
         // ════════════════════════════════════════════════════════════════
-        
-        stage('✋ Validation Manuelle') {
-            when {
-                expression { 
-                    params.DEPLOY_ENV == 'production' && params.SKIP_MANUAL_APPROVAL == false 
-                }
-            }
-            steps {
-                script {
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 7 : PRODUCTION (Simulation)'
-                    echo '═══════════════════════════════════════════════════════'
-                    echo '▶ Approbation manuelle requise pour la production...'
-                }
-                timeout(time: 30, unit: 'MINUTES') {
-                    input message: 'Déployer en production (SIMULATION) ?', 
-                          ok: 'Déployer',
-                          submitter: 'admin,deploy-team'
-                }
-            }
-        }
-        
-        stage('💾 Backup Base de Données (SIMULATION)') {
-            when {
-                expression { params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo '▶ Sauvegarde de la base de données de production (SIMULATION)...'
-                }
-                sh '''
-                    # Charger les secrets
-                    . rhDemo/secrets/env-vars.sh
-                    
-                    BACKUP_FILE="db-backup-$(date +%Y%m%d-%H%M%S).sql"
-                    echo "Création du backup: ${BACKUP_FILE}"
-                    # pg_dump -h ${PROD_SERVER} -U rhdemo rhdemo > ${BACKUP_FILE}
-                    echo "✅ Backup créé (SIMULATION)"
-                '''
-            }
-        }
-        
-        stage('🌐 Déploiement Production (SIMULATION)') {
-            when {
-                expression { params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo '▶ Déploiement en PRODUCTION (SIMULATION)...'
-                    echo '🚀 Déploiement Blue-Green...'
-                }
-                sh '''
-                    # Charger les secrets et URLs de serveurs
-                    . rhDemo/secrets/env-vars.sh
-                    
-                    # Stratégie Blue-Green deployment
-                    echo "1. Déploiement sur le serveur Green..."
-                    # scp ${JAR_FILE} user@${PROD_SERVER}-green:/opt/rhdemo/
-                    
-                    echo "2. Démarrage du nouveau service..."
-                    # ssh user@${PROD_SERVER}-green "systemctl start rhdemo-api"
-                    
-                    echo "3. Vérification du healthcheck..."
-                    # curl -f http://${PROD_SERVER}-green/actuator/health
-                    
-                    echo "4. Basculement du load balancer..."
-                    # Commande pour basculer le trafic
-                    
-                    echo "5. Arrêt de l'ancien service (Blue)..."
-                    # ssh user@${PROD_SERVER}-blue "systemctl stop rhdemo-api"
-                    
-                    echo "✅ Déploiement production (SIMULATION)"
-                '''
-            }
-        }
-        
-        stage('✅ Vérification Post-Déploiement (SIMULATION)') {
-            when {
-                expression { params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo '▶ Vérification du déploiement production...'
-                }
-                sh '''
-                    # Charger les secrets et URLs de serveurs
-                    . rhDemo/secrets/env-vars.sh
-                    
-                    echo "Healthcheck application..."
-                    # curl -f http://${PROD_SERVER}/actuator/health
-                    
-                    echo "Vérification des métriques Prometheus..."
-                    # curl -f http://${PROD_SERVER}/actuator/prometheus
-                    
-                    echo "Test des endpoints critiques..."
-                    # Tests automatisés sur la production
-                    
-                    echo "✅ Application en production fonctionnelle (SIMULATION)"
-                '''
-            }
-        }
+        // Les stages de production fictifs ont été supprimés.
+        // Utilisez les pipelines dédiés : Jenkinsfile-CI et Jenkinsfile-CD
+        // ════════════════════════════════════════════════════════════════
+
     }
     
     // ════════════════════════════════════════════════════════════════

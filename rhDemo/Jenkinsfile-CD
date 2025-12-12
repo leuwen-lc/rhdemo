@@ -1,0 +1,639 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Pipeline CD - RHDemo
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pipeline de Déploiement Continu (CD) pour l'application RHDemo
+ *
+ * OBJECTIF :
+ *   - Récupérer une image Docker validée depuis le registry
+ *   - La déployer sur l'environnement Kubernetes stagingkub
+ *   - Vérifier la santé de l'application déployée
+ *
+ * PRÉ-REQUIS :
+ *   - Image Docker publiée sur le registry par le pipeline CI (Jenkinsfile-CI)
+ *   - Cluster KinD 'rhdemo' initialisé (via init-stagingkub.sh)
+ *   - Namespace 'rhdemo-staging' créé
+ *
+ * RÉSULTAT :
+ *   - Application RHDemo déployée sur stagingkub
+ *   - Services accessibles via Ingress
+ *   - Health checks validés
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '50', artifactNumToKeepStr: '10'))
+    }
+
+    tools {
+        jdk 'JDK21'
+        maven 'Maven3'
+    }
+
+    environment {
+        // Configuration application
+        APP_NAME = 'rhdemo-api'
+        DOCKER_IMAGE_NAME = "rhdemo-api"
+
+        // Kubernetes
+        K8S_NAMESPACE = 'rhdemo-staging'
+        K8S_CONTEXT = 'kind-rhdemo'
+        CLUSTER_NAME = 'rhdemo'
+
+        // Fichiers de secrets SOPS
+        SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
+        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
+        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
+        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+
+        // URLs
+        APP_URL = 'https://rhdemo.staging.local'
+        KEYCLOAK_URL = 'https://keycloak.staging.local'
+    }
+
+    parameters {
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT, 1.0.0-rc1). Si vide, utilisera la dernière version publiée.'
+        )
+        booleanParam(
+            name: 'FORCE_RECREATE_PODS',
+            defaultValue: false,
+            description: 'Forcer la recréation des pods (rollout restart)'
+        )
+        booleanParam(
+            name: 'SKIP_HEALTH_CHECK',
+            defaultValue: false,
+            description: 'Ne pas attendre les health checks (déploiement plus rapide mais moins sûr)'
+        )
+    }
+
+    stages {
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 1 : PRÉPARATION
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  Pipeline CD - RHDemo"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "Build: #${env.BUILD_NUMBER}"
+                    echo "Branch: ${env.GIT_BRANCH ?: 'N/A'}"
+                    echo "═══════════════════════════════════════════════════════"
+                }
+
+                // Checkout du code
+                checkout scm
+            }
+        }
+
+        stage('🔢 Déterminer Version Image') {
+            steps {
+                script {
+                    if (params.IMAGE_TAG) {
+                        // Utiliser le tag fourni en paramètre
+                        env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG
+                        echo "▶ Tag fourni en paramètre: ${env.DEPLOY_IMAGE_TAG}"
+                    } else {
+                        // Lire la version depuis pom.xml
+                        echo "▶ Aucun tag fourni, lecture depuis pom.xml..."
+                        def pomFile = readFile('rhDemo/pom.xml')
+                        def project = new XmlSlurper().parseText(pomFile)
+                        env.DEPLOY_IMAGE_TAG = project.version.text()
+
+                        if (!env.DEPLOY_IMAGE_TAG) {
+                            error("❌ Impossible de déterminer la version de l'image")
+                        }
+
+                        echo "▶ Version détectée depuis pom.xml: ${env.DEPLOY_IMAGE_TAG}"
+                    }
+
+                    echo "✅ Version de l'image à déployer: ${env.DEPLOY_IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('🔓 Déchiffrement Secrets SOPS') {
+            steps {
+                script {
+                    echo '▶ Vérification SOPS et YQ...'
+                }
+                sh '''
+                    sops --version
+                    yq --version
+                '''
+
+                script {
+                    echo '▶ Déchiffrement du fichier de secrets...'
+                }
+
+                // Utiliser le credential sops-age-key de manière sécurisée
+                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
+                    sh '''
+                        # Créer le répertoire secrets s'il n'existe pas
+                        mkdir -p rhDemo/secrets
+
+                        # Déchiffrer le fichier de secrets
+                        echo "Déchiffrement de ${SECRETS_FILE}..."
+                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+
+                        # Vérifier que le fichier a été déchiffré
+                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
+                            echo "❌ Échec du déchiffrement"
+                            exit 1
+                        fi
+
+                        echo "✅ Secrets déchiffrés avec succès"
+
+                        # Extraire les valeurs pour les variables d'environnement
+                        # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets dans les logs
+                        set +x
+
+                        # Exporter les secrets comme variables d'environnement pour les stages suivants
+                        {
+                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
+                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
+                            echo "{ set +x; } 2>/dev/null"
+                            echo ""
+
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
+
+                            # Mots de passe Keycloak pour environnement staging
+                            echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // \"admin\"' ${SECRETS_DECRYPTED})"
+                        } > rhDemo/secrets/env-vars.sh 2>&1
+
+                        # Réactiver l'écho des commandes
+                        set -x
+
+                        echo "✅ Variables d'environnement préparées"
+                    '''
+                }
+            }
+            post {
+                always {
+                    script {
+                        // Supprimer le fichier déchiffré pour la sécurité
+                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
+                    }
+                }
+            }
+        }
+
+        stage('🔐 Extraction secrets rhDemo') {
+            steps {
+                script {
+                    echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo...'
+                }
+
+                sh '''
+                    # SÉCURITÉ: Désactiver l'écho des commandes
+                    set +x
+
+                    # Source les secrets
+                    . rhDemo/secrets/env-vars.sh
+
+                    # Créer le fichier secrets-rhdemo.yml
+                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+
+rhdemo:
+  datasource:
+    password:
+      pg: ${RHDEMO_DATASOURCE_PASSWORD_PG}
+      h2: ${RHDEMO_DATASOURCE_PASSWORD_H2}
+  client:
+    registration:
+      keycloak:
+        client:
+          secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+EOF
+
+                    # Réactiver l'écho
+                    set -x
+
+                    echo "✅ Fichier secrets-rhdemo.yml créé"
+                '''
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 2 : CONFIGURATION KUBERNETES
+        // ════════════════════════════════════════════════════════════════
+
+        stage('☸️ Configure Kubernetes Access') {
+            steps {
+                script {
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  CONFIGURATION DE L'ACCÈS KUBERNETES"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "▶ Configuration de kubectl pour le cluster KinD..."
+                }
+                sh """
+                    # Vérifier que le cluster KinD existe
+                    if ! kind get clusters | grep -q "^${env.CLUSTER_NAME}\$"; then
+                        echo "❌ Cluster KinD '${env.CLUSTER_NAME}' non trouvé"
+                        echo "   Exécutez d'abord: rhDemo/infra/stagingkub/scripts/init-stagingkub.sh"
+                        exit 1
+                    fi
+
+                    echo "✅ Cluster KinD '${env.CLUSTER_NAME}' trouvé"
+
+                    # Connecter Jenkins au réseau kind si nécessaire
+                    JENKINS_CONTAINER=\$(hostname)
+                    if ! docker network inspect kind 2>/dev/null | grep -q "\$JENKINS_CONTAINER"; then
+                        echo "▶ Connexion de Jenkins au réseau kind..."
+                        docker network connect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins connecté au réseau kind" || echo "⚠️  Impossible de connecter Jenkins au réseau kind"
+                    else
+                        echo "✅ Jenkins déjà connecté au réseau kind"
+                    fi
+
+                    # Générer une kubeconfig adaptée pour Jenkins
+                    # Remplace l'adresse localhost par le nom DNS du container control-plane
+                    echo "▶ Génération de la configuration kubectl..."
+                    kind get kubeconfig --name ${env.CLUSTER_NAME} | sed 's|https://127.0.0.1:[0-9]*|https://rhdemo-control-plane:6443|g' > /tmp/kubeconfig-kind
+
+                    # Installer la kubeconfig
+                    mkdir -p \$HOME/.kube
+                    cp /tmp/kubeconfig-kind \$HOME/.kube/config
+                    chmod 600 \$HOME/.kube/config
+                    rm /tmp/kubeconfig-kind
+
+                    echo "✅ Configuration kubectl installée"
+
+                    # Vérifier l'accès au cluster
+                    echo "▶ Vérification de l'accès au cluster..."
+                    if kubectl cluster-info 2>&1 | grep -q "is running"; then
+                        echo "✅ Accès au cluster KinD confirmé"
+                        kubectl config use-context ${env.K8S_CONTEXT}
+                        echo "✅ Contexte '${env.K8S_CONTEXT}' activé"
+                    else
+                        echo "❌ Impossible d'accéder au cluster KinD"
+                        echo "   Logs de débogage:"
+                        kubectl cluster-info || true
+                        exit 1
+                    fi
+                """
+            }
+        }
+
+        stage('🐳 Vérification Image Registry') {
+            steps {
+                script {
+                    echo "▶ Vérification de l'image dans le registry..."
+                }
+                sh """
+                    # Détection du registry sur le port 5000
+                    REGISTRY_NAME=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+                    if [ -z "\$REGISTRY_NAME" ]; then
+                        echo "❌ Aucun registry actif sur le port 5000"
+
+                        # Chercher un registry existant (même arrêté)
+                        EXISTING_REGISTRY=\$(docker ps -a --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+                        if [ -n "\$EXISTING_REGISTRY" ]; then
+                            echo "▶ Registry trouvé mais arrêté: \$EXISTING_REGISTRY"
+                            echo "  Démarrage du registry..."
+                            docker start \$EXISTING_REGISTRY
+                            REGISTRY_NAME="\$EXISTING_REGISTRY"
+                            sleep 2
+                        else
+                            echo "❌ Aucun registry Docker trouvé"
+                            echo "   Créez d'abord un registry ou exécutez le pipeline CI"
+                            exit 1
+                        fi
+                    fi
+
+                    echo "✅ Registry détecté: \$REGISTRY_NAME"
+
+                    # Vérifier que l'image existe dans le registry
+                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
+
+                    echo "▶ Vérification de l'image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}..."
+
+                    if curl -sf \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep -q "${env.DEPLOY_IMAGE_TAG}"; then
+                        echo "✅ Image trouvée dans le registry"
+                    else
+                        echo "❌ Image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG} introuvable dans le registry"
+                        echo ""
+                        echo "   Tags disponibles pour ${env.DOCKER_IMAGE_NAME}:"
+                        curl -s \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list || echo "   Aucun tag trouvé"
+                        echo ""
+                        echo "   Exécutez d'abord le pipeline CI pour construire et publier l'image"
+                        exit 1
+                    fi
+                """
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 3 : MISE À JOUR DES SECRETS KUBERNETES
+        // ════════════════════════════════════════════════════════════════
+
+        stage('☸️ Update Kubernetes Secrets') {
+            steps {
+                script {
+                    echo "▶ Mise à jour des secrets Kubernetes..."
+                }
+                sh """
+                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
+                    set +x
+
+                    # Charger les secrets depuis SOPS
+                    . rhDemo/secrets/env-vars.sh
+
+                    # Utiliser le contexte KinD
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    # Mettre à jour les secrets Kubernetes
+                    kubectl create secret generic rhdemo-db-secret \\
+                      --from-literal=password="\${RHDEMO_DATASOURCE_PASSWORD_PG}" \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic keycloak-db-secret \\
+                      --from-literal=password="\${KEYCLOAK_DB_PASSWORD}" \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic keycloak-admin-secret \\
+                      --from-literal=password="\${KEYCLOAK_ADMIN_PASSWORD}" \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --dry-run=client -o yaml | kubectl apply -f -
+
+                    # Mettre à jour le secret pour secrets-rhdemo.yml
+                    kubectl create secret generic rhdemo-app-secrets \\
+                      --from-file=secrets-rhdemo.yml=rhDemo/secrets/secrets-rhdemo.yml \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --dry-run=client -o yaml | kubectl apply -f -
+
+                    # Réactiver l'écho
+                    set -x
+
+                    echo "✅ Secrets Kubernetes mis à jour"
+                """
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 4 : DÉPLOIEMENT
+        // ════════════════════════════════════════════════════════════════
+
+        stage('☸️ Deploy to Kubernetes') {
+            steps {
+                script {
+                    def registryName = sh(script: 'docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1', returnStdout: true).trim()
+
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  DÉPLOIEMENT KUBERNETES (STAGINGKUB)"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "▶ Déploiement avec Helm..."
+                    echo "   Chart: rhDemo/infra/stagingkub/helm/rhdemo"
+                    echo "   Registry: ${registryName}"
+                    echo "   Image: ${registryName}:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    echo "   Namespace: ${env.K8S_NAMESPACE}"
+                }
+                sh """
+                    # Utiliser le contexte KinD
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    # Déployer ou mettre à jour avec Helm
+                    # IMPORTANT: Utiliser le nom DNS du registry (détecté dynamiquement)
+                    # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
+                    helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --set rhdemo.image.repository=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1):5000/${env.DOCKER_IMAGE_NAME} \\
+                      --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
+                      --wait \\
+                      --timeout 10m
+
+                    echo ""
+                    echo "✅ Déploiement Helm réussi"
+                """
+            }
+        }
+
+        stage('🔄 Force Pods Restart') {
+            when {
+                expression { params.FORCE_RECREATE_PODS == true }
+            }
+            steps {
+                script {
+                    echo "▶ Redémarrage forcé des pods..."
+                }
+                sh """
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    # Rollout restart pour forcer le redémarrage des pods
+                    kubectl rollout restart deployment/rhdemo -n ${env.K8S_NAMESPACE} || true
+                    kubectl rollout restart statefulset/postgresql-rhdemo -n ${env.K8S_NAMESPACE} || true
+                    kubectl rollout restart statefulset/postgresql-keycloak -n ${env.K8S_NAMESPACE} || true
+                    kubectl rollout restart deployment/keycloak -n ${env.K8S_NAMESPACE} || true
+
+                    echo "✅ Pods redémarrés"
+                """
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 5 : VÉRIFICATION
+        // ════════════════════════════════════════════════════════════════
+
+        stage('☸️ Wait for Kubernetes Readiness') {
+            when {
+                expression { params.SKIP_HEALTH_CHECK == false }
+            }
+            steps {
+                script {
+                    echo "▶ Attente de la disponibilité des services..."
+                }
+                sh """
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    # Attendre que tous les pods soient prêts
+                    echo "▶ Attente des pods..."
+                    kubectl wait --for=condition=ready pod --all \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --timeout=10m || {
+                        echo "⚠️  Certains pods ne sont pas prêts après 10 minutes"
+                        echo "   État actuel des pods:"
+                        kubectl get pods -n ${env.K8S_NAMESPACE}
+                        echo ""
+                        echo "   Logs des pods en erreur:"
+                        kubectl get pods -n ${env.K8S_NAMESPACE} --field-selector=status.phase!=Running -o name | xargs -I {} kubectl logs {} -n ${env.K8S_NAMESPACE} --tail=50 || true
+                        exit 1
+                    }
+
+                    echo "✅ Tous les pods sont prêts"
+                """
+            }
+        }
+
+        stage('🏥 Health Checks') {
+            when {
+                expression { params.SKIP_HEALTH_CHECK == false }
+            }
+            steps {
+                script {
+                    echo "▶ Vérification de la santé des services..."
+                }
+                sh """
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    echo "▶ Vérification de l'application RHDemo..."
+                    # Récupérer le nom du pod rhdemo
+                    RHDEMO_POD=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=rhdemo -o jsonpath='{.items[0].metadata.name}')
+
+                    if [ -z "\$RHDEMO_POD" ]; then
+                        echo "❌ Aucun pod rhdemo trouvé"
+                        exit 1
+                    fi
+
+                    echo "   Pod: \$RHDEMO_POD"
+
+                    # Vérifier l'actuator health
+                    if kubectl exec \$RHDEMO_POD -n ${env.K8S_NAMESPACE} -- curl -sf http://localhost:9000/actuator/health > /dev/null 2>&1; then
+                        echo "✅ Application RHDemo : healthy"
+                    else
+                        echo "❌ Application RHDemo : unhealthy"
+                        echo "   Logs du pod:"
+                        kubectl logs \$RHDEMO_POD -n ${env.K8S_NAMESPACE} --tail=50
+                        exit 1
+                    fi
+
+                    echo ""
+                    echo "▶ Vérification de Keycloak..."
+                    KEYCLOAK_POD=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=keycloak -o jsonpath='{.items[0].metadata.name}')
+
+                    if [ -z "\$KEYCLOAK_POD" ]; then
+                        echo "⚠️  Aucun pod Keycloak trouvé"
+                    else
+                        echo "   Pod: \$KEYCLOAK_POD"
+
+                        if kubectl exec \$KEYCLOAK_POD -n ${env.K8S_NAMESPACE} -- curl -sf http://localhost:9000/health/ready > /dev/null 2>&1; then
+                            echo "✅ Keycloak : ready"
+                        else
+                            echo "⚠️  Keycloak : not ready"
+                            kubectl logs \$KEYCLOAK_POD -n ${env.K8S_NAMESPACE} --tail=30 || true
+                        fi
+                    fi
+
+                    echo ""
+                    echo "▶ Vérification de PostgreSQL RHDemo..."
+                    PG_RHDEMO_POD=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-rhdemo -o jsonpath='{.items[0].metadata.name}')
+
+                    if [ -z "\$PG_RHDEMO_POD" ]; then
+                        echo "⚠️  Aucun pod PostgreSQL RHDemo trouvé"
+                    else
+                        echo "   Pod: \$PG_RHDEMO_POD"
+
+                        if kubectl exec \$PG_RHDEMO_POD -n ${env.K8S_NAMESPACE} -- pg_isready -U rhdemo > /dev/null 2>&1; then
+                            echo "✅ PostgreSQL RHDemo : ready"
+                        else
+                            echo "⚠️  PostgreSQL RHDemo : not ready"
+                        fi
+                    fi
+
+                    echo ""
+                    echo "✅ Health checks terminés"
+                """
+            }
+        }
+
+        stage('📊 Deployment Status') {
+            steps {
+                script {
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  ÉTAT DU DÉPLOIEMENT"
+                    echo "═══════════════════════════════════════════════════════"
+                }
+                sh """
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    echo "📊 Statut des pods:"
+                    kubectl get pods -n ${env.K8S_NAMESPACE} -o wide
+
+                    echo ""
+                    echo "🔗 Services:"
+                    kubectl get svc -n ${env.K8S_NAMESPACE}
+
+                    echo ""
+                    echo "🌐 Ingress:"
+                    kubectl get ingress -n ${env.K8S_NAMESPACE}
+
+                    echo ""
+                    echo "📦 Images déployées:"
+                    kubectl get pods -n ${env.K8S_NAMESPACE} -o jsonpath='{range .items[*]}{.metadata.name}{"\\t"}{.spec.containers[*].image}{"\\n"}{end}'
+
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "✅ DÉPLOIEMENT RÉUSSI"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo ""
+                    echo "🌍 URLs d'accès:"
+                    echo "   Application: ${env.APP_URL}"
+                    echo "   Keycloak: ${env.KEYCLOAK_URL}"
+                    echo ""
+                    echo "📌 Image déployée: ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    echo ""
+                """
+            }
+        }
+
+    } // fin stages
+
+    post {
+        always {
+            script {
+                echo "═══════════════════════════════════════════════════════"
+                echo "Pipeline CD terminé: ${currentBuild.currentResult}"
+                echo "═══════════════════════════════════════════════════════"
+
+                // Supprimer les fichiers de secrets
+                sh """
+                    rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
+                    rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
+                    rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
+                """
+
+                echo "✅ Nettoyage terminé"
+            }
+        }
+        success {
+            script {
+                echo "✅ Déploiement réussi !"
+                echo ""
+                echo "📌 Image déployée: ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                echo "🌍 Application accessible: ${env.APP_URL}"
+                echo "🔑 Keycloak accessible: ${env.KEYCLOAK_URL}"
+                echo ""
+                echo "Pour vérifier l'état:"
+                echo "   kubectl get pods -n ${env.K8S_NAMESPACE}"
+                echo "   kubectl logs -f deployment/rhdemo -n ${env.K8S_NAMESPACE}"
+            }
+        }
+        failure {
+            script {
+                echo "❌ Déploiement échoué !"
+                echo "Consultez les logs pour plus de détails:"
+                echo "   kubectl get pods -n ${env.K8S_NAMESPACE}"
+                echo "   kubectl describe pods -n ${env.K8S_NAMESPACE}"
+                echo "   kubectl logs -n ${env.K8S_NAMESPACE} <pod-name>"
+            }
+        }
+    }
+}

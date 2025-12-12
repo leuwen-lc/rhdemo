@@ -64,7 +64,10 @@ cd ../../rhDemoInitKeycloak
 
 # Initialiser la base de données (première fois)
 cd ../infra/dev
-docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgddl.sql
+# Créer le schéma (tables + index)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgschema.sql
+# Insérer les données de test (optionnel)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgdata.sql
 
 # Configurer les secrets (première fois)
 cd ../../secrets

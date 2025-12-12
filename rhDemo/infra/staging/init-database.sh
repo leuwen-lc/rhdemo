@@ -2,7 +2,7 @@
 
 #═══════════════════════════════════════════════════════════════
 # Script d'initialisation de la base de données RHDemo
-# Utilise pgddl.sql pour créer le schéma et insérer les données
+# Utilise pgschema.sql pour créer le schéma et pgdata.sql pour les données
 #
 # Usage:
 #   ./init-database.sh              # Mode interactif (demande confirmation)
@@ -34,7 +34,8 @@ fi
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SQL_FILE="${SCRIPT_DIR}/../../pgddl.sql"
+SCHEMA_FILE="${SCRIPT_DIR}/../../pgschema.sql"
+DATA_FILE="${SCRIPT_DIR}/../../pgdata.sql"
 DB_CONTAINER="rhdemo-staging-db"
 DB_NAME="rhdemo"
 DB_USER="rhdemo"
@@ -44,9 +45,13 @@ echo -e "${BLUE}  Initialisation de la base de données RHDemo${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
-# Vérifier que le fichier SQL existe
-if [ ! -f "$SQL_FILE" ]; then
-    echo -e "${RED}❌ Erreur: Le fichier SQL n'existe pas: $SQL_FILE${NC}"
+# Vérifier que les fichiers SQL existent
+if [ ! -f "$SCHEMA_FILE" ]; then
+    echo -e "${RED}❌ Erreur: Le fichier de schéma n'existe pas: $SCHEMA_FILE${NC}"
+    exit 1
+fi
+if [ ! -f "$DATA_FILE" ]; then
+    echo -e "${RED}❌ Erreur: Le fichier de données n'existe pas: $DATA_FILE${NC}"
     exit 1
 fi
 
@@ -89,25 +94,40 @@ else
     echo ""
 fi
 
-# Copier le fichier SQL dans le container
-echo -e "${BLUE}→ Copie du fichier SQL dans le container...${NC}"
-sudo docker cp "$SQL_FILE" "${DB_CONTAINER}:/tmp/init.sql"
-echo -e "${GREEN}✓ Fichier copié${NC}"
+# Copier les fichiers SQL dans le container
+echo -e "${BLUE}→ Copie des fichiers SQL dans le container...${NC}"
+sudo docker cp "$SCHEMA_FILE" "${DB_CONTAINER}:/tmp/schema.sql"
+sudo docker cp "$DATA_FILE" "${DB_CONTAINER}:/tmp/data.sql"
+echo -e "${GREEN}✓ Fichiers copiés${NC}"
 echo ""
 
-# Exécuter le script SQL
-echo -e "${BLUE}→ Exécution du script SQL...${NC}"
+# Exécuter le schéma SQL
+echo -e "${BLUE}→ Exécution du schéma SQL...${NC}"
 echo -e "${BLUE}   - Suppression de la table 'employes'${NC}"
 echo -e "${BLUE}   - Création de la table avec index${NC}"
-echo -e "${BLUE}   - Insertion des données (300+ employés)${NC}"
 echo ""
 
-if sudo docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/init.sql > /tmp/init-db.log 2>&1; then
-    echo -e "${GREEN}✓ Script SQL exécuté avec succès${NC}"
+if sudo docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/schema.sql > /tmp/init-schema.log 2>&1; then
+    echo -e "${GREEN}✓ Schéma créé avec succès${NC}"
 else
-    echo -e "${RED}❌ Erreur lors de l'exécution du script SQL${NC}"
-    echo -e "${RED}   Voir les détails dans /tmp/init-db.log${NC}"
-    cat /tmp/init-db.log
+    echo -e "${RED}❌ Erreur lors de la création du schéma${NC}"
+    echo -e "${RED}   Voir les détails dans /tmp/init-schema.log${NC}"
+    cat /tmp/init-schema.log
+    exit 1
+fi
+echo ""
+
+# Insérer les données de test
+echo -e "${BLUE}→ Insertion des données de test...${NC}"
+echo -e "${BLUE}   - Insertion de 300+ employés${NC}"
+echo ""
+
+if sudo docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/data.sql > /tmp/init-data.log 2>&1; then
+    echo -e "${GREEN}✓ Données insérées avec succès${NC}"
+else
+    echo -e "${RED}❌ Erreur lors de l'insertion des données${NC}"
+    echo -e "${RED}   Voir les détails dans /tmp/init-data.log${NC}"
+    cat /tmp/init-data.log
     exit 1
 fi
 echo ""
@@ -131,8 +151,8 @@ ORDER BY indexname;
 echo ""
 
 # Nettoyage
-sudo docker exec "$DB_CONTAINER" rm -f /tmp/init.sql
-rm -f /tmp/init-db.log
+sudo docker exec "$DB_CONTAINER" rm -f /tmp/schema.sql /tmp/data.sql
+rm -f /tmp/init-schema.log /tmp/init-data.log
 
 echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║  ✅ Base de données initialisée avec succès !                ║${NC}"

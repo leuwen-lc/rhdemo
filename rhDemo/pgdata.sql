@@ -1,30 +1,13 @@
-DROP TABLE IF EXISTS employes;
- 
-CREATE TABLE employes (
-  id BIGSERIAL PRIMARY KEY,  
-  prenom VARCHAR(250) NOT NULL,
-  nom VARCHAR(250) NOT NULL,
-  mail VARCHAR(250) NOT NULL,
-  adresse VARCHAR(500)
-);
+-- ═══════════════════════════════════════════════════════════════
+-- Données de test pour RHDemo
+-- DML (Data Manipulation Language) - Insertion des données
+-- ═══════════════════════════════════════════════════════════════
+-- 
+-- Ce fichier contient 304 employés de test pour les environnements
+-- de développement et de staging.
+-- NE PAS utiliser en production !
+-- ═══════════════════════════════════════════════════════════════
 
--- Création des index pour optimiser les performances
--- Index sur le mail pour les recherches rapides et l'unicité
-CREATE UNIQUE INDEX idx_employes_mail ON employes(mail);
-
--- Index sur le nom pour les recherches alphabétiques
-CREATE INDEX idx_employes_nom ON employes(nom);
-
--- Index sur le prénom pour les recherches par prénom
-CREATE INDEX idx_employes_prenom ON employes(prenom);
-
--- Index composite sur nom + prénom pour les recherches combinées
-CREATE INDEX idx_employes_nom_prenom ON employes(nom, prenom);
-
--- Index partiel sur l'adresse (seulement pour les adresses non-nulles)
--- Utile si beaucoup de recherches par ville/localisation
-CREATE INDEX idx_employes_adresse ON employes(adresse) WHERE adresse IS NOT NULL;
- 
 INSERT INTO employes (prenom, nom, mail, adresse) VALUES
   ('Laurent', 'GINA', 'laurentgina@mail.com', '123 Rue de la Paix, 75001 Paris'),
   ('Sophie', 'FONCEK', 'sophiefoncek@mail.com', '456 Avenue des Champs, 69000 Lyon'),

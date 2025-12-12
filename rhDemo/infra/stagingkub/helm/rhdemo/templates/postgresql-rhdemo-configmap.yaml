@@ -8,15 +8,57 @@ metadata:
     {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
     app: postgresql-rhdemo
 data:
-  # Script d'initialisation de la base de données
+  # Script d'initialisation de la base de données (SCHÉMA UNIQUEMENT)
   # Ce script sera exécuté automatiquement par PostgreSQL au premier démarrage
+  # Il crée la structure de la base (tables, index) UNIQUEMENT si elle n'existe pas
+  # Cela préserve les données existantes en cas de redéploiement
+  # Note: Correspond au fichier pgschema.sql du projet
   init-db.sql: |
-    -- Script d'initialisation pour la base de données RHDemo
-    -- Ce fichier sera copié depuis rhDemo/src/main/resources/data/pgddl.sql
-    -- par le script d'initialisation Jenkins
+    -- ═══════════════════════════════════════════════════════════════
+    -- Schéma de base de données pour RHDemo
+    -- DDL (Data Definition Language) - Définition des structures
+    -- Exécuté automatiquement au premier démarrage de PostgreSQL
+    -- ═══════════════════════════════════════════════════════════════
 
-    -- Note: Le contenu réel sera injecté par le script init-stagingkub.sh
-    -- lors du déploiement initial
+    -- Vérifier si la table existe déjà
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT FROM pg_tables
+        WHERE schemaname = 'public' AND tablename = 'employes'
+      ) THEN
+        \echo '📋 Création du schéma de la base de données RHDemo...'
 
-    \echo 'Database rhdemo initialized'
+        -- Créer la table employes
+        CREATE TABLE employes (
+          id BIGSERIAL PRIMARY KEY,
+          prenom VARCHAR(250) NOT NULL,
+          nom VARCHAR(250) NOT NULL,
+          mail VARCHAR(250) NOT NULL,
+          adresse VARCHAR(500)
+        );
+
+        -- Création des index pour optimiser les performances
+        -- Index sur le mail pour les recherches rapides et l'unicité
+        CREATE UNIQUE INDEX idx_employes_mail ON employes(mail);
+
+        -- Index sur le nom pour les recherches alphabétiques
+        CREATE INDEX idx_employes_nom ON employes(nom);
+
+        -- Index sur le prénom pour les recherches par prénom
+        CREATE INDEX idx_employes_prenom ON employes(prenom);
+
+        -- Index composite sur nom + prénom pour les recherches combinées
+        CREATE INDEX idx_employes_nom_prenom ON employes(nom, prenom);
+
+        -- Index partiel sur l'adresse (seulement pour les adresses non-nulles)
+        -- Utile si beaucoup de recherches par ville/localisation
+        CREATE INDEX idx_employes_adresse ON employes(adresse) WHERE adresse IS NOT NULL;
+
+        \echo '✅ Schéma de base de données RHDemo initialisé (table + index créés)'
+      ELSE
+        \echo 'ℹ️  Table employes existe déjà - schéma non modifié (données préservées)'
+      END IF;
+    END
+    $$;
 {{- end }}

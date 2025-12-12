@@ -1043,9 +1043,11 @@ YMLEOF
             }
             steps {
                 script {
+                    def registryName = sh(script: 'docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1', returnStdout: true).trim()
                     echo "▶ Déploiement avec Helm..."
                     echo "   Chart: rhDemo/infra/stagingkub/helm/rhdemo"
-                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Registry: ${registryName}"
+                    echo "   Image: ${registryName}:5000/${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
                     echo "   Namespace: rhdemo-staging"
                 }
                 sh """
@@ -1053,11 +1055,11 @@ YMLEOF
                     kubectl config use-context kind-rhdemo
 
                     # Déployer ou mettre à jour avec Helm
-                    # IMPORTANT: Utiliser localhost:5000 comme repository pour pointer vers le registry local
+                    # IMPORTANT: Utiliser le nom DNS du registry (détecté dynamiquement)
                     # Note: Le namespace rhdemo-staging doit déjà exister (créé par init-stagingkub.sh)
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace rhdemo-staging \\
-                      --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
+                      --set rhdemo.image.repository=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1):5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.APP_VERSION} \\
                       --wait \\
                       --timeout 10m
@@ -1291,18 +1293,28 @@ YMLEOF
                         exit 1
                     fi
                     
-                    # Copier et exécuter le schéma SQL
-                    PGDDL_PATH="../../pgddl.sql"
-                    if [ ! -f "\$PGDDL_PATH" ]; then
-                        echo "❌ Erreur: Fichier pgddl.sql introuvable"
+                    # Copier et exécuter le schéma SQL + données de test
+                    PGSCHEMA_PATH="../../pgschema.sql"
+                    PGDATA_PATH="../../pgdata.sql"
+
+                    if [ ! -f "\$PGSCHEMA_PATH" ]; then
+                        echo "❌ Erreur: Fichier pgschema.sql introuvable"
                         exit 1
                     fi
-                    
+                    if [ ! -f "\$PGDATA_PATH" ]; then
+                        echo "❌ Erreur: Fichier pgdata.sql introuvable"
+                        exit 1
+                    fi
+
                     echo "📋 Copie du schéma SQL dans le container..."
-                    docker cp "\$PGDDL_PATH" rhdemo-staging-db:/tmp/schema.sql
-                    
-                    echo "🔧 Exécution du schéma SQL (DROP + CREATE + INSERT)..."
+                    docker cp "\$PGSCHEMA_PATH" rhdemo-staging-db:/tmp/schema.sql
+                    docker cp "\$PGDATA_PATH" rhdemo-staging-db:/tmp/data.sql
+
+                    echo "🔧 Exécution du schéma SQL (DROP + CREATE + INDEX)..."
                     docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
+
+                    echo "📊 Insertion des données de test..."
+                    docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/data.sql
                     
                     # Vérifier le nombre d'employés insérés
                     EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')

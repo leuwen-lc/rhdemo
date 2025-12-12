@@ -94,11 +94,14 @@ cd monCheminGit/rhDemoInitKeycloak
 ### 4. Initialiser la base de données (schéma + jeu de données fictif)
 
 
-# Exécuter le script SQL de création du schéma
+# Exécuter les scripts SQL d'initialisation
 
 ```bash
 cd monCheminGit/rhDemo
-docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgddl.sql
+# Créer le schéma (tables + index)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgschema.sql
+# Insérer les données de test (optionnel)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgdata.sql
 ```
 
 ### 5. Créez un fichier secrets-rhdemo.yml

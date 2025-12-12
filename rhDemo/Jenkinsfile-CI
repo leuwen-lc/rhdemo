@@ -109,34 +109,31 @@ pipeline {
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
 
                 script {
-                    echo '▶ Vérification du projet rhDemoInitKeycloak...'
-                    // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
-                    // Le checkout SCM récupère en principe tout le workspace
+                    echo '▶ Vérification des projets dans le workspace...'
+                    // rhDemoInitKeycloak et rhDemoAPITestIHM sont dans le MÊME repo que rhDemo
+                    // Le checkout SCM récupère tout le workspace (un seul .git à la racine)
                 }
 
                 sh '''
+                    echo "▶ Vérification rhDemoInitKeycloak..."
                     if [ -d "rhDemoInitKeycloak" ]; then
-                        echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
-                        ls -la rhDemoInitKeycloak
+                        echo "✅ rhDemoInitKeycloak trouvé"
                     else
                         echo "❌ rhDemoInitKeycloak introuvable"
-                        echo "Structure du workspace:"
-                        ls -la
                         exit 1
                     fi
-                '''
 
-                // Checkout du projet de tests IHM (repository public, pas de credentials)
-                dir(env.TEST_PROJECT_PATH) {
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/LenoBay/rhDemoAPITestIHM.git'
-                            // Pas de credentialsId = pas d'authentification (repository public)
-                        ]]
-                    ])
-                }
+                    echo "▶ Vérification rhDemoAPITestIHM..."
+                    if [ -d "rhDemoAPITestIHM" ]; then
+                        echo "✅ rhDemoAPITestIHM trouvé"
+                    else
+                        echo "❌ rhDemoAPITestIHM introuvable"
+                        exit 1
+                    fi
+
+                    echo ""
+                    echo "✅ Tous les projets du repository sont présents"
+                '''
             }
         }
 
@@ -156,11 +153,33 @@ pipeline {
                         error("❌ Impossible de lire la version depuis pom.xml")
                     }
 
-                    echo "✅ Version détectée: ${env.APP_VERSION}"
+                    // Construire le nom du fichier JAR avec la version lue
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
 
-                    // Construire les noms de fichiers dérivés
-                    env.JAR_FILE = "rhDemo/target/rhDemo-${env.APP_VERSION}.jar"
+                    // Mettre à jour les variables Docker
                     env.DOCKER_IMAGE_TAG = env.APP_VERSION
+
+                    echo "✅ Version Maven détectée: ${env.APP_VERSION}"
+                    echo "   JAR attendu: ${env.JAR_FILE}"
+                    echo "   Docker tag: ${env.DOCKER_IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('🔑 Initialisation Variables Dynamiques') {
+            steps {
+                script {
+                    echo '▶ Initialisation des variables dynamiques...'
+
+                    // Génération d'une clé API ZAP aléatoire pour la session
+                    def zapApiKey = sh(
+                        script: 'cat /dev/urandom | tr -dc \'a-zA-Z0-9\' | fold -w 32 | head -n 1',
+                        returnStdout: true
+                    ).trim()
+
+                    // Stocker comme variable d'environnement globale du pipeline
+                    env.ZAP_API_KEY = zapApiKey
+                    echo "✅ Clé API ZAP générée: ${zapApiKey.take(8)}..."
                 }
             }
         }
@@ -990,13 +1009,13 @@ YMLEOF
                     # Arrêter et supprimer le container ZAP s'il existe
                     docker rm -f ${env.CONTAINER_ZAP} 2>/dev/null || true
 
-                    # Démarrer ZAP en mode daemon
+                    # Démarrer ZAP en mode daemon avec clé API aléatoire
                     docker run -d --name ${env.CONTAINER_ZAP} \\
                         --network ${env.NETWORK_JENKINS} \\
                         -v \$(pwd)/zap-reports:/zap/wrk/:rw \\
                         -u zap \\
                         ghcr.io/zaproxy/zaproxy:stable \\
-                        zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.key=jenkins-zap-api-key
+                        zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.key=${env.ZAP_API_KEY}
 
                     echo "⏳ Attente du démarrage de ZAP..."
                     sleep 30

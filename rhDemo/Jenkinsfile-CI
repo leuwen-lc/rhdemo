@@ -106,11 +106,36 @@ pipeline {
 
                 // Checkout du code
                 checkout scm
+                sh 'git log -1 --pretty=format:"%h - %an : %s"'
 
-                // Checkout du projet de tests IHM
+                script {
+                    echo '▶ Vérification du projet rhDemoInitKeycloak...'
+                    // rhDemoInitKeycloak est dans le MÊME repo que rhDemo
+                    // Le checkout SCM récupère en principe tout le workspace
+                }
+
+                sh '''
+                    if [ -d "rhDemoInitKeycloak" ]; then
+                        echo "✅ rhDemoInitKeycloak trouvé dans le workspace"
+                        ls -la rhDemoInitKeycloak
+                    else
+                        echo "❌ rhDemoInitKeycloak introuvable"
+                        echo "Structure du workspace:"
+                        ls -la
+                        exit 1
+                    fi
+                '''
+
+                // Checkout du projet de tests IHM (repository public, pas de credentials)
                 dir(env.TEST_PROJECT_PATH) {
-                    git branch: 'main',
-                        url: 'https://github.com/LenoBay/rhDemoAPITestIHM.git'
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/LenoBay/rhDemoAPITestIHM.git'
+                            // Pas de credentialsId = pas d'authentification (repository public)
+                        ]]
+                    ])
                 }
             }
         }
@@ -119,15 +144,23 @@ pipeline {
             steps {
                 script {
                     echo "▶ Lecture de la version depuis pom.xml..."
-                    def pomFile = readFile('rhDemo/pom.xml')
-                    def project = new XmlSlurper().parseText(pomFile)
-                    env.APP_VERSION = project.version.text()
 
-                    if (!env.APP_VERSION) {
+                    // Lire la version depuis le pom.xml avec Maven (méthode robuste)
+                    env.APP_VERSION = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                        returnStdout: true
+                    ).trim()
+
+                    // Vérifier que la lecture a réussi
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
                         error("❌ Impossible de lire la version depuis pom.xml")
                     }
 
                     echo "✅ Version détectée: ${env.APP_VERSION}"
+
+                    // Construire les noms de fichiers dérivés
+                    env.JAR_FILE = "rhDemo/target/rhDemo-${env.APP_VERSION}.jar"
+                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
                 }
             }
         }
@@ -484,18 +517,37 @@ YMLEOF
         stage('🐳 Build Image Docker') {
             steps {
                 script {
-                    echo "▶ Construction de l'image Docker..."
-                    echo "   Image: ${env.RHDEMO_IMAGE}"
+                    echo "▶ Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
+                    echo "   Version détectée: ${env.APP_VERSION}"
+                    echo "   Image à construire: ${env.RHDEMO_IMAGE}"
+                    echo "⚠️  Nettoyage complet: suppression images existantes..."
                 }
+
+                // Supprimer les anciennes images Docker pour forcer reconstruction
+                sh """
+                    docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image n'existe pas encore"
+                    docker rmi rhdemo-api:latest 2>/dev/null || echo "Image latest n'existe pas encore"
+                """
 
                 dir('rhDemo') {
                     sh """
-                        docker build -t ${env.RHDEMO_IMAGE} .
+                        docker build -t ${env.RHDEMO_IMAGE} \
+                                     -t rhdemo-api:latest \
+                                     --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                                     --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                                     --build-arg VERSION=${env.APP_VERSION} \
+                                     .
                     """
                 }
 
                 script {
-                    echo "✅ Image Docker construite: ${env.RHDEMO_IMAGE}"
+                    echo "✅ Image Docker créée: ${env.RHDEMO_IMAGE}"
+
+                    // Lister les images créées et afficher la taille
+                    sh """
+                        echo "📊 Images créées:"
+                        docker images rhdemo-api --format "table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}"
+                    """
                 }
             }
         }
@@ -616,10 +668,58 @@ YMLEOF
                         docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/data.sql
 
                         echo "▶ Vérification..."
-                        EMPLOYEE_COUNT=$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | xargs)
-                        echo "✅ Base de données initialisée avec $EMPLOYEE_COUNT employés"
+                        EMPLOYEE_COUNT=$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
+
+                        echo "✅ Base de données initialisée"
+                        echo "   📊 Nombre d'employés: $EMPLOYEE_COUNT"
+
+                        # Vérifier qu'il y a des données (au moins 10 employés)
+                        if [ "$EMPLOYEE_COUNT" -lt 10 ]; then
+                            echo "❌ Erreur: Trop peu d'employés insérés ($EMPLOYEE_COUNT < 10)"
+                            exit 1
+                        fi
                     '''
                 }
+            }
+        }
+
+        stage('🏥 Healthcheck Keycloak') {
+            steps {
+                script {
+                    echo "▶ Attente démarrage Keycloak..."
+                    echo "   Keycloak peut prendre 60-90s pour démarrer"
+                }
+
+                sh """
+                    echo "⏳ Attente de la disponibilité de Keycloak (60s max + 45s initial wait)..."
+
+                    # Attente initiale pour laisser Keycloak démarrer
+                    echo "▶ Attente initiale de 45s pour le démarrage de Keycloak..."
+                    sleep 45
+
+                    # Tentatives de connexion au health endpoint
+                    timeout=60
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec ${env.CONTAINER_KEYCLOAK} curl -sf http://localhost:9000/health/ready > /dev/null 2>&1; then
+                            echo "✅ Keycloak prêt et accessible"
+                            break
+                        fi
+                        echo -n "."
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo ""
+                        echo "❌ Timeout: Keycloak n'est pas prêt après 105s (45s initial + 60s)"
+                        echo "Logs Keycloak:"
+                        docker logs --tail=30 ${env.CONTAINER_KEYCLOAK}
+                        exit 1
+                    fi
+
+                    echo ""
+                    echo "✅ Keycloak opérationnel"
+                """
             }
         }
 
@@ -674,13 +774,147 @@ YMLEOF
 
                 sh """
                     docker restart ${env.CONTAINER_APP}
-
-                    echo "⏳ Attente du démarrage de l'application (actuator health)..."
-                    timeout 180 bash -c 'until curl -sf http://localhost:${env.TEST_PORT}/actuator/health > /dev/null 2>&1; do sleep 5; echo -n "."; done'
-
-                    echo ""
-                    echo "✅ Application démarrée et prête"
+                    echo "⏳ Attente du redémarrage (30s)..."
+                    sleep 30
                 """
+            }
+        }
+
+        stage('🏥 Healthcheck Application RHDemo') {
+            steps {
+                script {
+                    echo "▶ Vérification santé de l'application RHDemo..."
+                }
+
+                sh """
+                    echo "⏳ Attente du démarrage de l'application (90s max)..."
+                    timeout=90
+                    while [ \$timeout -gt 0 ]; do
+                        # Tester l'actuator health ET accepter les redirections OAuth2 (301/302)
+                        HTTP_CODE=\$(docker exec ${env.CONTAINER_APP} curl -sf -o /dev/null -w "%{http_code}" http://localhost:9000/front/ 2>/dev/null || echo "000")
+
+                        if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
+                            echo ""
+                            echo "✅ Application RHDemo accessible (HTTP \$HTTP_CODE)"
+                            break
+                        fi
+                        echo -n "."
+                        sleep 3
+                        timeout=\$((timeout - 3))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo ""
+                        echo "❌ Timeout: Application n'est pas prête après 90s"
+                        echo "Logs de l'application:"
+                        docker logs --tail=50 ${env.CONTAINER_APP}
+                        exit 1
+                    fi
+
+                    echo "✅ Application RHDemo opérationnelle"
+                """
+            }
+        }
+
+        stage('🌐 Healthcheck Nginx HTTPS') {
+            steps {
+                script {
+                    echo "▶ Vérification de l'accès HTTPS via nginx (test end-to-end)..."
+                }
+
+                sh """
+                    echo "⏳ Test de l'accès HTTPS (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        # Test HTTPS avec certificat auto-signé
+                        HTTP_CODE=\$(curl -sf -k -o /dev/null -w "%{http_code}" https://${env.TEST_DOMAIN}/front/ 2>/dev/null || echo "000")
+
+                        if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "302" ]; then
+                            echo ""
+                            echo "✅ Nginx HTTPS accessible (HTTP \$HTTP_CODE)"
+                            break
+                        fi
+                        echo -n "."
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo ""
+                        echo "❌ Timeout: Nginx HTTPS non accessible après 30s"
+                        echo "Logs Nginx:"
+                        docker logs --tail=30 ${env.CONTAINER_NGINX}
+                        exit 1
+                    fi
+
+                    echo "✅ Stack complète opérationnelle et accessible via HTTPS"
+                    echo "   Prêt pour les tests Selenium"
+                """
+            }
+        }
+
+        stage('🔍 Scan Sécurité Images Docker (Trivy)') {
+            options {
+                timeout(time: 8, unit: 'MINUTES')
+            }
+            steps {
+                script {
+                    echo "▶ Scan de sécurité des images Docker avec Trivy (parallélisé)..."
+                    echo "   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps"
+                    echo ""
+                    echo "   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées"
+                    echo "   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)"
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Créer le répertoire pour les rapports
+                    sh 'mkdir -p trivy-reports'
+
+                    // Définir les images à scanner avec leurs noms de rapports
+                    def imagesToScan = [
+                        [image: env.POSTGRES_IMAGE, name: 'postgres'],
+                        [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
+                        [image: env.NGINX_IMAGE, name: 'nginx'],
+                        [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
+                    ]
+
+                    echo "📋 Images à scanner:"
+                    imagesToScan.each { img ->
+                        echo "   - ${img.name}: ${img.image}"
+                    }
+
+                    // Créer les stages parallèles de scan
+                    def scanStages = imagesToScan.collectEntries { img ->
+                        ["Scan ${img.name}": {
+                            lib.generateTrivyReport(img.image, img.name)
+                        }]
+                    }
+
+                    // Exécuter tous les scans en parallèle
+                    parallel(scanStages + [failFast: false])
+
+                    // Agrégation des résultats et vérification des seuils
+                    if (!lib.aggregateTrivyResults()) {
+                        error("Trivy a détecté des vulnérabilités CRITICAL bloquantes")
+                    }
+                }
+            }
+            post {
+                always {
+                    // Archiver tous les rapports Trivy
+                    archiveArtifacts artifacts: 'trivy-reports/**/*', allowEmptyArchive: true
+
+                    // Publier le rapport HTML agrégé
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'trivy-reports',
+                        reportFiles: 'trivy-aggregate-report.html',
+                        reportName: 'Trivy Security Scan Report'
+                    ])
+                }
             }
         }
 

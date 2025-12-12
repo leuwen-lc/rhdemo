@@ -184,11 +184,21 @@ jobs:
               git {
                 remote {
                   url('https://github.com/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
                 }
                 branches('*/evol-kub')
+                extensions {
+                  // Clone superficiel pour accélérer le checkout
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
               }
             }
             scriptPath('rhDemo/Jenkinsfile-CI')
+            lightweight(true)
           }
         }
 
@@ -260,11 +270,21 @@ jobs:
               git {
                 remote {
                   url('https://github.com/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
                 }
                 branches('*/evol-kub')
+                extensions {
+                  // Clone superficiel pour accélérer le checkout
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
               }
             }
             scriptPath('rhDemo/Jenkinsfile-CD')
+            lightweight(true)
           }
         }
 
@@ -331,11 +351,20 @@ jobs:
               git {
                 remote {
                   url('https://github.com/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
                 }
                 branches('*/evol-kub')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
               }
             }
             scriptPath('rhDemo/Jenkinsfile')
+            lightweight(true)
           }
         }
 

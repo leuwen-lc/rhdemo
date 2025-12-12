@@ -96,9 +96,10 @@ pipeline {
         stage('🛠️ Checkout') {
             steps {
                 script {
-                    echo "═══════════════════════════════════════════════════════"
-                    echo "  Pipeline CI - RHDemo"
-                    echo "═══════════════════════════════════════════════════════"
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    lib.printSectionHeader("Pipeline CI - RHDemo")
                     echo "Build: #${env.BUILD_NUMBER}"
                     echo "Branch: ${env.GIT_BRANCH ?: 'N/A'}"
                     echo "═══════════════════════════════════════════════════════"
@@ -579,15 +580,14 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Création des réseaux Docker pour staging..."
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Créer les réseaux
+                    lib.dockerNetworkCreate(env.NETWORK_STAGING)
+                    lib.dockerNetworkCreate(env.NETWORK_JENKINS)
                 }
-
-                sh """
-                    # Créer le réseau staging (isolé)
-                    docker network create ${env.NETWORK_STAGING} 2>/dev/null || echo "✓ Réseau ${env.NETWORK_STAGING} existe déjà"
-
-                    # Créer le réseau Jenkins (pour ZAP)
-                    docker network create ${env.NETWORK_JENKINS} 2>/dev/null || echo "✓ Réseau ${env.NETWORK_JENKINS} existe déjà"
-                """
             }
         }
 
@@ -643,11 +643,8 @@ YMLEOF
                     timeout 120 bash -c 'until docker exec ${env.CONTAINER_KEYCLOAK_DB} pg_isready -U keycloak > /dev/null 2>&1; do sleep 2; done'
                     echo "✓ Keycloak DB prêt"
 
-                    echo "▶ Attente Keycloak (peut prendre 60-90s)..."
-                    timeout 180 bash -c 'until curl -sf http://localhost:18080/health/ready > /dev/null 2>&1; do sleep 5; done'
-                    echo "✓ Keycloak prêt"
-
-                    echo "✅ Tous les services sont prêts"
+                    echo "✅ Bases de données prêtes"
+                    echo "   Note: Le healthcheck Keycloak sera fait dans un stage dédié ultérieur"
                 """
             }
         }
@@ -705,40 +702,20 @@ YMLEOF
         stage('🏥 Healthcheck Keycloak') {
             steps {
                 script {
-                    echo "▶ Attente démarrage Keycloak..."
-                    echo "   Keycloak peut prendre 60-90s pour démarrer"
+                    echo '▶ Attente démarrage Keycloak...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Keycloak avec attente initiale
+                    lib.waitForHealthcheck([
+                        name: 'Keycloak',
+                        url: "http://${env.CONTAINER_KEYCLOAK}:9000/health/ready",
+                        timeout: 60,
+                        initialWait: 45,
+                        container: env.CONTAINER_KEYCLOAK
+                    ])
                 }
-
-                sh """
-                    echo "⏳ Attente de la disponibilité de Keycloak (60s max + 45s initial wait)..."
-
-                    # Attente initiale pour laisser Keycloak démarrer
-                    echo "▶ Attente initiale de 45s pour le démarrage de Keycloak..."
-                    sleep 45
-
-                    # Tentatives de connexion au health endpoint
-                    timeout=60
-                    while [ \$timeout -gt 0 ]; do
-                        if docker exec ${env.CONTAINER_KEYCLOAK} curl -sf http://localhost:9000/health/ready > /dev/null 2>&1; then
-                            echo "✅ Keycloak prêt et accessible"
-                            break
-                        fi
-                        echo -n "."
-                        sleep 2
-                        timeout=\$((timeout - 2))
-                    done
-
-                    if [ \$timeout -le 0 ]; then
-                        echo ""
-                        echo "❌ Timeout: Keycloak n'est pas prêt après 105s (45s initial + 60s)"
-                        echo "Logs Keycloak:"
-                        docker logs --tail=30 ${env.CONTAINER_KEYCLOAK}
-                        exit 1
-                    fi
-
-                    echo ""
-                    echo "✅ Keycloak opérationnel"
-                """
             }
         }
 
@@ -802,73 +779,44 @@ YMLEOF
         stage('🏥 Healthcheck Application RHDemo') {
             steps {
                 script {
-                    echo "▶ Vérification santé de l'application RHDemo..."
+                    echo '▶ Vérification santé de l\'application RHDemo...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Application RHDemo
+                    lib.waitForHealthcheck([
+                        name: 'RHDemo App',
+                        url: "http://${env.CONTAINER_APP}:9000/front/",
+                        timeout: 90,
+                        acceptedCodes: [200, 301, 302],
+                        container: env.CONTAINER_APP
+                    ])
                 }
-
-                sh """
-                    echo "⏳ Attente du démarrage de l'application (90s max)..."
-                    timeout=90
-                    while [ \$timeout -gt 0 ]; do
-                        # Tester l'actuator health ET accepter les redirections OAuth2 (301/302)
-                        HTTP_CODE=\$(docker exec ${env.CONTAINER_APP} curl -sf -o /dev/null -w "%{http_code}" http://localhost:9000/front/ 2>/dev/null || echo "000")
-
-                        if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "301" ] || [ "\$HTTP_CODE" = "302" ]; then
-                            echo ""
-                            echo "✅ Application RHDemo accessible (HTTP \$HTTP_CODE)"
-                            break
-                        fi
-                        echo -n "."
-                        sleep 3
-                        timeout=\$((timeout - 3))
-                    done
-
-                    if [ \$timeout -le 0 ]; then
-                        echo ""
-                        echo "❌ Timeout: Application n'est pas prête après 90s"
-                        echo "Logs de l'application:"
-                        docker logs --tail=50 ${env.CONTAINER_APP}
-                        exit 1
-                    fi
-
-                    echo "✅ Application RHDemo opérationnelle"
-                """
             }
         }
 
         stage('🌐 Healthcheck Nginx HTTPS') {
             steps {
                 script {
-                    echo "▶ Vérification de l'accès HTTPS via nginx (test end-to-end)..."
+                    echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Nginx HTTPS avec certificat auto-signé
+                    lib.waitForHealthcheck([
+                        name: 'Nginx HTTPS',
+                        url: "https://${env.TEST_DOMAIN}/front/",
+                        timeout: 30,
+                        acceptedCodes: [200, 302],
+                        insecure: true,
+                        container: env.CONTAINER_NGINX
+                    ])
+
+                    echo '✅ Stack complète opérationnelle et accessible via HTTPS'
+                    echo '   Prêt pour les tests Selenium'
                 }
-
-                sh """
-                    echo "⏳ Test de l'accès HTTPS (30s max)..."
-                    timeout=30
-                    while [ \$timeout -gt 0 ]; do
-                        # Test HTTPS avec certificat auto-signé
-                        HTTP_CODE=\$(curl -sf -k -o /dev/null -w "%{http_code}" https://${env.TEST_DOMAIN}/front/ 2>/dev/null || echo "000")
-
-                        if [ "\$HTTP_CODE" = "200" ] || [ "\$HTTP_CODE" = "302" ]; then
-                            echo ""
-                            echo "✅ Nginx HTTPS accessible (HTTP \$HTTP_CODE)"
-                            break
-                        fi
-                        echo -n "."
-                        sleep 2
-                        timeout=\$((timeout - 2))
-                    done
-
-                    if [ \$timeout -le 0 ]; then
-                        echo ""
-                        echo "❌ Timeout: Nginx HTTPS non accessible après 30s"
-                        echo "Logs Nginx:"
-                        docker logs --tail=30 ${env.CONTAINER_NGINX}
-                        exit 1
-                    fi
-
-                    echo "✅ Stack complète opérationnelle et accessible via HTTPS"
-                    echo "   Prêt pour les tests Selenium"
-                """
             }
         }
 
@@ -941,13 +889,15 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Connexion du container NGINX au réseau Jenkins (pour ZAP)..."
-                }
 
-                sh """
-                    docker network connect ${env.NETWORK_JENKINS} ${env.CONTAINER_NGINX} 2>/dev/null || echo "✓ NGINX déjà connecté au réseau Jenkins"
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Connecter NGINX au réseau Jenkins
+                    lib.dockerNetworkConnect(env.CONTAINER_NGINX, env.NETWORK_JENKINS)
 
                     echo "✅ NGINX accessible depuis le réseau Jenkins"
-                """
+                }
             }
         }
 
@@ -1144,9 +1094,10 @@ YMLEOF
     post {
         always {
             script {
-                echo "═══════════════════════════════════════════════════════"
-                echo "Pipeline CI terminé: ${currentBuild.currentResult}"
-                echo "═══════════════════════════════════════════════════════"
+                // Charger la bibliothèque
+                def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
 
                 // Nettoyage de l'environnement staging
                 echo "🧹 Nettoyage de l'environnement staging..."
@@ -1164,12 +1115,12 @@ YMLEOF
                     """
                 }
 
-                // Supprimer les fichiers de secrets
-                sh """
-                    rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
-                    rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
-                    rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
-                """
+                // Supprimer les fichiers de secrets de manière sécurisée
+                lib.cleanupSecrets([
+                    env.SECRETS_DECRYPTED,
+                    env.SECRETS_ENV_VARS,
+                    env.SECRETS_RHDEMO
+                ])
 
                 echo "✅ Nettoyage terminé"
             }

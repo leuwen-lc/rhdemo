@@ -182,6 +182,17 @@ def aggregateTrivyResults() {
 }
 
 /**
+ * Crée un réseau Docker s'il n'existe pas déjà
+ * @param network Nom du réseau
+ */
+def dockerNetworkCreate(String network) {
+    echo "🌐 Création du réseau Docker ${network}..."
+    sh """
+        docker network create ${network} 2>/dev/null || echo "✓ Réseau ${network} existe déjà"
+    """
+}
+
+/**
  * Connecte un container à un réseau Docker
  * @param container Nom du container
  * @param network Nom du réseau

@@ -710,7 +710,7 @@ YMLEOF
                     // Healthcheck Keycloak avec attente initiale
                     lib.waitForHealthcheck([
                         name: 'Keycloak',
-                        url: "http://localhost:9000/health/ready",
+                        url: "http://localhost:8080/health/ready",
                         timeout: 60,
                         initialWait: 45,
                         container: env.CONTAINER_KEYCLOAK

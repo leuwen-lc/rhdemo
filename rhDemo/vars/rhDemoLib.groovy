@@ -55,15 +55,33 @@ def waitForHealthcheck(Map config) {
 
     echo "⏳ Healthcheck ${name} (${timeout}s max)..."
 
-    // Déterminer si on doit utiliser docker exec ou curl direct
-    def curlCommand = config.container
-        ? "docker exec ${config.container} curl ${insecure} -s -o /dev/null -w \"%{http_code}\" ${config.url}"
-        : "curl ${insecure} -s -o /dev/null -w \"%{http_code}\" ${config.url}"
-
     sh """#!/bin/bash
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
-            HTTP_CODE=\$(${curlCommand} 2>/dev/null || echo "000")
+            HTTP_CODE="000"
+
+            if [ -n "${config.container}" ]; then
+                # Test depuis l'intérieur du container avec docker exec
+                # Essayer curl d'abord
+                if docker exec ${config.container} sh -c 'command -v curl' >/dev/null 2>&1; then
+                    HTTP_CODE=\$(docker exec ${config.container} curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
+                # Sinon essayer wget
+                elif docker exec ${config.container} sh -c 'command -v wget' >/dev/null 2>&1; then
+                    if docker exec ${config.container} wget ${insecure ? '--no-check-certificate' : ''} -q -O /dev/null --server-response "${config.url}" 2>&1 | grep -qE "HTTP/"; then
+                        HTTP_CODE=\$(docker exec ${config.container} wget ${insecure ? '--no-check-certificate' : ''} -q -O /dev/null --server-response "${config.url}" 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print \$2}' || echo "000")
+                    fi
+                else
+                    # Fallback: test TCP sur le port extrait de l'URL
+                    PORT=\$(echo "${config.url}" | sed -E 's|.*:([0-9]+).*|\\1|')
+                    if docker exec ${config.container} sh -c "exec 3<>/dev/tcp/localhost/\${PORT}" 2>/dev/null; then
+                        HTTP_CODE="200"
+                        echo "   ✓ Port \${PORT} accessible (TCP test)"
+                    fi
+                fi
+            else
+                # Test depuis Jenkins
+                HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
+            fi
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"

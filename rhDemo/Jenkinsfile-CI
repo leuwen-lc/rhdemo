@@ -620,7 +620,7 @@ YMLEOF
                         set -x
 
                         # Démarrer l'environnement
-                        sudo docker compose -p ${env.COMPOSE_PROJECT_NAME} up -d
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} up -d
 
                         echo "✅ Environnement staging démarré"
                     """
@@ -1154,7 +1154,7 @@ YMLEOF
                 dir(env.STAGING_INFRA_PATH) {
                     sh """
                         # Arrêter et supprimer l'environnement Docker Compose
-                        sudo docker compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
 
                         # Supprimer les containers isolés
                         docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true

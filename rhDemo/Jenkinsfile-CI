@@ -628,6 +628,29 @@ YMLEOF
             }
         }
 
+        stage('🔗 Connexion Jenkins au Réseau Staging') {
+            steps {
+                script {
+                    echo "▶ Connexion de Jenkins au réseau staging pour accès direct aux services..."
+                }
+
+                sh """
+                    # Trouver le conteneur Jenkins principal (pas l'agent)
+                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                    echo "📦 Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
+
+                    if [ -n "\$JENKINS_CONTAINER" ]; then
+                        docker network connect ${env.NETWORK_STAGING} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau ${env.NETWORK_STAGING}"
+                    else
+                        echo "❌ ERREUR: Conteneur Jenkins introuvable!"
+                        docker ps --filter "name=jenkins"
+                        exit 1
+                    fi
+                """
+            }
+        }
+
         stage('⏳ Attente Services Staging') {
             steps {
                 script {
@@ -703,17 +726,18 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Attente démarrage Keycloak...'
+                    echo '   Test depuis Jenkins via le réseau Docker staging'
 
                     // Charger la bibliothèque
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                    // Healthcheck Keycloak avec attente initiale
+                    // Healthcheck Keycloak depuis Jenkins (connecté au réseau staging)
                     lib.waitForHealthcheck([
                         name: 'Keycloak',
-                        url: "http://localhost:8080/health/ready",
+                        url: "http://${env.CONTAINER_KEYCLOAK}:8080/health/ready",
                         timeout: 60,
-                        initialWait: 45,
-                        container: env.CONTAINER_KEYCLOAK
+                        initialWait: 45
+                        // Pas de container: test depuis Jenkins, pas docker exec
                     ])
                 }
             }
@@ -723,13 +747,11 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Initialisation du realm et des utilisateurs Keycloak..."
+                    echo "   Jenkins est maintenant connecté au réseau staging, keycloak-staging est résolvable"
                 }
 
                 dir(env.KEYCLOAK_INIT_PATH) {
                     sh '''
-                        # Connecter rhDemoInitKeycloak au réseau staging
-                        echo "▶ Connexion au réseau Docker staging..."
-
                         # Exécuter l'initialisation avec Maven
                         echo "▶ Exécution de rhDemoInitKeycloak..."
                         ../rhDemo/mvnw spring-boot:run -Dspring-boot.run.profiles=staging
@@ -780,17 +802,18 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Vérification santé de l\'application RHDemo...'
+                    echo '   Test depuis Jenkins via le réseau Docker staging'
 
                     // Charger la bibliothèque
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                    // Healthcheck Application RHDemo
+                    // Healthcheck Application RHDemo depuis Jenkins (connecté au réseau staging)
                     lib.waitForHealthcheck([
                         name: 'RHDemo App',
-                        url: "http://localhost:9000/front/",
+                        url: "http://${env.CONTAINER_APP}:9000/front/",
                         timeout: 90,
-                        acceptedCodes: [200, 301, 302],
-                        container: env.CONTAINER_APP
+                        acceptedCodes: [200, 301, 302]
+                        // Pas de container: test depuis Jenkins, pas docker exec
                     ])
                 }
             }
@@ -1101,6 +1124,15 @@ YMLEOF
 
                 // Nettoyage de l'environnement staging
                 echo "🧹 Nettoyage de l'environnement staging..."
+
+                // Déconnecter Jenkins du réseau staging
+                sh """
+                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                    if [ -n "\$JENKINS_CONTAINER" ]; then
+                        docker network disconnect ${env.NETWORK_STAGING} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
+                        echo "✅ Jenkins déconnecté du réseau staging"
+                    fi
+                """
 
                 dir(env.STAGING_INFRA_PATH) {
                     sh """

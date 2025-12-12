@@ -31,14 +31,16 @@ def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
 
 /**
  * Attend qu'un service soit disponible via healthcheck HTTP
+ * Test effectué depuis Jenkins (qui doit être connecté au réseau Docker si nécessaire)
+ *
  * @param config Map de configuration avec les clés:
- *   - url: URL du healthcheck (requis)
+ *   - url: URL du healthcheck (requis) - peut être une URL réseau Docker (ex: http://keycloak-staging:8080)
  *   - timeout: Timeout en secondes (défaut: 60)
  *   - name: Nom du service pour les logs (défaut: 'Service')
  *   - container: Nom du container pour afficher les logs en cas d'échec (optionnel)
  *   - initialWait: Temps d'attente initial avant de commencer les checks (défaut: 0)
- *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: 200)
- *   - insecure: Ignorer les erreurs SSL (défaut: false)
+ *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: [200])
+ *   - insecure: Ignorer les erreurs SSL pour HTTPS (défaut: false)
  */
 def waitForHealthcheck(Map config) {
     def timeout = config.timeout ?: 60
@@ -58,30 +60,8 @@ def waitForHealthcheck(Map config) {
     sh """#!/bin/bash
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
-            HTTP_CODE="000"
-
-            if [ -n "${config.container}" ]; then
-                # Test depuis l'intérieur du container avec docker exec
-                # Essayer curl d'abord
-                if docker exec ${config.container} sh -c 'command -v curl' >/dev/null 2>&1; then
-                    HTTP_CODE=\$(docker exec ${config.container} curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
-                # Sinon essayer wget
-                elif docker exec ${config.container} sh -c 'command -v wget' >/dev/null 2>&1; then
-                    if docker exec ${config.container} wget ${insecure ? '--no-check-certificate' : ''} -q -O /dev/null --server-response "${config.url}" 2>&1 | grep -qE "HTTP/"; then
-                        HTTP_CODE=\$(docker exec ${config.container} wget ${insecure ? '--no-check-certificate' : ''} -q -O /dev/null --server-response "${config.url}" 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print \$2}' || echo "000")
-                    fi
-                else
-                    # Fallback: test TCP sur le port extrait de l'URL
-                    PORT=\$(echo "${config.url}" | sed -E 's|.*:([0-9]+).*|\\1|')
-                    if docker exec ${config.container} sh -c "exec 3<>/dev/tcp/localhost/\${PORT}" 2>/dev/null; then
-                        HTTP_CODE="200"
-                        echo "   ✓ Port \${PORT} accessible (TCP test)"
-                    fi
-                fi
-            else
-                # Test depuis Jenkins
-                HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
-            fi
+            # Test depuis Jenkins (connecté au réseau Docker si nécessaire)
+            HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"

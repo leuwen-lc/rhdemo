@@ -432,6 +432,30 @@ YMLEOF
         // PHASE 2 : BUILD ET TESTS
         // ════════════════════════════════════════════════════════════════
 
+        stage('🔍 Vérification Environnement') {
+            steps {
+                script {
+                    echo '▶ Vérification de l\'environnement...'
+                }
+
+                sh '''
+                    # Charger les secrets
+                    . rhDemo/secrets/env-vars.sh
+
+                    echo "Java version:"
+                    java -version
+                    echo ""
+                    echo "Maven version:"
+                    cd rhDemo && ./mvnw -version
+                    echo ""
+                    echo "Variables d'environnement:"
+                    # Compter les variables RHDEMO sans afficher leurs valeurs (sécurité)
+                    RHDEMO_VAR_COUNT=$(env | grep -c "^RHDEMO_" || echo "0")
+                    echo "✅ $RHDEMO_VAR_COUNT variables RHDEMO configurées (valeurs masquées pour sécurité)"
+                '''
+            }
+        }
+
         stage('🏗️ Compilation Maven') {
             steps {
                 script {
@@ -530,6 +554,24 @@ YMLEOF
             }
         }
 
+        stage('📈 Couverture de Code') {
+            steps {
+                script {
+                    echo '▶ Génération du rapport de couverture JaCoCo...'
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw jacoco:report'
+                }
+
+                jacoco(
+                    execPattern: '**/rhDemo/target/jacoco.exec',
+                    classPattern: '**/rhDemo/target/classes',
+                    sourcePattern: '**/rhDemo/src/main/java'
+                )
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 3 : DOCKER BUILD
         // ════════════════════════════════════════════════════════════════
@@ -575,6 +617,35 @@ YMLEOF
         // ════════════════════════════════════════════════════════════════
         // PHASE 4 : DÉPLOIEMENT STAGING DOCKER COMPOSE
         // ════════════════════════════════════════════════════════════════
+
+        stage('⚙️ Configuration Environnement Test') {
+            steps {
+                script {
+                    echo '▶ Configuration de l\'environnement de test Docker Compose...'
+                    echo '   Nettoyage des containers et volumes du build précédent'
+                }
+
+                dir(env.STAGING_INFRA_PATH) {
+                    sh """
+                        # Arrêter et supprimer les conteneurs du build précédent
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                        # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
+                        docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true
+
+                        # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
+                        # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
+                        echo "🧹 Suppression image nginx pour éviter layers corrompus..."
+                        docker rmi ${env.NGINX_IMAGE} 2>/dev/null || true
+
+                        # Nettoyer les réseaux orphelins
+                        docker network prune -f
+
+                        echo "✅ Environnement nettoyé"
+                    """
+                }
+            }
+        }
 
         stage('🌐 Préparation Réseau Docker') {
             steps {
@@ -964,25 +1035,74 @@ YMLEOF
             }
         }
 
-        stage('🔗 Connexion NGINX au Réseau Jenkins') {
-            steps {
-                script {
-                    echo "▶ Connexion du container NGINX au réseau Jenkins (pour ZAP)..."
-
-                    // Charger la bibliothèque
-                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
-
-                    // Connecter NGINX au réseau Jenkins
-                    lib.dockerNetworkConnect(env.CONTAINER_NGINX, env.NETWORK_JENKINS)
-
-                    echo "✅ NGINX accessible depuis le réseau Jenkins"
-                }
-            }
-        }
-
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS SELENIUM ET OWASP ZAP
         // ════════════════════════════════════════════════════════════════
+
+        stage('🔒 Démarrage OWASP ZAP Proxy') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage du proxy OWASP ZAP pour analyse de sécurité...'
+                    echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
+                }
+
+                sh """#!/bin/bash
+                    # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                    echo "🔐 Utilisation de ZAP_API_KEY: ${env.ZAP_API_KEY.take(8)}..."
+
+                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas staging
+                    cd rhDemo/infra/jenkins-docker
+
+                    # Nettoyage : supprimer le conteneur ZAP existant s'il existe
+                    if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
+                        echo "🧹 Suppression du conteneur ZAP existant..."
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Conteneur ZAP supprimé"
+                    fi
+
+                    # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
+                    echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
+                    echo "   Réseau: rhdemo-jenkins-network"
+                    echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+
+                    echo "⏳ Attente du démarrage de ZAP (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
+                            echo "✅ ZAP démarré et accessible"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: ZAP n'est pas prêt après 30s"
+                        docker logs --tail=20 rhdemo-jenkins-zap
+                        exit 1
+                    fi
+
+                    echo "📊 ZAP Status:"
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} | jq .
+
+                    echo ""
+                    echo "🔗 Connexion de ZAP au réseau staging..."
+                    docker network connect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau staging"
+
+                    echo ""
+                    echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
+                    echo "   Container: rhdemo-jenkins-zap"
+                    echo "   Réseau 1: rhdemo-jenkins-network (API + Proxy)"
+                    echo "   Réseau 2: rhdemo-staging-network (accès application via connexion dynamique)"
+                    echo "   Port unique (API + Proxy): owasp-zap:8090"
+                """
+            }
+        }
 
         stage('🧪 Tests Selenium') {
             when {
@@ -990,106 +1110,140 @@ YMLEOF
             }
             steps {
                 script {
-                    echo "▶ Exécution des tests Selenium..."
+                    echo "▶ Exécution des tests Selenium avec proxy ZAP..."
                 }
 
                 dir(env.TEST_PROJECT_PATH) {
-                    sh '''
+                    sh """
                         # Source les secrets pour les tests
                         set +x
                         . ../rhDemo/secrets/env-vars.sh
 
-                        # Exporter les variables nécessaires pour Selenium
-                        # Utilise l'alias réseau Docker (rhdemo.staging.local défini dans docker-compose.yml)
-                        export SELENIUM_BASE_URL="https://${TEST_DOMAIN}"
-                        export SELENIUM_ADMIN_USER="${RHDEMO_TEST_ID_USER_ADMIN}"
-                        export SELENIUM_ADMIN_PASSWORD="${RHDEMO_TEST_PWD_USER_ADMIN}"
-                        export SELENIUM_MAJ_USER="${RHDEMO_TEST_ID_USER_MAJ}"
-                        export SELENIUM_MAJ_PASSWORD="${RHDEMO_TEST_PWD_USER_MAJ}"
-                        export SELENIUM_CONSULT_USER="${RHDEMO_TEST_ID_USER_CONSULT}"
-                        export SELENIUM_CONSULT_PASSWORD="${RHDEMO_TEST_PWD_USER_CONSULT}"
+                        # URLs via nginx dans le réseau Docker avec HTTPS
+                        # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
+                        # Car Jenkins container est connecté à rhdemo-staging-network
+                        # Les aliases rhdemo.staging.local et keycloak.staging.local sont résolus via DNS Docker
+                        # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
+                        APP_URL="https://rhdemo.staging.local"
+                        KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
+
+                        # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
+                        # Ces variables seront passées via propriétés Maven à TestConfig
+                        # Username chargé depuis secrets-staging.yml (pas de valeur en dur)
+                        TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
+                        TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
+
+                        # Configuration du proxy ZAP pour intercepter le trafic Selenium
+                        # BaseSeleniumTest.java détecte ces variables et configure le proxy WebDriver
+                        export ZAP_PROXY_HOST=owasp-zap
+                        export ZAP_PROXY_PORT=8090
+
+                        echo "📍 Configuration des tests Selenium:"
+                        echo "   APP_URL: \${APP_URL}"
+                        echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
+                        echo "   TEST_USERNAME: \${TEST_USERNAME} (ROLE_consult + ROLE_MAJ)"
+                        echo "   Mode: Headless"
+                        echo "   ZAP Proxy: \${ZAP_PROXY_HOST}:\${ZAP_PROXY_PORT}"
+                        echo "   (Healthcheck HTTPS validé avant ce stage)"
 
                         set -x
 
-                        # Exécuter les tests Selenium
-                        ../rhDemo/mvnw test -Dtest=RhDemoSeleniumTests
-                    '''
+                        # Lancement des tests avec TOUTES les configs via propriétés Maven
+                        # TestConfig charge dans l'ordre: Maven properties > env vars > YAML
+                        cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
+                            -Dtest.baseurl=\${APP_URL} \\
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL} \\
+                            -Dselenium.headless=true \\
+                            -Dtest.username=\${TEST_USERNAME} \\
+                            -Dtest.password=\${TEST_PASSWORD}
+                    """
                 }
             }
             post {
                 always {
-                    // Archiver les rapports de tests
-                    junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
+                    script {
+                        // Archiver les rapports de tests
+                        junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
 
-                    // Archiver les screenshots en cas d'échec
-                    archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+                        // Archiver les screenshots en cas d'échec
+                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+
+                        // Génération du rapport OWASP ZAP avant déconnexion
+                        echo '📊 Génération du rapport OWASP ZAP...'
+                        sh """#!/bin/bash
+                            # Sauvegarder le workspace actuel
+                            WORKSPACE_DIR=\$(pwd)
+
+                            # Créer le répertoire pour les rapports ZAP dans le workspace
+                            mkdir -p "\${WORKSPACE_DIR}/zap-reports"
+
+                            # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                            ZAP_API_KEY="${env.ZAP_API_KEY}"
+                            ZAP_HOST="owasp-zap"
+                            ZAP_PORT="8090"
+
+                            echo "🔍 Récupération du rapport ZAP depuis http://\${ZAP_HOST}:\${ZAP_PORT}"
+                            echo "   Clé API utilisée: \${ZAP_API_KEY:0:8}..."
+
+                            # Tester d'abord la connexion à ZAP
+                            if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
+                                echo "✅ Connexion à ZAP réussie"
+
+                                # Générer le rapport HTML
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                else
+                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                fi
+
+                                # Générer également le rapport JSON pour analyse
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
+                                else
+                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                fi
+                            else
+                                echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
+                            fi
+                        """
+
+                        // Archiver les rapports ZAP
+                        archiveArtifacts artifacts: 'zap-reports/*', fingerprint: true, allowEmptyArchive: true
+
+                        // Déconnexion de ZAP du réseau staging après les tests
+                        echo '🔌 Déconnexion de ZAP du réseau staging...'
+                        sh '''
+                            docker network disconnect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau staging"
+                            echo "✅ ZAP déconnecté du réseau staging (reste sur jenkins-network)"
+                        '''
+                    }
                 }
             }
         }
 
-        stage('🔒 Tests Sécurité OWASP ZAP') {
+        stage('📝 Génération Rapports') {
             steps {
                 script {
-                    echo "▶ Exécution des tests de sécurité OWASP ZAP..."
-                }
+                    echo '▶ Publication des rapports HTML...'
 
-                sh """
-                    echo "▶ Démarrage du container OWASP ZAP..."
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                    # Arrêter et supprimer le container ZAP s'il existe
-                    docker rm -f ${env.CONTAINER_ZAP} 2>/dev/null || true
+                    // Définir tous les rapports à publier
+                    def reports = [
+                        ['rhDemo/target/site/jacoco', 'index.html', 'Code Coverage (JaCoCo)'],
+                        ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
+                        ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
+                        ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
+                        ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
+                        ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
+                        ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']
+                    ]
 
-                    # Démarrer ZAP en mode daemon avec clé API aléatoire
-                    docker run -d --name ${env.CONTAINER_ZAP} \\
-                        --network ${env.NETWORK_JENKINS} \\
-                        -v \$(pwd)/zap-reports:/zap/wrk/:rw \\
-                        -u zap \\
-                        ghcr.io/zaproxy/zaproxy:stable \\
-                        zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.key=${env.ZAP_API_KEY}
-
-                    echo "⏳ Attente du démarrage de ZAP..."
-                    sleep 30
-
-                    echo "▶ Lancement du scan ZAP sur https://${env.TEST_DOMAIN}..."
-
-                    # Exécuter le scan ZAP (baseline scan)
-                    docker exec ${env.CONTAINER_ZAP} \\
-                        zap-baseline.py \\
-                        -t https://${env.CONTAINER_NGINX} \\
-                        -r zap-report.html \\
-                        -w zap-report.md \\
-                        -J zap-report.json \\
-                        -x zap-report.xml \\
-                        || true
-
-                    echo "✅ Scan ZAP terminé"
-                """
-            }
-            post {
-                always {
-                    // Copier les rapports ZAP
-                    sh """
-                        mkdir -p zap-reports
-                        docker cp ${env.CONTAINER_ZAP}:/zap/wrk/zap-report.html zap-reports/ 2>/dev/null || true
-                        docker cp ${env.CONTAINER_ZAP}:/zap/wrk/zap-report.xml zap-reports/ 2>/dev/null || true
-                        docker cp ${env.CONTAINER_ZAP}:/zap/wrk/zap-report.json zap-reports/ 2>/dev/null || true
-                    """
-
-                    // Publier le rapport HTML
-                    publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'zap-reports',
-                        reportFiles: 'zap-report.html',
-                        reportName: 'OWASP ZAP Security Report'
-                    ])
-
-                    // Archiver tous les rapports ZAP
-                    archiveArtifacts artifacts: 'zap-reports/*', allowEmptyArchive: true
-
-                    // Arrêter et supprimer le container ZAP
-                    sh "docker rm -f ${env.CONTAINER_ZAP} 2>/dev/null || true"
+                    lib.publishHTMLReports(reports)
                 }
             }
         }
@@ -1189,6 +1343,14 @@ YMLEOF
                         docker network disconnect ${env.NETWORK_STAGING} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
                         echo "✅ Jenkins déconnecté du réseau staging"
                     fi
+                """
+
+                // Arrêter et supprimer le container ZAP
+                echo "🧹 Nettoyage du container OWASP ZAP..."
+                sh """
+                    docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                    docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                    echo "✅ Container ZAP supprimé"
                 """
 
                 dir(env.STAGING_INFRA_PATH) {

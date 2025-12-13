@@ -1272,22 +1272,22 @@ YMLEOF
                     echo "▶ Tag de l'image: ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                     docker tag ${env.RHDEMO_IMAGE} ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
-                    # Tag pour le registry
-                    echo "▶ Tag pour le registry: \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
-                    docker tag ${env.RHDEMO_IMAGE} \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+                    # Tag pour le registry (utiliser localhost:5000 depuis Jenkins)
+                    echo "▶ Tag pour le registry: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
                     # Push vers le registry
                     echo "▶ Push vers le registry..."
-                    docker push \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
                     # Tag latest
                     echo "▶ Tag latest..."
-                    docker tag ${env.RHDEMO_IMAGE} \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:latest
-                    docker push \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:latest
+                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
+                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
 
                     echo "✅ Image publiée sur le registry:"
-                    echo "   - \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
-                    echo "   - \$REGISTRY_NAME:5000/${env.DOCKER_IMAGE_NAME}:latest"
+                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:latest"
                 """
             }
         }

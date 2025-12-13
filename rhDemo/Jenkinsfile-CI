@@ -651,6 +651,46 @@ YMLEOF
             }
         }
 
+        stage('📋 Configuration Nginx HTTPS') {
+            steps {
+                script {
+                    echo "▶ Copie des configurations Nginx et certificats SSL..."
+                }
+
+                dir(env.STAGING_INFRA_PATH) {
+                    sh """
+                        echo "📋 Copie des configurations nginx..."
+                        docker cp nginx/nginx.conf ${env.CONTAINER_NGINX}:/etc/nginx/nginx.conf
+                        docker cp nginx/conf.d/. ${env.CONTAINER_NGINX}:/etc/nginx/conf.d/
+
+                        if [ -d "certs" ]; then
+                            docker cp certs/. ${env.CONTAINER_NGINX}:/etc/nginx/ssl/
+                            echo "✅ Configurations nginx et certificats copiés"
+                        else
+                            echo "✅ Configurations nginx copiées (certificats manquants)"
+                        fi
+
+                        # Recharger la configuration nginx pour appliquer les changements
+                        echo "🔄 Rechargement de la configuration nginx..."
+                        docker exec ${env.CONTAINER_NGINX} nginx -t  # Test de la config
+                        docker exec ${env.CONTAINER_NGINX} nginx -s reload  # Reload
+                        echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
+
+                        # Vérifier que nginx écoute réellement sur le port 443
+                        echo "🔍 Vérification que nginx écoute sur le port 443..."
+                        if docker exec ${env.CONTAINER_NGINX} netstat -tuln | grep -q ':443'; then
+                            echo "✅ Nginx écoute sur le port 443 (HTTPS)"
+                        else
+                            echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
+                            echo "Ports écoutés par nginx:"
+                            docker exec ${env.CONTAINER_NGINX} netstat -tuln
+                            exit 1
+                        fi
+                    """
+                }
+            }
+        }
+
         stage('⏳ Attente Services Staging') {
             steps {
                 script {
@@ -823,18 +863,19 @@ YMLEOF
             steps {
                 script {
                     echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
+                    echo '   Test depuis Jenkins via alias réseau Docker'
 
                     // Charger la bibliothèque
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                    // Healthcheck Nginx HTTPS avec certificat auto-signé (test end-to-end depuis Jenkins)
+                    // Healthcheck Nginx HTTPS avec certificat auto-signé
+                    // Utilise l'alias réseau Docker défini dans docker-compose.yml
                     lib.waitForHealthcheck([
                         name: 'Nginx HTTPS',
                         url: "https://${env.TEST_DOMAIN}/front/",
                         timeout: 30,
                         acceptedCodes: [200, 302],
                         insecure: true
-                        // Pas de container: on teste depuis Jenkins, pas depuis l'intérieur de Nginx
                     ])
 
                     echo '✅ Stack complète opérationnelle et accessible via HTTPS'
@@ -944,6 +985,7 @@ YMLEOF
                         . ../rhDemo/secrets/env-vars.sh
 
                         # Exporter les variables nécessaires pour Selenium
+                        # Utilise l'alias réseau Docker (rhdemo.staging.local défini dans docker-compose.yml)
                         export SELENIUM_BASE_URL="https://${TEST_DOMAIN}"
                         export SELENIUM_ADMIN_USER="${RHDEMO_TEST_ID_USER_ADMIN}"
                         export SELENIUM_ADMIN_PASSWORD="${RHDEMO_TEST_PWD_USER_ADMIN}"

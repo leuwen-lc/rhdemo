@@ -647,21 +647,6 @@ YMLEOF
             }
         }
 
-        stage('🌐 Préparation Réseau Docker') {
-            steps {
-                script {
-                    echo "▶ Création des réseaux Docker pour staging..."
-
-                    // Charger la bibliothèque
-                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
-
-                    // Créer les réseaux
-                    lib.dockerNetworkCreate(env.NETWORK_STAGING)
-                    lib.dockerNetworkCreate(env.NETWORK_JENKINS)
-                }
-            }
-        }
-
         stage('🔐 Génération Certificats SSL') {
             steps {
                 script {
@@ -684,28 +669,21 @@ YMLEOF
                 }
 
                 dir(env.STAGING_INFRA_PATH) {
-                    // Source les secrets
-                    sh '''
-                        set +x
-                        . ../../secrets/env-vars.sh
-                        set -x
-                    '''
-
-                    // Démarrer Docker Compose
                     sh """
                         # Source les secrets
                         set +x
                         . ../../secrets/env-vars.sh
 
-                        # Exporter les variables d'environnement nécessaires
+                        # Exporter les variables d'environnement nécessaires pour docker-compose
                         export RHDEMO_IMAGE=${env.RHDEMO_IMAGE}
+                        export RHDEMO_DB_PASSWORD=\${RHDEMO_DB_PASSWORD}
                         export KEYCLOAK_DB_PASSWORD=\${KEYCLOAK_DB_PASSWORD}
                         export KEYCLOAK_ADMIN=\${KEYCLOAK_ADMIN_USER}
                         export KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
 
                         set -x
 
-                        # Démarrer l'environnement
+                        # Démarrer l'environnement (docker-compose créera automatiquement le réseau)
                         docker-compose -p ${env.COMPOSE_PROJECT_NAME} up -d
 
                         echo "✅ Environnement staging démarré"

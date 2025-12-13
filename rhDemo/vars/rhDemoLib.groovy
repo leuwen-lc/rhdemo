@@ -93,7 +93,11 @@ def generateTrivyReport(String image, String reportName) {
         echo "🔍 Scan Trivy: \${IMAGE}"
 
         # Scan JSON pour analyse programmatique
+        # --skip-db-update : DB déjà mise à jour avant les scans parallèles (évite conflits de verrous)
+        # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         timeout 5m trivy image \\
+            --skip-db-update \\
+            --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
@@ -105,14 +109,17 @@ def generateTrivyReport(String image, String reportName) {
         fi
 
         # Scan format table pour lecture humaine
-        timeout 1m trivy image \\
+        timeout 3m trivy image \\
+            --skip-db-update \\
+            --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format table \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
-            "\${IMAGE}" 2>&1 || true
+            "\${IMAGE}" 2>&1 || echo "⚠️  Scan table timeout ou erreur pour \${NAME}"
 
         # Générer le rapport HTML stylisé
         if [ -f "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" ]; then
+            echo "📄 Génération rapport HTML pour \${NAME}..."
             {
                 echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
                 echo "<title>Trivy Report - \${IMAGE}</title>"
@@ -120,6 +127,19 @@ def generateTrivyReport(String image, String reportName) {
                 echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: \${IMAGE}</h2><pre>"
                 cat "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
                 echo '</pre></body></html>'
+            } > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.html"
+            echo "✅ Rapport HTML \${NAME}.html créé"
+        else
+            echo "⚠️  Fichier \${NAME}.txt introuvable - HTML non généré"
+            # Créer un HTML vide pour indiquer qu'il n'y a pas de rapport
+            {
+                echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                echo "<title>Trivy Report - \${IMAGE}</title>"
+                echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5}</style></head>'
+                echo "<body><h1>⚠️  Rapport Trivy non disponible</h1>"
+                echo "<p>Le scan format table n'a pas pu être généré pour \${IMAGE}.</p>"
+                echo "<p>Consultez le rapport JSON pour plus de détails.</p>"
+                echo "</body></html>"
             } > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.html"
         fi
 

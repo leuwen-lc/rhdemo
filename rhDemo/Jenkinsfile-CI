@@ -967,6 +967,14 @@ YMLEOF
                     // Créer le répertoire pour les rapports
                     sh 'mkdir -p trivy-reports'
 
+                    // Télécharger/mettre à jour la base de données Trivy AVANT les scans parallèles
+                    // Évite les conflits de verrous lors de scans parallèles
+                    echo "📥 Téléchargement de la base de données Trivy..."
+                    sh '''
+                        trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                        echo "✅ Base de données Trivy prête"
+                    '''
+
                     // Définir les images à scanner avec leurs noms de rapports
                     def imagesToScan = [
                         [image: env.POSTGRES_IMAGE, name: 'postgres'],

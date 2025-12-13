@@ -734,7 +734,7 @@ YMLEOF
                     // Healthcheck Keycloak depuis Jenkins (connecté au réseau staging)
                     lib.waitForHealthcheck([
                         name: 'Keycloak',
-                        url: "http://${env.CONTAINER_KEYCLOAK}:8080/health/ready",
+                        url: "http://${env.CONTAINER_KEYCLOAK}:9000/health/ready",
                         timeout: 60,
                         initialWait: 45
                         // Pas de container: test depuis Jenkins, pas docker exec

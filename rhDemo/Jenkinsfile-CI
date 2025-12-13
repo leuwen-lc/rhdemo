@@ -591,6 +591,21 @@ YMLEOF
             }
         }
 
+        stage('🔐 Génération Certificats SSL') {
+            steps {
+                script {
+                    echo '▶ Génération des certificats SSL auto-signés...'
+                }
+
+                dir(env.STAGING_INFRA_PATH) {
+                    sh """
+                        ./generate-certs.sh --domain ${env.TEST_DOMAIN} --domain ${env.KEYCLOAK_DOMAIN}
+                        echo "✅ Certificats SSL générés"
+                    """
+                }
+            }
+        }
+
         stage('🚀 Démarrage Environnement Staging') {
             steps {
                 script {

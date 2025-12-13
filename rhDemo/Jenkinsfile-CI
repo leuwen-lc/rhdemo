@@ -45,7 +45,7 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.27-alpine"
+        NGINX_IMAGE = "nginx:1.29.4-alpine"
         POSTGRES_IMAGE = "postgres:16-alpine"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
 
@@ -677,6 +677,9 @@ YMLEOF
                         # Exporter les variables d'environnement nécessaires pour docker-compose
                         # Mapping des noms de variables entre secrets et docker-compose
                         export RHDEMO_IMAGE=${env.RHDEMO_IMAGE}
+                        export NGINX_IMAGE=${env.NGINX_IMAGE}
+                        export POSTGRES_IMAGE=${env.POSTGRES_IMAGE}
+                        export KEYCLOAK_IMAGE=${env.KEYCLOAK_IMAGE}
                         export RHDEMO_DB_PASSWORD=\${RHDEMO_DATASOURCE_PASSWORD_PG}
                         export KEYCLOAK_DB_PASSWORD=\${KEYCLOAK_DB_PASSWORD}
                         export KEYCLOAK_ADMIN=\${KEYCLOAK_ADMIN_USER}

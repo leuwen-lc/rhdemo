@@ -49,7 +49,7 @@ pipeline {
         DOCKER_REGISTRY = "" // Laisser vide pour Docker Hub ou spécifier registry privé
 
         // Versions des images Docker de base
-        NGINX_IMAGE = "nginx:1.27-alpine"
+        NGINX_IMAGE = "nginx:1.29.4-alpine"
         POSTGRES_IMAGE = "postgres:16-alpine"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
 
@@ -1153,6 +1153,11 @@ YMLEOF
                     # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
                     export APP_VERSION=build-${env.BUILD_NUMBER}
                     export WORKSPACE=\$(pwd)
+
+                    # Export des versions d'images Docker (source de vérité : Jenkinsfile)
+                    export NGINX_IMAGE=${env.NGINX_IMAGE}
+                    export POSTGRES_IMAGE=${env.POSTGRES_IMAGE}
+                    export KEYCLOAK_IMAGE=${env.KEYCLOAK_IMAGE}
 
                     # Export explicite des variables critiques (pour éviter que .env les écrase)
                     export RHDEMO_DB_PASSWORD="\${RHDEMO_DATASOURCE_PASSWORD_PG}"

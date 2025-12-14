@@ -594,7 +594,7 @@ YMLEOF
 
                 dir('rhDemo') {
                     sh """
-                        docker build -t ${env.RHDEMO_IMAGE} \
+                        DOCKER_BUILDKIT=1 docker build -t ${env.RHDEMO_IMAGE} \
                                      -t rhdemo-api:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
@@ -628,8 +628,12 @@ YMLEOF
 
                 dir(env.STAGING_INFRA_PATH) {
                     sh """
-                        # Arrêter et supprimer les conteneurs du build précédent
+                        # Arrêter et supprimer les conteneurs du build précédent via docker-compose
                         docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                        # Supprimer les containers avec noms fixes (peuvent rester d'un build précédent avec KEEP_STAGING_ENV)
+                        echo "🧹 Suppression des containers avec noms fixes..."
+                        docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
 
                         # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
                         docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true

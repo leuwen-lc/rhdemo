@@ -594,7 +594,7 @@ YMLEOF
 
                 dir('rhDemo') {
                     sh """
-                        DOCKER_BUILDKIT=1 docker build -t ${env.RHDEMO_IMAGE} \
+                        DOCKER_BUILDKIT=0 docker build -t ${env.RHDEMO_IMAGE} \
                                      -t rhdemo-api:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \

@@ -870,42 +870,6 @@ YMLEOF
             }
         }
 
-        stage('📋 Copie Secrets vers Container App') {
-            steps {
-                script {
-                    echo "▶ Copie du fichier de secrets dans le container applicatif..."
-                }
-
-                sh """
-                    # Créer le répertoire secrets dans le container
-                    docker exec --user root ${env.CONTAINER_APP} mkdir -p /workspace/secrets
-
-                    # Copier le fichier de secrets
-                    docker cp ${env.SECRETS_RHDEMO} ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
-
-                    # Corriger les permissions (user spring:spring depuis migration Dockerfile)
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets/secrets-rhdemo.yml
-
-                    echo "✅ Secrets copiés dans le container"
-                """
-            }
-        }
-
-        stage('🔄 Redémarrage Application') {
-            steps {
-                script {
-                    echo "▶ Redémarrage du container applicatif pour charger les secrets..."
-                }
-
-                sh """
-                    docker restart ${env.CONTAINER_APP}
-                    echo "⏳ Attente du redémarrage (30s)..."
-                    sleep 30
-                """
-            }
-        }
-
         stage('🏥 Healthcheck Application RHDemo') {
             steps {
                 script {

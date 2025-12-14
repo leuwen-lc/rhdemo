@@ -13,13 +13,13 @@ spring:
         provider:
           keycloak:
             # URL publique HTTPS pour le navigateur (redirection login)
-            authorization-uri: https://keycloak.staging.local/realms/RHDemo/protocol/openid-connect/auth
+            authorization-uri: https://keycloak.stagingkub.local/realms/RHDemo/protocol/openid-connect/auth
 
             # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
             # (échange code→token, récupération JWKS)
-            # Utilise l'alias Docker Compose "keycloak-staging" pour accès réseau interne
-            token-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/token
-            jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
+            # Utilise le service Kubernetes "keycloak" pour accès réseau interne
+            token-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/token
+            jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
 
             # NE PAS configurer issuer-uri ici car Spring essaierait de télécharger
             # /.well-known/openid-configuration en HTTPS (échec SSL certificat auto-signé)
@@ -29,7 +29,7 @@ spring:
       resourceserver:
         jwt:
           # JWKS en HTTP interne pour validation des signatures JWT
-          jwk-set-uri: http://keycloak-staging:8080/realms/RHDemo/protocol/openid-connect/certs
+          jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
 
           # NE PAS configurer issuer-uri ici non plus
           # Spring utilisera l'issuer présent dans le token JWT pour validation

@@ -106,11 +106,15 @@ pipeline {
                         env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG
                         echo "▶ Tag fourni en paramètre: ${env.DEPLOY_IMAGE_TAG}"
                     } else {
-                        // Lire la version depuis pom.xml
+                        // Lire la version depuis pom.xml via Maven
                         echo "▶ Aucun tag fourni, lecture depuis pom.xml..."
-                        def pomFile = readFile('rhDemo/pom.xml')
-                        def project = new XmlSlurper().parseText(pomFile)
-                        env.DEPLOY_IMAGE_TAG = project.version.text()
+
+                        dir('rhDemo') {
+                            env.DEPLOY_IMAGE_TAG = sh(
+                                script: './mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                                returnStdout: true
+                            ).trim()
+                        }
 
                         if (!env.DEPLOY_IMAGE_TAG) {
                             error("❌ Impossible de déterminer la version de l'image")

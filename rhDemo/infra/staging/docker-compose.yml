@@ -112,6 +112,7 @@ services:
       # au lieu d'être passés en variables d'environnement.
       # Ce fichier contient UNIQUEMENT les secrets nécessaires à rhDemo (moindre privilège)
       # Exclus: mots de passe admin Keycloak, secrets infra, etc.
+      # Le fichier est copié via docker cp dans un stage Jenkins APRÈS le démarrage du container
 
       # Actuator
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
@@ -121,10 +122,6 @@ services:
       BPL_JVM_THREAD_COUNT: 50
       BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
-    volumes:
-      # Bind mount du fichier de secrets (créé par Jenkins avant docker-compose up)
-      # Chemin depuis infra/staging/ : ../../rhDemo/secrets/secrets-rhdemo.yml
-      - ../../rhDemo/secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
     depends_on:
       rhdemo-db:
         condition: service_healthy

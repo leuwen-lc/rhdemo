@@ -123,7 +123,8 @@ services:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
     volumes:
       # Bind mount du fichier de secrets (créé par Jenkins avant docker-compose up)
-      - ../../secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
+      # Chemin depuis infra/staging/ : ../../rhDemo/secrets/secrets-rhdemo.yml
+      - ../../rhDemo/secrets/secrets-rhdemo.yml:/workspace/secrets/secrets-rhdemo.yml:ro
     depends_on:
       rhdemo-db:
         condition: service_healthy

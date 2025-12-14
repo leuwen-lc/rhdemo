@@ -106,7 +106,7 @@ Connecte un container à un réseau Docker.
 
 **Exemple :**
 ```groovy
-lib.dockerNetworkConnect('jenkins', 'rhdemo-staging-network')
+lib.dockerNetworkConnect('jenkins', 'rhdemo-stagingkub-network')
 ```
 
 #### 6. `dockerNetworkDisconnect(String container, String network)`
@@ -198,11 +198,11 @@ sh 'chmod +x rhDemo/scripts/jenkins/cleanup-secrets.sh && ./rhDemo/scripts/jenki
 
 ```groovy
 environment {
-    CONTAINER_NGINX = 'rhdemo-staging-nginx'
-    CONTAINER_APP = 'rhdemo-staging-app'
+    CONTAINER_NGINX = 'rhdemo-stagingkub-nginx'
+    CONTAINER_APP = 'rhdemo-stagingkub-app'
     CONTAINER_KEYCLOAK = 'keycloak-staging'
     CONTAINER_KEYCLOAK_DB = 'keycloak-staging-db'
-    CONTAINER_DB = 'rhdemo-staging-db'
+    CONTAINER_DB = 'rhdemo-stagingkub-db'
     CONTAINER_ZAP = 'rhdemo-jenkins-zap'
 }
 ```
@@ -211,7 +211,7 @@ environment {
 
 ```groovy
 environment {
-    NETWORK_STAGING = 'rhdemo-staging-network'
+    NETWORK_STAGING = 'rhdemo-stagingkub-network'
     NETWORK_JENKINS = 'rhdemo-jenkins-network'
 }
 ```

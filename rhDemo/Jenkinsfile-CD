@@ -13,7 +13,7 @@
  * PRÉ-REQUIS :
  *   - Image Docker publiée sur le registry par le pipeline CI (Jenkinsfile-CI)
  *   - Cluster KinD 'rhdemo' initialisé (via init-stagingkub.sh)
- *   - Namespace 'rhdemo-staging' créé
+ *   - Namespace 'rhdemo-stagingkub' créé
  *
  * RÉSULTAT :
  *   - Application RHDemo déployée sur stagingkub
@@ -43,19 +43,19 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Kubernetes
-        K8S_NAMESPACE = 'rhdemo-staging'
+        K8S_NAMESPACE = 'rhdemo-stagingkub'
         K8S_CONTEXT = 'kind-rhdemo'
         CLUSTER_NAME = 'rhdemo'
 
-        // Fichiers de secrets SOPS
-        SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
+        // Fichiers de secrets SOPS (stagingkub utilise ses propres secrets, différents de staging Docker Compose)
+        SECRETS_FILE = 'rhDemo/secrets/secrets-stagingkub.yml'
         SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
         SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
         SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
 
         // URLs
-        APP_URL = 'https://rhdemo.staging.local'
-        KEYCLOAK_URL = 'https://keycloak.staging.local'
+        APP_URL = 'https://rhdemo.stagingkub.local'
+        KEYCLOAK_URL = 'https://keycloak.stagingkub.local'
     }
 
     parameters {

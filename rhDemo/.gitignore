@@ -54,3 +54,6 @@ build/
 ### VS Code ###
 .vscode/
 /replacegit.txt
+
+# Fichiers secrets déchiffrés (stagingkub)
+secrets/secrets-stagingkub-decrypted.yml

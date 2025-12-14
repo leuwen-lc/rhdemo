@@ -110,7 +110,7 @@ Environnement complet utilisé par Jenkins pour les tests d'intégration automat
 │  Jenkins Pipeline (Docker)                                  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Docker Compose Network (rhdemo-staging-network)     │  │
+│  │  Docker Compose Network (rhdemo-stagingkub-network)     │  │
 │  │                                                       │  │
 │  │  ┌─────────────┐   ┌──────────────┐   ┌──────────┐ │  │
 │  │  │   nginx     │   │  rhDemo App  │   │ Keycloak │ │  │
@@ -130,10 +130,10 @@ Environnement complet utilisé par Jenkins pour les tests d'intégration automat
 
 | Service | Container | Port (externe) | Base de données | HTTPS |
 |---------|-----------|----------------|-----------------|-------|
-| nginx | rhdemo-staging-nginx | 443 | - | ✅ Oui |
-| rhDemo App | rhdemo-staging-app | - | PostgreSQL | via nginx |
+| nginx | rhdemo-stagingkub-nginx | 443 | - | ✅ Oui |
+| rhDemo App | rhdemo-stagingkub-app | - | PostgreSQL | via nginx |
 | Keycloak | keycloak-staging | - | PostgreSQL | via nginx |
-| PostgreSQL (rhDemo) | rhdemo-staging-db | - | rhdemo | - |
+| PostgreSQL (rhDemo) | rhdemo-stagingkub-db | - | rhdemo | - |
 | PostgreSQL (Keycloak) | keycloak-staging-db | - | keycloak | - |
 
 ### Gestion des secrets
@@ -157,13 +157,13 @@ secrets-staging.yml (chiffré SOPS)
     │  (copié dans container)    │
     └────────────────────────────┘
          ↓
-    Container rhdemo-staging-app
+    Container rhdemo-stagingkub-app
     (accès limité aux secrets rhDemo)
 ```
 
 #### Secrets accessibles par rhDemo
 
-Le container `rhdemo-staging-app` reçoit **uniquement** :
+Le container `rhdemo-stagingkub-app` reçoit **uniquement** :
 - ✅ Mot de passe PostgreSQL rhDemo
 - ✅ Secret client Keycloak OAuth2
 - ✅ Mot de passe H2 (tests)
@@ -212,7 +212,7 @@ Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails
 | **Keycloak port** | 6090 | 8080 (interne) |
 | **HTTPS** | ❌ Non | ✅ Oui (nginx reverse proxy) |
 | **Certificats SSL** | - | Auto-signés |
-| **Réseau** | rhdemo-dev-network | rhdemo-staging-network |
+| **Réseau** | rhdemo-dev-network | rhdemo-stagingkub-network |
 | **Secrets** | Fichier local non chiffré | SOPS/AGE chiffré |
 | **Données persistées** | PostgreSQL uniquement | Tous les volumes Docker |
 | **Tests Selenium** | Manuel | Automatiques (headless) |

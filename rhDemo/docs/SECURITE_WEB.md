@@ -185,7 +185,7 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 ### 1. Vérifier les Headers HTTP
 
 ```bash
-curl -I https://rhdemo.staging.local/front/
+curl -I https://rhdemo.stagingkub.local/front/
 
 # Attendu:
 # Content-Security-Policy: default-src 'self'; script-src 'self'; ...

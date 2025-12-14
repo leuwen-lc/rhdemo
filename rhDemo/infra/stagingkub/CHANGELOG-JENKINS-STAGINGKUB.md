@@ -325,7 +325,7 @@ Le pipeline Jenkins avec `DEPLOY_ENV=stagingkub` doit maintenant passer les éta
 2. ✅ Tester l'accès : `./scripts/test-jenkins-access.sh`
 3. 🔄 Lancer un build Jenkins avec `DEPLOY_ENV=stagingkub`
 4. ✅ Vérifier les logs dans la console Jenkins
-5. ✅ Accéder à l'application : https://rhdemo.staging.local
+5. ✅ Accéder à l'application : https://rhdemo.stagingkub.local
 
 ---
 

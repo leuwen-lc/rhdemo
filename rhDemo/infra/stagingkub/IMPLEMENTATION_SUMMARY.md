@@ -24,7 +24,7 @@ infra/stagingkub/
 │   ├── values.yaml                 # Configuration par défaut
 │   └── templates/
 │       ├── _helpers.tpl            # Fonctions Helm réutilisables
-│       ├── namespace.yaml          # Namespace rhdemo-staging
+│       ├── namespace.yaml          # Namespace rhdemo-stagingkub
 │       ├── postgresql-rhdemo-*     # PostgreSQL pour RHDemo (3 fichiers)
 │       ├── postgresql-keycloak-*   # PostgreSQL pour Keycloak (2 fichiers)
 │       ├── keycloak-*              # Keycloak (2 fichiers)
@@ -90,7 +90,7 @@ choice(name: 'DEPLOY_ENV',
 ## 🎯 Ressources Kubernetes déployées
 
 ### Namespace
-- `rhdemo-staging`
+- `rhdemo-stagingkub`
 
 ### Workloads (4)
 - `StatefulSet/postgresql-rhdemo` : Base de données RHDemo
@@ -143,7 +143,7 @@ User → Jenkins Pipeline (DEPLOY_ENV=stagingkub)
 9. Tests Unitaires + Intégration
 10. SonarQube (optionnel)
   ↓
-Application déployée sur https://rhdemo.staging.local
+Application déployée sur https://rhdemo.stagingkub.local
 ```
 
 ### Manuel (Local)
@@ -230,7 +230,7 @@ helm upgrade rhdemo ./helm/rhdemo \
 ```bash
 kubectl scale deployment/rhdemo-app \
   --replicas=3 \
-  -n rhdemo-staging
+  -n rhdemo-stagingkub
 ```
 
 ### 5. Secrets management
@@ -264,10 +264,10 @@ Vérifie :
 ### Logs centralisés
 ```bash
 # Tous les logs
-kubectl logs -f -n rhdemo-staging --all-containers
+kubectl logs -f -n rhdemo-stagingkub --all-containers
 
 # Par composant
-kubectl logs -f -n rhdemo-staging -l app=rhdemo-app
+kubectl logs -f -n rhdemo-stagingkub -l app=rhdemo-app
 ```
 
 ---
@@ -368,7 +368,7 @@ Cette implémentation respecte les best practices Kubernetes et Helm :
 En cas de problème :
 1. Consulter [README.md](./README.md) - Troubleshooting
 2. Exécuter `./scripts/validate.sh`
-3. Vérifier les logs : `kubectl logs -f -n rhdemo-staging -l app=rhdemo-app`
+3. Vérifier les logs : `kubectl logs -f -n rhdemo-stagingkub -l app=rhdemo-app`
 4. Consulter [ENVIRONMENTS.md](../ENVIRONMENTS.md) - FAQ
 
 ---

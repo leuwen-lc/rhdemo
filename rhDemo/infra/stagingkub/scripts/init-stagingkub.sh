@@ -187,17 +187,17 @@ else
 fi
 
 # Créer le namespace si nécessaire avec les labels Helm
-echo -e "${YELLOW}▶ Création du namespace rhdemo-staging...${NC}"
+echo -e "${YELLOW}▶ Création du namespace rhdemo-stagingkub...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: rhdemo-staging
+  name: rhdemo-stagingkub
   labels:
     app.kubernetes.io/managed-by: Helm
   annotations:
     meta.helm.sh/release-name: rhdemo
-    meta.helm.sh/release-namespace: rhdemo-staging
+    meta.helm.sh/release-namespace: rhdemo-stagingkub
 EOF
 echo -e "${GREEN}✅ Namespace créé avec labels Helm${NC}"
 
@@ -207,19 +207,19 @@ echo -e "${YELLOW}▶ Création des secrets Kubernetes...${NC}"
 # Secret pour rhdemo-db
 kubectl create secret generic rhdemo-db-secret \
   --from-literal=password="$RHDEMO_DB_PASSWORD" \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Secret pour keycloak-db
 kubectl create secret generic keycloak-db-secret \
   --from-literal=password="$KEYCLOAK_DB_PASSWORD" \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Secret pour keycloak admin
 kubectl create secret generic keycloak-admin-secret \
   --from-literal=password="$KEYCLOAK_ADMIN_PASSWORD" \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo -e "${GREEN}✅ Secrets créés${NC}"
@@ -230,7 +230,7 @@ SECRETS_RHDEMO_FILE="$RHDEMO_ROOT/secrets/secrets-rhdemo.yml"
 if [ -f "$SECRETS_RHDEMO_FILE" ]; then
     kubectl create secret generic rhdemo-app-secrets \
       --from-file=secrets-rhdemo.yml="$SECRETS_RHDEMO_FILE" \
-      --namespace rhdemo-staging \
+      --namespace rhdemo-stagingkub \
       --dry-run=client -o yaml | kubectl apply -f -
     echo -e "${GREEN}✅ Secret secrets-rhdemo.yml créé${NC}"
 else
@@ -238,7 +238,7 @@ else
     echo "# Placeholder" > /tmp/secrets-rhdemo.yml
     kubectl create secret generic rhdemo-app-secrets \
       --from-file=secrets-rhdemo.yml=/tmp/secrets-rhdemo.yml \
-      --namespace rhdemo-staging \
+      --namespace rhdemo-stagingkub \
       --dry-run=client -o yaml | kubectl apply -f -
     rm /tmp/secrets-rhdemo.yml
 fi
@@ -253,8 +253,8 @@ if [ ! -f "$CERTS_DIR/tls.crt" ]; then
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout "$CERTS_DIR/tls.key" \
       -out "$CERTS_DIR/tls.crt" \
-      -subj "/CN=*.staging.local/O=RHDemo" \
-      -addext "subjectAltName=DNS:rhdemo.staging.local,DNS:keycloak.staging.local"
+      -subj "/CN=*.stagingkub.local/O=RHDemo" \
+      -addext "subjectAltName=DNS:rhdemo.stagingkub.local,DNS:keycloak.stagingkub.local"
     echo -e "${GREEN}✅ Certificats SSL générés${NC}"
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
@@ -264,16 +264,16 @@ fi
 kubectl create secret tls rhdemo-tls-cert \
   --cert="$CERTS_DIR/tls.crt" \
   --key="$CERTS_DIR/tls.key" \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
 echo -e "${GREEN}✅ Secret TLS créé${NC}"
 
 # Mettre à jour /etc/hosts si nécessaire
 echo -e "${YELLOW}▶ Vérification de /etc/hosts...${NC}"
-if ! grep -q "rhdemo.staging.local" /etc/hosts; then
+if ! grep -q "rhdemo.stagingkub.local" /etc/hosts; then
     echo -e "${YELLOW}Ajout des entrées DNS dans /etc/hosts (nécessite sudo)...${NC}"
-    echo "127.0.0.1 rhdemo.staging.local" | sudo tee -a /etc/hosts
-    echo "127.0.0.1 keycloak.staging.local" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
     echo -e "${GREEN}✅ Entrées DNS ajoutées${NC}"
 else
     echo -e "${GREEN}✅ Entrées DNS déjà présentes${NC}"

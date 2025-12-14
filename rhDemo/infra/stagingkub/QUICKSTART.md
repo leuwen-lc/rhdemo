@@ -60,8 +60,8 @@ Cette commande :
 ### Accès à l'application
 
 Ouvrez votre navigateur :
-- **Application** : https://rhdemo.staging.local
-- **Keycloak** : https://keycloak.staging.local
+- **Application** : https://rhdemo.stagingkub.local
+- **Keycloak** : https://keycloak.stagingkub.local
 
 ⚠️ Vous verrez un avertissement de certificat (self-signed) → Acceptez et continuez
 
@@ -69,13 +69,13 @@ Ouvrez votre navigateur :
 
 ```bash
 # Statut des pods
-kubectl get pods -n rhdemo-staging
+kubectl get pods -n rhdemo-stagingkub
 
 # Logs de l'application
-kubectl logs -f -n rhdemo-staging -l app=rhdemo-app
+kubectl logs -f -n rhdemo-stagingkub -l app=rhdemo-app
 
 # Tous les services
-kubectl get all -n rhdemo-staging
+kubectl get all -n rhdemo-stagingkub
 ```
 
 ---
@@ -103,7 +103,7 @@ docker push localhost:5000/rhdemo-api:1.2.0-SNAPSHOT
 
 # Mettre à jour via Helm
 helm upgrade rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --set rhdemo.image.repository=localhost:5000/rhdemo-api \
   --set rhdemo.image.tag=1.2.0-SNAPSHOT \
   --wait
@@ -127,10 +127,10 @@ curl http://localhost:5000/v2/rhdemo-api/tags/list
 
 ```bash
 # Voir les logs du pod qui crash
-kubectl logs -n rhdemo-staging <pod-name> --previous
+kubectl logs -n rhdemo-stagingkub <pod-name> --previous
 
 # Voir les events
-kubectl get events -n rhdemo-staging --sort-by='.lastTimestamp'
+kubectl get events -n rhdemo-stagingkub --sort-by='.lastTimestamp'
 ```
 
 ### Problème : Ingress ne répond pas
@@ -140,17 +140,17 @@ kubectl get events -n rhdemo-staging --sort-by='.lastTimestamp'
 kubectl get pods -n ingress-nginx
 
 # Vérifier l'ingress
-kubectl describe ingress rhdemo-ingress -n rhdemo-staging
+kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
 
 # Test direct avec curl
-curl -k https://rhdemo.staging.local
+curl -k https://rhdemo.stagingkub.local
 ```
 
 ### Problème : /etc/hosts non configuré
 
 ```bash
-echo "127.0.0.1 rhdemo.staging.local" | sudo tee -a /etc/hosts
-echo "127.0.0.1 keycloak.staging.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
 ```
 
 ---
@@ -160,13 +160,13 @@ echo "127.0.0.1 keycloak.staging.local" | sudo tee -a /etc/hosts
 ### Supprimer le déploiement (conserver le cluster)
 
 ```bash
-helm uninstall rhdemo -n rhdemo-staging
+helm uninstall rhdemo -n rhdemo-stagingkub
 ```
 
 ### Supprimer tout le namespace
 
 ```bash
-kubectl delete namespace rhdemo-staging
+kubectl delete namespace rhdemo-stagingkub
 ```
 
 ### Supprimer le cluster complet
@@ -204,16 +204,16 @@ Ce script vérifie :
 
 ```bash
 # Voir tous les pods
-kubectl get pods -n rhdemo-staging
+kubectl get pods -n rhdemo-stagingkub
 
 # Voir les services
-kubectl get svc -n rhdemo-staging
+kubectl get svc -n rhdemo-stagingkub
 
 # Voir l'ingress
-kubectl get ingress -n rhdemo-staging
+kubectl get ingress -n rhdemo-stagingkub
 
 # Port-forward direct (alternative à Ingress)
-kubectl port-forward -n rhdemo-staging svc/rhdemo-app 9000:9000
+kubectl port-forward -n rhdemo-stagingkub svc/rhdemo-app 9000:9000
 ```
 
 ---

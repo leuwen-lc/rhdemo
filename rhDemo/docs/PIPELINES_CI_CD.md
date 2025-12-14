@@ -221,14 +221,14 @@ SKIP_HEALTH_CHECK=true
 
 2. **Image Docker publiée** : L'image doit exister dans le registry local (port 5000).
 
-3. **Namespace créé** : Le namespace `rhdemo-staging` doit exister avec les labels Helm.
+3. **Namespace créé** : Le namespace `rhdemo-stagingkub` doit exister avec les labels Helm.
 
 ### URLs d'accès
 
 Après un déploiement réussi :
 
-- **Application RHDemo** : https://rhdemo.staging.local
-- **Keycloak** : https://keycloak.staging.local
+- **Application RHDemo** : https://rhdemo.stagingkub.local
+- **Keycloak** : https://keycloak.stagingkub.local
 
 ---
 
@@ -317,8 +317,8 @@ Il est conservé pour compatibilité temporaire mais **sera supprimé dans une v
        ▼
 ┌──────────────────────────────────────┐
 │  Application accessible              │
-│  - https://rhdemo.staging.local      │
-│  - https://keycloak.staging.local    │
+│  - https://rhdemo.stagingkub.local      │
+│  - https://keycloak.stagingkub.local    │
 └──────────────────────────────────────┘
 ```
 
@@ -444,14 +444,14 @@ curl -s http://localhost:5000/v2/rhdemo-api/tags/list
 **Solution** :
 ```bash
 # Vérifier les logs des pods
-kubectl logs -n rhdemo-staging <pod-name>
+kubectl logs -n rhdemo-stagingkub <pod-name>
 
 # Vérifier les événements
-kubectl get events -n rhdemo-staging --sort-by='.lastTimestamp'
+kubectl get events -n rhdemo-stagingkub --sort-by='.lastTimestamp'
 
 # Vérifier les ressources
 kubectl top nodes
-kubectl top pods -n rhdemo-staging
+kubectl top pods -n rhdemo-stagingkub
 ```
 
 ### Problème : Health check failed
@@ -461,13 +461,13 @@ kubectl top pods -n rhdemo-staging
 **Solution** :
 ```bash
 # Vérifier les secrets
-kubectl get secrets -n rhdemo-staging
+kubectl get secrets -n rhdemo-stagingkub
 
 # Vérifier les logs de l'application
-kubectl logs -n rhdemo-staging deployment/rhdemo
+kubectl logs -n rhdemo-stagingkub deployment/rhdemo
 
 # Tester l'actuator en local dans le pod
-kubectl exec -it <rhdemo-pod> -n rhdemo-staging -- curl http://localhost:9000/actuator/health
+kubectl exec -it <rhdemo-pod> -n rhdemo-stagingkub -- curl http://localhost:9000/actuator/health
 ```
 
 ### Problème : Jenkins ne peut pas accéder au cluster KinD

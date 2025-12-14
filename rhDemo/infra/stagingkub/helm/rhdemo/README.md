@@ -71,7 +71,7 @@ helm/rhdemo/
 ├── values.yaml             # Configuration par défaut
 ├── templates/              # Templates Kubernetes
 │   ├── _helpers.tpl        # Fonctions réutilisables
-│   ├── namespace.yaml      # Namespace rhdemo-staging
+│   ├── namespace.yaml      # Namespace rhdemo-stagingkub
 │   ├── postgresql-rhdemo-* # PostgreSQL pour RHDemo (3 fichiers)
 │   ├── postgresql-keycloak-* # PostgreSQL pour Keycloak (2 fichiers)
 │   ├── keycloak-*          # Keycloak (2 fichiers)
@@ -106,7 +106,7 @@ appVersion: "1.1.0-SNAPSHOT"      # Version de l'app déployée
 helm show chart ./helm/rhdemo
 
 # Lister les charts installés
-helm list -n rhdemo-staging
+helm list -n rhdemo-stagingkub
 ```
 
 ---
@@ -121,7 +121,7 @@ Ce fichier contient **TOUTES** les valeurs configurables :
 
 ```yaml
 global:                           # Variables globales
-  namespace: rhdemo-staging       # Namespace Kubernetes
+  namespace: rhdemo-stagingkub       # Namespace Kubernetes
   environment: staging            # Environnement (staging/prod)
   domain: staging.local           # Domaine DNS
 
@@ -152,7 +152,7 @@ keycloak:                         # Config Keycloak
   admin:
     user: admin
   hostname:
-    url: https://keycloak.staging.local
+    url: https://keycloak.stagingkub.local
   resources:                      # Plus de ressources que les DB
     requests:
       memory: "512Mi"
@@ -175,8 +175,8 @@ ingress:                          # Config Ingress (exposition HTTPS)
   enabled: true
   className: nginx
   hosts:
-    - host: rhdemo.staging.local
-    - host: keycloak.staging.local
+    - host: rhdemo.stagingkub.local
+    - host: keycloak.stagingkub.local
   tls:
     enabled: true
 ```
@@ -213,13 +213,13 @@ Chaque template génère une ressource Kubernetes. Helm remplace les variables `
 
 ### Template 1 : namespace.yaml
 
-**Rôle** : Crée le namespace `rhdemo-staging`
+**Rôle** : Crée le namespace `rhdemo-stagingkub`
 
 ```yaml
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.global.namespace }}    # → rhdemo-staging
+  name: {{ .Values.global.namespace }}    # → rhdemo-stagingkub
   labels:
     {{- include "rhdemo.labels" . | nindent 4 }}
     name: {{ .Values.global.namespace }}
@@ -230,7 +230,7 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: rhdemo-staging
+  name: rhdemo-stagingkub
   labels:
     app.kubernetes.io/name: rhdemo
     app.kubernetes.io/instance: rhdemo
@@ -248,7 +248,7 @@ metadata:
 kubectl get namespaces
 
 # Lister toutes les ressources dans un namespace
-kubectl get all -n rhdemo-staging
+kubectl get all -n rhdemo-stagingkub
 ```
 
 ---
@@ -328,13 +328,13 @@ spec:
 **Commandes** :
 ```bash
 # Voir le StatefulSet
-kubectl get statefulset -n rhdemo-staging
+kubectl get statefulset -n rhdemo-stagingkub
 
 # Voir les pods créés
-kubectl get pods -n rhdemo-staging -l app=postgresql-rhdemo
+kubectl get pods -n rhdemo-stagingkub -l app=postgresql-rhdemo
 
 # Se connecter au pod PostgreSQL
-kubectl exec -it postgresql-rhdemo-0 -n rhdemo-staging -- psql -U rhdemo -d rhdemo
+kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo
 ```
 
 ---
@@ -370,15 +370,15 @@ spec:
 
 **Pourquoi Headless pour les DB ?**
 - StatefulSet crée des pods avec des noms stables : `postgresql-rhdemo-0`
-- Un service headless permet d'y accéder directement via DNS : `postgresql-rhdemo-0.postgresql-rhdemo.rhdemo-staging.svc.cluster.local`
+- Un service headless permet d'y accéder directement via DNS : `postgresql-rhdemo-0.postgresql-rhdemo.rhdemo-stagingkub.svc.cluster.local`
 
 **Commandes** :
 ```bash
 # Lister les services
-kubectl get svc -n rhdemo-staging
+kubectl get svc -n rhdemo-stagingkub
 
 # Tester la connexion depuis un autre pod
-kubectl run -it --rm debug --image=postgres:16-alpine -n rhdemo-staging -- \
+kubectl run -it --rm debug --image=postgres:16-alpine -n rhdemo-stagingkub -- \
   psql -h postgresql-rhdemo -U rhdemo -d rhdemo
 ```
 
@@ -414,10 +414,10 @@ data:
 **Commandes** :
 ```bash
 # Voir le ConfigMap
-kubectl get configmap -n rhdemo-staging
+kubectl get configmap -n rhdemo-stagingkub
 
 # Voir le contenu
-kubectl describe configmap postgresql-rhdemo-init -n rhdemo-staging
+kubectl describe configmap postgresql-rhdemo-init -n rhdemo-stagingkub
 ```
 
 ---
@@ -494,7 +494,7 @@ spec:
               key: password
         - name: KC_HOSTNAME_URL
           value: {{ .Values.keycloak.hostname.url }}
-          # → https://keycloak.staging.local
+          # → https://keycloak.stagingkub.local
         livenessProbe:
           httpGet:
             path: /health/live
@@ -530,16 +530,16 @@ spec:
 **Commandes** :
 ```bash
 # Voir le Deployment
-kubectl get deployment -n rhdemo-staging
+kubectl get deployment -n rhdemo-stagingkub
 
 # Voir les ReplicaSets (créés par le Deployment)
-kubectl get replicaset -n rhdemo-staging
+kubectl get replicaset -n rhdemo-stagingkub
 
 # Scaler horizontalement
-kubectl scale deployment keycloak --replicas=2 -n rhdemo-staging
+kubectl scale deployment keycloak --replicas=2 -n rhdemo-stagingkub
 
 # Rolling update (changer l'image)
-kubectl set image deployment/keycloak keycloak=quay.io/keycloak/keycloak:27.0.0 -n rhdemo-staging
+kubectl set image deployment/keycloak keycloak=quay.io/keycloak/keycloak:27.0.0 -n rhdemo-stagingkub
 ```
 
 ---
@@ -700,12 +700,12 @@ spec:
   ingressClassName: nginx       # Utilise Nginx Ingress Controller
   tls:
   - hosts:
-    - rhdemo.staging.local
-    - keycloak.staging.local
+    - rhdemo.stagingkub.local
+    - keycloak.stagingkub.local
     secretName: rhdemo-tls-cert # Secret contenant les certificats SSL
   rules:
-  # Règle 1 : rhdemo.staging.local → rhdemo-app:9000
-  - host: rhdemo.staging.local
+  # Règle 1 : rhdemo.stagingkub.local → rhdemo-app:9000
+  - host: rhdemo.stagingkub.local
     http:
       paths:
       - path: /
@@ -716,8 +716,8 @@ spec:
             port:
               number: 9000
 
-  # Règle 2 : keycloak.staging.local → keycloak:8080
-  - host: keycloak.staging.local
+  # Règle 2 : keycloak.stagingkub.local → keycloak:8080
+  - host: keycloak.stagingkub.local
     http:
       paths:
       - path: /
@@ -732,14 +732,14 @@ spec:
 **Qu'est-ce qu'un Ingress ?**
 - Point d'entrée unique pour exposer plusieurs services HTTP/HTTPS
 - Routing basé sur :
-  - **Hostname** : rhdemo.staging.local → app, keycloak.staging.local → keycloak
+  - **Hostname** : rhdemo.stagingkub.local → app, keycloak.stagingkub.local → keycloak
   - **Path** : /api → service1, /admin → service2
 - Nécessite un **Ingress Controller** (Nginx, Traefik, HAProxy)
 
 **Flux de requête** :
 ```
 Client (navigateur)
-  ↓ https://rhdemo.staging.local
+  ↓ https://rhdemo.stagingkub.local
 Ingress (port 443)
   ↓ détermine le backend via rules.host
 Service rhdemo-app (port 9000)
@@ -750,14 +750,14 @@ Pod rhdemo-app (port 9000)
 **Commandes** :
 ```bash
 # Voir l'Ingress
-kubectl get ingress -n rhdemo-staging
+kubectl get ingress -n rhdemo-stagingkub
 
 # Voir les détails (events, rules)
-kubectl describe ingress rhdemo-ingress -n rhdemo-staging
+kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
 
 # Tester depuis un pod
-kubectl run -it --rm debug --image=curlimages/curl -n rhdemo-staging -- \
-  curl -H "Host: rhdemo.staging.local" http://rhdemo-app:9000/actuator/health
+kubectl run -it --rm debug --image=curlimages/curl -n rhdemo-stagingkub -- \
+  curl -H "Host: rhdemo.stagingkub.local" http://rhdemo-app:9000/actuator/health
 ```
 
 ---
@@ -819,14 +819,14 @@ metadata:
 
 📦 Release: rhdemo
 🏷️  Version: 1.1.0-SNAPSHOT
-📂 Namespace: rhdemo-staging
+📂 Namespace: rhdemo-stagingkub
 
 🌐 URLS D'ACCÈS
-  Application RHDemo: https://rhdemo.staging.local
-  Keycloak Admin Console: https://keycloak.staging.local
+  Application RHDemo: https://rhdemo.stagingkub.local
+  Keycloak Admin Console: https://keycloak.stagingkub.local
 
 📊 VÉRIFIER LE STATUT
-  kubectl get pods -n rhdemo-staging
+  kubectl get pods -n rhdemo-stagingkub
 ```
 
 ---
@@ -875,7 +875,7 @@ kind: Ingress
 
 ```bash
 helm install rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --create-namespace
 ```
 
@@ -884,12 +884,12 @@ helm install rhdemo ./helm/rhdemo \
 ```bash
 # Avec nouvelle version d'image
 helm upgrade rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --set rhdemo.image.tag=1.2.0-SNAPSHOT
 
 # Avec fichier custom
 helm upgrade rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --values values-custom.yaml
 ```
 
@@ -897,23 +897,23 @@ helm upgrade rhdemo ./helm/rhdemo \
 
 ```bash
 # Voir l'historique
-helm history rhdemo -n rhdemo-staging
+helm history rhdemo -n rhdemo-stagingkub
 
 # Revenir à la version précédente
-helm rollback rhdemo -n rhdemo-staging
+helm rollback rhdemo -n rhdemo-stagingkub
 
 # Revenir à une version spécifique
-helm rollback rhdemo 3 -n rhdemo-staging
+helm rollback rhdemo 3 -n rhdemo-stagingkub
 ```
 
 ### Désinstallation
 
 ```bash
 # Supprimer la release (garde les PVC)
-helm uninstall rhdemo -n rhdemo-staging
+helm uninstall rhdemo -n rhdemo-stagingkub
 
 # Supprimer aussi le namespace (supprime tout)
-kubectl delete namespace rhdemo-staging
+kubectl delete namespace rhdemo-stagingkub
 ```
 
 ---
@@ -922,7 +922,7 @@ kubectl delete namespace rhdemo-staging
 
 | Type | Nom | Rôle |
 |------|-----|------|
-| **Namespace** | rhdemo-staging | Isolation des ressources |
+| **Namespace** | rhdemo-stagingkub | Isolation des ressources |
 | **StatefulSet** | postgresql-rhdemo | Base de données RHDemo |
 | **StatefulSet** | postgresql-keycloak | Base de données Keycloak |
 | **Deployment** | keycloak | Serveur d'authentification |

@@ -144,8 +144,11 @@ public class SecurityConfig {
 	)
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
-            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
+            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+            .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+            // Autres endpoints actuator réservés aux admins
             .requestMatchers("/actuator/**").hasRole("admin")
+            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
             // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
             .anyRequest().authenticated())
 	.oauth2Login(oauth2 -> oauth2

@@ -281,8 +281,8 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
 
 4. **Vérifier le déploiement**
    ```bash
-   kubectl get pods -n rhdemo-staging
-   kubectl logs -f <pod-name> -n rhdemo-staging
+   kubectl get pods -n rhdemo-stagingkub
+   kubectl logs -f <pod-name> -n rhdemo-stagingkub
    ```
 
 ### Déploiements suivants

@@ -14,7 +14,8 @@ Le projet utilise deux fichiers SQL distincts pour séparer la **structure** de 
 
 **Usage** :
 - ✅ **Environnement de production** : Oui
-- ✅ **Environnement de staging (Kubernetes)** : Oui (automatique)
+- ✅ **Environnement de staging (Docker Compose)** : Oui
+- ✅ **Environnement de stagingkub (Kubernetes)** : Oui (automatique)
 - ✅ **Environnement de développement** : Oui
 
 **Exécution** :
@@ -22,8 +23,11 @@ Le projet utilise deux fichiers SQL distincts pour séparer la **structure** de 
 # Développement
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgschema.sql
 
-# Staging Docker
+# Staging (Docker Compose)
 docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < pgschema.sql
+
+# Stagingkub (Kubernetes) - Automatique via ConfigMap, ou manuel si besoin :
+kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo < pgschema.sql
 
 # Production (à adapter selon votre infrastructure)
 psql -h your-db-host -U your-user -d your-database < pgschema.sql
@@ -38,20 +42,20 @@ psql -h your-db-host -U your-user -d your-database < pgschema.sql
 
 **Usage** :
 - ❌ **Environnement de production** : **NON** (ne pas utiliser en production !)
-- ✅ **Environnement de staging Docker** : Oui
+- ✅ **Environnement de staging (Docker Compose)** : Oui
 - ✅ **Environnement de développement** : Oui
-- ⚠️ **Environnement de staging Kubernetes** : À la demande uniquement (non automatique)
+- ⚠️ **Environnement de stagingkub (Kubernetes)** : À la demande uniquement (non automatique)
 
 **Exécution** :
 ```bash
 # Développement
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgdata.sql
 
-# Staging Docker
+# Staging (Docker Compose)
 docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < pgdata.sql
 
-# Staging Kubernetes (manuel uniquement si nécessaire)
-kubectl exec -it postgresql-rhdemo-0 -n rhdemo-staging -- psql -U rhdemo -d rhdemo < pgdata.sql
+# Stagingkub (Kubernetes) - Manuel uniquement si nécessaire
+kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo < pgdata.sql
 ```
 
 ## 🔄 Migration depuis `pgddl.sql`
@@ -101,7 +105,7 @@ docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgschema.sql
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgdata.sql
 ```
 
-### Staging Docker
+### Staging (Docker Compose)
 
 ```bash
 cd rhDemo/infra/staging
@@ -121,7 +125,7 @@ Le script `init-database.sh` :
 - ✅ Vérifie que les données sont insérées
 - ✅ Affiche les index créés
 
-### Staging Kubernetes (stagingkub)
+### Stagingkub (Kubernetes)
 
 **Automatique** : Le schéma est créé automatiquement au premier démarrage du pod PostgreSQL.
 
@@ -134,10 +138,10 @@ Le script `init-database.sh` :
 **Ajout de données de test** (si nécessaire) :
 ```bash
 # Copier pgdata.sql dans le pod
-kubectl cp pgdata.sql postgresql-rhdemo-0:/tmp/data.sql -n rhdemo-staging
+kubectl cp pgdata.sql postgresql-rhdemo-0:/tmp/data.sql -n rhdemo-stagingkub
 
 # Exécuter
-kubectl exec postgresql-rhdemo-0 -n rhdemo-staging -- psql -U rhdemo -d rhdemo -f /tmp/data.sql
+kubectl exec postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo -f /tmp/data.sql
 ```
 
 ### Production
@@ -161,16 +165,16 @@ Si vous modifiez la structure de la base :
    ```bash
    docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgschema.sql
    ```
-4. **Redéployer en staging Kubernetes** : Le nouveau schéma sera appliqué au prochain pod créé avec un volume vierge
+4. **Redéployer en stagingkub (Kubernetes)** : Le nouveau schéma sera appliqué au prochain pod créé avec un volume vierge
 
 ## 📝 Scripts automatisés
 
 | Script | Environnement | Description |
 |--------|---------------|-------------|
 | `infra/dev/start.sh` | Dev local | Affiche les commandes d'init DB |
-| `infra/staging/init-database.sh` | Staging Docker | Init complète (schéma + données) |
-| `Jenkinsfile` (staging) | Pipeline CI/CD | Init automatique en staging Docker |
-| ConfigMap K8s | Staging Kubernetes | Init automatique du schéma uniquement |
+| `infra/staging/init-database.sh` | Staging (Docker Compose) | Init complète (schéma + données) |
+| `Jenkinsfile-CI` | Pipeline CI | Init automatique en staging (Docker Compose) |
+| ConfigMap K8s | Stagingkub (Kubernetes) | Init automatique du schéma uniquement |
 
 ## ❓ FAQ
 
@@ -183,7 +187,7 @@ R: Si le PersistentVolume existe, les données sont préservées. Le script d'in
 **Q: Comment vider complètement la base en Kubernetes ?**
 R: Supprimer le PersistentVolumeClaim :
 ```bash
-kubectl delete pvc postgresql-data-postgresql-rhdemo-0 -n rhdemo-staging
+kubectl delete pvc postgresql-data-postgresql-rhdemo-0 -n rhdemo-stagingkub
 ```
 Au prochain démarrage, le schéma sera recréé automatiquement.
 

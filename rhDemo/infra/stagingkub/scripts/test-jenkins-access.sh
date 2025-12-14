@@ -154,8 +154,8 @@ else
     ((ERRORS++))
 fi
 
-echo -n "Accès au namespace rhdemo-staging... "
-if docker exec rhdemo-jenkins kubectl get namespace rhdemo-staging 2>/dev/null | grep -q "rhdemo-staging"; then
+echo -n "Accès au namespace rhdemo-stagingkub... "
+if docker exec rhdemo-jenkins kubectl get namespace rhdemo-stagingkub 2>/dev/null | grep -q "rhdemo-stagingkub"; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${YELLOW}⚠️  Namespace non créé (normal si init pas encore lancé)${NC}"

@@ -153,10 +153,10 @@ else
 fi
 echo ""
 
-# 5. Vérification du namespace rhdemo-staging
-echo -e "${YELLOW}▶ Vérification du namespace rhdemo-staging${NC}"
+# 5. Vérification du namespace rhdemo-stagingkub
+echo -e "${YELLOW}▶ Vérification du namespace rhdemo-stagingkub${NC}"
 echo -n "Vérification du namespace... "
-if kubectl get namespace rhdemo-staging &> /dev/null; then
+if kubectl get namespace rhdemo-stagingkub &> /dev/null; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ MANQUANT${NC}"
@@ -167,35 +167,35 @@ echo ""
 
 # 6. Vérification des secrets
 echo -e "${YELLOW}▶ Vérification des secrets Kubernetes${NC}"
-check_k8s_resource "secret" "rhdemo-db-secret" "rhdemo-staging"
-check_k8s_resource "secret" "keycloak-db-secret" "rhdemo-staging"
-check_k8s_resource "secret" "keycloak-admin-secret" "rhdemo-staging"
-check_k8s_resource "secret" "rhdemo-app-secrets" "rhdemo-staging"
-check_k8s_resource "secret" "rhdemo-tls-cert" "rhdemo-staging"
+check_k8s_resource "secret" "rhdemo-db-secret" "rhdemo-stagingkub"
+check_k8s_resource "secret" "keycloak-db-secret" "rhdemo-stagingkub"
+check_k8s_resource "secret" "keycloak-admin-secret" "rhdemo-stagingkub"
+check_k8s_resource "secret" "rhdemo-app-secrets" "rhdemo-stagingkub"
+check_k8s_resource "secret" "rhdemo-tls-cert" "rhdemo-stagingkub"
 echo ""
 
 # 7. Vérification du déploiement Helm (si existe)
 echo -e "${YELLOW}▶ Vérification du déploiement Helm (optionnel)${NC}"
 echo -n "Vérification de la release 'rhdemo'... "
-if helm list -n rhdemo-staging 2>/dev/null | grep -q "rhdemo"; then
+if helm list -n rhdemo-stagingkub 2>/dev/null | grep -q "rhdemo"; then
     echo -e "${GREEN}✅ OK${NC}"
 
     # Vérification des ressources déployées
     echo -e "${YELLOW}▶ Vérification des ressources déployées${NC}"
-    check_k8s_resource "statefulset" "postgresql-rhdemo" "rhdemo-staging"
-    check_k8s_resource "statefulset" "postgresql-keycloak" "rhdemo-staging"
-    check_k8s_resource "deployment" "keycloak" "rhdemo-staging"
-    check_k8s_resource "deployment" "rhdemo-app" "rhdemo-staging"
-    check_k8s_resource "service" "postgresql-rhdemo" "rhdemo-staging"
-    check_k8s_resource "service" "postgresql-keycloak" "rhdemo-staging"
-    check_k8s_resource "service" "keycloak" "rhdemo-staging"
-    check_k8s_resource "service" "rhdemo-app" "rhdemo-staging"
-    check_k8s_resource "ingress" "rhdemo-ingress" "rhdemo-staging"
+    check_k8s_resource "statefulset" "postgresql-rhdemo" "rhdemo-stagingkub"
+    check_k8s_resource "statefulset" "postgresql-keycloak" "rhdemo-stagingkub"
+    check_k8s_resource "deployment" "keycloak" "rhdemo-stagingkub"
+    check_k8s_resource "deployment" "rhdemo-app" "rhdemo-stagingkub"
+    check_k8s_resource "service" "postgresql-rhdemo" "rhdemo-stagingkub"
+    check_k8s_resource "service" "postgresql-keycloak" "rhdemo-stagingkub"
+    check_k8s_resource "service" "keycloak" "rhdemo-stagingkub"
+    check_k8s_resource "service" "rhdemo-app" "rhdemo-stagingkub"
+    check_k8s_resource "ingress" "rhdemo-ingress" "rhdemo-stagingkub"
 
     # Vérification du statut des pods
     echo ""
     echo -e "${YELLOW}▶ Statut des pods${NC}"
-    kubectl get pods -n rhdemo-staging
+    kubectl get pods -n rhdemo-stagingkub
 else
     echo -e "${YELLOW}⚠️  Pas encore déployé${NC}"
     echo -e "${YELLOW}Exécutez: ./scripts/deploy.sh VERSION${NC}"
@@ -204,21 +204,21 @@ echo ""
 
 # 8. Vérification de /etc/hosts
 echo -e "${YELLOW}▶ Vérification de /etc/hosts${NC}"
-echo -n "Vérification de rhdemo.staging.local... "
-if grep -q "rhdemo.staging.local" /etc/hosts; then
+echo -n "Vérification de rhdemo.stagingkub.local... "
+if grep -q "rhdemo.stagingkub.local" /etc/hosts; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ MANQUANT${NC}"
-    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 rhdemo.staging.local' | sudo tee -a /etc/hosts${NC}"
+    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 rhdemo.stagingkub.local' | sudo tee -a /etc/hosts${NC}"
     ((ERRORS++))
 fi
 
-echo -n "Vérification de keycloak.staging.local... "
-if grep -q "keycloak.staging.local" /etc/hosts; then
+echo -n "Vérification de keycloak.stagingkub.local... "
+if grep -q "keycloak.stagingkub.local" /etc/hosts; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ MANQUANT${NC}"
-    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 keycloak.staging.local' | sudo tee -a /etc/hosts${NC}"
+    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 keycloak.stagingkub.local' | sudo tee -a /etc/hosts${NC}"
     ((ERRORS++))
 fi
 echo ""

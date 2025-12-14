@@ -19,7 +19,7 @@ NC='\033[0m'
 # Paramètres
 APP_VERSION="${1:-1.1.0-SNAPSHOT}"
 RELEASE_NAME="${2:-rhdemo}"
-NAMESPACE="${3:-rhdemo-staging}"
+NAMESPACE="${3:-rhdemo-stagingkub}"
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Déploiement de RHDemo sur stagingkub${NC}"
@@ -106,8 +106,8 @@ echo -e "${YELLOW}Statut de l'ingress :${NC}"
 kubectl get ingress -n ${NAMESPACE}
 echo ""
 echo -e "${YELLOW}URLs d'accès :${NC}"
-echo -e "  Application : ${BLUE}https://rhdemo.staging.local${NC}"
-echo -e "  Keycloak : ${BLUE}https://keycloak.staging.local${NC}"
+echo -e "  Application : ${BLUE}https://rhdemo.stagingkub.local${NC}"
+echo -e "  Keycloak : ${BLUE}https://keycloak.stagingkub.local${NC}"
 echo ""
 echo -e "${YELLOW}Pour voir les logs de l'application :${NC}"
 echo -e "  ${BLUE}kubectl logs -f -n ${NAMESPACE} -l app=rhdemo-app${NC}"

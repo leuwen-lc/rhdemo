@@ -2,9 +2,9 @@
 # Configuration globale
 # ═══════════════════════════════════════════════════════════════
 global:
-  namespace: rhdemo-staging
-  environment: staging
-  domain: staging.local
+  namespace: rhdemo-stagingkub
+  environment: stagingkub
+  domain: stagingkub.local
 
 # ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour RHDemo
@@ -152,7 +152,7 @@ rhdemo:
 
   replicaCount: 1
 
-  springProfile: staging
+  springProfile: stagingkub
   serverPort: 9000
 
   database:
@@ -215,14 +215,14 @@ ingress:
   className: nginx
 
   hosts:
-    - host: rhdemo.staging.local
+    - host: rhdemo.stagingkub.local
       paths:
         - path: /
           pathType: Prefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak.staging.local
+    - host: keycloak.stagingkub.local
       paths:
         - path: /
           pathType: Prefix
@@ -240,6 +240,13 @@ ingress:
     # Configuration pour Keycloak derrière proxy
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+    # Headers X-Forwarded-* pour OAuth2 redirect URIs
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-Port $server_port;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
 # ═══════════════════════════════════════════════════════════════
 # Nginx Ingress Controller

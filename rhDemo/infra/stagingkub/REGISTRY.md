@@ -272,10 +272,10 @@ docker exec rhdemo-control-plane curl http://kind-registry:5000/v2/
 curl http://localhost:5000/v2/rhdemo-api/tags/list
 
 # Vérifier les événements Kubernetes
-kubectl get events -n rhdemo-staging --sort-by='.lastTimestamp'
+kubectl get events -n rhdemo-stagingkub --sort-by='.lastTimestamp'
 
 # Vérifier les logs du pod
-kubectl describe pod <pod-name> -n rhdemo-staging
+kubectl describe pod <pod-name> -n rhdemo-stagingkub
 
 # Vérifier la configuration containerd dans KinD
 docker exec rhdemo-control-plane cat /etc/containerd/config.toml | grep registry

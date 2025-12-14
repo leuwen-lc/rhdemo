@@ -89,7 +89,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 ┌─────────────────────────────────────────────────────────────┐
 │                    Cluster KinD "rhdemo"                     │
 ├─────────────────────────────────────────────────────────────┤
-│  Namespace: rhdemo-staging                                   │
+│  Namespace: rhdemo-stagingkub                                   │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Nginx Ingress Controller                              │  │
@@ -99,7 +99,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 │               │                                              │
 │  ┌────────────▼──────────┐    ┌────────────────────────┐   │
 │  │ Ingress                │    │ Ingress                │   │
-│  │ rhdemo.staging.local   │    │ keycloak.staging.local │   │
+│  │ rhdemo.stagingkub.local   │    │ keycloak.stagingkub.local │   │
 │  └────────────┬───────────┘    └────────────┬───────────┘   │
 │               │                               │              │
 │  ┌────────────▼───────────┐    ┌─────────────▼──────────┐  │
@@ -130,7 +130,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 
 ### Ressources Kubernetes créées
 
-- **1 Namespace** : `rhdemo-staging`
+- **1 Namespace** : `rhdemo-stagingkub`
 - **5 Deployments/StatefulSets** :
   - `postgresql-rhdemo` (StatefulSet)
   - `postgresql-keycloak` (StatefulSet)
@@ -169,7 +169,7 @@ Ce script :
 - ✅ Crée le cluster KinD `rhdemo` (si non existant)
 - ✅ Configure les port mappings (80:30080, 443:30443)
 - ✅ Installe Nginx Ingress Controller
-- ✅ Crée le namespace `rhdemo-staging`
+- ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)
 - ✅ Génère les certificats SSL
 - ✅ Ajoute les entrées DNS à `/etc/hosts`
@@ -187,7 +187,7 @@ kubectl get nodes
 kubectl get pods -n ingress-nginx
 
 # Vérifier le namespace
-kubectl get ns rhdemo-staging
+kubectl get ns rhdemo-stagingkub
 ```
 
 ---
@@ -231,7 +231,7 @@ kind load docker-image rhdemo-api:1.1.0-SNAPSHOT --name rhdemo
 
 # 2. Déployer avec Helm
 helm upgrade --install rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --create-namespace \
   --set rhdemo.image.tag=1.1.0-SNAPSHOT \
   --wait \
@@ -273,7 +273,7 @@ Puis déployer avec :
 
 ```bash
 helm upgrade --install rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --values ./helm/rhdemo/values.yaml \
   --values values-custom.yaml
 ```
@@ -291,11 +291,11 @@ Pour mettre à jour les secrets :
 # Mettre à jour secrets-rhdemo.yml
 kubectl create secret generic rhdemo-app-secrets \
   --from-file=secrets-rhdemo.yml=../../secrets/secrets-rhdemo.yml \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # Redémarrer le pod pour charger les nouveaux secrets
-kubectl rollout restart deployment/rhdemo-app -n rhdemo-staging
+kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 ```
 
 ---
@@ -306,45 +306,45 @@ kubectl rollout restart deployment/rhdemo-app -n rhdemo-staging
 
 ```bash
 # Logs de l'application
-kubectl logs -f -n rhdemo-staging -l app=rhdemo-app
+kubectl logs -f -n rhdemo-stagingkub -l app=rhdemo-app
 
 # Logs de Keycloak
-kubectl logs -f -n rhdemo-staging -l app=keycloak
+kubectl logs -f -n rhdemo-stagingkub -l app=keycloak
 
 # Logs de PostgreSQL (rhdemo)
-kubectl logs -f -n rhdemo-staging -l app=postgresql-rhdemo
+kubectl logs -f -n rhdemo-stagingkub -l app=postgresql-rhdemo
 
 # Logs de tous les pods
-kubectl logs -f -n rhdemo-staging --all-containers=true
+kubectl logs -f -n rhdemo-stagingkub --all-containers=true
 ```
 
 ### Vérifier le statut
 
 ```bash
 # Statut des pods
-kubectl get pods -n rhdemo-staging
+kubectl get pods -n rhdemo-stagingkub
 
 # Statut détaillé d'un pod
-kubectl describe pod <pod-name> -n rhdemo-staging
+kubectl describe pod <pod-name> -n rhdemo-stagingkub
 
 # Statut des services
-kubectl get svc -n rhdemo-staging
+kubectl get svc -n rhdemo-stagingkub
 
 # Statut de l'ingress
-kubectl get ingress -n rhdemo-staging
+kubectl get ingress -n rhdemo-stagingkub
 ```
 
 ### Accéder aux services
 
 ```bash
 # Port-forward vers l'application (alternative à Ingress)
-kubectl port-forward -n rhdemo-staging svc/rhdemo-app 9000:9000
+kubectl port-forward -n rhdemo-stagingkub svc/rhdemo-app 9000:9000
 
 # Port-forward vers Keycloak
-kubectl port-forward -n rhdemo-staging svc/keycloak 8080:8080
+kubectl port-forward -n rhdemo-stagingkub svc/keycloak 8080:8080
 
 # Port-forward vers PostgreSQL
-kubectl port-forward -n rhdemo-staging svc/postgresql-rhdemo 5432:5432
+kubectl port-forward -n rhdemo-stagingkub svc/postgresql-rhdemo 5432:5432
 ```
 
 ### Mettre à jour l'application
@@ -352,37 +352,37 @@ kubectl port-forward -n rhdemo-staging svc/postgresql-rhdemo 5432:5432
 ```bash
 # Méthode 1 : Via Helm
 helm upgrade rhdemo ./helm/rhdemo \
-  --namespace rhdemo-staging \
+  --namespace rhdemo-stagingkub \
   --set rhdemo.image.tag=1.2.0-SNAPSHOT \
   --wait
 
 # Méthode 2 : Via kubectl (patch)
 kubectl set image deployment/rhdemo-app \
   rhdemo-app=rhdemo-api:1.2.0-SNAPSHOT \
-  -n rhdemo-staging
+  -n rhdemo-stagingkub
 ```
 
 ### Redémarrer un service
 
 ```bash
 # Redémarrer l'application
-kubectl rollout restart deployment/rhdemo-app -n rhdemo-staging
+kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 
 # Redémarrer Keycloak
-kubectl rollout restart deployment/keycloak -n rhdemo-staging
+kubectl rollout restart deployment/keycloak -n rhdemo-stagingkub
 
 # Redémarrer PostgreSQL (attention : va recréer le pod)
-kubectl rollout restart statefulset/postgresql-rhdemo -n rhdemo-staging
+kubectl rollout restart statefulset/postgresql-rhdemo -n rhdemo-stagingkub
 ```
 
 ### Nettoyer l'environnement
 
 ```bash
 # Supprimer le déploiement Helm (conserve les PVC)
-helm uninstall rhdemo -n rhdemo-staging
+helm uninstall rhdemo -n rhdemo-stagingkub
 
 # Supprimer le namespace entier (supprime tout, y compris les PVC)
-kubectl delete namespace rhdemo-staging
+kubectl delete namespace rhdemo-stagingkub
 
 # Supprimer le cluster KinD complet
 kind delete cluster --name rhdemo
@@ -396,26 +396,26 @@ kind delete cluster --name rhdemo
 
 ```bash
 # Voir les logs du pod qui crash
-kubectl logs -n rhdemo-staging <pod-name> --previous
+kubectl logs -n rhdemo-stagingkub <pod-name> --previous
 
 # Voir les events
-kubectl get events -n rhdemo-staging --sort-by='.lastTimestamp'
+kubectl get events -n rhdemo-stagingkub --sort-by='.lastTimestamp'
 
 # Décrire le pod pour voir les erreurs
-kubectl describe pod <pod-name> -n rhdemo-staging
+kubectl describe pod <pod-name> -n rhdemo-stagingkub
 ```
 
 ### Problème de connexion à la base de données
 
 ```bash
 # Vérifier que PostgreSQL est prêt
-kubectl get pods -n rhdemo-staging -l app=postgresql-rhdemo
+kubectl get pods -n rhdemo-stagingkub -l app=postgresql-rhdemo
 
 # Tester la connexion depuis un pod
-kubectl run -it --rm debug --image=postgres:16-alpine --restart=Never -n rhdemo-staging -- psql -h postgresql-rhdemo -U rhdemo -d rhdemo
+kubectl run -it --rm debug --image=postgres:16-alpine --restart=Never -n rhdemo-stagingkub -- psql -h postgresql-rhdemo -U rhdemo -d rhdemo
 
 # Vérifier les secrets
-kubectl get secret rhdemo-db-secret -n rhdemo-staging -o yaml
+kubectl get secret rhdemo-db-secret -n rhdemo-stagingkub -o yaml
 ```
 
 ### Ingress ne fonctionne pas
@@ -425,13 +425,13 @@ kubectl get secret rhdemo-db-secret -n rhdemo-staging -o yaml
 kubectl get pods -n ingress-nginx
 
 # Vérifier l'ingress
-kubectl describe ingress rhdemo-ingress -n rhdemo-staging
+kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
 
 # Vérifier les certificats TLS
-kubectl get secret rhdemo-tls-cert -n rhdemo-staging
+kubectl get secret rhdemo-tls-cert -n rhdemo-stagingkub
 
 # Tester avec curl (ignorer le certificat self-signed)
-curl -k https://rhdemo.staging.local
+curl -k https://rhdemo.stagingkub.local
 ```
 
 ### /etc/hosts non configuré
@@ -441,8 +441,8 @@ curl -k https://rhdemo.staging.local
 cat /etc/hosts | grep staging.local
 
 # Ajouter manuellement si nécessaire
-echo "127.0.0.1 rhdemo.staging.local" | sudo tee -a /etc/hosts
-echo "127.0.0.1 keycloak.staging.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
 ```
 
 ### Image Docker non trouvée
@@ -494,11 +494,11 @@ kind load docker-image rhdemo-api:VERSION --name rhdemo
 - [ ] kubectl configuré avec contexte `kind-rhdemo`
 - [ ] Helm installé (version 3.12+)
 - [ ] Nginx Ingress Controller déployé
-- [ ] Secrets créés dans le namespace `rhdemo-staging`
+- [ ] Secrets créés dans le namespace `rhdemo-stagingkub`
 - [ ] Certificats SSL générés
 - [ ] `/etc/hosts` mis à jour
 - [ ] Image Docker construite
 - [ ] Image chargée dans KinD
 - [ ] Helm chart déployé
 - [ ] Tous les pods en status `Running`
-- [ ] Ingress accessible via https://rhdemo.staging.local
+- [ ] Ingress accessible via https://rhdemo.stagingkub.local

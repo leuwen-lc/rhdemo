@@ -133,7 +133,7 @@ docker-compose up -d
 │ │  └─→ keycloak (Service ClusterIP:8080)   │   │
 │ └──────────────────────────────────────────┘   │
 │                                                  │
-│ Namespace: rhdemo-staging                        │
+│ Namespace: rhdemo-stagingkub                     │
 │  ├─ Deployment: rhdemo-app                       │
 │  ├─ Deployment: keycloak                         │
 │  ├─ StatefulSet: postgresql-rhdemo               │
@@ -168,8 +168,8 @@ DEPLOY_ENV=stagingkub
 
 ### URLs d'accès
 
-- Application : https://rhdemo.staging.local
-- Keycloak : https://keycloak.staging.local
+- Application : https://rhdemo.stagingkub.local
+- Keycloak : https://keycloak.stagingkub.local
 
 ### Avantages
 

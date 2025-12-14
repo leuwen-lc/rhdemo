@@ -878,19 +878,17 @@ YMLEOF
                 }
 
                 sh """
-                    # Attendre que le container soit stable (pas en restart)
-                    echo "⏳ Attente stabilisation du container..."
-                    sleep 10
-
                     # Créer le répertoire secrets dans le container
+                    # Ces commandes fonctionnent même si le container est en restart loop
                     docker exec --user root ${env.CONTAINER_APP} mkdir -p /workspace/secrets
+                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
 
                     # Copier le fichier de secrets
-                    docker cp rhDemo/secrets/secrets-rhdemo.yml ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
+                    docker cp ${env.SECRETS_RHDEMO} ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
 
-                    # Corriger les permissions (user spring:spring depuis migration Dockerfile)
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
+                    # Définir les permissions (user spring:spring)
                     docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
 
                     echo "✅ Secrets copiés dans le container"
                 """
@@ -903,11 +901,14 @@ YMLEOF
                     echo "▶ Redémarrage du container applicatif pour charger les secrets..."
                 }
 
-                sh """
-                    docker restart ${env.CONTAINER_APP}
-                    echo "⏳ Attente du redémarrage (30s)..."
-                    sleep 30
-                """
+                dir(env.STAGING_INFRA_PATH) {
+                    sh """
+                        # Redémarrer via docker-compose pour charger les secrets
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} restart rhdemo-app
+                        echo "⏳ Attente du redémarrage (30s)..."
+                        sleep 30
+                    """
+                }
             }
         }
 

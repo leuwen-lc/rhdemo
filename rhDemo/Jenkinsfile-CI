@@ -84,6 +84,7 @@ pipeline {
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'PUBLISH_IMAGE', defaultValue: true, description: 'Publier l\'image sur le registry après validation')
+        booleanParam(name: 'KEEP_STAGING_ENV', defaultValue: false, description: 'Garder l\'environnement staging pour debug (ne pas nettoyer à la fin)')
         string(name: 'IMAGE_TAG_SUFFIX', defaultValue: '', description: 'Suffixe optionnel pour le tag (ex: -rc1, -hotfix)')
     }
 
@@ -1328,36 +1329,47 @@ YMLEOF
                 lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
 
                 // Nettoyage de l'environnement staging
-                echo "🧹 Nettoyage de l'environnement staging..."
+                if (!params.KEEP_STAGING_ENV) {
+                    echo "🧹 Nettoyage de l'environnement staging..."
 
-                // Déconnecter Jenkins du réseau staging
-                sh """
-                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
-                    if [ -n "\$JENKINS_CONTAINER" ]; then
-                        docker network disconnect ${env.NETWORK_STAGING} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
-                        echo "✅ Jenkins déconnecté du réseau staging"
-                    fi
-                """
-
-                // Arrêter et supprimer le container ZAP
-                echo "🧹 Nettoyage du container OWASP ZAP..."
-                sh """
-                    docker stop rhdemo-jenkins-zap 2>/dev/null || true
-                    docker rm rhdemo-jenkins-zap 2>/dev/null || true
-                    echo "✅ Container ZAP supprimé"
-                """
-
-                dir(env.STAGING_INFRA_PATH) {
+                    // Déconnecter Jenkins du réseau staging
                     sh """
-                        # Arrêter et supprimer l'environnement Docker Compose
-                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
-
-                        # Supprimer les containers isolés
-                        docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
-
-                        # Supprimer l'image de build temporaire
-                        docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || true
+                        JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                        if [ -n "\$JENKINS_CONTAINER" ]; then
+                            docker network disconnect ${env.NETWORK_STAGING} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
+                            echo "✅ Jenkins déconnecté du réseau staging"
+                        fi
                     """
+
+                    // Arrêter et supprimer le container ZAP
+                    echo "🧹 Nettoyage du container OWASP ZAP..."
+                    sh """
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Container ZAP supprimé"
+                    """
+
+                    dir(env.STAGING_INFRA_PATH) {
+                        sh """
+                            # Arrêter et supprimer l'environnement Docker Compose
+                            docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                            # Supprimer les containers isolés
+                            docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
+
+                            # Supprimer l'image de build temporaire
+                            docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || true
+                        """
+                    }
+
+                    echo "✅ Nettoyage terminé"
+                } else {
+                    echo "🔧 Mode DEBUG: Environnement staging préservé pour tests manuels"
+                    echo "⚠️  RAPPEL: L'environnement sera nettoyé au prochain build"
+                    echo "📋 Containers actifs: ${env.CONTAINER_NGINX}, ${env.CONTAINER_APP}, ${env.CONTAINER_DB}, ${env.CONTAINER_KEYCLOAK}"
+                    echo "🌐 URLs d'accès:"
+                    echo "   - RHDemo: https://rhdemo.staging.local"
+                    echo "   - Keycloak: https://keycloak.staging.local"
                 }
 
                 // Supprimer les fichiers de secrets de manière sécurisée

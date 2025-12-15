@@ -14,10 +14,10 @@
 
 {{- if .Values.ingress.enabled }}
   Application RHDemo:
-    https://rhdemo.{{ .Values.global.domain }}
+    https://rhdemo.{{ .Values.global.domain }}:58443
 
   Keycloak Admin Console:
-    https://keycloak.{{ .Values.global.domain }}
+    https://keycloak.{{ .Values.global.domain }}:58443
     👤 Admin: {{ .Values.keycloak.admin.user }}
 {{- else }}
   Ingress désactivé. Utilisez port-forward pour accéder aux services:

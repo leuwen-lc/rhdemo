@@ -40,6 +40,10 @@ spec:
         - name: SERVER_PORT
           value: "{{ .Values.rhdemo.serverPort }}"
 
+        # OAuth2 - Forcer l'URL de redirection avec le port externe
+        - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_REDIRECT_URI
+          value: "https://rhdemo.{{ .Values.global.domain }}:58443/login/oauth2/code/{registrationId}"
+
         # Base de données PostgreSQL
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:postgresql://{{ .Values.rhdemo.database.host }}:{{ .Values.rhdemo.database.port }}/{{ .Values.rhdemo.database.name }}"

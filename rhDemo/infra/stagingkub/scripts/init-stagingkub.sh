@@ -178,6 +178,14 @@ else
     exit 1
 fi
 
+# Configurer les NodePorts fixes pour l'Ingress Controller
+# Ces NodePorts correspondent aux ports mappés dans la configuration KinD :
+# - NodePort 31792 (HTTP) → Host port 58080
+# - NodePort 32616 (HTTPS) → Host port 58443
+echo -e "${YELLOW}▶ Configuration des NodePorts pour l'Ingress Controller...${NC}"
+kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http","nodePort":31792},{"name":"https","port":443,"protocol":"TCP","targetPort":"https","nodePort":32616}]}}'
+echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→58080, HTTPS: 32616→58443)${NC}"
+
 # Charger les secrets depuis SOPS si disponibles
 echo -e "${YELLOW}▶ Chargement des secrets...${NC}"
 SECRETS_FILE="$RHDEMO_ROOT/secrets/secrets-stagingkub.yml"

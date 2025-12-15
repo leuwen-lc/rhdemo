@@ -270,13 +270,13 @@ keycloak:
     client-id: RHDemo
     name: RHDemo
     secret: ${KEYCLOAK_CLIENT_SECRET}
-    root-url: https://rhdemo.stagingkub.local/
+    root-url: https://rhdemo.stagingkub.local:58443/
     base-url: ''
     admin-url: ''
     redirect-uris:
-      - https://rhdemo.stagingkub.local/*
+      - https://rhdemo.stagingkub.local:58443/*
     web-origins:
-      - https://rhdemo.stagingkub.local
+      - https://rhdemo.stagingkub.local:58443
     roles:
       - ROLE_admin
       - ROLE_consult

@@ -397,40 +397,6 @@ EOF
         // PHASE 4 : DÉPLOIEMENT
         // ════════════════════════════════════════════════════════════════
 
-        stage('☸️ Deploy to Kubernetes') {
-            steps {
-                script {
-                    def registryName = sh(script: 'docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1', returnStdout: true).trim()
-
-                    echo "═══════════════════════════════════════════════════════"
-                    echo "  DÉPLOIEMENT KUBERNETES (STAGINGKUB)"
-                    echo "═══════════════════════════════════════════════════════"
-                    echo "▶ Déploiement avec Helm..."
-                    echo "   Chart: rhDemo/infra/stagingkub/helm/rhdemo"
-                    echo "   Registry: ${registryName}"
-                    echo "   Image: ${registryName}:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
-                    echo "   Namespace: ${env.K8S_NAMESPACE}"
-                }
-                sh """
-                    # Utiliser le contexte KinD
-                    kubectl config use-context ${env.K8S_CONTEXT}
-
-                    # Déployer ou mettre à jour avec Helm
-                    # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
-                    # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
-                    helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
-                      --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
-                      --wait \\
-                      --timeout 10m
-
-                    echo ""
-                    echo "✅ Déploiement Helm réussi"
-                """
-            }
-        }
-
         stage('🗄️ Initialize Database Schema') {
             steps {
                 script {
@@ -456,6 +422,43 @@ EOF
                     else
                         echo "ℹ️  Table 'employes' existe déjà, pas d'initialisation nécessaire"
                     fi
+                """
+            }
+        }
+
+        stage('☸️ Deploy to Kubernetes') {
+            steps {
+                script {
+                    def registryName = sh(script: 'docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1', returnStdout: true).trim()
+
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  DÉPLOIEMENT KUBERNETES (STAGINGKUB)"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "▶ Déploiement avec Helm..."
+                    echo "   Chart: rhDemo/infra/stagingkub/helm/rhdemo"
+                    echo "   Registry: ${registryName}"
+                    echo "   Image: ${registryName}:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    echo "   Namespace: ${env.K8S_NAMESPACE}"
+                }
+                sh """
+                    # Utiliser le contexte KinD
+                    kubectl config use-context ${env.K8S_CONTEXT}
+
+                    # Déployer ou mettre à jour avec Helm
+                    # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
+                    # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
+                    echo "▶ Lancement du déploiement Helm..."
+                    helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
+                      --namespace ${env.K8S_NAMESPACE} \\
+                      --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
+                      --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
+                      --wait \\
+                      --timeout 10m \\
+                      --debug \\
+                      --atomic
+
+                    echo ""
+                    echo "✅ Déploiement Helm réussi"
                 """
             }
         }

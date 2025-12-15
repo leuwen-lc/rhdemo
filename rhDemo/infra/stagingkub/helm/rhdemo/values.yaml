@@ -241,8 +241,10 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # Headers X-Forwarded-* sont gérés automatiquement par nginx-ingress
-    # en combinaison avec forward-headers-strategy: framework dans Spring Boot
+    # Forcer le port 58443 dans les headers X-Forwarded-Port pour OAuth2 redirects
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Port "58443";
+      proxy_set_header X-Forwarded-Proto "https";
 
 # ═══════════════════════════════════════════════════════════════
 # Nginx Ingress Controller

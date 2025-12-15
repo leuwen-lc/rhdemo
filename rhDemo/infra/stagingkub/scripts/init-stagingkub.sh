@@ -189,8 +189,9 @@ echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→58080, HTTPS: 32616→
 # Configurer nginx-ingress pour forcer les headers X-Forwarded-Port et X-Forwarded-Proto
 # Ceci permet à Spring Boot de construire les URLs OAuth2 avec le bon port (58443)
 echo -e "${YELLOW}▶ Configuration des headers X-Forwarded-* dans nginx-ingress...${NC}"
+kubectl patch configmap ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"use-forwarded-headers":"true","compute-full-forwarded-for":"true","forwarded-for-header":"X-Forwarded-For"}}'
 
-# Configurer nginx pour mapper le port 443 -> 58443 dans les headers forwarded
+# Ajouter la configuration pour forcer X-Forwarded-Port à 58443 pour HTTPS
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -202,13 +203,23 @@ data:
   compute-full-forwarded-for: "true"
   forwarded-for-header: "X-Forwarded-For"
   http-snippet: |
-    map \$server_port \$custom_port {
+    map \$server_port \$custom_forwarded_port {
       443 58443;
-      80 58080;
       default \$server_port;
     }
-  server-snippet: |
-    set \$pass_port \$custom_port;
+  proxy-set-headers: "ingress-nginx/custom-headers"
+EOF
+
+# Créer une ConfigMap pour les headers personnalisés
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-headers
+  namespace: ingress-nginx
+data:
+  X-Forwarded-Port: "58443"
+  X-Forwarded-Proto: "https"
 EOF
 
 echo -e "${GREEN}✅ Headers X-Forwarded-* configurés dans nginx-ingress${NC}"

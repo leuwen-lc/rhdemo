@@ -38,12 +38,6 @@ spring:
 server:
   # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
   forward-headers-strategy: framework
-  # Forcer le port externe dans les URLs générées
-  tomcat:
-    remoteip:
-      remote-ip-header: X-Forwarded-For
-      protocol-header: X-Forwarded-Proto
-      port-header: X-Forwarded-Port
 
 # Logging pour debug
 logging:

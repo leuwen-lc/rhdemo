@@ -186,6 +186,50 @@ echo -e "${YELLOW}▶ Configuration des NodePorts pour l'Ingress Controller...${
 kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http","nodePort":31792},{"name":"https","port":443,"protocol":"TCP","targetPort":"https","nodePort":32616}]}}'
 echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→58080, HTTPS: 32616→58443)${NC}"
 
+# Configurer nginx-ingress pour forcer les headers X-Forwarded-Port et X-Forwarded-Proto
+# Ceci permet à Spring Boot de construire les URLs OAuth2 avec le bon port (58443)
+echo -e "${YELLOW}▶ Configuration des headers X-Forwarded-* dans nginx-ingress...${NC}"
+kubectl patch configmap ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"use-forwarded-headers":"true","compute-full-forwarded-for":"true","forwarded-for-header":"X-Forwarded-For"}}'
+
+# Ajouter la configuration pour forcer X-Forwarded-Port à 58443 pour HTTPS
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+data:
+  use-forwarded-headers: "true"
+  compute-full-forwarded-for: "true"
+  forwarded-for-header: "X-Forwarded-For"
+  http-snippet: |
+    map \$server_port \$custom_forwarded_port {
+      443 58443;
+      default \$server_port;
+    }
+  proxy-set-headers: "ingress-nginx/custom-headers"
+EOF
+
+# Créer une ConfigMap pour les headers personnalisés
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-headers
+  namespace: ingress-nginx
+data:
+  X-Forwarded-Port: "58443"
+  X-Forwarded-Proto: "https"
+EOF
+
+echo -e "${GREEN}✅ Headers X-Forwarded-* configurés dans nginx-ingress${NC}"
+
+# Redémarrer le contrôleur nginx-ingress pour appliquer les changements
+echo -e "${YELLOW}▶ Redémarrage du contrôleur nginx-ingress...${NC}"
+kubectl rollout restart deployment ingress-nginx-controller -n ingress-nginx
+kubectl rollout status deployment ingress-nginx-controller -n ingress-nginx --timeout=60s
+echo -e "${GREEN}✅ Contrôleur nginx-ingress redémarré${NC}"
+
 # Charger les secrets depuis SOPS si disponibles
 echo -e "${YELLOW}▶ Chargement des secrets...${NC}"
 SECRETS_FILE="$RHDEMO_ROOT/secrets/secrets-stagingkub.yml"

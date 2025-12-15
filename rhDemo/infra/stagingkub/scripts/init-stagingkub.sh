@@ -95,6 +95,8 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${YELLOW}Création du cluster KinD 'rhdemo'...${NC}"
 
     # Créer un fichier de configuration KinD avec support du registry local
+    # Note: Les ports 58080/58443 (host) sont mappés vers les NodePorts de l'Ingress Controller
+    # Ces NodePorts (31792/32616) sont assignés automatiquement par le manifeste Ingress Nginx
     cat <<EOF > /tmp/kind-config.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -106,11 +108,11 @@ containerdConfigPatches:
 nodes:
 - role: control-plane
   extraPortMappings:
-  - containerPort: 30080
-    hostPort: 80
+  - containerPort: 31792
+    hostPort: 58080
     protocol: TCP
-  - containerPort: 30443
-    hostPort: 443
+  - containerPort: 32616
+    hostPort: 58443
     protocol: TCP
 EOF
 
@@ -143,22 +145,43 @@ echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller...${NC}"
 if ! kubectl get namespace ingress-nginx &> /dev/null; then
     echo -e "${YELLOW}Installation de Nginx Ingress Controller...${NC}"
     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-
-    # Attendre que l'Ingress Controller soit prêt
-    echo -e "${YELLOW}Attente du démarrage de Nginx Ingress Controller...${NC}"
-    kubectl wait --namespace ingress-nginx \
-      --for=condition=ready pod \
-      --selector=app.kubernetes.io/component=controller \
-      --timeout=90s
-    echo -e "${GREEN}✅ Nginx Ingress Controller installé${NC}"
+    INGRESS_INSTALLED=true
 else
     echo -e "${GREEN}✅ Nginx Ingress Controller déjà installé${NC}"
+    INGRESS_INSTALLED=false
+fi
+
+# Attendre que l'Ingress Controller soit prêt (que ce soit une nouvelle installation ou existant)
+echo -e "${YELLOW}Attente du démarrage de Nginx Ingress Controller...${NC}"
+# Attendre d'abord que le pod existe (jusqu'à 60s)
+for i in {1..60}; do
+    if kubectl get pod -l app.kubernetes.io/component=controller -n ingress-nginx &> /dev/null; then
+        break
+    fi
+    echo -n "."
+    sleep 1
+done
+echo ""
+
+# Maintenant attendre que le pod soit ready
+if kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=90s > /dev/null 2>&1; then
+    if [ "$INGRESS_INSTALLED" = true ]; then
+        echo -e "${GREEN}✅ Nginx Ingress Controller installé et prêt${NC}"
+    else
+        echo -e "${GREEN}✅ Nginx Ingress Controller prêt${NC}"
+    fi
+else
+    echo -e "${RED}❌ Timeout lors de l'attente de l'Ingress Controller${NC}"
+    exit 1
 fi
 
 # Charger les secrets depuis SOPS si disponibles
 echo -e "${YELLOW}▶ Chargement des secrets...${NC}"
-SECRETS_FILE="$RHDEMO_ROOT/secrets/secrets-staging.yml"
-SECRETS_DECRYPTED="/tmp/secrets-staging-decrypted.yml"
+SECRETS_FILE="$RHDEMO_ROOT/secrets/secrets-stagingkub.yml"
+SECRETS_DECRYPTED="/tmp/secrets-stagingkub-decrypted.yml"
 
 if [ -f "$SECRETS_FILE" ]; then
     # Déchiffrer les secrets avec SOPS

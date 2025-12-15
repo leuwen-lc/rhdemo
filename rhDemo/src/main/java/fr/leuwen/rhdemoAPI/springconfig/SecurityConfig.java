@@ -145,7 +145,11 @@ public class SecurityConfig {
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
             // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
-            .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+            // Endpoints env accessibles sans authentification (phase de mise au point des environnements)
+                    .requestMatchers("/actuator/env", "/actuator/env/**").permitAll()
             // Autres endpoints actuator réservés aux admins
             .requestMatchers("/actuator/**").hasRole("admin")
             .requestMatchers("/front")).hasAnyRole("consult","MAJ")

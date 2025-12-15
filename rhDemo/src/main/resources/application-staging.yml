@@ -46,3 +46,13 @@ logging:
     org.springframework.security: DEBUG
     org.springframework.security.oauth2: TRACE
     org.springframework.web.client: DEBUG
+
+# Endpoints Actuator disponibles
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  endpoint:
+    env:
+      show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS    

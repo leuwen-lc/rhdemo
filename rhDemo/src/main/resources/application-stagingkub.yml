@@ -13,7 +13,7 @@ spring:
         provider:
           keycloak:
             # URL publique HTTPS pour le navigateur (redirection login)
-            authorization-uri: https://keycloak.stagingkub.local:58443/realms/RHDemo/protocol/openid-connect/auth
+            authorization-uri: https://keycloak.stagingkub.local/realms/RHDemo/protocol/openid-connect/auth
 
             # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
             # (échange code→token, récupération JWKS)
@@ -46,3 +46,13 @@ logging:
     org.springframework.security: DEBUG
     org.springframework.security.oauth2: TRACE
     org.springframework.web.client: DEBUG
+
+# Endpoints Actuator disponibles
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  endpoint:
+    env:
+      show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS

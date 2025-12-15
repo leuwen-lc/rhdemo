@@ -416,11 +416,11 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Déployer ou mettre à jour avec Helm
-                    # IMPORTANT: Utiliser le nom DNS du registry (détecté dynamiquement)
+                    # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
                     # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace ${env.K8S_NAMESPACE} \\
-                      --set rhdemo.image.repository=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1):5000/${env.DOCKER_IMAGE_NAME} \\
+                      --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
                       --wait \\
                       --timeout 10m

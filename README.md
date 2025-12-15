@@ -48,7 +48,6 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - CI : Sonar avec quality gate mais profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut, sécurité toute faille potentielle doit être revue).
 - Activation d'un proxy ZAP pour analyse dynamique intégrée au CI/CD durant le stage de tests en Selenium.
 - TLS : activer TLS sur les endpoints publics sur le staging (certificats auto-signés sur cet env).
-- Logging / monitoring basique : succès/échecs d'authentification, erreurs applicatives, métriques de disponibilité (TODO).
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
 
 ## Installation 
@@ -57,7 +56,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Pour édition/lancement mode dev : VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue. Possibilité d'utiliser également Spring Tool Suite (Eclipse)
 - Pour env de développement : PostgresSQL 16 ou supérieur, Keycloak 26.4 ou supérieur
 - Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de staging.
-- Pour déploiement env de staging : Docker Compose avec un réseau dédié dans un premier temps. Evolution possible sur un Kubernetes light  (TODO)
+- Pour déploiement env de staging : Docker Compose avec un réseau dédié dans un premier temps. 
 
 ## Limites 
 - Le fait de déployer via CI/CD dans un premier environnement de staging permet de démontrer la portabilité de l'application
@@ -90,6 +89,27 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
       - (facultatif) sous l'id "mail.credentials" un compte sur un serveur de mails permettant l'envoi SMTP
    - Lancez le pipeline rhDemo/Jenkinsfile
 
+## Feuille de route 
+  Version 1.1
+  - Déployer sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (kind) en gardant les données applicatives/keycloack d'un déploiement sur l'autre
+  - Découper la chaine CI/CD actuelle en
+      - CI (build, tests unitaires et intégration, déploiement éphémère pour test selenium, scans qualité et sécurité, publication de l'image docker sur dépot docker local)
+      - CD utilisation de l'image docker publiée pour déploiement sur l'environnement stagingkib 
+  - Supprimer le build du container applicatif par Paketo qui génére trop de dépendances externes au build (et le fait planter quand elles sont busy) et utiliser un build docker classique basé sur l'image OpenJDK21 de Ecilse Temurin.
+    Bizarement le build Paketo est également plus volumineux.
+
+  Version 1.2
+  - Transformer le champ adresse en champs d'adresse normalisés. Je n'avais pas prévu du tout de fonctionnel au départ mais l'adresse sur un seul chammp fait trop mal aux yeux.
+  - Ajouter un filtre sur le tableau des employes (en principe standard avec Element Plus/Spring Boot)
+ 
+  Versions ultérieures 
+  - Faire une revue des pipeline CI et CD selon le top10 risques de sécurité owasp https://owasp.org/www-project-top-10-ci-cd-security-risks/
+  - Ajouter une collecte centralisée de logs et de métriques sur l'environnement stagingkub
+  - Ajouter un mécanisme de mise à jour du schéma basé sur Liquibase
+  - Ajouter Redis pour gérer les sessions partagées
+  - Ajouter l'opérateur cloudnativePG sur stagingkub
+  - Ajouter une Network Politcy de niveau prod.
+    
 
 ## Contribuer
 - Ouvrir une issue décrivant la modification souhaitée.

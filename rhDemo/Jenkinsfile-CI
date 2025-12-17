@@ -1260,10 +1260,24 @@ YMLEOF
                 script {
                     echo "▶ Tag et publication de l'image Docker sur le registry..."
 
-                    // Déterminer le tag final
-                    def finalTag = "${env.APP_VERSION}${params.IMAGE_TAG_SUFFIX}"
-                    env.FINAL_IMAGE_TAG = finalTag
+                    // Déterminer le tag final avec auto-incrémentation pour SNAPSHOT
+                    def baseVersion = env.APP_VERSION
+                    def finalTag
 
+                    if (baseVersion.contains('SNAPSHOT')) {
+                        // Pour les SNAPSHOT : ajouter le numéro de build pour garantir l'unicité
+                        finalTag = "${baseVersion}-${env.BUILD_NUMBER}${params.IMAGE_TAG_SUFFIX}"
+                        echo "   Mode SNAPSHOT détecté : ajout du build number"
+                        echo "   Version Maven: ${baseVersion}"
+                        echo "   Build number: ${env.BUILD_NUMBER}"
+                    } else {
+                        // Pour les releases : utiliser la version telle quelle
+                        finalTag = "${baseVersion}${params.IMAGE_TAG_SUFFIX}"
+                        echo "   Mode RELEASE"
+                        echo "   Version Maven: ${baseVersion}"
+                    }
+
+                    env.FINAL_IMAGE_TAG = finalTag
                     echo "   Tag final: ${finalTag}"
                 }
 
@@ -1298,6 +1312,122 @@ YMLEOF
                     echo "✅ Image publiée sur le registry:"
                     echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                     echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:latest"
+                """
+            }
+        }
+
+        stage('🧹 Nettoyage Registry SNAPSHOT') {
+            when {
+                allOf {
+                    expression { params.PUBLISH_IMAGE == true }
+                    expression { env.APP_VERSION.contains('SNAPSHOT') }
+                }
+            }
+            steps {
+                script {
+                    echo "▶ Nettoyage des anciennes images SNAPSHOT du registry..."
+                    echo "   Politique de rétention: garder les 3 dernières versions"
+                }
+
+                sh """
+                    REGISTRY_URL="http://localhost:5000"
+                    IMAGE_NAME="${env.DOCKER_IMAGE_NAME}"
+                    RETENTION_COUNT=3
+
+                    echo "▶ Récupération de la liste des tags SNAPSHOT..."
+
+                    # Récupérer tous les tags de l'image
+                    ALL_TAGS=\$(curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
+
+                    if [ -z "\$ALL_TAGS" ]; then
+                        echo "ℹ️  Aucun tag trouvé dans le registry"
+                        exit 0
+                    fi
+
+                    # Filtrer uniquement les tags SNAPSHOT avec numéro de build
+                    SNAPSHOT_TAGS=\$(echo "\$ALL_TAGS" | grep "SNAPSHOT-[0-9]" | sort -V || true)
+
+                    if [ -z "\$SNAPSHOT_TAGS" ]; then
+                        echo "ℹ️  Aucune image SNAPSHOT avec numéro de build trouvée"
+                        exit 0
+                    fi
+
+                    # Compter le nombre de tags SNAPSHOT
+                    TAG_COUNT=\$(echo "\$SNAPSHOT_TAGS" | wc -l)
+                    echo "📊 Nombre d'images SNAPSHOT trouvées: \$TAG_COUNT"
+
+                    if [ "\$TAG_COUNT" -le "\$RETENTION_COUNT" ]; then
+                        echo "✅ Nombre d'images ≤ \$RETENTION_COUNT, aucun nettoyage nécessaire"
+                        exit 0
+                    fi
+
+                    # Calculer combien d'images à supprimer
+                    TO_DELETE_COUNT=\$(( TAG_COUNT - RETENTION_COUNT ))
+                    echo "🗑️  Suppression des \$TO_DELETE_COUNT images les plus anciennes..."
+
+                    # Garder seulement les N derniers tags
+                    TAGS_TO_DELETE=\$(echo "\$SNAPSHOT_TAGS" | head -n \$TO_DELETE_COUNT)
+
+                    # Supprimer les anciennes images
+                    for TAG in \$TAGS_TO_DELETE; do
+                        echo "  ➤ Suppression de \${IMAGE_NAME}:\${TAG}..."
+
+                        # Récupérer le manifest avec le bon Accept header pour obtenir le digest
+                        DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
+                            \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${TAG} \\
+                            | grep -i "Docker-Content-Digest" \\
+                            | awk '{print \$2}' \\
+                            | tr -d '\\r')
+
+                        if [ -n "\$DIGEST" ]; then
+                            # Supprimer le manifest (cela marque l'image pour suppression)
+                            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \\
+                                \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
+
+                            if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
+                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \${DIGEST:0:20}...)"
+                            else
+                                echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$HTTP_CODE)"
+                            fi
+                        else
+                            echo "    ⚠️  Impossible de récupérer le digest pour \${TAG}"
+                        fi
+                    done
+
+                    echo ""
+                    echo "✅ Nettoyage des tags terminé"
+                    echo "📋 Images SNAPSHOT restantes:"
+                    curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
+
+                    echo ""
+                    echo "▶ Exécution du garbage collection du registry pour libérer l'espace disque..."
+
+                    # Trouver le container du registry
+                    REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1)
+
+                    if [ -z "\$REGISTRY_CONTAINER" ]; then
+                        echo "⚠️  Container registry introuvable, garbage collection ignoré"
+                    else
+                        echo "   Registry container: \$REGISTRY_CONTAINER"
+
+                        # Exécuter le garbage collector en mode read-only d'abord pour voir ce qui serait supprimé
+                        echo "   Analyse des blobs à supprimer..."
+                        BLOBS_TO_DELETE=\$(docker exec \$REGISTRY_CONTAINER registry garbage-collect --dry-run /etc/docker/registry/config.yml 2>&1 | grep -c "would delete" || echo "0")
+
+                        if [ "\$BLOBS_TO_DELETE" -gt 0 ]; then
+                            echo "   💾 \$BLOBS_TO_DELETE blob(s) seront supprimés"
+
+                            # Exécuter le garbage collector en mode suppression réelle
+                            docker exec \$REGISTRY_CONTAINER registry garbage-collect /etc/docker/registry/config.yml
+
+                            echo "   ✅ Garbage collection terminé, espace disque libéré"
+                        else
+                            echo "   ℹ️  Aucun blob à supprimer"
+                        fi
+                    fi
+
+                    echo ""
+                    echo "✅ Nettoyage complet du registry terminé"
                 """
             }
         }

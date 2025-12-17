@@ -444,6 +444,17 @@ EOF
                     # Utiliser le contexte KinD
                     kubectl config use-context ${env.K8S_CONTEXT}
 
+                    # Déterminer la politique de pull d'image
+                    # Pour les SNAPSHOT : Always (force le pull à chaque déploiement)
+                    # Pour les releases : IfNotPresent (utilise le cache si disponible)
+                    PULL_POLICY="IfNotPresent"
+                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -q "SNAPSHOT"; then
+                        PULL_POLICY="Always"
+                        echo "⚠️  Version SNAPSHOT détectée : imagePullPolicy=Always"
+                    else
+                        echo "ℹ️  Version RELEASE : imagePullPolicy=IfNotPresent"
+                    fi
+
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
                     # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
@@ -452,6 +463,7 @@ EOF
                       --namespace ${env.K8S_NAMESPACE} \\
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
+                      --set rhdemo.image.pullPolicy=\${PULL_POLICY} \\
                       --wait \\
                       --timeout 10m \\
                       --debug \\

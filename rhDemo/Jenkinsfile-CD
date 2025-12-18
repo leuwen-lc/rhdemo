@@ -512,21 +512,47 @@ EOF
                 sh """
                     kubectl config use-context ${env.K8S_CONTEXT}
 
-                    # Attendre que tous les pods soient prêts
-                    echo "▶ Attente des pods..."
-                    kubectl wait --for=condition=ready pod --all \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --timeout=10m || {
-                        echo "⚠️  Certains pods ne sont pas prêts après 10 minutes"
-                        echo "   État actuel des pods:"
-                        kubectl get pods -n ${env.K8S_NAMESPACE}
-                        echo ""
-                        echo "   Logs des pods en erreur:"
-                        kubectl get pods -n ${env.K8S_NAMESPACE} --field-selector=status.phase!=Running -o name | xargs -I {} kubectl logs {} -n ${env.K8S_NAMESPACE} --tail=50 || true
+                    # Attendre que tous les pods principaux soient prêts
+                    # Note: On attend les deployments/statefulsets plutôt que tous les pods
+                    # pour éviter d'attendre les pods en terminaison durant les rolling updates
+                    echo "▶ Attente des déploiements..."
+
+                    # Attendre les deployments
+                    echo "   - Deployment rhdemo-app..."
+                    kubectl rollout status deployment/rhdemo-app -n ${env.K8S_NAMESPACE} --timeout=10m || {
+                        echo "❌ Deployment rhdemo-app non prêt"
+                        kubectl get pods -n ${env.K8S_NAMESPACE} -l app=rhdemo-app
+                        kubectl describe pod -n ${env.K8S_NAMESPACE} -l app=rhdemo-app | tail -50
                         exit 1
                     }
 
-                    echo "✅ Tous les pods sont prêts"
+                    echo "   - Deployment keycloak..."
+                    kubectl rollout status deployment/keycloak -n ${env.K8S_NAMESPACE} --timeout=10m || {
+                        echo "❌ Deployment keycloak non prêt"
+                        kubectl get pods -n ${env.K8S_NAMESPACE} -l app=keycloak
+                        kubectl describe pod -n ${env.K8S_NAMESPACE} -l app=keycloak | tail -50
+                        exit 1
+                    }
+
+                    # Attendre les statefulsets
+                    echo "   - StatefulSet postgresql-rhdemo..."
+                    kubectl rollout status statefulset/postgresql-rhdemo -n ${env.K8S_NAMESPACE} --timeout=5m || {
+                        echo "❌ StatefulSet postgresql-rhdemo non prêt"
+                        kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-rhdemo
+                        exit 1
+                    }
+
+                    echo "   - StatefulSet postgresql-keycloak..."
+                    kubectl rollout status statefulset/postgresql-keycloak -n ${env.K8S_NAMESPACE} --timeout=5m || {
+                        echo "❌ StatefulSet postgresql-keycloak non prêt"
+                        kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-keycloak
+                        exit 1
+                    }
+
+                    echo "✅ Tous les déploiements sont prêts"
+                    echo ""
+                    echo "État final des pods:"
+                    kubectl get pods -n ${env.K8S_NAMESPACE}
                 """
             }
         }

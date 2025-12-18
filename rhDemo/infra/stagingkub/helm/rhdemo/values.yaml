@@ -106,8 +106,8 @@ keycloak:
       key: password
 
   hostname:
-    url: https://keycloak.stagingkub.local:58443
-    adminUrl: https://keycloak.stagingkub.local:58443
+    url: https://keycloak.stagingkub.local
+    adminUrl: https://keycloak.stagingkub.local
 
   proxyHeaders: xforwarded
   httpEnabled: true

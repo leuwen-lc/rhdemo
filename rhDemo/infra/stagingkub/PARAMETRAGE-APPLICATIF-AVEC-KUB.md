@@ -171,7 +171,7 @@ env:
 
   # OAuth2 (surcharge application-stagingkub.yml)
   - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_REDIRECT_URI
-    value: "https://rhdemo.stagingkub.local:58443/login/oauth2/code/{registrationId}"
+    value: "https://rhdemo.stagingkub.local/login/oauth2/code/{registrationId}"
 
   # Actuator
   - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
@@ -356,7 +356,7 @@ cat /workspace/secrets/secrets-rhdemo.yml
 
 ```bash
 # Depuis votre machine (si ingress configuré)
-curl -k https://rhdemo.stagingkub.local:58443/actuator/env | jq
+curl -k https://rhdemo.stagingkub.local/actuator/env | jq
 
 # Ou en port-forward
 kubectl port-forward -n rhdemo-stagingkub $POD_NAME 9000:9000

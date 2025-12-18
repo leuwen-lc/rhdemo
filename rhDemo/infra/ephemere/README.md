@@ -1,14 +1,14 @@
-# Environnement de Staging - RHDemo
+# Environnement de Ephemere - RHDemo
 
-Infrastructure Docker Compose pour environnement de staging isolé avec HTTPS, PostgreSQL et Keycloak.
+Infrastructure Docker Compose pour environnement de ephemere isolé avec HTTPS, PostgreSQL et Keycloak.
 
 ## 📋 Architecture
 
 ```
 nginx:443 (HTTPS reverse proxy)
-  ├─> rhdemo.staging.local → rhdemo-app:9000 (Spring Boot Paketo)
+  ├─> rhdemo.ephemere.local → rhdemo-app:9000 (Spring Boot Paketo)
   │                            └─> rhdemo-db:5432 (PostgreSQL)
-  └─> keycloak.staging.local → keycloak:8080 (Keycloak 26.0.7)
+  └─> keycloak.ephemere.local → keycloak:8080 (Keycloak 26.0.7)
                                    └─> keycloak-db:5432 (PostgreSQL)
 ```
 
@@ -24,7 +24,7 @@ nginx:443 (HTTPS reverse proxy)
 
 ### Réseau
 
-- **Network isolé**: `rhdemo-staging-network` (bridge)
+- **Network isolé**: `rhdemo-ephemere-network` (bridge)
 - **Volumes persistants**: 
   - `rhdemo-db-data` (données applicatives)
   - `keycloak-db-data` (données auth)
@@ -62,7 +62,7 @@ docker images | grep rhdemo-api
 Créer le fichier `.env` à partir du template:
 
 ```bash
-cd infra/staging
+cd infra/ephemere
 cp .env.example .env
 ```
 
@@ -84,8 +84,8 @@ KEYCLOAK_ADMIN_PASSWORD=changeme_admin
 RHDEMO_CLIENT_SECRET=changeme_client_secret
 
 # Domaines
-NGINX_DOMAIN=rhdemo.staging.local
-KEYCLOAK_DOMAIN=keycloak.staging.local
+NGINX_DOMAIN=rhdemo.ephemere.local
+KEYCLOAK_DOMAIN=keycloak.ephemere.local
 ```
 
 ### Étape 3: Générer les certificats SSL
@@ -110,14 +110,14 @@ sudo nano /etc/hosts
 ```
 
 ```
-127.0.0.1  rhdemo.staging.local
-127.0.0.1  keycloak.staging.local
+127.0.0.1  rhdemo.ephemere.local
+127.0.0.1  keycloak.ephemere.local
 ```
 
 ### Étape 5: Démarrer les services
 
 ```bash
-cd /home/leno-vo/git/repository/rhDemo/infra/staging
+cd /home/leno-vo/git/repository/rhDemo/infra/ephemere
 docker-compose up -d
 ```
 
@@ -150,9 +150,9 @@ keycloak-db       running   healthy
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Application** | https://rhdemo.staging.local | Via Keycloak |
-| **Keycloak Admin** | https://keycloak.staging.local | admin / (voir `.env`) |
-| **Actuator** | https://rhdemo.staging.local/actuator | - |
+| **Application** | https://rhdemo.ephemere.local | Via Keycloak |
+| **Keycloak Admin** | https://keycloak.ephemere.local | admin / (voir `.env`) |
+| **Actuator** | https://rhdemo.ephemere.local/actuator | - |
 
 ⚠️ **Certificats auto-signés**: Acceptez l'avertissement de sécurité dans votre navigateur.
 
@@ -166,7 +166,7 @@ Utiliser le projet **rhDemoInitKeycloak** (déjà migré Spring Boot):
 cd /home/leno-vo/git/repository/rhDemoInitKeycloak
 
 # Modifier src/main/resources/application.properties
-# keycloak.server-url=https://keycloak.staging.local
+# keycloak.server-url=https://keycloak.ephemere.local
 # keycloak.username=admin
 # keycloak.password=${KEYCLOAK_ADMIN_PASSWORD}
 
@@ -177,7 +177,7 @@ cd /home/leno-vo/git/repository/rhDemoInitKeycloak
 
 1. **Accéder à Keycloak Admin Console**:
    ```
-   https://keycloak.staging.local
+   https://keycloak.ephemere.local
    Credentials: admin / (voir .env KEYCLOAK_ADMIN_PASSWORD)
    ```
 
@@ -186,8 +186,8 @@ cd /home/leno-vo/git/repository/rhDemoInitKeycloak
 3. **Créer le Client "RHDemo"**:
    - Client ID: `RHDemo`
    - Access Type: `confidential`
-   - Valid Redirect URIs: `https://rhdemo.staging.local/*`
-   - Web Origins: `https://rhdemo.staging.local`
+   - Valid Redirect URIs: `https://rhdemo.ephemere.local/*`
+   - Web Origins: `https://rhdemo.ephemere.local`
    
 4. **Récupérer le Client Secret**:
    - Onglet "Credentials" → copier le secret
@@ -246,7 +246,7 @@ cd /home/leno-vo/git/repository/rhDemo
 ./mvnw clean spring-boot:build-image
 
 # 2. Redémarrer le container
-cd infra/staging
+cd infra/ephemere
 docker-compose up -d --force-recreate rhdemo-app
 ```
 
@@ -273,16 +273,16 @@ docker-compose exec nginx sh
 
 ```bash
 # Application Spring Boot
-curl -k https://rhdemo.staging.local/actuator/health
+curl -k https://rhdemo.ephemere.local/actuator/health
 
 # Keycloak
-curl -k https://keycloak.staging.local/health
+curl -k https://keycloak.ephemere.local/health
 ```
 
 ### Métriques Prometheus
 
 ```bash
-curl -k https://rhdemo.staging.local/actuator/prometheus
+curl -k https://rhdemo.ephemere.local/actuator/prometheus
 ```
 
 ### État des services
@@ -296,7 +296,7 @@ docker stats
 
 ### Certificats SSL
 
-- **Staging**: Certificats auto-signés générés par `generate-certs.sh`
+- **Ephemere**: Certificats auto-signés générés par `generate-certs.sh`
 - **Production**: Utilisez Let's Encrypt ou certificats CA reconnus
 
 ### Headers de sécurité (configurés dans Nginx)
@@ -380,7 +380,7 @@ cat backup.sql | docker-compose exec -T rhdemo-db psql -U rhdemo -d rhdemodb
 ## 📁 Structure des fichiers
 
 ```
-infra/staging/
+infra/ephemere/
 ├── docker-compose.yml          # Orchestration des services
 ├── .env                        # Variables d'environnement (non versionné)
 ├── .env.example                # Template de configuration
@@ -412,4 +412,4 @@ infra/staging/
 - **Cache**: Assets statiques cachés 1 an par Nginx
 - **Isolation**: Réseau bridge dédié, pas d'exposition des ports PostgreSQL sur l'hôte
 - **Healthchecks**: Tous les services surveillés (PostgreSQL, Keycloak, Spring Boot Actuator)
-- **Production-ready**: Configuration adaptée pour staging proche de la production
+- **Production-ready**: Configuration adaptée pour ephemere proche de la production

@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Configuration pour le client Keycloak Admin
- * Désactive la validation SSL pour accepter les certificats auto-signés en staging/dev
+ * Désactive la validation SSL pour accepter les certificats auto-signés en ephemere/dev
  */
 @Configuration
 public class KeycloakConfig {
@@ -29,7 +29,7 @@ public class KeycloakConfig {
             // qui a des problèmes avec certains payloads JSON
             
             logger.warn("⚠️  Utilisation du client HTTP par défaut (SSL non vérifié via système)");
-            logger.warn("⚠️  Pour staging: s'assurer que le serveur Keycloak utilise HTTP (pas HTTPS)");
+            logger.warn("⚠️  Pour ephemere: s'assurer que le serveur Keycloak utilise HTTP (pas HTTPS)");
 
             // Client Keycloak avec configuration par défaut (plus simple et moins de problèmes potentiels)
             return KeycloakBuilder.builder()

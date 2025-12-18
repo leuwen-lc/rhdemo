@@ -45,8 +45,8 @@ public abstract class BaseSeleniumTest {
             WebDriverManager.chromedriver().setup();
             ChromeOptions options = new ChromeOptions();
 
-            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
-            // Permet à Chrome de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour ephemere
+            // Permet à Chrome de se connecter à https://rhdemo.ephemere.local:58443 et https://keycloak.ephemere.local:58443
             options.setAcceptInsecureCerts(true);
 
             // Configuration du proxy ZAP (si activé via variable d'environnement)
@@ -104,8 +104,8 @@ public abstract class BaseSeleniumTest {
                 options.setBinary(firefoxBinary);
             }
 
-            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
-            // Permet à Firefox de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour ephemere
+            // Permet à Firefox de se connecter à https://rhdemo.ephemere.local:58443 et https://keycloak.ephemere.local:58443
             options.setAcceptInsecureCerts(true);
 
             // Configuration du proxy ZAP (si activé via variable d'environnement)

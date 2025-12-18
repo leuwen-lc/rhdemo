@@ -90,8 +90,8 @@ mvnw test
 
 ```bash
 mvn clean test \
-  -Dtest.baseurl=https://rhdemo.staging.local \
-  -Dtest.keycloak.url=https://rhdemo.staging.local/realms/RHDemo \
+  -Dtest.baseurl=https://rhdemo.ephemere.local:58443 \
+  -Dtest.keycloak.url=https://rhdemo.ephemere.local:58443/realms/RHDemo \
   -Dselenium.headless=true \
   -Dtest.username=${TEST_USERNAME} \
   -Dtest.password=${TEST_PASSWORD}

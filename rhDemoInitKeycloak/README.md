@@ -31,7 +31,7 @@ Cet outil non destiné à la production automatise la configuration minimale de 
 
 Une configuration de Keycloak pour la prod devrait être largement complétée et renforcée. Probablement qu'on fera appel à un Keycloak mutualisé potentiellement déjà existant pour la production.
 
-Cet outil manipule des secrets et crée des utilisateurs fictifs dans l'unique but de test de l'application RHDemo en dev et en staging
+Cet outil manipule des secrets et crée des utilisateurs fictifs dans l'unique but de test de l'application RHDemo en dev et en ephemere
 
 ---
 

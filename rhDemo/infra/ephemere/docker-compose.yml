@@ -4,7 +4,7 @@ services:
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db:
     image: ${POSTGRES_IMAGE:-postgres:16-alpine}
-    container_name: rhdemo-staging-db
+    container_name: rhdemo-ephemere-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: rhdemo
@@ -15,7 +15,7 @@ services:
       # Note: pgddl.sql est copié via script init au lieu de bind mount
       # pour éviter les problèmes de layers Docker corrompus
     networks:
-      - rhdemo-staging
+      - rhdemo-ephemere
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rhdemo"]
       interval: 10s
@@ -27,7 +27,7 @@ services:
   # ═══════════════════════════════════════════════════════════════
   keycloak-db:
     image: ${POSTGRES_IMAGE:-postgres:16-alpine}
-    container_name: keycloak-staging-db
+    container_name: keycloak-ephemere-db
     restart: unless-stopped
     environment:
       POSTGRES_DB: keycloak
@@ -36,7 +36,7 @@ services:
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
     networks:
-      - rhdemo-staging
+      - rhdemo-ephemere
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
@@ -48,7 +48,7 @@ services:
   # ═══════════════════════════════════════════════════════════════
   keycloak:
     image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4.2}
-    container_name: keycloak-staging
+    container_name: keycloak-ephemere
     restart: unless-stopped
     command:
       - start-dev
@@ -68,11 +68,11 @@ services:
       # Configuration hostname : URLs publiques via nginx HTTPS
       # Force Keycloak à générer les URLs publiques avec HTTPS
       # pour les redirections navigateur (page de login, etc.)
-      KC_HOSTNAME_URL: https://keycloak.staging.local
-      KC_HOSTNAME_ADMIN_URL: https://keycloak.staging.local
+      KC_HOSTNAME_URL: https://keycloak.ephemere.local:58443
+      KC_HOSTNAME_ADMIN_URL: https://keycloak.ephemere.local:58443
 
       # La communication interne app→keycloak reste en HTTP:8080
-      # via l'alias keycloak-staging pour les performances
+      # via l'alias keycloak-ephemere pour les performances
 
       # Logging
       KC_LOG_LEVEL: info
@@ -80,10 +80,10 @@ services:
       keycloak-db:
         condition: service_healthy
     networks:
-      rhdemo-staging:
+      rhdemo-ephemere:
         aliases:
-          - keycloak-staging
-          - keycloak.staging.local
+          - keycloak-ephemere
+          - keycloak.ephemere.local
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
       interval: 10s
@@ -96,11 +96,11 @@ services:
   # ═══════════════════════════════════════════════════════════════
   rhdemo-app:
     image: rhdemo-api:${APP_VERSION:-0.0.1-SNAPSHOT}
-    container_name: rhdemo-staging-app
+    container_name: rhdemo-ephemere-app
     restart: unless-stopped
     environment:
       # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
-      SPRING_PROFILES_ACTIVE: staging
+      SPRING_PROFILES_ACTIVE: ephemere
       SERVER_PORT: 9000
 
       # Base de données PostgreSQL
@@ -128,10 +128,10 @@ services:
       keycloak:
         condition: service_healthy
     networks:
-      rhdemo-staging:
+      rhdemo-ephemere:
         aliases:
-          - rhdemo-staging-app
-          - rhdemo.staging.local
+          - rhdemo-ephemere-app
+          - rhdemo.ephemere.local
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 || exit 1"]
       interval: 30s
@@ -144,12 +144,12 @@ services:
   # ═══════════════════════════════════════════════════════════════
   nginx:
     image: ${NGINX_IMAGE:-nginx:1.29.4-alpine}
-    container_name: rhdemo-staging-nginx
+    container_name: rhdemo-ephemere-nginx
     restart: unless-stopped
     ports:
       # Port 80 fermé pour sécurité - Tests utilisent HTTPS uniquement
       # - "80:80"
-      - "443:443"
+      - "58443:443"
     volumes:
       # Note: nginx.conf et conf.d copiés via docker cp au lieu de bind mount
       # pour éviter les problèmes de layers Docker corrompus
@@ -158,11 +158,11 @@ services:
       - rhdemo-app
       - keycloak
     networks:
-      rhdemo-staging:
+      rhdemo-ephemere:
         aliases:
           - nginx
-          - rhdemo.staging.local
-          - keycloak.staging.local
+          - rhdemo.ephemere.local
+          - keycloak.ephemere.local
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --no-check-certificate https://localhost/health || exit 1"]
       interval: 30s
@@ -170,14 +170,14 @@ services:
       retries: 3
 
 networks:
-  rhdemo-staging:
-    name: rhdemo-staging-network
+  rhdemo-ephemere:
+    name: rhdemo-ephemere-network
     driver: bridge
 
 volumes:
   rhdemo-db-data:
-    name: rhdemo-staging-db-data
+    name: rhdemo-ephemere-db-data
   keycloak-db-data:
-    name: keycloak-staging-db-data
+    name: keycloak-ephemere-db-data
   nginx-cache:
-    name: rhdemo-staging-nginx-cache
+    name: rhdemo-ephemere-nginx-cache

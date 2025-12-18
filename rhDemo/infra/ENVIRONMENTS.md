@@ -9,7 +9,7 @@ Ce document décrit les différents environnements disponibles pour le déploiem
 | Environnement | Type | Description | Cas d'usage |
 |---------------|------|-------------|-------------|
 | **none** | - | Build + tests uniquement | CI rapide sans déploiement |
-| **staging** | Docker Compose | Environnement de staging avec Docker Compose | Tests fonctionnels rapides, debugging |
+| **ephemere** | Docker Compose | Environnement ephemere avec Docker Compose | Tests fonctionnels rapides, debugging |
 | **stagingkub** | Kubernetes (KinD) | Environnement de staging Kubernetes local | Tests Kubernetes, validation pre-prod |
 | **production** | Docker Compose | Production (à migrer vers Kubernetes) | Déploiement production |
 
@@ -23,14 +23,14 @@ Dans le pipeline Jenkins, le paramètre `DEPLOY_ENV` contrôle l'environnement d
 
 ```groovy
 choice(name: 'DEPLOY_ENV',
-       choices: ['staging', 'stagingkub', 'production', 'none'],
+       choices: ['ephemere', 'stagingkub', 'production', 'none'],
        description: 'Environnement de déploiement')
 ```
 
 ### Comportement selon l'environnement
 
-| Stage | none | staging | stagingkub | production |
-|-------|------|---------|------------|------------|
+| Stage | none | ephemere | stagingkub | production |
+|-------|------|----------|------------|------------|
 | Checkout | ✅ | ✅ | ✅ | ✅ |
 | Lecture Version Maven | ❌ | ✅ | ✅ | ✅ |
 | Compilation Backend | ✅ | ✅ | ✅ | ✅ |
@@ -47,20 +47,20 @@ choice(name: 'DEPLOY_ENV',
 
 ---
 
-## 🐳 Environnement: `staging` (Docker Compose)
+## 🐳 Environnement: `ephemere` (Docker Compose)
 
 ### Caractéristiques
 
 - **Technologie** : Docker Compose
-- **Localisation** : `rhDemo/infra/staging/`
+- **Localisation** : `rhDemo/infra/ephemere/`
 - **Fichier principal** : `docker-compose.yml`
-- **Port HTTPS** : 443
+- **Port HTTPS** : 58443
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────────┐
-│ Host (port 443)                             │
+│ Host (port 58443)                           │
 │  ↓                                          │
 │ Nginx (reverse proxy HTTPS)                 │
 │  ├─→ rhdemo-app:9000                        │
@@ -82,18 +82,18 @@ choice(name: 'DEPLOY_ENV',
 
 ```bash
 # Via Jenkins
-DEPLOY_ENV=staging
+DEPLOY_ENV=ephemere
 
 # Ou manuellement
-cd rhDemo/infra/staging
-./init-staging.sh
+cd rhDemo/infra/ephemere
+./init-ephemere.sh
 docker-compose up -d
 ```
 
 ### URLs d'accès
 
-- Application : https://rhdemo.staging.local
-- Keycloak : https://keycloak.staging.local
+- Application : https://rhdemo.ephemere.local:58443
+- Keycloak : https://keycloak.ephemere.local:58443
 
 ### Avantages
 
@@ -190,7 +190,7 @@ DEPLOY_ENV=stagingkub
 
 ---
 
-## 🔄 Migration staging → stagingkub
+## 🔄 Migration ephemere → stagingkub
 
 ### Quand migrer ?
 
@@ -229,8 +229,8 @@ Migrez vers stagingkub si :
 
 ### Performance
 
-| Aspect | staging | stagingkub |
-|--------|---------|------------|
+| Aspect | ephemere | stagingkub |
+|--------|----------|------------|
 | Temps démarrage | ~2 min | ~4 min |
 | Temps déploiement | ~30s | ~2 min |
 | RAM utilisée | ~4GB | ~6GB |
@@ -238,24 +238,24 @@ Migrez vers stagingkub si :
 
 ### Gestion des secrets
 
-| Aspect | staging | stagingkub |
-|--------|---------|------------|
+| Aspect | ephemere | stagingkub |
+|--------|----------|------------|
 | Méthode | Variables env + docker cp | Kubernetes Secrets |
 | Chiffrement | SOPS | SOPS → K8s Secrets |
 | Rotation | Redémarrage conteneurs | Rolling update |
 
 ### Réseau
 
-| Aspect | staging | stagingkub |
-|--------|---------|------------|
+| Aspect | ephemere | stagingkub |
+|--------|----------|------------|
 | Type | Docker network bridge | K8s Services + Ingress |
 | DNS interne | Noms de services | K8s DNS |
 | Exposition | Port mapping direct | Ingress Controller |
 
 ### Volumes
 
-| Aspect | staging | stagingkub |
-|--------|---------|------------|
+| Aspect | ephemere | stagingkub |
+|--------|----------|------------|
 | Type | Docker volumes | PersistentVolumeClaims |
 | Persistance | Locale | Locale (hostPath) |
 | Backup | docker cp | kubectl cp ou Velero |
@@ -264,7 +264,7 @@ Migrez vers stagingkub si :
 
 ## 📚 Documentation
 
-- [Documentation staging](./staging/README.md)
+- [Documentation ephemere](./ephemere/README.md)
 - [Documentation stagingkub](./stagingkub/README.md)
 
 ---
@@ -273,13 +273,13 @@ Migrez vers stagingkub si :
 
 ### Puis-je utiliser les deux environnements en même temps ?
 
-Oui, mais ils écoutent tous les deux sur le port 443. Vous devrez :
+Oui, mais ephemere utilise le port 58443 et stagingkub utilise le port 443. Vous devrez :
 - Utiliser des domaines différents dans `/etc/hosts`
 - OU arrêter un environnement avant de démarrer l'autre
 
 ### Lequel utiliser pour le développement local ?
 
-**staging** (Docker Compose) est recommandé pour :
+**ephemere** (Docker Compose) est recommandé pour :
 - Développement quotidien
 - Tests rapides
 - Debugging
@@ -289,17 +289,17 @@ Oui, mais ils écoutent tous les deux sur le port 443. Vous devrez :
 - Tester les rolling updates
 - Reproduire un comportement production
 
-### Comment choisir entre staging et stagingkub dans Jenkins ?
+### Comment choisir entre ephemere et stagingkub dans Jenkins ?
 
 Lors du lancement du build, sélectionnez le paramètre `DEPLOY_ENV` :
-- `staging` : Déploiement Docker Compose classique
+- `ephemere` : Déploiement Docker Compose classique
 - `stagingkub` : Déploiement Kubernetes (KinD)
 - `none` : Build + tests uniquement (pas de déploiement)
 
 ### Les secrets sont-ils les mêmes ?
 
 Oui, les deux environnements utilisent les mêmes secrets sources (SOPS), mais :
-- **staging** : Injectés via variables d'environnement et `docker cp`
+- **ephemere** : Injectés via variables d'environnement et `docker cp`
 - **stagingkub** : Stockés dans Kubernetes Secrets
 
 ---

@@ -58,34 +58,34 @@ pipeline {
         TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
 
         // Fichiers de secrets SOPS
-        SECRETS_FILE = 'rhDemo/secrets/secrets-staging.yml'
+        SECRETS_FILE = 'rhDemo/secrets/secrets-ephemere.yml'
         SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
         SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
         SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
 
-        // Configuration environnement staging (Docker Compose)
-        STAGING_INFRA_PATH = 'rhDemo/infra/staging'
+        // Configuration environnement ephemere (Docker Compose)
+        EPHEMERE_INFRA_PATH = 'rhDemo/infra/ephemere'
         KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
-        TEST_DOMAIN = 'rhdemo.staging.local'
-        KEYCLOAK_DOMAIN = 'keycloak.staging.local'
-        COMPOSE_PROJECT_NAME = "rhdemo-staging-${env.BUILD_NUMBER}"
+        TEST_DOMAIN = 'rhdemo.ephemere.local'
+        KEYCLOAK_DOMAIN = 'keycloak.ephemere.local'
+        COMPOSE_PROJECT_NAME = "rhdemo-ephemere-${env.BUILD_NUMBER}"
         RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
 
         // Noms des conteneurs Docker (centralisés pour faciliter maintenance)
-        CONTAINER_NGINX = 'rhdemo-staging-nginx'
-        CONTAINER_APP = 'rhdemo-staging-app'
-        CONTAINER_KEYCLOAK = 'keycloak-staging'
-        CONTAINER_KEYCLOAK_DB = 'keycloak-staging-db'
-        CONTAINER_DB = 'rhdemo-staging-db'
+        CONTAINER_NGINX = 'rhdemo-ephemere-nginx'
+        CONTAINER_APP = 'rhdemo-ephemere-app'
+        CONTAINER_KEYCLOAK = 'keycloak-ephemere'
+        CONTAINER_KEYCLOAK_DB = 'keycloak-ephemere-db'
+        CONTAINER_DB = 'rhdemo-ephemere-db'
         CONTAINER_ZAP = 'rhdemo-jenkins-zap'
 
         // Noms des réseaux Docker
-        NETWORK_STAGING = 'rhdemo-staging-network'
+        NETWORK_EPHEMERE = 'rhdemo-ephemere-network'
         NETWORK_JENKINS = 'rhdemo-jenkins-network'
     }
     
     parameters {
-        choice(name: 'DEPLOY_ENV', choices: ['staging', 'stagingkub', 'production', 'none'], description: 'Environnement de déploiement: staging=Docker Compose, stagingkub=Kubernetes (KinD), production=production, none=build+tests uniquement')
+        choice(name: 'DEPLOY_ENV', choices: ['ephemere', 'stagingkub', 'production', 'none'], description: 'Environnement de déploiement: ephemere=Docker Compose, stagingkub=Kubernetes (KinD), production=production, none=build+tests uniquement')
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium (ignoré si DEPLOY_ENV=none)')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'SKIP_MANUAL_APPROVAL', defaultValue: false, description: 'Ignorer l\'approbation manuelle pour la production')
@@ -236,7 +236,7 @@ pipeline {
                             echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
                             echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
 
-                            # Mots de passe Keycloak pour environnement staging
+                            # Mots de passe Keycloak pour environnement ephemere
                             echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
                             echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
                             echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // "admin"' ${SECRETS_DECRYPTED})"
@@ -250,8 +250,8 @@ pipeline {
                             echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})"
 
                             # URLs des serveurs si elles existent
-                            if yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                                echo "export STAGING_SERVER=$(yq eval '.rhdemo.servers.staging' ${SECRETS_DECRYPTED})"
+                            if yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                                echo "export EPHEMERE_SERVER=$(yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED})"
                             fi
 
                             if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
@@ -317,7 +317,7 @@ EOF
         stage('🔧 Configuration rhDemoInitKeycloak') {
             steps {
                 script {
-                    echo '▶ Génération de application-staging.yml pour rhDemoInitKeycloak...'
+                    echo '▶ Génération de application-ephemere.yml pour rhDemoInitKeycloak...'
                     echo '   (Sera utilisé directement via mvnw spring-boot:run, sans packaging JAR)'
                 }
                 
@@ -328,20 +328,20 @@ EOF
                     # Source les secrets déchiffrés
                     . rhDemo/secrets/env-vars.sh
 
-                    # Générer application-staging.yml (sera utilisé directement par Maven)
+                    # Générer application-ephemere.yml (sera utilisé directement par Maven)
                     # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
-                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-staging.yml"
+                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
 
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
                     cat > "${CONFIG_FILE}" << YMLEOF
 # ========================================
-# Configuration Keycloak Server - STAGING
+# Configuration Keycloak Server - EPHEMERE
 # Générée automatiquement par Jenkins CI/CD
 # ========================================
 keycloak:
   # URL interne HTTP pour rhDemoInitKeycloak (exécuté dans le réseau Docker)
   # Pas besoin de HTTPS car communication interne sécurisée par le réseau isolé
-  server-url: http://keycloak-staging:8080
+  server-url: http://keycloak-ephemere:8080
   
   admin:
     realm: master
@@ -373,19 +373,19 @@ keycloak:
     client-id: RHDemo
     name: RHDemo
     secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-    root-url: https://${TEST_DOMAIN}/
+    root-url: https://${TEST_DOMAIN}:58443/
     base-url: ''
     admin-url: ''
     redirect-uris:
-      - https://${TEST_DOMAIN}/*
+      - https://${TEST_DOMAIN}:58443/*
       - http://localhost:9000/*
-      - https://rhdemo.staging.local/*
-      - https://keycloak.staging.local/*
+      - https://rhdemo.ephemere.local:58443/*
+      - https://keycloak.ephemere.local:58443/*
     web-origins:
-      - https://${TEST_DOMAIN}
+      - https://${TEST_DOMAIN}:58443
       - http://localhost:9000
-      - https://rhdemo.staging.local
-      - https://keycloak.staging.local
+      - https://rhdemo.ephemere.local:58443
+      - https://keycloak.ephemere.local:58443
     roles:
       - ROLE_admin
       - ROLE_consult
@@ -444,7 +444,7 @@ YMLEOF
                 '''
                 
                 script {
-                    echo '✅ rhDemoInitKeycloak configuré (prêt pour exécution via mvnw)'
+                    echo '✅ rhDemoInitKeycloak configuré (prêt pour exécution via mvnw avec profil ephemere)'
                 }
             }
         }
@@ -792,7 +792,7 @@ YMLEOF
         }
         
         // ════════════════════════════════════════════════════════════════
-        // PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)
+        // PHASE 4 : ENVIRONNEMENT EPHEMERE (DOCKER COMPOSE)
         // ════════════════════════════════════════════════════════════════
         
         stage('⚙️ Configuration Environnement Test') {
@@ -802,19 +802,19 @@ YMLEOF
             steps {
                 script {
                     echo '═══════════════════════════════════════════════════════'
-                    echo '  PHASE 4 : ENVIRONNEMENT STAGING (DOCKER COMPOSE)'
+                    echo '  PHASE 4 : ENVIRONNEMENT EPHEMERE (DOCKER COMPOSE)'
                     echo '═══════════════════════════════════════════════════════'
                     echo '▶ Configuration de l\'environnement de test Docker Compose...'
-                    
+
                     // Nettoyer l'environnement précédent si existant
                     sh """
-                        cd ${STAGING_INFRA_PATH}
+                        cd ${EPHEMERE_INFRA_PATH}
                         
                         # Arrêter et supprimer les conteneurs du build précédent
                         docker-compose -p ${COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
                         
                         # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
-                        docker volume rm keycloak-staging-db-data rhdemo-staging-db-data rhdemo-staging-nginx-cache 2>/dev/null || true
+                        docker volume rm keycloak-ephemere-db-data rhdemo-ephemere-db-data rhdemo-ephemere-nginx-cache 2>/dev/null || true
                         
                         # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
                         # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
@@ -845,7 +845,7 @@ YMLEOF
                     echo '▶ Génération des certificats SSL auto-signés...'
                 }
                 sh """
-                    cd ${STAGING_INFRA_PATH}
+                    cd ${EPHEMERE_INFRA_PATH}
                     ./generate-certs.sh --domain ${TEST_DOMAIN} --domain ${KEYCLOAK_DOMAIN}
                 """
             }
@@ -853,7 +853,7 @@ YMLEOF
         
         stage('🏷️ Tag Image Docker') {
             when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
+                expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
             }
             steps {
                 script {
@@ -1129,12 +1129,12 @@ YMLEOF
         }
 
         // ════════════════════════════════════════════════════════════════
-        // DÉPLOIEMENT DOCKER COMPOSE (STAGING/PRODUCTION)
+        // DÉPLOIEMENT DOCKER COMPOSE (EPHEMERE/PRODUCTION)
         // ════════════════════════════════════════════════════════════════
 
         stage('🐳 Démarrage Environnement Docker') {
             when {
-                expression { params.DEPLOY_ENV == 'staging' || params.DEPLOY_ENV == 'production' }
+                expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
             }
             steps {
                 script {
@@ -1147,7 +1147,7 @@ YMLEOF
                     # Source les secrets SOPS
                     . rhDemo/secrets/env-vars.sh
 
-                    cd ${STAGING_INFRA_PATH}
+                    cd ${EPHEMERE_INFRA_PATH}
 
                     # Variables d'environnement pour Docker Compose
                     # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
@@ -1173,22 +1173,22 @@ YMLEOF
                     echo "✅ Secrets exportés avec succès (secrets non affichés pour sécurité)"
                     
                     # IMPORTANT: Nettoyage forcé des conteneurs existants pour éviter les conflits de noms
-                    echo "🧹 Nettoyage des conteneurs staging existants..."
-                    docker rm -f keycloak-staging-db rhdemo-staging-db keycloak-staging rhdemo-staging-app rhdemo-staging-nginx 2>/dev/null || true
+                    echo "🧹 Nettoyage des conteneurs ephemere existants..."
+                    docker rm -f keycloak-ephemere-db rhdemo-ephemere-db keycloak-ephemere rhdemo-ephemere-app rhdemo-ephemere-nginx 2>/dev/null || true
                     echo "✅ Conteneurs existants supprimés"
                     
                     # Démarrer les conteneurs (plus besoin de docker-compose.jenkins.yml override)
                     echo "🚀 Démarrage des conteneurs Docker..."
                     docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
-                    # Connecter Jenkins au réseau staging pour accès direct aux services
-                    echo "🔗 Connexion de Jenkins au réseau staging..."
+                    # Connecter Jenkins au réseau ephemere pour accès direct aux services
+                    echo "🔗 Connexion de Jenkins au réseau ephemere..."
                     # Trouver le conteneur Jenkins principal (pas l'agent)
                     JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
                     echo "Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
                     if [ -n "\$JENKINS_CONTAINER" ]; then
-                        docker network connect rhdemo-staging-network \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
-                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau rhdemo-staging-network"
+                        docker network connect rhdemo-ephemere-network \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau rhdemo-ephemere-network"
                     else
                         echo "❌ ERREUR: Conteneur Jenkins introuvable!"
                         docker ps --filter "name=jenkins"
@@ -1200,30 +1200,30 @@ YMLEOF
                     
                     # Copier les configurations nginx et certificats SSL
                     echo "📋 Copie des configurations nginx..."
-                    docker cp nginx/nginx.conf rhdemo-staging-nginx:/etc/nginx/nginx.conf
-                    docker cp nginx/conf.d/. rhdemo-staging-nginx:/etc/nginx/conf.d/
-                    
+                    docker cp nginx/nginx.conf rhdemo-ephemere-nginx:/etc/nginx/nginx.conf
+                    docker cp nginx/conf.d/. rhdemo-ephemere-nginx:/etc/nginx/conf.d/
+
                     if [ -d "certs" ]; then
-                        docker cp certs/. rhdemo-staging-nginx:/etc/nginx/ssl/
+                        docker cp certs/. rhdemo-ephemere-nginx:/etc/nginx/ssl/
                         echo "✅ Configurations nginx et certificats copiés"
                     else
                         echo "✅ Configurations nginx copiées (certificats manquants)"
                     fi
-                    
+
                     # Recharger la configuration nginx pour appliquer les changements
                     echo "🔄 Rechargement de la configuration nginx..."
-                    docker exec rhdemo-staging-nginx nginx -t  # Test de la config
-                    docker exec rhdemo-staging-nginx nginx -s reload  # Reload
+                    docker exec rhdemo-ephemere-nginx nginx -t  # Test de la config
+                    docker exec rhdemo-ephemere-nginx nginx -s reload  # Reload
                     echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
-                    
-                    # Vérifier que nginx écoute réellement sur le port 443
-                    echo "🔍 Vérification que nginx écoute sur le port 443..."
-                    if docker exec rhdemo-staging-nginx netstat -tuln | grep -q ':443'; then
-                        echo "✅ Nginx écoute sur le port 443 (HTTPS)"
+
+                    # Vérifier que nginx écoute réellement sur le port 58443
+                    echo "🔍 Vérification que nginx écoute sur le port 58443..."
+                    if docker exec rhdemo-ephemere-nginx netstat -tuln | grep -q ':443'; then
+                        echo "✅ Nginx écoute sur le port 443 interne (mappé sur 58443 externe)"
                     else
                         echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
                         echo "Ports écoutés par nginx:"
-                        docker exec rhdemo-staging-nginx netstat -tuln
+                        docker exec rhdemo-ephemere-nginx netstat -tuln
                         exit 1
                     fi
                     
@@ -1243,7 +1243,7 @@ YMLEOF
                     echo '   Ce fichier contient uniquement les secrets nécessaires à rhDemo (moindre privilège)'
                 }
                 sh """
-                    cd ${STAGING_INFRA_PATH}
+                    cd ${EPHEMERE_INFRA_PATH}
 
                     # Chemin du fichier secrets dans le workspace Jenkins
                     SECRETS_FILE="../../secrets/secrets-rhdemo.yml"
@@ -1259,22 +1259,22 @@ YMLEOF
 
                     # Créer le répertoire en tant que root, puis changer le propriétaire
                     # L'utilisateur spring n'a pas les droits root
-                    docker exec --user root rhdemo-staging-app mkdir -p /workspace/secrets
-                    docker exec --user root rhdemo-staging-app chown spring:spring /workspace/secrets
+                    docker exec --user root rhdemo-ephemere-app mkdir -p /workspace/secrets
+                    docker exec --user root rhdemo-ephemere-app chown spring:spring /workspace/secrets
 
                     # Copier le fichier
-                    docker cp "\$SECRETS_FILE" rhdemo-staging-app:/workspace/secrets/secrets-rhdemo.yml
+                    docker cp "\$SECRETS_FILE" rhdemo-ephemere-app:/workspace/secrets/secrets-rhdemo.yml
 
                     # Définir les permissions (read-only) et le propriétaire en tant que root
-                    docker exec --user root rhdemo-staging-app chown spring:spring /workspace/secrets/secrets-rhdemo.yml
-                    docker exec --user root rhdemo-staging-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root rhdemo-ephemere-app chown spring:spring /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root rhdemo-ephemere-app chmod 400 /workspace/secrets/secrets-rhdemo.yml
 
                     echo "✅ Fichier secrets-rhdemo.yml copié dans le container"
                     echo "   Chemin: /workspace/secrets/secrets-rhdemo.yml"
                     echo "   Permissions: 400 (read-only, propriétaire: spring)"
 
                     # Vérification (sans afficher le contenu pour sécurité)
-                    docker exec rhdemo-staging-app ls -lh /workspace/secrets/secrets-rhdemo.yml
+                    docker exec rhdemo-ephemere-app ls -lh /workspace/secrets/secrets-rhdemo.yml
 
                     # Redémarrer l'application pour charger les secrets
                     # Spring Boot charge spring.config.import au démarrage uniquement
@@ -1294,26 +1294,26 @@ YMLEOF
                     echo '▶ Initialisation de la base de données PostgreSQL...'
                 }
                 sh """
-                    cd ${STAGING_INFRA_PATH}
-                    
+                    cd ${EPHEMERE_INFRA_PATH}
+
                     # Attendre que PostgreSQL soit prêt
                     echo "⏳ Attente PostgreSQL ready (30s max)..."
                     timeout=30
                     while [ \$timeout -gt 0 ]; do
-                        if docker exec rhdemo-staging-db pg_isready -U rhdemo >/dev/null 2>&1; then
+                        if docker exec rhdemo-ephemere-db pg_isready -U rhdemo >/dev/null 2>&1; then
                             echo "✅ PostgreSQL ready"
                             break
                         fi
                         sleep 2
                         timeout=\$((timeout - 2))
                     done
-                    
+
                     if [ \$timeout -le 0 ]; then
                         echo "❌ Timeout: PostgreSQL n'est pas prêt après 30s"
-                        docker logs --tail=20 rhdemo-staging-db
+                        docker logs --tail=20 rhdemo-ephemere-db
                         exit 1
                     fi
-                    
+
                     # Copier et exécuter le schéma SQL + données de test
                     PGSCHEMA_PATH="../../pgschema.sql"
                     PGDATA_PATH="../../pgdata.sql"
@@ -1328,17 +1328,17 @@ YMLEOF
                     fi
 
                     echo "📋 Copie du schéma SQL dans le container..."
-                    docker cp "\$PGSCHEMA_PATH" rhdemo-staging-db:/tmp/schema.sql
-                    docker cp "\$PGDATA_PATH" rhdemo-staging-db:/tmp/data.sql
+                    docker cp "\$PGSCHEMA_PATH" rhdemo-ephemere-db:/tmp/schema.sql
+                    docker cp "\$PGDATA_PATH" rhdemo-ephemere-db:/tmp/data.sql
 
                     echo "🔧 Exécution du schéma SQL (DROP + CREATE + INDEX)..."
-                    docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
+                    docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
 
                     echo "📊 Insertion des données de test..."
-                    docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -f /tmp/data.sql
-                    
+                    docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -f /tmp/data.sql
+
                     # Vérifier le nombre d'employés insérés
-                    EMPLOYEE_COUNT=\$(docker exec rhdemo-staging-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
+                    EMPLOYEE_COUNT=\$(docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
                     
                     echo "✅ Base de données initialisée"
                     echo "   📊 Nombre d'employés: \$EMPLOYEE_COUNT"
@@ -1393,24 +1393,24 @@ YMLEOF
                     set -x
 
                     echo "🚀 Exécution de rhDemoInitKeycloak via Maven..."
-                    echo "   (Utilise directement application-staging.yml généré, sans packaging)"
-                    
+                    echo "   (Utilise directement application-ephemere.yml généré, sans packaging)"
+
                     cd ${WORKSPACE}/rhDemoInitKeycloak
-                    
+
                     # Vérification que le fichier de config existe
-                    CONFIG_FILE="src/main/resources/application-staging.yml"
+                    CONFIG_FILE="src/main/resources/application-ephemere.yml"
                     if [ ! -f "\${CONFIG_FILE}" ]; then
                         echo "❌ Fichier de configuration manquant: \${CONFIG_FILE}"
                         exit 1
                     fi
-                    
-                    echo "� Configuration trouvée: \${CONFIG_FILE}"
+
+                    echo "Configuration trouvée: \${CONFIG_FILE}"
                     echo ""
                     echo "✅ Configuration Keycloak préparée (secrets non affichés pour sécurité)"
                     echo ""
 
                     # Exécution directe via Maven Spring Boot plugin
-                    if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging; then
+                    if ./mvnw spring-boot:run -Dspring-boot.run.profiles=ephemere; then
                         echo ""
                         echo "✅ Keycloak initialisé avec succès"
                         echo "   - Realm RHDemo créé"
@@ -1421,7 +1421,7 @@ YMLEOF
                         echo "❌ Échec de l'initialisation Keycloak"
                         echo ""
                         echo "📋 Logs Keycloak pour diagnostic:"
-                        docker logs --tail=30 keycloak-staging || true
+                        docker logs --tail=30 keycloak-ephemere || true
                         exit 1
                     fi
                     
@@ -1470,7 +1470,7 @@ YMLEOF
                     // Healthcheck Nginx HTTPS (test depuis Jenkins où Firefox tourne)
                     lib.waitForHealthcheck([
                         name: 'Nginx HTTPS',
-                        url: 'https://rhdemo.staging.local/front/',
+                        url: 'https://rhdemo.ephemere.local:58443/front/',
                         timeout: 30,
                         acceptedCodes: [200, 302],
                         insecure: true,  // Certificat auto-signé
@@ -1560,7 +1560,7 @@ YMLEOF
                     # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
                     echo "🔐 Utilisation de ZAP_API_KEY: ${env.ZAP_API_KEY.take(8)}..."
 
-                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas staging
+                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas ephemere
                     cd rhDemo/infra/jenkins-docker
 
                     # Nettoyage : supprimer le conteneur ZAP existant s'il existe
@@ -1598,14 +1598,14 @@ YMLEOF
                     docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} | jq .
 
                     echo ""
-                    echo "🔗 Connexion de ZAP au réseau staging..."
-                    docker network connect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau staging"
+                    echo "🔗 Connexion de ZAP au réseau ephemere..."
+                    docker network connect rhdemo-ephemere-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau ephemere"
 
                     echo ""
                     echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
                     echo "   Container: rhdemo-jenkins-zap"
                     echo "   Réseau 1: rhdemo-jenkins-network (API + Proxy)"
-                    echo "   Réseau 2: rhdemo-staging-network (accès application via connexion dynamique)"
+                    echo "   Réseau 2: rhdemo-ephemere-network (accès application via connexion dynamique)"
                     echo "   Port unique (API + Proxy): owasp-zap:8090"
                 """
             }
@@ -1632,15 +1632,15 @@ YMLEOF
 
                         # URLs via nginx dans le réseau Docker avec HTTPS
                         # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
-                        # Car Jenkins container est connecté à rhdemo-staging-network
-                        # Les aliases rhdemo.staging.local et keycloak.staging.local sont résolus via DNS Docker
+                        # Car Jenkins container est connecté à rhdemo-ephemere-network
+                        # Les aliases rhdemo.ephemere.local et keycloak.ephemere.local sont résolus via DNS Docker
                         # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
-                        APP_URL="https://rhdemo.staging.local"
-                        KEYCLOAK_URL="https://rhdemo.staging.local/realms/RHDemo"
+                        APP_URL="https://rhdemo.ephemere.local:58443"
+                        KEYCLOAK_URL="https://rhdemo.ephemere.local:58443/realms/RHDemo"
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig
-                        # Username chargé depuis secrets-staging.yml (pas de valeur en dur)
+                        # Username chargé depuis secrets-ephemere.yml (pas de valeur en dur)
                         TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 
@@ -1722,23 +1722,23 @@ YMLEOF
                         // Archiver les rapports ZAP
                         archiveArtifacts artifacts: 'zap-reports/*', fingerprint: true, allowEmptyArchive: true
 
-                        // Déconnexion de ZAP du réseau staging après les tests
-                        echo '🔌 Déconnexion de ZAP du réseau staging...'
+                        // Déconnexion de ZAP du réseau ephemere après les tests
+                        echo '🔌 Déconnexion de ZAP du réseau ephemere...'
                         sh '''
-                            docker network disconnect rhdemo-staging-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau staging"
-                            echo "✅ ZAP déconnecté du réseau staging (reste sur jenkins-network)"
+                            docker network disconnect rhdemo-ephemere-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau ephemere"
+                            echo "✅ ZAP déconnecté du réseau ephemere (reste sur jenkins-network)"
                         '''
 
-                        // Déconnexion de Jenkins du réseau staging après les tests
-                        echo '🔌 Déconnexion de Jenkins du réseau staging...'
+                        // Déconnexion de Jenkins du réseau ephemere après les tests
+                        echo '🔌 Déconnexion de Jenkins du réseau ephemere...'
                         sh '''#!/bin/bash
                             # Trouver le conteneur Jenkins principal (pas l'agent)
                             JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
                             echo "Conteneur Jenkins trouvé: $JENKINS_CONTAINER"
 
                             if [ -n "$JENKINS_CONTAINER" ]; then
-                                docker network disconnect rhdemo-staging-network $JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté du réseau staging"
-                                echo "✅ Jenkins ($JENKINS_CONTAINER) déconnecté du réseau rhdemo-staging-network"
+                                docker network disconnect rhdemo-ephemere-network $JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté du réseau ephemere"
+                                echo "✅ Jenkins ($JENKINS_CONTAINER) déconnecté du réseau rhdemo-ephemere-network"
                             else
                                 echo "⚠️ Conteneur Jenkins introuvable pour déconnexion"
                             fi
@@ -1859,10 +1859,10 @@ YMLEOF
                     fi
 
                     # Nettoyer aussi le fichier de config Keycloak généré
-                    if [ -f "rhDemoInitKeycloak/src/main/resources/application-staging.yml" ]; then
-                        shred -vfz -n 3 rhDemoInitKeycloak/src/main/resources/application-staging.yml 2>/dev/null || \
-                        rm -f rhDemoInitKeycloak/src/main/resources/application-staging.yml
-                        echo "✅ application-staging.yml supprimé de manière sécurisée"
+                    if [ -f "rhDemoInitKeycloak/src/main/resources/application-ephemere.yml" ]; then
+                        shred -vfz -n 3 rhDemoInitKeycloak/src/main/resources/application-ephemere.yml 2>/dev/null || \
+                        rm -f rhDemoInitKeycloak/src/main/resources/application-ephemere.yml
+                        echo "✅ application-ephemere.yml supprimé de manière sécurisée"
                     fi
                 '''
 
@@ -1873,20 +1873,20 @@ YMLEOF
                     if (buildResult != 'SUCCESS') {
                         echo "📋 Récupération des logs Docker (build ${buildResult})..."
                         sh """
-                            cd ${STAGING_INFRA_PATH} || exit 0
+                            cd ${EPHEMERE_INFRA_PATH} || exit 0
                             docker-compose -p ${COMPOSE_PROJECT_NAME} logs --tail=100 || true
                         """
                     }
 
-                    echo '✅ Environnement staging conservé pour tests manuels'
+                    echo '✅ Environnement ephemere conservé pour tests manuels'
                     echo '📍 Accès à l\'environnement:'
-                    echo '   - Application rhDemo : https://rhdemo.staging.local'
-                    echo '   - Keycloak Admin     : https://keycloak.staging.local'
+                    echo '   - Application rhDemo : https://rhdemo.ephemere.local:58443'
+                    echo '   - Keycloak Admin     : https://keycloak.ephemere.local:58443'
                     echo ''
                     echo '🔧 Commandes utiles:'
-                    echo "   - Logs app     : docker logs -f rhdemo-staging-app"
-                    echo "   - Logs Keycloak: docker logs -f keycloak-staging"
-                    echo "   - Arrêter      : cd ${STAGING_INFRA_PATH} && docker-compose -p ${COMPOSE_PROJECT_NAME} down -v"
+                    echo "   - Logs app     : docker logs -f rhdemo-ephemere-app"
+                    echo "   - Logs Keycloak: docker logs -f keycloak-ephemere"
+                    echo "   - Arrêter      : cd ${EPHEMERE_INFRA_PATH} && docker-compose -p ${COMPOSE_PROJECT_NAME} down -v"
                     echo ''
                     echo '⚠️  IMPORTANT: L\'environnement sera automatiquement nettoyé au prochain build'
                     echo '   Le nettoyage se fait en début de pipeline (stage "Configuration Environnement Test")'
@@ -1898,7 +1898,7 @@ YMLEOF
         
         success {
             script {
-                def deployInfo = params.DEPLOY_ENV != 'none' ? " et déployé en ${params.DEPLOY_ENV}" : ""
+                def deployInfo = params.DEPLOY_ENV != 'none' ? " et deploye en ${params.DEPLOY_ENV}" : ""
                 echo "✅ Pipeline réussi${deployInfo} !"
             }
             

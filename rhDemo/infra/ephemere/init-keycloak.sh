@@ -1,10 +1,10 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# Script d'initialisation de Keycloak pour l'environnement staging
+# Script d'initialisation de Keycloak pour l'environnement ephemere
 # USAGE MANUEL LOCAL UNIQUEMENT
 #
 # Pour CI/CD Jenkins: l'initialisation est gérée directement dans Jenkinsfile
-# (génération application-staging.yml + exécution JAR)
+# (génération application-ephemere.yml + exécution JAR)
 #
 # Utilise le projet rhDemoInitKeycloak pour créer le realm, 
 # le client et les utilisateurs
@@ -31,10 +31,10 @@ echo -e "${BLUE}  Initialisation Keycloak pour RHDemo Staging (mode manuel)${NC}
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo
 
-# Charger les variables depuis .env (créé par init-staging.sh)
+# Charger les variables depuis .env (créé par init-ephemere.sh)
 if [ ! -f "${ENV_FILE}" ]; then
     echo -e "${RED}✗ Fichier .env introuvable${NC}"
-    echo -e "Exécutez d'abord: ./init-staging.sh"
+    echo -e "Exécutez d'abord: ./init-ephemere.sh"
     exit 1
 fi
 
@@ -80,10 +80,10 @@ fi
 echo -e "${GREEN}✓ Projet rhDemoInitKeycloak trouvé${NC}"
 echo
 
-# Copier la configuration pour le staging
+# Copier la configuration pour le ephemere
 echo -e "${YELLOW}→ Préparation de la configuration Keycloak...${NC}"
 
-CONFIG_FILE="${RHDEMO_INIT_KEYCLOAK_DIR}/src/main/resources/application-staging.yml"
+CONFIG_FILE="${RHDEMO_INIT_KEYCLOAK_DIR}/src/main/resources/application-ephemere.yml"
 
 cat > "${CONFIG_FILE}" << EOF
 # ========================================
@@ -178,7 +178,7 @@ echo
 cd "${RHDEMO_INIT_KEYCLOAK_DIR}"
 
 # Utiliser Maven wrapper pour exécution en mode dev
-if ./mvnw spring-boot:run -Dspring-boot.run.profiles=staging -q; then
+if ./mvnw spring-boot:run -Dspring-boot.run.profiles=ephemere -q; then
     echo
     echo -e "${GREEN}✓ Keycloak initialisé avec succès !${NC}"
 else

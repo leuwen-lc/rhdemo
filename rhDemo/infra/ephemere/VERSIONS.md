@@ -23,7 +23,7 @@ Les versions des images Docker de base sont définies dans **trois endroits sync
 ### 1. Mettre à jour .env.example
 
 ```bash
-cd rhDemo/infra/staging
+cd rhDemo/infra/ephemere
 vim .env.example
 ```
 
@@ -76,9 +76,9 @@ docker-compose up -d
 
 # 4. Vérifier les versions
 docker-compose ps
-docker inspect rhdemo-staging-nginx | grep Image
-docker inspect rhdemo-staging-db | grep Image
-docker inspect keycloak-staging | grep Image
+docker inspect rhdemo-ephemere-nginx | grep Image
+docker inspect rhdemo-ephemere-db | grep Image
+docker inspect keycloak-ephemere | grep Image
 ```
 
 ### 5. Tester avec Jenkins
@@ -169,15 +169,15 @@ docker rmi ${NGINX_IMAGE} 2>/dev/null || true
 ```bash
 # Backup avec ancienne version
 docker-compose up -d rhdemo-db
-docker exec rhdemo-staging-db pg_dump -U rhdemo rhdemo > backup.sql
+docker exec rhdemo-ephemere-db pg_dump -U rhdemo rhdemo > backup.sql
 
 # Supprimer volume et recréer avec nouvelle version
 docker-compose down -v
-docker volume rm rhdemo-staging-db-data
+docker volume rm rhdemo-ephemere-db-data
 
 # Restaurer avec nouvelle version
 docker-compose up -d rhdemo-db
-cat backup.sql | docker exec -i rhdemo-staging-db psql -U rhdemo rhdemo
+cat backup.sql | docker exec -i rhdemo-ephemere-db psql -U rhdemo rhdemo
 ```
 
 ### Keycloak : Migration base de données
@@ -189,11 +189,11 @@ cat backup.sql | docker exec -i rhdemo-staging-db psql -U rhdemo rhdemo
 **Solution** : Keycloak migre automatiquement le schéma au démarrage
 ```bash
 # Vérifier les logs de migration
-docker logs keycloak-staging | grep "Liquibase"
+docker logs keycloak-ephemere | grep "Liquibase"
 
 # En cas d'erreur, backup et recréation
-docker exec keycloak-staging-db pg_dump -U keycloak keycloak > keycloak-backup.sql
-docker volume rm keycloak-staging-db-data
+docker exec keycloak-ephemere-db pg_dump -U keycloak keycloak > keycloak-backup.sql
+docker volume rm keycloak-ephemere-db-data
 # Relancer docker-compose
 ```
 
@@ -205,7 +205,7 @@ docker volume rm keycloak-staging-db-data
 - [ ] Mettre à jour `Jenkinsfile` (variables environment)
 - [ ] Tester localement avec `docker-compose up -d`
 - [ ] Vérifier les healthchecks : `docker-compose ps`
-- [ ] Tester l'application : `curl https://rhdemo.staging.local/front`
+- [ ] Tester l'application : `curl https://rhdemo.ephemere.local/front`
 - [ ] Tester l'authentification Keycloak
 - [ ] Lancer les tests Selenium : `cd rhDemoAPITestIHM && mvn test`
 - [ ] Tester avec Jenkins (build complet)

@@ -2,11 +2,11 @@
 
 #═══════════════════════════════════════════════════════════════
 # Script de génération de certificats SSL auto-signés
-# Pour l'environnement de test staging avec nginx
+# Pour l'environnement de test ephemere avec nginx
 #
 # Crée un certificat valide pour :
-#   - rhdemo.staging.local
-#   - keycloak.staging.local
+#   - rhdemo.ephemere.local
+#   - keycloak.ephemere.local
 #
 # Usage:
 #   ./generate-certs.sh
@@ -18,7 +18,7 @@ set -e
 # Configuration par défaut
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CERTS_DIR="${SCRIPT_DIR}/certs"
-DEFAULT_DOMAIN="staging.local"
+DEFAULT_DOMAIN="ephemere.local"
 RHDEMO_DOMAIN="rhdemo.${DEFAULT_DOMAIN}"
 KEYCLOAK_DOMAIN="keycloak.${DEFAULT_DOMAIN}"
 
@@ -43,9 +43,9 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --domain DOMAIN          Domaine de base (default: staging.local)"
-            echo "  --rhdemo-domain DOMAIN   Domaine RHDemo (default: rhdemo.staging.local)"
-            echo "  --keycloak-domain DOMAIN Domaine Keycloak (default: keycloak.staging.local)"
+            echo "  --domain DOMAIN          Domaine de base (default: ephemere.local)"
+            echo "  --rhdemo-domain DOMAIN   Domaine RHDemo (default: rhdemo.ephemere.local)"
+            echo "  --keycloak-domain DOMAIN Domaine Keycloak (default: keycloak.ephemere.local)"
             echo "  -h, --help               Afficher cette aide"
             echo ""
             echo "Example:"
@@ -96,7 +96,7 @@ req_extensions     = v3_req
 C  = FR
 ST = Ile-de-France
 L  = Paris
-O  = RHDemo Staging
+O  = RHDemo Ephemere
 OU = IT Department
 CN = ${RHDEMO_DOMAIN}
 
@@ -167,6 +167,6 @@ echo -e "   ✓ ${KEYCLOAK_DOMAIN}"
 echo -e "   ✓ localhost"
 echo -e "   ✓ 127.0.0.1"
 echo ""
-echo -e "${YELLOW}⚠️  Note: Certificat auto-signé - À utiliser uniquement en test/staging${NC}"
+echo -e "${YELLOW}⚠️  Note: Certificat auto-signé - À utiliser uniquement en test/ephemere${NC}"
 echo ""
 

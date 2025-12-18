@@ -7,7 +7,7 @@ Ce document décrit les différents environnements disponibles pour développer 
 | Environnement | Usage | Emplacement | Infrastructure |
 |---------------|-------|-------------|----------------|
 | **Dev Local** | Développement sur machine locale | [infra/dev/](../infra/dev/) | Docker Compose (Keycloak + PostgreSQL) |
-| **Staging** | Tests d'intégration CI/CD | [infra/staging/](../infra/staging/) | Docker Compose complet (App + Keycloak + PostgreSQL + nginx) |
+| **Ephemere** | Tests d'intégration CI/CD | [infra/ephemere/](../infra/ephemere/) | Docker Compose complet (App + Keycloak + PostgreSQL + nginx) |
 
 ---
 
@@ -97,7 +97,7 @@ Voir [infra/dev/README.md](../infra/dev/README.md) pour plus de détails.
 
 ---
 
-## 🚀 Environnement staging (CI/CD)
+## 🚀 Environnement ephemere (CI/CD)
 
 ### Description
 
@@ -110,12 +110,12 @@ Environnement complet utilisé par Jenkins pour les tests d'intégration automat
 │  Jenkins Pipeline (Docker)                                  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Docker Compose Network (rhdemo-stagingkub-network)     │  │
+│  │  Docker Compose Network (rhdemo-ephemere-network)       │  │
 │  │                                                       │  │
 │  │  ┌─────────────┐   ┌──────────────┐   ┌──────────┐ │  │
 │  │  │   nginx     │   │  rhDemo App  │   │ Keycloak │ │  │
 │  │  │   (HTTPS)   ├──→│  (Container) │←──│          │ │  │
-│  │  │  Port: 443  │   │  Port: 9000  │   │  :8080   │ │  │
+│  │  │ Port:58443  │   │  Port: 9000  │   │  :8080   │ │  │
 │  │  └─────────────┘   └──────┬───────┘   └────┬─────┘ │  │
 │  │                           │                  │       │  │
 │  │                    ┌──────▼──────┐   ┌──────▼────┐ │  │
@@ -130,20 +130,20 @@ Environnement complet utilisé par Jenkins pour les tests d'intégration automat
 
 | Service | Container | Port (externe) | Base de données | HTTPS |
 |---------|-----------|----------------|-----------------|-------|
-| nginx | rhdemo-stagingkub-nginx | 443 | - | ✅ Oui |
-| rhDemo App | rhdemo-stagingkub-app | - | PostgreSQL | via nginx |
-| Keycloak | keycloak-staging | - | PostgreSQL | via nginx |
-| PostgreSQL (rhDemo) | rhdemo-stagingkub-db | - | rhdemo | - |
-| PostgreSQL (Keycloak) | keycloak-staging-db | - | keycloak | - |
+| nginx | rhdemo-ephemere-nginx | 58443 | - | ✅ Oui |
+| rhDemo App | rhdemo-ephemere-app | - | PostgreSQL | via nginx |
+| Keycloak | keycloak-ephemere | - | PostgreSQL | via nginx |
+| PostgreSQL (rhDemo) | rhdemo-ephemere-db | - | rhdemo | - |
+| PostgreSQL (Keycloak) | keycloak-ephemere-db | - | keycloak | - |
 
 ### Gestion des secrets
 
-L'environnement staging utilise **SOPS/AGE** pour chiffrer les secrets.
+L'environnement ephemere utilise **SOPS/AGE** pour chiffrer les secrets.
 
 #### Flux des secrets (principe du moindre privilège)
 
 ```
-secrets-staging.yml (chiffré SOPS)
+secrets-ephemere.yml (chiffré SOPS)
          ↓
    Jenkins déchiffre
          ↓
@@ -157,13 +157,13 @@ secrets-staging.yml (chiffré SOPS)
     │  (copié dans container)    │
     └────────────────────────────┘
          ↓
-    Container rhdemo-stagingkub-app
+    Container rhdemo-ephemere-app
     (accès limité aux secrets rhDemo)
 ```
 
 #### Secrets accessibles par rhDemo
 
-Le container `rhdemo-stagingkub-app` reçoit **uniquement** :
+Le container `rhdemo-ephemere-app` reçoit **uniquement** :
 - ✅ Mot de passe PostgreSQL rhDemo
 - ✅ Secret client Keycloak OAuth2
 - ✅ Mot de passe H2 (tests)
@@ -178,7 +178,7 @@ Voir [SECURITY_LEAST_PRIVILEGE.md](SECURITY_LEAST_PRIVILEGE.md) pour plus de dé
 
 ### Démarrage
 
-L'environnement staging est démarré automatiquement par Jenkins via le [Jenkinsfile](../Jenkinsfile).
+L'environnement ephemere est démarré automatiquement par Jenkins via le [Jenkinsfile](../Jenkinsfile).
 
 Étapes principales :
 1. Déchiffrement SOPS des secrets
@@ -194,7 +194,7 @@ L'environnement staging est démarré automatiquement par Jenkins via le [Jenkin
 
 ### Documentation
 
-Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails (à créer si nécessaire).
+Voir [infra/ephemere/README.md](../infra/ephemere/README.md) pour plus de détails (à créer si nécessaire).
 
 ---
 
@@ -202,8 +202,8 @@ Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails
 
 ### Tableau récapitulatif
 
-| Aspect | Dev Local | Staging |
-|--------|-----------|---------|
+| Aspect | Dev Local | Ephemere |
+|--------|-----------|----------|
 | **Usage** | Développement manuel | Tests automatisés CI/CD |
 | **Démarrage** | `./start.sh` | Jenkins pipeline |
 | **App rhDemo** | Lancée via `mvnw` | Container Docker (Paketo) |
@@ -212,7 +212,7 @@ Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails
 | **Keycloak port** | 6090 | 8080 (interne) |
 | **HTTPS** | ❌ Non | ✅ Oui (nginx reverse proxy) |
 | **Certificats SSL** | - | Auto-signés |
-| **Réseau** | rhdemo-dev-network | rhdemo-stagingkub-network |
+| **Réseau** | rhdemo-dev-network | rhdemo-ephemere-network |
 | **Secrets** | Fichier local non chiffré | SOPS/AGE chiffré |
 | **Données persistées** | PostgreSQL uniquement | Tous les volumes Docker |
 | **Tests Selenium** | Manuel | Automatiques (headless) |
@@ -227,7 +227,7 @@ Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails
 - ✅ Vous n'avez pas besoin de HTTPS
 - ✅ Vous voulez contrôler le démarrage/arrêt
 
-**Utilisez Staging si** :
+**Utilisez Ephemere si** :
 - ✅ Vous testez le pipeline CI/CD
 - ✅ Vous validez une pull request
 - ✅ Vous testez en conditions proches de la production
@@ -238,9 +238,9 @@ Voir [infra/staging/README.md](../infra/staging/README.md) pour plus de détails
 
 ## Configuration des secrets
 
-### Installation SOPS/AGE (requis pour staging)
+### Installation SOPS/AGE (requis pour ephemere)
 
-Pour déchiffrer les secrets de staging, vous devez installer SOPS et AGE.
+Pour déchiffrer les secrets de ephemere, vous devez installer SOPS et AGE.
 
 **Voir le guide complet : [SOPS_SETUP.md](SOPS_SETUP.md)**
 
@@ -286,9 +286,9 @@ rhdemo:
           secret: votre-secret-client-keycloak
 ```
 
-### Staging
+### Ephemere
 
-Les secrets sont gérés par Jenkins via `secrets/secrets-staging.yml` (chiffré SOPS).
+Les secrets sont gérés par Jenkins via `secrets/secrets-ephemere.yml` (chiffré SOPS).
 
 Voir [REFACTOR_SECRETS_NAMING.md](REFACTOR_SECRETS_NAMING.md) pour la structure complète.
 
@@ -304,11 +304,11 @@ Voir [REFACTOR_SECRETS_NAMING.md](REFACTOR_SECRETS_NAMING.md) pour la structure 
 | Keycloak | 6090 | HTTP | localhost |
 | rhDemo App | 8080 | HTTP | localhost (si lancée) |
 
-### Staging
+### Ephemere
 
 | Service | Port externe | Port interne | Protocol | Accessible depuis |
 |---------|--------------|--------------|----------|-------------------|
-| nginx | 443 | 443 | HTTPS | localhost (host Docker) |
+| nginx | 58443 | 443 | HTTPS | localhost (host Docker) |
 | rhDemo App | - | 9000 | HTTP | réseau Docker uniquement |
 | Keycloak | - | 8080 | HTTP | réseau Docker uniquement |
 | PostgreSQL rhDemo | - | 5432 | TCP | réseau Docker uniquement |
@@ -322,4 +322,4 @@ Voir [REFACTOR_SECRETS_NAMING.md](REFACTOR_SECRETS_NAMING.md) pour la structure 
 - [SECURITY_LEAST_PRIVILEGE.md](SECURITY_LEAST_PRIVILEGE.md) - Gestion sécurisée des secrets
 - [REFACTOR_SECRETS_NAMING.md](REFACTOR_SECRETS_NAMING.md) - Nomenclature des fichiers secrets
 - [infra/dev/README.md](../infra/dev/README.md) - Documentation environnement dev
-- [Jenkinsfile](../Jenkinsfile) - Pipeline CI/CD staging
+- [Jenkinsfile](../Jenkinsfile) - Pipeline CI/CD ephemere

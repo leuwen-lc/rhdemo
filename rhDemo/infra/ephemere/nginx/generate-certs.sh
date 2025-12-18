@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# Génération de certificats SSL auto-signés pour staging
+# Génération de certificats SSL auto-signés pour ephemere
 # ═══════════════════════════════════════════════════════════════
 
 set -e
@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Génération des certificats SSL pour staging${NC}"
+echo -e "${GREEN}  Génération des certificats SSL pour ephemere${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
 
 # Créer le répertoire SSL s'il n'existe pas
@@ -42,7 +42,7 @@ generate_cert() {
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout "${key_file}" \
         -out "${cert_file}" \
-        -subj "/C=FR/ST=France/L=Paris/O=RHDemo/OU=Staging/CN=${domain}" \
+        -subj "/C=FR/ST=France/L=Paris/O=RHDemo/OU=Ephemere/CN=${domain}" \
         -addext "subjectAltName=DNS:${domain},DNS:*.${domain},DNS:localhost"
     
     # Permissions appropriées
@@ -64,12 +64,12 @@ echo -e "${GREEN}✓ Génération terminée !${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
 echo
 echo -e "${YELLOW}IMPORTANT:${NC}"
-echo -e "Ces certificats sont auto-signés et destinés uniquement au staging."
+echo -e "Ces certificats sont auto-signés et destinés uniquement à l'environnement ephemere."
 echo -e "Pour un environnement de production, utilisez Let's Encrypt ou des"
 echo -e "certificats émis par une autorité de certification reconnue."
 echo
 echo -e "${YELLOW}Configuration /etc/hosts requise:${NC}"
 echo -e "Ajoutez ces lignes à votre fichier /etc/hosts :"
-echo -e "${GREEN}127.0.0.1  rhdemo.staging.local${NC}"
-echo -e "${GREEN}127.0.0.1  keycloak.staging.local${NC}"
+echo -e "${GREEN}127.0.0.1  rhdemo.ephemere.local${NC}"
+echo -e "${GREEN}127.0.0.1  keycloak.ephemere.local${NC}"
 echo

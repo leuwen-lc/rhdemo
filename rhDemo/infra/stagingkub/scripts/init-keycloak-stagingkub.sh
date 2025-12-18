@@ -183,9 +183,9 @@ LOCAL_PORT=6090
 pkill -f "kubectl.*port-forward.*keycloak.*${LOCAL_PORT}" 2>/dev/null || true
 sleep 2
 
-# Démarrer le port-forward en arrière-plan
+# Démarrer le port-forward
 KEYCLOAK_POD=$(kubectl get pod -l app=keycloak -n "${K8S_NAMESPACE}" -o jsonpath='{.items[0].metadata.name}')
-kubectl port-forward "${KEYCLOAK_POD}" "${LOCAL_PORT}:8080" -n "${K8S_NAMESPACE}" > /dev/null 2>&1 &
+kubectl port-forward "${KEYCLOAK_POD}" "${LOCAL_PORT}:8080" -n "${K8S_NAMESPACE}" &
 PORT_FORWARD_PID=$!
 
 # Attendre que le port-forward soit actif
@@ -194,6 +194,7 @@ sleep 3
 # Vérifier que le port-forward fonctionne
 if ! ps -p ${PORT_FORWARD_PID} > /dev/null 2>&1; then
     echo -e "${RED}✗ Échec du port-forward vers Keycloak${NC}"
+    echo "vérifiez qu'un autre processus n'évoute pas déjà sur le port"
     exit 1
 fi
 

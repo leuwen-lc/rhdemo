@@ -442,6 +442,18 @@ EOF
 
                     echo ""
                     echo "✅ Déploiement Helm réussi"
+
+                    # CRITIQUE: Attendre explicitement que les pods rhdemo-app soient READY
+                    # Cela permet à l'Ingress Controller de synchroniser les endpoints actifs
+                    # et évite les erreurs 503 lors des premiers accès
+                    echo ""
+                    echo "▶ Attente que les pods rhdemo-app soient complètement ready..."
+                    kubectl wait --for=condition=ready pod \\
+                        -l app=rhdemo-app \\
+                        -n ${env.K8S_NAMESPACE} \\
+                        --timeout=300s
+
+                    echo "✅ Pods rhdemo-app ready - Ingress Controller peut maintenant router le trafic"
                 """
             }
         }

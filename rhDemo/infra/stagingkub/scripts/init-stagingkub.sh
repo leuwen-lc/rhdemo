@@ -140,6 +140,11 @@ fi
 # Définir le contexte kubectl
 kubectl config use-context kind-rhdemo
 
+# Attendre que le nœud KinD soit prêt
+echo -e "${YELLOW}▶ Attente que le nœud KinD soit prêt...${NC}"
+kubectl wait --for=condition=ready node --all --timeout=120s
+echo -e "${GREEN}✅ Nœud KinD prêt${NC}"
+
 # Installer Nginx Ingress Controller si nécessaire
 echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller...${NC}"
 if ! kubectl get namespace ingress-nginx &> /dev/null; then
@@ -152,10 +157,14 @@ else
 fi
 
 # Attendre que l'Ingress Controller soit prêt (que ce soit une nouvelle installation ou existant)
-echo -e "${YELLOW}Attente du démarrage de Nginx Ingress Controller...${NC}"
-# Attendre d'abord que le pod existe (jusqu'à 60s)
-for i in {1..60}; do
+echo -e "${YELLOW}Attente du démarrage de Nginx Ingress Controller (jusqu'à 3 minutes)...${NC}"
+
+# Attendre d'abord que le pod existe (jusqu'à 2 minutes)
+echo -n "  - Attente de la création du pod"
+POD_FOUND=false
+for i in {1..120}; do
     if kubectl get pod -l app.kubernetes.io/component=controller -n ingress-nginx &> /dev/null; then
+        POD_FOUND=true
         break
     fi
     echo -n "."
@@ -163,11 +172,18 @@ for i in {1..60}; do
 done
 echo ""
 
+if [ "$POD_FOUND" = false ]; then
+    echo -e "${RED}❌ Le pod Ingress Controller n'a pas été créé${NC}"
+    kubectl get pods -n ingress-nginx
+    exit 1
+fi
+
 # Maintenant attendre que le pod soit ready
+echo "  - Attente que le pod soit prêt..."
 if kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
-  --timeout=90s > /dev/null 2>&1; then
+  --timeout=120s > /dev/null 2>&1; then
     if [ "$INGRESS_INSTALLED" = true ]; then
         echo -e "${GREEN}✅ Nginx Ingress Controller installé et prêt${NC}"
     else
@@ -175,23 +191,26 @@ if kubectl wait --namespace ingress-nginx \
     fi
 else
     echo -e "${RED}❌ Timeout lors de l'attente de l'Ingress Controller${NC}"
+    echo -e "${YELLOW}Vérification de l'état des pods...${NC}"
+    kubectl get pods -n ingress-nginx
+    kubectl describe pod -l app.kubernetes.io/component=controller -n ingress-nginx | tail -50
     exit 1
 fi
 
 # Configurer les NodePorts fixes pour l'Ingress Controller
 # Ces NodePorts correspondent aux ports mappés dans la configuration KinD :
-# - NodePort 31792 (HTTP) → Host port 58080
-# - NodePort 32616 (HTTPS) → Host port 58443
+# - NodePort 31792 (HTTP) → Host port 80
+# - NodePort 32616 (HTTPS) → Host port 443
 echo -e "${YELLOW}▶ Configuration des NodePorts pour l'Ingress Controller...${NC}"
 kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http","nodePort":31792},{"name":"https","port":443,"protocol":"TCP","targetPort":"https","nodePort":32616}]}}'
-echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→58080, HTTPS: 32616→58443)${NC}"
+echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→80, HTTPS: 32616→443)${NC}"
 
 # Configurer nginx-ingress pour forcer les headers X-Forwarded-Port et X-Forwarded-Proto
-# Ceci permet à Spring Boot de construire les URLs OAuth2 avec le bon port (58443)
+# Ceci permet à Spring Boot de construire les URLs OAuth2 avec le bon port (443)
 echo -e "${YELLOW}▶ Configuration des headers X-Forwarded-* dans nginx-ingress...${NC}"
 kubectl patch configmap ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"use-forwarded-headers":"true","compute-full-forwarded-for":"true","forwarded-for-header":"X-Forwarded-For"}}'
 
-# Ajouter la configuration pour forcer X-Forwarded-Port à 58443 pour HTTPS
+# Ajouter la configuration pour forcer X-Forwarded-Port à 443 pour HTTPS
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -204,7 +223,7 @@ data:
   forwarded-for-header: "X-Forwarded-For"
   http-snippet: |
     map \$server_port \$custom_forwarded_port {
-      443 58443;
+      443 443;
       default \$server_port;
     }
   proxy-set-headers: "ingress-nginx/custom-headers"
@@ -218,7 +237,7 @@ metadata:
   name: custom-headers
   namespace: ingress-nginx
 data:
-  X-Forwarded-Port: "58443"
+  X-Forwarded-Port: "443"
   X-Forwarded-Proto: "https"
 EOF
 
@@ -260,6 +279,8 @@ else
     KEYCLOAK_DB_PASSWORD="changeme"
     KEYCLOAK_ADMIN_PASSWORD="admin"
 fi
+
+
 
 # Créer le namespace si nécessaire avec les labels Helm
 echo -e "${YELLOW}▶ Création du namespace rhdemo-stagingkub...${NC}"

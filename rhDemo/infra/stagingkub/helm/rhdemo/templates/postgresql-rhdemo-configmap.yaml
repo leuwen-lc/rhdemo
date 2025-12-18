@@ -20,45 +20,41 @@ data:
     -- Exécuté automatiquement au premier démarrage de PostgreSQL
     -- ═══════════════════════════════════════════════════════════════
 
-    -- Vérifier si la table existe déjà
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT FROM pg_tables
-        WHERE schemaname = 'public' AND tablename = 'employes'
-      ) THEN
-        \echo '📋 Création du schéma de la base de données RHDemo...'
+    -- Créer la table employes (IF NOT EXISTS = idempotent)
+    CREATE TABLE IF NOT EXISTS employes (
+      id BIGSERIAL PRIMARY KEY,
+      prenom VARCHAR(250) NOT NULL,
+      nom VARCHAR(250) NOT NULL,
+      mail VARCHAR(250) NOT NULL,
+      adresse VARCHAR(500)
+    );
 
-        -- Créer la table employes
-        CREATE TABLE employes (
-          id BIGSERIAL PRIMARY KEY,
-          prenom VARCHAR(250) NOT NULL,
-          nom VARCHAR(250) NOT NULL,
-          mail VARCHAR(250) NOT NULL,
-          adresse VARCHAR(500)
-        );
+    -- Création des index pour optimiser les performances
+    -- Index sur le mail pour les recherches rapides et l'unicité
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employes_mail ON employes(mail);
 
-        -- Création des index pour optimiser les performances
-        -- Index sur le mail pour les recherches rapides et l'unicité
-        CREATE UNIQUE INDEX idx_employes_mail ON employes(mail);
+    -- Index sur le nom pour les recherches alphabétiques
+    CREATE INDEX IF NOT EXISTS idx_employes_nom ON employes(nom);
 
-        -- Index sur le nom pour les recherches alphabétiques
-        CREATE INDEX idx_employes_nom ON employes(nom);
+    -- Index sur le prénom pour les recherches par prénom
+    CREATE INDEX IF NOT EXISTS idx_employes_prenom ON employes(prenom);
 
-        -- Index sur le prénom pour les recherches par prénom
-        CREATE INDEX idx_employes_prenom ON employes(prenom);
+    -- Index composite sur nom + prénom pour les recherches combinées
+    CREATE INDEX IF NOT EXISTS idx_employes_nom_prenom ON employes(nom, prenom);
 
-        -- Index composite sur nom + prénom pour les recherches combinées
-        CREATE INDEX idx_employes_nom_prenom ON employes(nom, prenom);
+    -- Index partiel sur l'adresse (seulement pour les adresses non-nulles)
+    CREATE INDEX IF NOT EXISTS idx_employes_adresse ON employes(adresse) WHERE adresse IS NOT NULL;
 
-        -- Index partiel sur l'adresse (seulement pour les adresses non-nulles)
-        -- Utile si beaucoup de recherches par ville/localisation
-        CREATE INDEX idx_employes_adresse ON employes(adresse) WHERE adresse IS NOT NULL;
+    -- Insérer des données de test (seulement si la table est vide)
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Jean', 'Dupont', 'jean.dupont@rhdemo.local', '1 Rue de Paris, 75001 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes LIMIT 1);
 
-        \echo '✅ Schéma de base de données RHDemo initialisé (table + index créés)'
-      ELSE
-        \echo 'ℹ️  Table employes existe déjà - schéma non modifié (données préservées)'
-      END IF;
-    END
-    $$;
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Marie', 'Martin', 'marie.martin@rhdemo.local', '2 Avenue des Champs, 75008 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes WHERE mail = 'marie.martin@rhdemo.local');
+
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Pierre', 'Bernard', 'pierre.bernard@rhdemo.local', '3 Boulevard Saint-Germain, 75005 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes WHERE mail = 'pierre.bernard@rhdemo.local');
 {{- end }}

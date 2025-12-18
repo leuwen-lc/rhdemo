@@ -108,7 +108,7 @@ docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgdata.sql
 ### Staging (Docker Compose)
 
 ```bash
-cd rhDemo/infra/staging
+cd rhDemo/infra/ephemere
 
 # Option 1 : Script automatique
 ./init-database.sh

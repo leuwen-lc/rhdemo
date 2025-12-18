@@ -60,7 +60,7 @@ pipeline {
         SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
 
         // Configuration environnement staging (Docker Compose)
-        STAGING_INFRA_PATH = 'rhDemo/infra/staging'
+        STAGING_INFRA_PATH = 'rhDemo/infra/ephemere'
         KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
         TEST_DOMAIN = 'rhdemo.staging.local'
         KEYCLOAK_DOMAIN = 'keycloak.staging.local'

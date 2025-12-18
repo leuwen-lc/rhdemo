@@ -95,7 +95,7 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${YELLOW}Création du cluster KinD 'rhdemo'...${NC}"
 
     # Créer un fichier de configuration KinD avec support du registry local
-    # Note: Les ports 58080/58443 (host) sont mappés vers les NodePorts de l'Ingress Controller
+    # Note: Les ports 80/443 (host) sont mappés vers les NodePorts de l'Ingress Controller
     # Ces NodePorts (31792/32616) sont assignés automatiquement par le manifeste Ingress Nginx
     cat <<EOF > /tmp/kind-config.yaml
 kind: Cluster
@@ -109,10 +109,10 @@ nodes:
 - role: control-plane
   extraPortMappings:
   - containerPort: 31792
-    hostPort: 58080
+    hostPort: 80
     protocol: TCP
   - containerPort: 32616
-    hostPort: 58443
+    hostPort: 443
     protocol: TCP
 EOF
 

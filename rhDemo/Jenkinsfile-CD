@@ -397,35 +397,6 @@ EOF
         // PHASE 4 : DÉPLOIEMENT
         // ════════════════════════════════════════════════════════════════
 
-        stage('🗄️ Initialize Database Schema') {
-            steps {
-                script {
-                    echo "▶ Initialisation du schéma de la base de données..."
-                }
-                sh """
-                    kubectl config use-context ${env.K8S_CONTEXT}
-
-                    # Attendre que PostgreSQL soit prêt
-                    kubectl wait --for=condition=ready pod -l app=postgresql-rhdemo \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --timeout=5m
-
-                    # Vérifier si la table 'employes' existe déjà
-                    TABLE_EXISTS=\$(kubectl exec -i postgresql-rhdemo-0 -n ${env.K8S_NAMESPACE} -- \\
-                      psql -U rhdemo -d rhdemo -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='employes'")
-
-                    if [ "\$TABLE_EXISTS" = "0" ]; then
-                        echo "▶ Table 'employes' non trouvée, initialisation du schéma..."
-                        kubectl exec -i postgresql-rhdemo-0 -n ${env.K8S_NAMESPACE} -- \\
-                          psql -U rhdemo -d rhdemo < ../rhDemo/pgschema.sql
-                        echo "✅ Schéma de base de données initialisé"
-                    else
-                        echo "ℹ️  Table 'employes' existe déjà, pas d'initialisation nécessaire"
-                    fi
-                """
-            }
-        }
-
         stage('☸️ Deploy to Kubernetes') {
             steps {
                 script {

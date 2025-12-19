@@ -375,19 +375,19 @@ keycloak:
     client-id: RHDemo
     name: RHDemo
     secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-    root-url: https://${TEST_DOMAIN}/
+    root-url: https://${TEST_DOMAIN}:58443/
     base-url: ''
     admin-url: ''
     redirect-uris:
-      - https://${TEST_DOMAIN}/*
+      - https://${TEST_DOMAIN}:58443/*
+      - https://rhdemo.ephemere.local:58443/*
+      - https://keycloak.ephemere.local:58443/*
       - http://localhost:9000/*
-      - https://rhdemo.ephemere.local/*
-      - https://keycloak.ephemere.local/*
     web-origins:
-      - https://${TEST_DOMAIN}
+      - https://${TEST_DOMAIN}:58443
+      - https://rhdemo.ephemere.local:58443
+      - https://keycloak.ephemere.local:58443
       - http://localhost:9000
-      - https://rhdemo.ephemere.local
-      - https://keycloak.ephemere.local
     roles:
       - ROLE_admin
       - ROLE_consult

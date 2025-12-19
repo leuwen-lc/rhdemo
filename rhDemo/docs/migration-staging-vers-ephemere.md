@@ -73,6 +73,29 @@ element located by By.id: username (tried for 20 second(s))
 
 **Impact** : Saturation espace disque sur serveur Jenkins
 
+### 5. Proxy ZAP ne peut pas résoudre host.docker.internal
+
+**Symptôme** : Tests Selenium échouent avec erreur ZAP
+
+**Erreur ZAP** :
+```
+An exception occurred while attempting to connect to: https://host.docker.internal:58443/front/ajout
+The exception was:
+host.docker.internal
+```
+
+**Détails** :
+- Selenium configure proxy ZAP pour intercepter le trafic HTTPS
+- ZAP tente de se connecter à `host.docker.internal:58443`
+- ZAP ne peut pas résoudre ce nom DNS (spécifique aux conteneurs Docker)
+- Toutes les requêtes HTTP échouent
+
+**Cause racine** :
+- `host.docker.internal` est un nom DNS spécial Docker
+- Fonctionne uniquement pour les connexions sortantes des conteneurs
+- Proxy ZAP (application Java) ne peut pas résoudre ce nom
+- Besoin d'une IP réelle accessible depuis le réseau Docker
+
 ---
 
 ## ✅ Solutions Implémentées
@@ -139,27 +162,46 @@ client:
 proxy_set_header X-Forwarded-Port 58443;  # Port HTTPS public
 ```
 
-### Solution 3 : Accès Selenium via host.docker.internal
+### Solution 3 : Accès Selenium via IP Gateway Docker
 
 **Problématique** :
 - Accès réseau Docker interne → port 443
 - Accès depuis l'hôte → port 58443
 - Selenium doit se comporter comme utilisateur externe (port 58443)
+- `host.docker.internal` ne fonctionne pas avec proxy ZAP (ZAP ne peut pas résoudre ce nom DNS)
 
-**Solution** : Utiliser `host.docker.internal` pour accès hôte depuis conteneur
+**Solution** : Utiliser l'IP de la gateway Docker détectée dynamiquement
 
-**Fichier** : `rhDemo/Jenkinsfile-CI` (lignes 1132-1133)
+**Fichier** : `rhDemo/Jenkinsfile-CI`
 
+**Détection IP Gateway** (lignes 327-330) :
 ```bash
-# Selenium accède comme un utilisateur externe via l'hôte
-APP_URL="https://host.docker.internal:58443"
-KEYCLOAK_URL="https://host.docker.internal:58443/realms/RHDemo"
+# Détecter l'IP de la gateway Docker pour les tests Selenium
+GATEWAY_IP=$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+echo "🔍 Gateway IP détectée pour redirect URIs: ${GATEWAY_IP}"
+```
+
+**Configuration redirect URIs Keycloak** (lignes 390, 396) :
+```yaml
+redirect-uris:
+  - https://${GATEWAY_IP}:58443/*
+web-origins:
+  - https://${GATEWAY_IP}:58443
+```
+
+**URLs Selenium** (lignes 1147-1151) :
+```bash
+# Détecter l'IP de la gateway pour Selenium
+GATEWAY_IP=$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+APP_URL="https://${GATEWAY_IP}:58443"
+KEYCLOAK_URL="https://${GATEWAY_IP}:58443/realms/RHDemo"
 ```
 
 **Bénéfices** :
 - ✅ Selenium utilise le port public 58443
 - ✅ Compatible avec redirect_uri générés par Spring Boot
-- ✅ Keycloak accepte les redirect_uri (whitelist)
+- ✅ Keycloak accepte les redirect_uri (IP gateway dans whitelist)
+- ✅ Proxy ZAP peut résoudre l'IP (contrairement à host.docker.internal)
 - ✅ Tests fonctionnent comme en manuel
 
 ### Solution 4 : Nettoyage automatique des images Docker
@@ -288,10 +330,16 @@ curl -k https://rhdemo.ephemere.local/front/
 
 ## ⚠️ Points d'Attention
 
-### Compatibilité Docker
-- `host.docker.internal` fonctionne sur Docker Desktop (Mac/Windows)
-- Sur Linux standard, peut nécessiter configuration supplémentaire
-- Alternative Linux : utiliser IP gateway réseau (`docker network inspect`)
+### IP Gateway Docker
+- L'IP de la gateway est détectée dynamiquement à chaque build
+- Typiquement : `172.17.0.1`, `172.18.0.1`, etc.
+- Compatible tous systèmes (Linux, Mac, Windows)
+- Permet au proxy ZAP de résoudre correctement l'adresse
+
+### Compatibilité Proxy ZAP
+- **CRITIQUE** : ZAP ne peut pas résoudre `host.docker.internal`
+- Solution : utiliser IP gateway détectée dynamiquement
+- ZAP doit pouvoir accéder à l'hôte via cette IP pour intercepter le trafic HTTPS
 
 ### Certificats SSL
 - Certificats auto-signés acceptés via `setAcceptInsecureCerts(true)` dans Selenium

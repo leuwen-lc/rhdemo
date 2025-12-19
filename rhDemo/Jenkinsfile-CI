@@ -324,6 +324,11 @@ EOF
                 }
 
                 sh '''
+                    # Détecter l'IP de la gateway Docker pour les tests Selenium
+                    # Cette IP sera ajoutée aux redirect URIs Keycloak
+                    GATEWAY_IP=$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+                    echo "🔍 Gateway IP détectée pour redirect URIs: ${GATEWAY_IP}"
+
                     # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
                     set +x
 
@@ -382,13 +387,13 @@ keycloak:
       - https://${TEST_DOMAIN}:58443/*
       - https://rhdemo.ephemere.local:58443/*
       - https://keycloak.ephemere.local:58443/*
-      - https://host.docker.internal:58443/*
+      - https://${GATEWAY_IP}:58443/*
       - http://localhost:9000/*
     web-origins:
       - https://${TEST_DOMAIN}:58443
       - https://rhdemo.ephemere.local:58443
       - https://keycloak.ephemere.local:58443
-      - https://host.docker.internal:58443
+      - https://${GATEWAY_IP}:58443
       - http://localhost:9000
     roles:
       - ROLE_admin
@@ -1133,17 +1138,22 @@ YMLEOF
                         . ../rhDemo/secrets/env-vars.sh
 
                         # URLs via nginx avec HTTPS
-                        # Selenium dans Jenkins doit accéder comme un utilisateur externe via localhost
+                        # Selenium dans Jenkins doit accéder comme un utilisateur externe via l'IP gateway
                         # et le port exposé 58443, pas via les alias réseau Docker interne (port 443)
                         # car Spring Boot construit les redirect_uri avec le port 58443 (X-Forwarded-Port)
                         # et Keycloak valide strictement les redirect_uri
                         # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
                         #
-                        # Note: Jenkins container peut accéder à l'hôte via host.docker.internal (Docker Desktop)
-                        # ou via l'IP du gateway pour les setups Linux standard
+                        # Note: On utilise l'IP de la gateway Docker au lieu de host.docker.internal
+                        # car ZAP proxy ne peut pas résoudre host.docker.internal
 
-                        APP_URL="https://host.docker.internal:58443"
-                        KEYCLOAK_URL="https://host.docker.internal:58443/realms/RHDemo"
+                        # Détecter l'IP de la gateway du réseau rhdemo-jenkins-network
+                        # (Jenkins et ZAP sont sur ce réseau, peuvent donc accéder à l'hôte via la gateway)
+                        GATEWAY_IP=\$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+                        echo "🔍 Gateway IP détectée: \${GATEWAY_IP}"
+
+                        APP_URL="https://\${GATEWAY_IP}:58443"
+                        KEYCLOAK_URL="https://\${GATEWAY_IP}:58443/realms/RHDemo"
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig

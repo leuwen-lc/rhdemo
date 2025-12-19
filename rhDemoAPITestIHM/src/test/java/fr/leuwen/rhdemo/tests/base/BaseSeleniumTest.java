@@ -119,6 +119,13 @@ public abstract class BaseSeleniumTest {
                 proxy.setSslProxy(proxyAddress);
                 proxy.setNoProxy(""); // Tout passe par ZAP
                 options.setProxy(proxy);
+
+                // CRITIQUE: Préférences Firefox pour accepter les certificats du proxy ZAP
+                // ZAP intercepte HTTPS et re-signe avec son propre CA
+                options.addPreference("network.proxy.allow_hijacking_localhost", true);
+                options.addPreference("security.cert_pinning.enforcement_level", 0);
+                options.addPreference("security.enterprise_roots.enabled", true);
+
                 log.info("✅ Proxy ZAP configuré: {}", proxyAddress);
             }
 

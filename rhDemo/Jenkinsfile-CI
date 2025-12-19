@@ -382,11 +382,13 @@ keycloak:
       - https://${TEST_DOMAIN}:58443/*
       - https://rhdemo.ephemere.local:58443/*
       - https://keycloak.ephemere.local:58443/*
+      - https://host.docker.internal:58443/*
       - http://localhost:9000/*
     web-origins:
       - https://${TEST_DOMAIN}:58443
       - https://rhdemo.ephemere.local:58443
       - https://keycloak.ephemere.local:58443
+      - https://host.docker.internal:58443
       - http://localhost:9000
     roles:
       - ROLE_admin
@@ -1130,13 +1132,18 @@ YMLEOF
                         set +x
                         . ../rhDemo/secrets/env-vars.sh
 
-                        # URLs via nginx dans le réseau Docker avec HTTPS
-                        # Firefox dans Jenkins doit utiliser les network aliases DNS Docker
-                        # Car Jenkins container est connecté à rhdemo-ephemere-network
-                        # Les aliases rhdemo.ephemere.local et keycloak.ephemere.local sont résolus via DNS Docker
+                        # URLs via nginx avec HTTPS
+                        # Selenium dans Jenkins doit accéder comme un utilisateur externe via localhost
+                        # et le port exposé 58443, pas via les alias réseau Docker interne (port 443)
+                        # car Spring Boot construit les redirect_uri avec le port 58443 (X-Forwarded-Port)
+                        # et Keycloak valide strictement les redirect_uri
                         # HTTPS utilisé pour tester en conditions réelles (certificat auto-signé accepté par setAcceptInsecureCerts)
-                        APP_URL="https://rhdemo.ephemere.local"
-                        KEYCLOAK_URL="https://rhdemo.ephemere.local/realms/RHDemo"
+                        #
+                        # Note: Jenkins container peut accéder à l'hôte via host.docker.internal (Docker Desktop)
+                        # ou via l'IP du gateway pour les setups Linux standard
+
+                        APP_URL="https://host.docker.internal:58443"
+                        KEYCLOAK_URL="https://host.docker.internal:58443/realms/RHDemo"
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig

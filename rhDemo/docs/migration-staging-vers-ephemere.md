@@ -330,6 +330,13 @@ curl -k https://rhdemo.ephemere.local/front/
 
 ## ⚠️ Points d'Attention
 
+### Variable Substitution dans Jenkinsfile
+- **CRITIQUE** : Utiliser `sh """` (double quotes) pour permettre substitution Groovy des variables d'environnement
+- Variables Groovy (`${env.VAR}`) substituées par Groovy AVANT exécution bash
+- Variables bash (`\${VAR}`) échappées avec `\` pour substitution APRÈS par bash
+- Heredoc sans quotes (`<< YMLEOF`) permet substitution bash des variables dans le document
+- Vérification ajoutée : `grep -A 5 "redirect-uris:" fichier.yml` pour valider substitution
+
 ### IP Gateway Docker
 - L'IP de la gateway est détectée dynamiquement à chaque build
 - Typiquement : `172.17.0.1`, `172.18.0.1`, etc.
@@ -364,9 +371,56 @@ Pour revenir à l'ancienne configuration :
 
 ---
 
+## 🔧 Troubleshooting
+
+### Erreur "We are sorry..." de Keycloak lors des tests
+
+**Symptômes** :
+- Selenium accède à `https://<GATEWAY_IP>:58443/front/ajout`
+- Redirection vers Keycloak fonctionne
+- Keycloak affiche "We are sorry..." au lieu du formulaire de login
+
+**Causes possibles** :
+
+1. **Variables non substituées dans application-ephemere.yml**
+   - Vérifier les logs Jenkins pour la section "Vérification de la section redirect-uris"
+   - Les redirect URIs doivent montrer l'IP réelle (ex: `172.18.0.1`) et non `${GATEWAY_IP}`
+   - Si `${GATEWAY_IP}` apparaît littéralement, problème de substitution bash
+
+2. **Redirect URI non whitelisté dans Keycloak**
+   - Vérifier que `https://<GATEWAY_IP>:58443/*` est dans la liste des redirect URIs
+   - Accéder à l'admin Keycloak : `https://keycloak.ephemere.local:58443/admin`
+   - Aller dans le realm RHDemo > Client RHDemo > Settings > Valid redirect URIs
+
+3. **Problème de timing (Keycloak pas complètement initialisé)**
+   - Vérifier les logs du conteneur `keycloak-ephemere`
+   - Attendre que le healthcheck soit vert avant les tests
+
+**Commandes de diagnostic** :
+
+```bash
+# Vérifier le fichier généré
+cat rhDemoInitKeycloak/src/main/resources/application-ephemere.yml | grep -A 10 "redirect-uris"
+
+# Vérifier les logs Keycloak
+docker logs keycloak-ephemere | tail -50
+
+# Tester manuellement l'authentification avec l'IP gateway
+curl -k -v "https://<GATEWAY_IP>:58443/front/"
+
+# Vérifier la configuration du client dans Keycloak (via API)
+# Remplacer <ADMIN_TOKEN> par un token admin Keycloak valide
+curl -k "https://keycloak.ephemere.local:58443/admin/realms/RHDemo/clients" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" | jq '.[] | select(.clientId=="RHDemo") | .redirectUris'
+```
+
+---
+
 ## 📚 Références
 
 - [Spring Boot Behind Proxy](https://docs.spring.io/spring-boot/reference/web/servlet.html#web.servlet.embedded-container.customizing.samesite)
 - [Keycloak Redirect URI Validation](https://www.keycloak.org/docs/latest/server_admin/#_clients)
 - [Docker host.docker.internal](https://docs.docker.com/desktop/networking/#i-want-to-connect-from-a-container-to-a-service-on-the-host)
 - [Selenium Firefox Options](https://www.selenium.dev/documentation/webdriver/browsers/firefox/)
+- [Jenkins Pipeline Shell Step](https://www.jenkins.io/doc/pipeline/steps/workflow-durable-task-step/#sh-shell-script)
+- [Bash Heredoc](https://tldp.org/LDP/abs/html/here-docs.html)

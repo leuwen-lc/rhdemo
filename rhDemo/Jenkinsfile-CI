@@ -323,11 +323,14 @@ EOF
                     echo '   (Sera utilisé directement via mvnw spring-boot:run, sans packaging JAR)'
                 }
 
-                sh '''
+                sh """
                     # Détecter l'IP de la gateway Docker pour les tests Selenium
                     # Cette IP sera ajoutée aux redirect URIs Keycloak
-                    GATEWAY_IP=$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
-                    echo "🔍 Gateway IP détectée pour redirect URIs: ${GATEWAY_IP}"
+                    GATEWAY_IP=\$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+                    echo "🔍 Gateway IP détectée pour redirect URIs: \${GATEWAY_IP}"
+
+                    # Variables Groovy passées à bash pour substitution dans le YAML
+                    TEST_DOMAIN="${env.TEST_DOMAIN}"
 
                     # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
                     set +x
@@ -340,7 +343,7 @@ EOF
                     CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
 
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
-                    cat > "${CONFIG_FILE}" << YMLEOF
+                    cat > "\${CONFIG_FILE}" << YMLEOF
 # ========================================
 # Configuration Keycloak Server - EPHEMERE
 # Générée automatiquement par Jenkins CI/CD
@@ -433,9 +436,16 @@ YMLEOF
                     # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
                     set -x
 
-                    echo "✅ Fichier de configuration Keycloak généré: ${CONFIG_FILE}"
+                    echo "✅ Fichier de configuration Keycloak généré: \${CONFIG_FILE}"
                     echo "   Ce fichier sera utilisé par rhDemoInitKeycloak pour initialiser Keycloak"
-                '''
+                    echo "   Redirect URIs configurés pour:"
+                    echo "     - https://\${TEST_DOMAIN}:58443/*"
+                    echo "     - https://\${GATEWAY_IP}:58443/* (pour Selenium/ZAP)"
+
+                    echo ""
+                    echo "🔍 Vérification de la section redirect-uris dans le fichier généré:"
+                    grep -A 5 "redirect-uris:" "\${CONFIG_FILE}" || echo "⚠️ Section redirect-uris non trouvée"
+                """
             }
         }
 

@@ -679,19 +679,19 @@ YMLEOF
                     }
 
                     echo "🐳 Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
-                    echo "   Version détectée: ${env.APP_VERSION}"
-                    echo "   Image à construire: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Version Maven détectée: ${env.APP_VERSION}"
+                    echo "   Image à construire: ${env.RHDEMO_IMAGE}"
                     echo "⚠️  Nettoyage complet: suppression images existantes..."
 
                     // Supprimer les anciennes images Docker pour forcer reconstruction
                     sh """
-                        docker rmi ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image n'existe pas encore"
                         docker rmi ${env.DOCKER_IMAGE_NAME}:latest 2>/dev/null || echo "Image latest n'existe pas encore"
                     """
 
                     sh """
                         cd rhDemo
-                        docker build -t ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
+                        docker build -t ${env.RHDEMO_IMAGE} \
                                      -t ${env.DOCKER_IMAGE_NAME}:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
@@ -699,7 +699,7 @@ YMLEOF
                                      .
                     """
 
-                    echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "✅ Image Docker créée: ${env.RHDEMO_IMAGE}"
 
                     // Lister les images créées et afficher la taille
                     sh """
@@ -851,21 +851,23 @@ YMLEOF
             }
         }
         
-        stage('🏷️ Tag Image Docker') {
-            when {
-                expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
-            }
-            steps {
-                script {
-                    echo "▶ Tag de l'image Docker..."
-                    echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
-                    echo "   Cible:  ${env.RHDEMO_IMAGE}"
-                }
-                sh """
-                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
-                """
-            }
-        }
+        // NOTE: Ce stage n'est plus nécessaire car l'image est maintenant construite
+        // directement avec le tag build-${BUILD_NUMBER} dans le stage "Build Docker Image"
+        // stage('🏷️ Tag Image Docker') {
+        //     when {
+        //         expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
+        //     }
+        //     steps {
+        //         script {
+        //             echo "▶ Tag de l'image Docker..."
+        //             echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+        //             echo "   Cible:  ${env.RHDEMO_IMAGE}"
+        //         }
+        //         sh """
+        //             docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
+        //         """
+        //     }
+        // }
 
         // ════════════════════════════════════════════════════════════════
         // DÉPLOIEMENT KUBERNETES (STAGINGKUB)

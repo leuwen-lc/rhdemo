@@ -2,11 +2,11 @@
 
 ## Vue d'ensemble
 
-Un stage de scan de sécurité Trivy a été ajouté au pipeline Jenkins pour détecter les vulnérabilités dans toutes les images Docker utilisées en staging.
+Un stage de scan de sécurité Trivy a été ajouté au pipeline Jenkins pour détecter les vulnérabilités dans toutes les images Docker utilisées en ephemere.
 
 ## Images scannées
 
-Le stage scanne automatiquement les 4 images Docker du stack staging :
+Le stage scanne automatiquement les 4 images Docker du stack ephemere :
 
 1. **postgres:16-alpine** - Base de données (rhdemo-db et keycloak-db)
 2. **quay.io/keycloak/keycloak:26.4.2** - Serveur d'authentification
@@ -103,7 +103,7 @@ TOTAL                : CRITICAL=  0, HIGH= 18, MEDIUM= 57
 
 ### Images tierces (postgres, keycloak, nginx)
 
-Mettre à jour vers des versions patchées dans `infra/staging/docker-compose.yml` :
+Mettre à jour vers des versions patchées dans `infra/ephemere/docker-compose.yml` :
 
 ```yaml
 services:

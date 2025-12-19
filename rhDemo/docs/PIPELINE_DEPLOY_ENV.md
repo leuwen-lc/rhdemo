@@ -38,9 +38,9 @@ Pipeline **léger** pour validation rapide du code (Pull Requests, commits de d�
 
 ---
 
-### `staging` - Pipeline complet avec déploiement staging
+### `ephemere` - Pipeline complet avec déploiement ephemere
 
-Pipeline **complet** incluant Docker, Selenium et déploiement en environnement de staging.
+Pipeline **complet** incluant Docker, Selenium et déploiement en environnement de ephemere.
 
 **Stages exécutés** :
 - ✅ Tous les stages de `none`
@@ -72,7 +72,7 @@ Pipeline **complet** incluant Docker, Selenium et déploiement en environnement 
 Pipeline **complet** incluant toutes les étapes de production (actuellement en simulation).
 
 **Stages exécutés** :
-- ✅ Tous les stages de `staging`
+- ✅ Tous les stages de `ephemere`
 - ✅ + Approbation manuelle (sauf si `SKIP_MANUAL_APPROVAL=true`)
 - ✅ + Backup base de données (simulation)
 - ✅ + Déploiement production (simulation)
@@ -89,7 +89,7 @@ Pipeline **complet** incluant toutes les étapes de production (actuellement en 
 
 ## Matrice de décision
 
-| Stage | `none` | `staging` | `production` |
+| Stage | `none` | `ephemere` | `production` |
 |-------|:------:|:---------:|:------------:|
 | **Build & Compilation** | ✅ | ✅ | ✅ |
 | **Tests unitaires** | ✅ | ✅ | ✅ |
@@ -97,7 +97,7 @@ Pipeline **complet** incluant toutes les étapes de production (actuellement en 
 | **OWASP Dependency-Check** | ✅ | ✅ | ✅ |
 | **SonarQube** | ✅* | ✅* | ✅* |
 | **Build Docker Image** | ❌ | ✅ | ✅ |
-| **Déploiement staging** | ❌ | ✅ | ✅ |
+| **Déploiement ephemere** | ❌ | ✅ | ✅ |
 | **Tests Selenium** | ❌ | ✅** | ✅** |
 | **Approbation manuelle** | ❌ | ❌ | ✅*** |
 | **Backup BDD** | ❌ | ❌ | ✅ |
@@ -117,7 +117,7 @@ Pipeline **complet** incluant toutes les étapes de production (actuellement en 
 - **Défaut** : `true`
 - **Impact** :
   - Si `DEPLOY_ENV=none` → **Ignoré** (tests Selenium ne s'exécutent jamais)
-  - Si `DEPLOY_ENV=staging/production` → Active/désactive tests Selenium
+  - Si `DEPLOY_ENV=ephemere/production` → Active/désactive tests Selenium
 
 ### `RUN_SONAR`
 
@@ -131,7 +131,7 @@ Pipeline **complet** incluant toutes les étapes de production (actuellement en 
 - **Défaut** : `false`
 - **Impact** :
   - Si `DEPLOY_ENV=production` → Ignore l'approbation manuelle
-  - Si `DEPLOY_ENV=none/staging` → **Ignoré** (pas d'approbation dans ces modes)
+  - Si `DEPLOY_ENV=none/ephemere` → **Ignoré** (pas d'approbation dans ces modes)
 
 ---
 
@@ -162,11 +162,11 @@ RUN_SONAR: true
 ### Validation complète avant production
 
 ```groovy
-DEPLOY_ENV: staging
+DEPLOY_ENV: ephemere
 RUN_SELENIUM_TESTS: true
 RUN_SONAR: true
 ```
-**Résultat** : Pipeline complet staging + Selenium + SonarQube (~40-50 min)
+**Résultat** : Pipeline complet ephemere + Selenium + SonarQube (~40-50 min)
 
 ---
 
@@ -203,12 +203,12 @@ SKIP_MANUAL_APPROVAL: true
 
 ### Pour les releases
 
-- **Release Candidate** : `DEPLOY_ENV=staging`, `RUN_SELENIUM_TESTS=true`, `RUN_SONAR=true`
+- **Release Candidate** : `DEPLOY_ENV=ephemere`, `RUN_SELENIUM_TESTS=true`, `RUN_SONAR=true`
 - **Production** : `DEPLOY_ENV=production`, `RUN_SELENIUM_TESTS=true`, `SKIP_MANUAL_APPROVAL=false`
 
 ### Pour les tests
 
-- **Tests Selenium uniquement** : `DEPLOY_ENV=staging`, `RUN_SELENIUM_TESTS=true`, `RUN_SONAR=false`
+- **Tests Selenium uniquement** : `DEPLOY_ENV=ephemere`, `RUN_SELENIUM_TESTS=true`, `RUN_SONAR=false`
 - **Analyse qualité uniquement** : `DEPLOY_ENV=none`, `RUN_SONAR=true`
 
 ---
@@ -218,7 +218,7 @@ SKIP_MANUAL_APPROVAL: true
 | Mode | CPU | RAM | Disque | Durée |
 |------|-----|-----|--------|-------|
 | `none` | Faible | ~2 GB | ~500 MB | 5-20 min |
-| `staging` | Moyen | ~6 GB | ~5 GB | 30-40 min |
+| `ephemere` | Moyen | ~6 GB | ~5 GB | 30-40 min |
 | `production` | Moyen | ~6 GB | ~5 GB | 35-45 min |
 
 ---

@@ -1,22 +1,22 @@
-# Séparation des Secrets : staging vs stagingkub
+# Séparation des Secrets : ephemere vs stagingkub
 
 ## 📋 Vue d'ensemble
 
-Les environnements `staging` (Docker Compose) et `stagingkub` (Kubernetes) utilisent des fichiers de secrets **complètement séparés** pour permettre une gestion indépendante et éviter les conflits.
+Les environnements `ephemere` (Docker Compose) et `stagingkub` (Kubernetes) utilisent des fichiers de secrets **complètement séparés** pour permettre une gestion indépendante et éviter les conflits.
 
 ## 📁 Fichiers de secrets
 
 | Fichier | Environnement | Utilisation | Chiffrement |
 |---------|---------------|-------------|-------------|
-| `secrets-staging.yml` | **staging** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
+| `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
 | `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Environnement permanent Kubernetes | SOPS/Age |
 | `secrets-rhdemo.yml` | Temporaire | Généré depuis secrets-staging*.yml pour l'app | Non chiffré (temporaire) |
 
 ## 🔐 Gestion des secrets
 
-### Pour l'environnement staging (Docker Compose)
+### Pour l'environnement ephemere (Docker Compose)
 
-**Fichier source**: `secrets/secrets-staging.yml`
+**Fichier source**: `secrets/secrets-ephemere.yml`
 
 **Utilisé par**:
 - `Jenkinsfile` (pipeline monolithique)
@@ -26,10 +26,10 @@ Les environnements `staging` (Docker Compose) et `stagingkub` (Kubernetes) utili
 **Déchiffrement**:
 ```bash
 # Éditer les secrets
-SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-staging.yml
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-ephemere.yml
 
 # Déchiffrer pour inspection
-sops -d secrets-staging.yml > secrets-staging-decrypted.yml
+sops -d secrets-ephemere.yml > secrets-ephemere-decrypted.yml
 ```
 
 ### Pour l'environnement stagingkub (Kubernetes)
@@ -53,7 +53,7 @@ sops -d secrets-stagingkub.yml > secrets-stagingkub-decrypted.yml
 
 Lors de la création de `secrets-stagingkub.yml` :
 
-1. Le fichier a été dupliqué depuis `secrets-staging.yml`
+1. Le fichier a été dupliqué depuis `secrets-ephemere.yml`
 2. **Vous devriez changer les secrets** pour stagingkub pour plus de sécurité
 3. Notamment :
    - Mots de passe des bases de données

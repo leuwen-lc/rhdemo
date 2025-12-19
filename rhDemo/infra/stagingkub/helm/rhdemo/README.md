@@ -122,8 +122,8 @@ Ce fichier contient **TOUTES** les valeurs configurables :
 ```yaml
 global:                           # Variables globales
   namespace: rhdemo-stagingkub       # Namespace Kubernetes
-  environment: staging            # Environnement (staging/prod)
-  domain: staging.local           # Domaine DNS
+  environment: ephemere            # Environnement (staging/prod)
+  domain: ephemere.local           # Domaine DNS
 
 postgresql-rhdemo:                # Config PostgreSQL RHDemo
   enabled: true                   # Activer ce composant ?
@@ -164,7 +164,7 @@ rhdemo:                           # Config Application RHDemo
     repository: rhdemo-api        # Sera remplacé par localhost:5000/rhdemo-api
     tag: "1.1.0-SNAPSHOT"
   replicaCount: 1
-  springProfile: staging
+  springProfile: ephemere
   serverPort: 9000
   jvm:                            # Config JVM
     threadCount: 50
@@ -234,7 +234,7 @@ metadata:
   labels:
     app.kubernetes.io/name: rhdemo
     app.kubernetes.io/instance: rhdemo
-    environment: staging
+    environment: ephemere
 ```
 
 **Qu'est-ce qu'un Namespace ?**
@@ -653,7 +653,7 @@ spec:
 
 **Configuration Spring Boot via environnement** :
 - Les variables `SPRING_*` sont automatiquement lues par Spring Boot
-- Équivalent de `application-staging.properties`
+- Équivalent de `application-ephemere.properties`
 - Permet de surcharger la config sans rebuild
 
 **Volumes et Secrets** :

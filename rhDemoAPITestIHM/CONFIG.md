@@ -134,7 +134,7 @@ mvn test -Dtest.baseurl=http://192.168.1.100:9000
 
 ```bash
 mvn clean test \
-  -Dtest.baseurl=https://staging.example.com \
+  -Dtest.baseurl=https://ephemere.example.com \
   -Dtest.keycloak.url=https://keycloak.example.com/realms/MyRealm \
   -Dselenium.headless=true \
   -Dselenium.browser=chrome \

@@ -161,7 +161,7 @@ Client génère state → Stocke en session → Redirige vers Keycloak
 
 ## 🛠️ Configuration Nginx (Keycloak)
 
-### Fichier : `infra/staging/nginx/conf.d/keycloak.conf`
+### Fichier : `infra/ephemere/nginx/conf.d/keycloak.conf`
 
 ```nginx
 # CSP complète pour Keycloak
@@ -261,8 +261,8 @@ ls target/classes/static/css/error.css
 - `frontend/public/index.html` (modifié)
 
 ### Infrastructure
-- `infra/staging/nginx/conf.d/rhdemo.conf`
-- `infra/staging/nginx/conf.d/keycloak.conf`
+- `infra/ephemere/nginx/conf.d/rhdemo.conf`
+- `infra/ephemere/nginx/conf.d/keycloak.conf`
 
 ---
 

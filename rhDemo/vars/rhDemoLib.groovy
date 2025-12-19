@@ -34,7 +34,7 @@ def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
  * Test effectué depuis Jenkins (qui doit être connecté au réseau Docker si nécessaire)
  *
  * @param config Map de configuration avec les clés:
- *   - url: URL du healthcheck (requis) - peut être une URL réseau Docker (ex: http://keycloak-staging:8080)
+ *   - url: URL du healthcheck (requis) - peut être une URL réseau Docker (ex: http://keycloak-ephemere:8080)
  *   - timeout: Timeout en secondes (défaut: 60)
  *   - name: Nom du service pour les logs (défaut: 'Service')
  *   - container: Nom du container pour afficher les logs en cas d'échec (optionnel)

@@ -7,7 +7,7 @@ Ce document résume l'implémentation complète de l'environnement stagingkub (K
 ## ✅ Objectifs atteints
 
 - ✅ **Migration complète avec Helm** : Chart Helm complet et production-ready
-- ✅ **Compatibilité avec staging** : L'environnement Docker Compose existant reste fonctionnel
+- ✅ **Compatibilité avec ephemere** : L'environnement Docker Compose existant reste fonctionnel
 - ✅ **Intégration Jenkins** : Nouveau paramètre `DEPLOY_ENV=stagingkub` dans le pipeline
 - ✅ **Documentation complète** : README, Quick Start, comparaisons, troubleshooting
 - ✅ **Scripts d'automatisation** : Init, deploy, validate

@@ -10,17 +10,17 @@
 - [Configuration](#configuration)
 - [Opérations courantes](#opérations-courantes)
 - [Troubleshooting](#troubleshooting)
-- [Comparaison staging vs stagingkub](#comparaison-staging-vs-stagingkub)
+- [Comparaison ephemere vs stagingkub](#comparaison-ephemere-vs-stagingkub)
 
 ---
 
 ## 🎯 Vue d'ensemble
 
-L'environnement **stagingkub** est un environnement de staging Kubernetes basé sur **KinD** (Kubernetes in Docker). Il reproduit l'architecture de l'environnement staging Docker Compose dans un cluster Kubernetes local, permettant de tester les déploiements Kubernetes avant la production.
+L'environnement **stagingkub** est un environnement de staging Kubernetes basé sur **KinD** (Kubernetes in Docker). Il reproduit l'architecture de l'environnement ephemere Docker Compose dans un cluster Kubernetes local, permettant de tester les déploiements Kubernetes avant la production.
 
-### Différences avec staging (Docker Compose)
+### Différences avec ephemere (Docker Compose)
 
-| Aspect | staging (Docker Compose) | stagingkub (Kubernetes/KinD) |
+| Aspect | ephemere (Docker Compose) | stagingkub (Kubernetes/KinD) |
 |--------|-------------------------|------------------------------|
 | **Orchestration** | Docker Compose | Kubernetes (KinD) |
 | **Package** | docker-compose.yml | Helm Chart |
@@ -438,7 +438,7 @@ curl -k https://rhdemo.stagingkub.local
 
 ```bash
 # Vérifier /etc/hosts
-cat /etc/hosts | grep staging.local
+cat /etc/hosts | grep ephemere.local
 
 # Ajouter manuellement si nécessaire
 echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
@@ -457,9 +457,9 @@ kind load docker-image rhdemo-api:VERSION --name rhdemo
 
 ---
 
-## 📊 Comparaison staging vs stagingkub
+## 📊 Comparaison ephemere vs stagingkub
 
-### Quand utiliser staging (Docker Compose)
+### Quand utiliser ephemere (Docker Compose)
 
 ✅ Tests rapides de nouvelles fonctionnalités
 ✅ Développement local

@@ -31,13 +31,13 @@ Guide complet pour installer et configurer SOPS (Secrets OPerationS) avec AGE po
 ### Exemple
 
 ```yaml
-# secrets-staging.yml (avant chiffrement)
+# secrets-ephemere.yml (avant chiffrement)
 rhdemo:
   datasource:
     password:
       pg: monMotDePasseSecret123
 
-# secrets-staging.yml (après chiffrement SOPS)
+# secrets-ephemere.yml (après chiffrement SOPS)
 rhdemo:
   datasource:
     password:
@@ -221,8 +221,8 @@ grep "public key:" ~/.config/sops/age/keys.txt
 rhDemo/
 ├── secrets/
 │   ├── secrets.yml.template           ← Template (commité)
-│   ├── secrets-staging.yml.template   ← Template staging (commité)
-│   ├── secrets-staging.yml            ← Secrets staging chiffrés SOPS (commité)
+│   ├── secrets-ephemere.yml.template   ← Template ephemere (commité)
+│   ├── secrets-ephemere.yml            ← Secrets ephemere chiffrés SOPS (commité)
 │   ├── secrets-rhdemo.yml             ← Secrets dev local non chiffrés (gitignore)
 │   └── .sops.yaml                     ← Configuration SOPS (commité)
 └── .sops.yaml                         ← Configuration SOPS racine (commité)
@@ -235,7 +235,7 @@ Le fichier `.sops.yaml` définit les règles de chiffrement :
 ```yaml
 # rhDemo/.sops.yaml
 creation_rules:
-  - path_regex: secrets/secrets-staging\.yml$
+  - path_regex: secrets/secrets-ephemere\.yml$
     age: >-
       age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,
       age1yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
@@ -247,16 +247,16 @@ creation_rules:
 cd rhDemo/secrets
 
 # Créer un fichier depuis le template
-cp secrets-staging.yml.template secrets-staging-new.yml
+cp secrets-ephemere.yml.template secrets-ephemere-new.yml
 
 # Éditer avec vos vrais secrets
-vim secrets-staging-new.yml
+vim secrets-ephemere-new.yml
 
 # Chiffrer avec SOPS
-sops --encrypt secrets-staging-new.yml > secrets-staging.yml
+sops --encrypt secrets-ephemere-new.yml > secrets-ephemere.yml
 
 # Ou directement éditer et chiffrer
-sops secrets-staging.yml
+sops secrets-ephemere.yml
 ```
 
 ### Déchiffrer un fichier
@@ -265,10 +265,10 @@ sops secrets-staging.yml
 cd rhDemo/secrets
 
 # Déchiffrer et afficher (sans écrire sur disque)
-sops --decrypt secrets-staging.yml
+sops --decrypt secrets-ephemere.yml
 
 # Déchiffrer vers un fichier temporaire
-sops --decrypt secrets-staging.yml > secrets-staging-decrypted.yml
+sops --decrypt secrets-ephemere.yml > secrets-ephemere-decrypted.yml
 
 # ⚠️ Ne jamais commiter le fichier déchiffré !
 ```
@@ -280,7 +280,7 @@ cd rhDemo/secrets
 
 # SOPS ouvre l'éditeur avec le contenu déchiffré
 # À la sauvegarde, re-chiffre automatiquement
-sops secrets-staging.yml
+sops secrets-ephemere.yml
 ```
 
 ### Ajouter un nouveau recipient (membre d'équipe)
@@ -292,7 +292,7 @@ cd rhDemo/secrets
 vim ../.sops.yaml
 
 # Méthode 2 : Utiliser updatekeys pour ajouter automatiquement
-sops updatekeys secrets-staging.yml
+sops updatekeys secrets-ephemere.yml
 ```
 
 ---
@@ -316,10 +316,10 @@ sops fichier-encrypted.yml
 
 ```bash
 # Extraire une valeur spécifique (avec yq intégré)
-sops --decrypt secrets-staging.yml | yq eval '.rhdemo.datasource.password.pg' -
+sops --decrypt secrets-ephemere.yml | yq eval '.rhdemo.datasource.password.pg' -
 
 # Ou directement avec SOPS
-sops --decrypt --extract '["rhdemo"]["datasource"]["password"]["pg"]' secrets-staging.yml
+sops --decrypt --extract '["rhdemo"]["datasource"]["password"]["pg"]' secrets-ephemere.yml
 ```
 
 ### Rotation des clés
@@ -328,17 +328,17 @@ sops --decrypt --extract '["rhdemo"]["datasource"]["password"]["pg"]' secrets-st
 # Ajouter un nouveau recipient et retirer l'ancien
 sops rotate --add-age age1newkeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
             --rm-age age1oldkeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-            secrets-staging.yml
+            secrets-ephemere.yml
 ```
 
 ### Validation
 
 ```bash
 # Vérifier qu'un fichier est bien chiffré
-sops --decrypt secrets-staging.yml > /dev/null && echo "✅ Déchiffrement réussi"
+sops --decrypt secrets-ephemere.yml > /dev/null && echo "✅ Déchiffrement réussi"
 
 # Afficher les métadonnées SOPS
-sops --decrypt --extract '["sops"]' secrets-staging.yml
+sops --decrypt --extract '["sops"]' secrets-ephemere.yml
 ```
 
 ---
@@ -371,7 +371,7 @@ export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
 grep "public key:" ~/.config/sops/age/keys.txt
 
 # Vérifier les recipients du fichier
-sops --decrypt --extract '["sops"]["age"]' secrets-staging.yml
+sops --decrypt --extract '["sops"]["age"]' secrets-ephemere.yml
 
 # Si votre clé n'est pas dans la liste, demander à quelqu'un qui a accès d'ajouter votre clé
 ```
@@ -383,12 +383,12 @@ sops --decrypt --extract '["sops"]["age"]' secrets-staging.yml
 **Solutions** :
 ```bash
 # Restaurer depuis Git
-git checkout secrets-staging.yml
+git checkout secrets-ephemere.yml
 
 # Ou re-chiffrer depuis le template
-cp secrets-staging.yml.template secrets-staging-new.yml
-vim secrets-staging-new.yml  # Éditer avec les vrais secrets
-sops --encrypt secrets-staging-new.yml > secrets-staging.yml
+cp secrets-ephemere.yml.template secrets-ephemere-new.yml
+vim secrets-ephemere-new.yml  # Éditer avec les vrais secrets
+sops --encrypt secrets-ephemere-new.yml > secrets-ephemere.yml
 ```
 
 ### Performances lentes
@@ -401,7 +401,7 @@ sops --encrypt secrets-staging-new.yml > secrets-staging.yml
 # AGE est beaucoup plus rapide que PGP
 
 # Vérifier que vous utilisez bien AGE
-sops --decrypt --extract '["sops"]' secrets-staging.yml | grep age
+sops --decrypt --extract '["sops"]' secrets-ephemere.yml | grep age
 ```
 
 ### Permission denied sur les clés
@@ -443,10 +443,10 @@ chmod 600 ~/.config/sops/age/keys.txt
 
    # Mettre à jour le fichier chiffré pour inclure la nouvelle clé
    cd secrets
-   sops updatekeys secrets-staging.yml
+   sops updatekeys secrets-ephemere.yml
 
    # Commiter
-   git add ../.sops.yaml secrets-staging.yml
+   git add ../.sops.yaml secrets-ephemere.yml
    git commit -m "security: add new team member AGE key"
    git push
    ```
@@ -455,7 +455,7 @@ chmod 600 ~/.config/sops/age/keys.txt
    ```bash
    git pull
    cd rhDemo/secrets
-   sops --decrypt secrets-staging.yml
+   sops --decrypt secrets-ephemere.yml
    ```
 
 ### Pour retirer l'accès d'un membre
@@ -469,10 +469,10 @@ vim .sops.yaml
 # Rotation : retirer l'ancien recipient
 cd secrets
 sops rotate --rm-age age1oldkeyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-            secrets-staging.yml
+            secrets-ephemere.yml
 
 # Commiter
-git add ../.sops.yaml secrets-staging.yml
+git add ../.sops.yaml secrets-ephemere.yml
 git commit -m "security: revoke access for former team member"
 git push
 ```
@@ -487,7 +487,7 @@ Dans le [Jenkinsfile](../Jenkinsfile), SOPS est utilisé pour déchiffrer les se
 stage('🔓 Déchiffrement SOPS des secrets') {
     environment {
         // Clé privée AGE stockée dans Jenkins credentials
-        SOPS_AGE_KEY = credentials('sops-age-key-staging')
+        SOPS_AGE_KEY = credentials('sops-age-key-ephemere')
     }
     steps {
         sh '''
@@ -497,7 +497,7 @@ stage('🔓 Déchiffrement SOPS des secrets') {
             chmod 600 ${SOPS_AGE_KEY_FILE}
 
             # Déchiffrer le fichier
-            sops --decrypt rhDemo/secrets/secrets-staging.yml > rhDemo/secrets/secrets-decrypted.yml
+            sops --decrypt rhDemo/secrets/secrets-ephemere.yml > rhDemo/secrets/secrets-decrypted.yml
 
             # Nettoyer la clé temporaire
             shred -vfz -n 3 ${SOPS_AGE_KEY_FILE}
@@ -509,7 +509,7 @@ stage('🔓 Déchiffrement SOPS des secrets') {
 **Configuration Jenkins** :
 1. Aller dans Jenkins → Credentials → Add Credentials
 2. Type : Secret file
-3. ID : `sops-age-key-staging`
+3. ID : `sops-age-key-ephemere`
 4. Uploader le fichier `~/.config/sops/age/keys.txt` du compte autorisé
 
 ---
@@ -518,7 +518,7 @@ stage('🔓 Déchiffrement SOPS des secrets') {
 
 ### ✅ À faire
 
-- ✅ Utiliser des clés AGE différentes pour staging et production
+- ✅ Utiliser des clés AGE différentes pour ephemere et production
 - ✅ Sauvegarder votre clé privée AGE dans un gestionnaire de mots de passe
 - ✅ Restreindre les permissions du fichier de clés (chmod 600)
 - ✅ Ajouter plusieurs recipients au cas où (redondance)

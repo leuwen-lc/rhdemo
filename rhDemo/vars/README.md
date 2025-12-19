@@ -149,7 +149,7 @@ Connecte un container à un réseau Docker.
 
 **Exemple :**
 ```groovy
-lib.dockerNetworkConnect('jenkins', 'staging-network')
+lib.dockerNetworkConnect('jenkins', 'ephemere-network')
 ```
 
 #### `dockerNetworkDisconnect(String container, String network)`
@@ -157,7 +157,7 @@ Déconnecte un container d'un réseau Docker.
 
 **Exemple :**
 ```groovy
-lib.dockerNetworkDisconnect('jenkins', 'staging-network')
+lib.dockerNetworkDisconnect('jenkins', 'ephemere-network')
 ```
 
 ---

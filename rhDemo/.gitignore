@@ -16,7 +16,7 @@ secrets/*-decrypted.yml
 secrets/env-vars.sh
 # Autoriser le template et les secrets chiffrés pour CI/CD
 !secrets/secrets-rhdemo.yml.template
-!secrets/secrets-staging.yml
+!secrets/secrets-ephemere.yml
 # Ignorer les backups
 secrets/*.backup
 

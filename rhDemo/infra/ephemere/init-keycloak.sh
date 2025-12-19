@@ -87,7 +87,7 @@ CONFIG_FILE="${RHDEMO_INIT_KEYCLOAK_DIR}/src/main/resources/application-ephemere
 
 cat > "${CONFIG_FILE}" << EOF
 # ========================================
-# Configuration Keycloak Server - STAGING
+# Configuration Keycloak Server - EPHEMERE
 # Générée automatiquement par init-keycloak.sh
 # ========================================
 keycloak:

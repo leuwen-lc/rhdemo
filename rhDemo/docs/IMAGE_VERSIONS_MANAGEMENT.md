@@ -2,11 +2,11 @@
 
 ## Principe
 
-Les versions des images Docker sont **définies une seule fois** dans `infra/staging/docker-compose.yml` et **lues automatiquement** par le Jenkinsfile pour le scan Trivy.
+Les versions des images Docker sont **définies une seule fois** dans `infra/ephemere/docker-compose.yml` et **lues automatiquement** par le Jenkinsfile pour le scan Trivy.
 
 ## Source de vérité unique
 
-**Fichier de référence** : `infra/staging/docker-compose.yml`
+**Fichier de référence** : `infra/ephemere/docker-compose.yml`
 
 ```yaml
 services:
@@ -33,8 +33,8 @@ Le stage Trivy extrait automatiquement les versions avec `yq` :
 stage('🔍 Scan Sécurité Images Docker (Trivy)') {
     steps {
         sh '''
-            # Aller dans le répertoire staging
-            cd ${STAGING_INFRA_PATH}
+            # Aller dans le répertoire ephemere
+            cd ${EPHEMERE_INFRA_PATH}
 
             # Extraire les versions depuis docker-compose.yml
             POSTGRES_IMAGE=$(yq eval '.services.rhdemo-db.image' docker-compose.yml | sed 's/\${POSTGRES_IMAGE:-//' | sed 's/}//')
@@ -178,7 +178,7 @@ Le Jenkinsfile gère les deux formats grâce à `sed` qui nettoie les variables.
 
 3. **Commit et push**
    ```bash
-   git add infra/staging/docker-compose.yml
+   git add infra/ephemere/docker-compose.yml
    git commit -m "fix: upgrade nginx to 1.29.3-alpine (CVE-2025-XXXXX)"
    git push
    ```

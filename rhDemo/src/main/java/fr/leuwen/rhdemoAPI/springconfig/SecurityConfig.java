@@ -37,7 +37,7 @@ public class SecurityConfig {
 
     /**
      * Extrait l'URL de base de Keycloak depuis l'URI d'autorisation OAuth2.
-     * Exemple: "https://keycloak.staging.local/realms/..." → "https://keycloak.staging.local"
+     * Exemple: "https://keycloak.ephemere.local/realms/..." → "https://keycloak.ephemere.local"
      */
     private String extractKeycloakBaseUrl() {
         if (keycloakAuthorizationUri == null || keycloakAuthorizationUri.isEmpty()) {

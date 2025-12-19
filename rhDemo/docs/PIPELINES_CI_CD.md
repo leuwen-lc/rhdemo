@@ -33,7 +33,7 @@ Le projet RHDemo utilise **deux pipelines Jenkins distincts** pour séparer les 
 │    └─ Construction de l'image Docker                           │
 │                                                                 │
 │ 3. Tests d'intégration (Staging Docker Compose)               │
-│    ├─ Déploiement environnement staging Docker                 │
+│    ├─ Déploiement environnement ephemere Docker                 │
 │    ├─ Initialisation base de données                           │
 │    ├─ Initialisation Keycloak                                  │
 │    ├─ Tests Selenium                                           │
@@ -101,7 +101,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Construction de l'image Docker
 
 #### Phase 4 : Staging Docker Compose
-- Démarrage de l'environnement staging (Docker Compose)
+- Démarrage de l'environnement ephemere (Docker Compose)
   - PostgreSQL
   - Keycloak
   - Application RHDemo

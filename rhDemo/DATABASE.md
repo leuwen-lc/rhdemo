@@ -14,7 +14,7 @@ Le projet utilise deux fichiers SQL distincts pour séparer la **structure** de 
 
 **Usage** :
 - ✅ **Environnement de production** : Oui
-- ✅ **Environnement de staging (Docker Compose)** : Oui
+- ✅ **Environnement de ephemere (Docker Compose)** : Oui
 - ✅ **Environnement de stagingkub (Kubernetes)** : Oui (automatique)
 - ✅ **Environnement de développement** : Oui
 
@@ -24,7 +24,7 @@ Le projet utilise deux fichiers SQL distincts pour séparer la **structure** de 
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgschema.sql
 
 # Staging (Docker Compose)
-docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < pgschema.sql
+docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < pgschema.sql
 
 # Stagingkub (Kubernetes) - Automatique via ConfigMap, ou manuel si besoin :
 kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo < pgschema.sql
@@ -42,7 +42,7 @@ psql -h your-db-host -U your-user -d your-database < pgschema.sql
 
 **Usage** :
 - ❌ **Environnement de production** : **NON** (ne pas utiliser en production !)
-- ✅ **Environnement de staging (Docker Compose)** : Oui
+- ✅ **Environnement de ephemere (Docker Compose)** : Oui
 - ✅ **Environnement de développement** : Oui
 - ⚠️ **Environnement de stagingkub (Kubernetes)** : À la demande uniquement (non automatique)
 
@@ -52,7 +52,7 @@ psql -h your-db-host -U your-user -d your-database < pgschema.sql
 docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgdata.sql
 
 # Staging (Docker Compose)
-docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < pgdata.sql
+docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < pgdata.sql
 
 # Stagingkub (Kubernetes) - Manuel uniquement si nécessaire
 kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo < pgdata.sql
@@ -114,8 +114,8 @@ cd rhDemo/infra/ephemere
 ./init-database.sh
 
 # Option 2 : Manuel
-docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < ../../pgschema.sql
-docker exec -i rhdemo-staging-db psql -U rhdemo -d rhdemo < ../../pgdata.sql
+docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < ../../pgschema.sql
+docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < ../../pgdata.sql
 ```
 
 Le script `init-database.sh` :
@@ -172,8 +172,8 @@ Si vous modifiez la structure de la base :
 | Script | Environnement | Description |
 |--------|---------------|-------------|
 | `infra/dev/start.sh` | Dev local | Affiche les commandes d'init DB |
-| `infra/staging/init-database.sh` | Staging (Docker Compose) | Init complète (schéma + données) |
-| `Jenkinsfile-CI` | Pipeline CI | Init automatique en staging (Docker Compose) |
+| `infra/ephemere/init-database.sh` | Staging (Docker Compose) | Init complète (schéma + données) |
+| `Jenkinsfile-CI` | Pipeline CI | Init automatique en ephemere (Docker Compose) |
 | ConfigMap K8s | Stagingkub (Kubernetes) | Init automatique du schéma uniquement |
 
 ## ❓ FAQ

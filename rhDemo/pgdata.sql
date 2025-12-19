@@ -4,7 +4,7 @@
 -- ═══════════════════════════════════════════════════════════════
 -- 
 -- Ce fichier contient 304 employés de test pour les environnements
--- de développement et de staging.
+-- de développement et de ephemere.
 -- NE PAS utiliser en production !
 -- ═══════════════════════════════════════════════════════════════
 

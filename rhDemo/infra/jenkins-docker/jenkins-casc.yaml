@@ -149,7 +149,7 @@ jobs:
         • Build Maven + Tests unitaires
         • Analyse OWASP Dependency-Check
         • Build Docker
-        • Tests Selenium + OWASP ZAP (staging Docker Compose)
+        • Tests Selenium + OWASP ZAP (ephemere Docker Compose)
         • Publication de l\'image sur le registry
 
         📖 Documentation : docs/PIPELINES_CI_CD.md''')
@@ -325,7 +325,7 @@ jobs:
         parameters {
           choice {
             name('DEPLOY_ENV')
-            choices(['none', 'staging', 'stagingkub'])
+            choices(['none', 'ephemere', 'stagingkub'])
             description('⚠️  DÉPRÉCIÉ - Utilisez RHDemo-CI et RHDemo-CD')
           }
           booleanParam {

@@ -16,21 +16,21 @@
 #
 #   Jenkins :
 #     - rhdemo-jenkins-network (permanent)
-#     - rhdemo-staging-network (temporaire - connecté/déconnecté par Jenkinsfile)
+#     - rhdemo-ephemere-network (temporaire - connecté/déconnecté par Jenkinsfile)
 #
 #   ZAP :
 #     - rhdemo-jenkins-network (permanent - défini dans ce fichier)
-#     - rhdemo-staging-network (temporaire - connecté/déconnecté par Jenkinsfile)
+#     - rhdemo-ephemere-network (temporaire - connecté/déconnecté par Jenkinsfile)
 #
 #   Jenkinsfile gère le cycle de vie réseau :
-#     1. Stage "📦 Déploiement" : Jenkins se connecte à rhdemo-staging-network
-#     2. Stage "🔒 Démarrage OWASP ZAP" : ZAP se connecte à rhdemo-staging-network
-#     3. Stage "🌐 Tests Selenium" : Tests avec accès aux alias DNS staging
-#     4. Post Selenium (always) : ZAP et Jenkins se déconnectent de rhdemo-staging-network
+#     1. Stage "📦 Déploiement" : Jenkins se connecte à rhdemo-ephemere-network
+#     2. Stage "🔒 Démarrage OWASP ZAP" : ZAP se connecte à rhdemo-ephemere-network
+#     3. Stage "🌐 Tests Selenium" : Tests avec accès aux alias DNS ephemere
+#     4. Post Selenium (always) : ZAP et Jenkins se déconnectent de rhdemo-ephemere-network
 #
 #   Flux de données durant les tests :
 #   Selenium (dans Jenkins) → ZAP Proxy (8090) →
-#                             Nginx (rhdemo.staging.local via alias DNS) → RHDemo App
+#                             Nginx (rhdemo.ephemere.local via alias DNS) → RHDemo App
 #                                        ↓
 #                                Analyse passive
 #                                + Spider
@@ -93,7 +93,7 @@ services:
 
     networks:
       # Réseau Jenkins (permanent)
-      # Note: ZAP sera connecté dynamiquement à rhdemo-staging-network par le Jenkinsfile
+      # Note: ZAP sera connecté dynamiquement à rhdemo-ephemere-network par le Jenkinsfile
       # lors du stage de démarrage ZAP, puis déconnecté après les tests Selenium
       jenkins-network:
         aliases:
@@ -139,7 +139,7 @@ networks:
   # Réseau Jenkins (déjà défini dans docker-compose.yml principal)
   # ZAP démarre sur ce réseau uniquement
   #
-  # Connexion dynamique à rhdemo-staging-network gérée par Jenkinsfile :
+  # Connexion dynamique à rhdemo-ephemere-network gérée par Jenkinsfile :
   #   - Connexion : Stage "🔒 Démarrage OWASP ZAP" (après healthcheck)
   #   - Déconnexion : Post "🌐 Tests Selenium IHM" (always block)
   jenkins-network:

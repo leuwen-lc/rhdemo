@@ -64,11 +64,11 @@ docker info
 │  │ • Docker-in-Docker (DinD)│      │                                            │  │
 │  │ • Lance conteneurs       │      │ • Proxy de sécurité pour tests Selenium    │  │
 │  │ • Build images           │      │ • Détection XSS, CSRF, SQLi, etc.          │  │
-│  │ • Deploy staging         │      │ • Analyse passive + Spider + Active Scan   │  │
+│  │ • Deploy ephemere         │      │ • Analyse passive + Spider + Active Scan   │  │
 │  │ • Démarrage ZAP          │      │ • Rapports HTML/JSON                       │  │
 │  └──────────────────────────┘      │                                            │  │
 │                                    │ Réseau: rhdemo-jenkins-network             │  │
-│                                    │ (accès staging via Jenkins multi-réseau)   │  │
+│                                    │ (accès ephemere via Jenkins multi-réseau)   │  │
 │  Services optionnels:              └────────────────────────────────────────────┘  │
 │  • jenkins-agent (agents distribués)                                              │
 │  • registry:5000 (Docker Registry local)                                          │
@@ -85,7 +85,7 @@ docker info
                                 ▼
                     ┌───────────────────────────────┐
                     │   Réseau Staging (externe)    │
-                    │   rhdemo-staging-network      │
+                    │   rhdemo-ephemere-network      │
                     │                               │
                     │ • Nginx (443)                 │
                     │ • RHDemo App (9000)           │
@@ -327,7 +327,7 @@ Le pipeline est créé automatiquement au démarrage si vous décommentez la sec
 1. Aller sur le job `rhdemo-api`
 2. Cliquer sur **"Build with Parameters"**
 3. Configurer :
-   - **DEPLOY_ENV** : `none`, `staging`, ou `production`
+   - **DEPLOY_ENV** : `none`, `ephemere`, ou `production`
    - **RUN_SELENIUM_TESTS** : `true`/`false`
    - **RUN_SONAR** : `true`/`false`
 4. Cliquer sur **"Build"**
@@ -451,7 +451,7 @@ OWASP ZAP (Zed Attack Proxy) est un proxy de sécurité qui intercepte le trafic
 
 **Architecture :**
 ```
-Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-staging) → RHDemo App
+Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-ephemere) → RHDemo App
                            ↓
                     Analyse passive
                     + Spider
@@ -475,9 +475,9 @@ Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsf
    - Défini dans docker-compose.yml
    - Communication avec SonarQube, Registry, Jenkins Agent
 
-2. **Réseau temporaire** : `rhdemo-staging-network`
+2. **Réseau temporaire** : `rhdemo-ephemere-network`
    - Connecté lors du stage `📦 Déploiement ${params.DEPLOY_ENV}` (ligne 699)
-   - Permet l'accès aux alias DNS staging pour orchestration
+   - Permet l'accès aux alias DNS ephemere pour orchestration
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
 **ZAP :**
@@ -485,21 +485,21 @@ Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsf
    - Défini dans docker-compose.zap.yml
    - Permet la communication API avec Jenkins
 
-2. **Réseau temporaire** : `rhdemo-staging-network`
+2. **Réseau temporaire** : `rhdemo-ephemere-network`
    - Connecté lors du stage `🔒 Démarrage OWASP ZAP`
-   - Permet l'accès aux alias DNS (`rhdemo.staging.local`, `keycloak.staging.local`)
+   - Permet l'accès aux alias DNS (`rhdemo.ephemere.local`, `keycloak.ephemere.local`)
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
 **Cycle de vie réseau :**
 ```
-Stage "Déploiement"        : Jenkins connecté à rhdemo-staging-network
-Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-staging-network
-Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau staging
+Stage "Déploiement"        : Jenkins connecté à rhdemo-ephemere-network
+Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-ephemere-network
+Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau ephemere
 Post "Tests Selenium"      : ZAP déconnecté + Jenkins déconnecté
 ```
 
 Cette approche offre :
-- ✅ Accès DNS aux services staging uniquement durant le déploiement/tests
+- ✅ Accès DNS aux services ephemere uniquement durant le déploiement/tests
 - ✅ Isolation réseau stricte en dehors des phases actives
 - ✅ Sécurité renforcée (principe du moindre privilège)
 - ✅ Traçabilité complète du cycle de connexion/déconnexion

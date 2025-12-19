@@ -680,31 +680,19 @@ YMLEOF
 
                     echo "🐳 Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
                     echo "   Version Maven détectée: ${env.APP_VERSION}"
-                    echo "   Image à construire: ${env.RHDEMO_IMAGE}"
-                    echo "⚠️  Nettoyage complet: suppression images existantes..."
+                    echo "   Image à construire: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "⚠️  Nettoyage pré-build: suppression image si elle existe..."
 
-                    // Supprimer l'image du build actuel si elle existe (pour forcer reconstruction)
+                    // Supprimer l'image actuelle si elle existe (pour forcer reconstruction)
                     sh """
-                        docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image build-${env.BUILD_NUMBER} n'existe pas encore"
+                        docker rmi ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} 2>/dev/null || echo "Image ${env.APP_VERSION} n'existe pas encore"
                         docker rmi ${env.DOCKER_IMAGE_NAME}:latest 2>/dev/null || echo "Image latest n'existe pas encore"
-                    """
-
-                    // Nettoyer les anciennes images (garder seulement les 5 dernières)
-                    sh """
-                        echo "🧹 Nettoyage des anciennes images (conservation des 5 dernières)..."
-
-                        # Lister toutes les images build-* triées par date (plus récentes en premier)
-                        # Puis supprimer toutes sauf les 5 premières
-                        docker images ${env.DOCKER_IMAGE_NAME} --filter "reference=${env.DOCKER_IMAGE_NAME}:build-*" --format "{{.Repository}}:{{.Tag}}" | \
-                            tail -n +6 | \
-                            xargs -r docker rmi 2>/dev/null || echo "Aucune ancienne image à supprimer"
-
-                        echo "✅ Nettoyage terminé"
+                        echo "✅ Nettoyage pré-build terminé"
                     """
 
                     sh """
                         cd rhDemo
-                        docker build -t ${env.RHDEMO_IMAGE} \
+                        docker build -t ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} \
                                      -t ${env.DOCKER_IMAGE_NAME}:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
@@ -712,7 +700,7 @@ YMLEOF
                                      .
                     """
 
-                    echo "✅ Image Docker créée: ${env.RHDEMO_IMAGE}"
+                    echo "✅ Image Docker créée: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
 
                     // Lister les images créées et afficher la taille
                     sh """
@@ -864,23 +852,21 @@ YMLEOF
             }
         }
         
-        // NOTE: Ce stage n'est plus nécessaire car l'image est maintenant construite
-        // directement avec le tag build-${BUILD_NUMBER} dans le stage "Build Docker Image"
-        // stage('🏷️ Tag Image Docker') {
-        //     when {
-        //         expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
-        //     }
-        //     steps {
-        //         script {
-        //             echo "▶ Tag de l'image Docker..."
-        //             echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
-        //             echo "   Cible:  ${env.RHDEMO_IMAGE}"
-        //         }
-        //         sh """
-        //             docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
-        //         """
-        //     }
-        // }
+        stage('🏷️ Tag Image Docker') {
+            when {
+                expression { params.DEPLOY_ENV == 'ephemere' || params.DEPLOY_ENV == 'production' }
+            }
+            steps {
+                script {
+                    echo "▶ Tag de l'image Docker..."
+                    echo "   Source: ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}"
+                    echo "   Cible:  ${env.RHDEMO_IMAGE}"
+                }
+                sh """
+                    docker tag ${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION} ${env.RHDEMO_IMAGE}
+                """
+            }
+        }
 
         // ════════════════════════════════════════════════════════════════
         // DÉPLOIEMENT KUBERNETES (STAGINGKUB)
@@ -1176,8 +1162,9 @@ YMLEOF
                     export KEYCLOAK_ADMIN_PASSWORD="\${KEYCLOAK_ADMIN_PASSWORD}"
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
 
-                    # IMPORTANT: Écraser APP_VERSION APRÈS le sourcing de env-vars.sh
-                    # car env-vars.sh pourrait définir APP_VERSION à partir du POM Maven
+                    # Variables d'environnement pour Docker Compose
+                    # docker-compose.yml utilise image: rhdemo-api:${APP_VERSION}
+                    # On utilise build-XX pour distinguer les builds même avec la même version Maven
                     export APP_VERSION=build-${env.BUILD_NUMBER}
                     export WORKSPACE=\$(pwd)
 
@@ -1195,6 +1182,8 @@ YMLEOF
                     # Démarrer les conteneurs (plus besoin de docker-compose.jenkins.yml override)
                     echo "🚀 Démarrage des conteneurs Docker..."
                     echo "   APP_VERSION=\$APP_VERSION (devrait être build-${env.BUILD_NUMBER})"
+                    echo "🔍 Vérification que l'image existe avant docker-compose:"
+                    docker images ${env.DOCKER_IMAGE_NAME} | grep -E "(TAG|build-${env.BUILD_NUMBER})" || echo "⚠️ Image build-${env.BUILD_NUMBER} non trouvée!"
                     docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
                     # Connecter Jenkins au réseau ephemere pour accès direct aux services

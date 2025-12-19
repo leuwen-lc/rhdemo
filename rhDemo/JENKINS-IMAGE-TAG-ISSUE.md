@@ -96,18 +96,47 @@ export APP_VERSION=${env.APP_VERSION}  # Utilise la version Maven
 **Avantage** : Plus simple, pas besoin de tag supplémentaire
 **Inconvénient** : Perd la numérotation par build (`build-52`)
 
-## Recommandation
+## Solution Implémentée ✅
 
-**Solution 2** est la plus fiable : déplacer le tag directement dans le stage "Démarrage Environnement Docker" pour garantir que l'image existe avant le `docker-compose up -d`.
+**Combinaison améliorée** :
+
+### 1. Jenkinsfile (ligne 694)
+Construire directement avec le tag `build-${BUILD_NUMBER}` :
+```groovy
+docker build -t ${env.RHDEMO_IMAGE} \
+             -t ${env.DOCKER_IMAGE_NAME}:latest \
+             ...
+```
+
+Où `RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"` (défini ligne 72)
+
+### 2. docker-compose.yml (ligne 99)
+Forcer l'utilisation de l'image locale :
+```yaml
+rhdemo-app:
+  image: rhdemo-api:${APP_VERSION:-0.0.1-SNAPSHOT}
+  pull_policy: never  # IMPORTANT: Ne pas essayer de pull depuis Docker Hub
+```
+
+### 3. Stage "Tag Image Docker" supprimé
+Le stage séparé de tagging n'est plus nécessaire car l'image est construite directement avec le bon tag.
+
+## Avantages de cette solution
+
+1. **Pas de race condition** : L'image a le bon tag dès sa création
+2. **Pas de pull inutile** : `pull_policy: never` empêche Docker Compose d'essayer de pull
+3. **Plus simple** : Un stage en moins dans le pipeline
+4. **Plus rapide** : Pas d'opération de tag supplémentaire
 
 ## Vérification
 
 Après correction, vérifier que :
 
 ```bash
-# L'image taguée existe
+# L'image avec le bon tag existe
 docker images | grep rhdemo-api | grep build-
 
 # Exemple de sortie attendue :
-# rhdemo-api   build-52   abc123   5 minutes ago   500MB
+# rhdemo-api   build-53   abc123   5 minutes ago   357MB
+# rhdemo-api   latest     abc123   5 minutes ago   357MB
 ```

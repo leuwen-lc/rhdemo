@@ -96,6 +96,7 @@ services:
   # ═══════════════════════════════════════════════════════════════
   rhdemo-app:
     image: rhdemo-api:${APP_VERSION:-0.0.1-SNAPSHOT}
+    pull_policy: never  # IMPORTANT: Utiliser l'image locale construite par Jenkins, ne pas essayer de pull
     container_name: rhdemo-ephemere-app
     restart: unless-stopped
     environment:

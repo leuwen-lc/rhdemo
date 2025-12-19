@@ -332,9 +332,14 @@ curl -k https://rhdemo.ephemere.local/front/
 
 ### Variable Substitution dans Jenkinsfile
 - **CRITIQUE** : Utiliser `sh """` (double quotes) pour permettre substitution Groovy des variables d'environnement
-- Variables Groovy (`${env.VAR}`) substituées par Groovy AVANT exécution bash
-- Variables bash (`\${VAR}`) échappées avec `\` pour substitution APRÈS par bash
-- Heredoc sans quotes (`<< YMLEOF`) permet substitution bash des variables dans le document
+- **Ordre de substitution** :
+  1. Groovy substitue `${env.VAR}` et `${VAR}` (variables Groovy) AVANT d'envoyer le script à bash
+  2. Bash substitue `\${VAR}` (échappées par `\`) lors de l'exécution du heredoc
+- **Dans le heredoc YAML** :
+  - Variables Groovy (TEST_DOMAIN, GATEWAY_IP) : `${VAR}` → substituées par Groovy
+  - Variables bash depuis env-vars.sh : `\${VAR}` → échappées pour substitution par bash
+  - Exemple : `username: \${KEYCLOAK_ADMIN_USER}` (bash) vs `root-url: https://${TEST_DOMAIN}` (Groovy)
+- Heredoc sans quotes (`<< YMLEOF`) permet substitution bash des variables `\${...}`
 - Vérification ajoutée : `grep -A 5 "redirect-uris:" fichier.yml` pour valider substitution
 
 ### IP Gateway Docker
@@ -372,6 +377,27 @@ Pour revenir à l'ancienne configuration :
 ---
 
 ## 🔧 Troubleshooting
+
+### Erreur "No such property: KEYCLOAK_ADMIN_USER" lors du build Jenkins
+
+**Symptômes** :
+```
+groovy.lang.MissingPropertyException: No such property: KEYCLOAK_ADMIN_USER for class: groovy.lang.Binding
+```
+
+**Cause** :
+- Utilisation de `sh """` (double quotes) fait que Groovy essaie de substituer **toutes** les variables `${...}`
+- Les variables bash provenant de `env-vars.sh` ne sont pas connues de Groovy
+- Groovy échoue en essayant de résoudre `${KEYCLOAK_ADMIN_USER}` avant même d'exécuter le script bash
+
+**Solution** :
+- Échapper les variables bash avec `\$` : `\${KEYCLOAK_ADMIN_USER}`
+- Laisser les variables Groovy sans échappement : `${TEST_DOMAIN}`, `${GATEWAY_IP}`
+- **Règle** :
+  - Variables Groovy (`env.VAR`, variables définies dans le pipeline) : `${VAR}`
+  - Variables bash (chargées par `source env-vars.sh`) : `\${VAR}`
+
+---
 
 ### Erreur "We are sorry..." de Keycloak lors des tests
 

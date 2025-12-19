@@ -355,8 +355,8 @@ keycloak:
 
   admin:
     realm: master
-    username: ${KEYCLOAK_ADMIN_USER}
-    password: ${KEYCLOAK_ADMIN_PASSWORD}
+    username: \${KEYCLOAK_ADMIN_USER}
+    password: \${KEYCLOAK_ADMIN_PASSWORD}
 
   # ========================================
   # Configuration du Realm RHDemo
@@ -382,7 +382,7 @@ keycloak:
   client:
     client-id: RHDemo
     name: RHDemo
-    secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+    secret: \${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
     root-url: https://${TEST_DOMAIN}:58443/
     base-url: ''
     admin-url: ''
@@ -407,25 +407,25 @@ keycloak:
   # Configuration des Utilisateurs de test
   # ========================================
   users:
-    - username: ${RHDEMO_TEST_ID_USER_ADMIN}
-      password: ${RHDEMO_TEST_PWD_USER_ADMIN}
-      email: ${RHDEMO_TEST_ID_USER_ADMIN}@rhdemo.local
+    - username: \${RHDEMO_TEST_ID_USER_ADMIN}
+      password: \${RHDEMO_TEST_PWD_USER_ADMIN}
+      email: \${RHDEMO_TEST_ID_USER_ADMIN}@rhdemo.local
       first-name: Admin
       last-name: RHDemo
       roles:
         - ROLE_admin
 
-    - username: ${RHDEMO_TEST_ID_USER_CONSULT}
-      password: ${RHDEMO_TEST_PWD_USER_CONSULT}
-      email: ${RHDEMO_TEST_ID_USER_CONSULT}@rhdemo.local
+    - username: \${RHDEMO_TEST_ID_USER_CONSULT}
+      password: \${RHDEMO_TEST_PWD_USER_CONSULT}
+      email: \${RHDEMO_TEST_ID_USER_CONSULT}@rhdemo.local
       first-name: Jean
       last-name: Consultant
       roles:
         - ROLE_consult
 
-    - username: ${RHDEMO_TEST_ID_USER_MAJ}
-      password: ${RHDEMO_TEST_PWD_USER_MAJ}
-      email: ${RHDEMO_TEST_ID_USER_MAJ}@rhdemo.local
+    - username: \${RHDEMO_TEST_ID_USER_MAJ}
+      password: \${RHDEMO_TEST_PWD_USER_MAJ}
+      email: \${RHDEMO_TEST_ID_USER_MAJ}@rhdemo.local
       first-name: Marie
       last-name: Manager
       roles:

@@ -65,7 +65,6 @@ pipeline {
         TEST_DOMAIN = 'rhdemo.ephemere.local'
         KEYCLOAK_DOMAIN = 'keycloak.ephemere.local'
         COMPOSE_PROJECT_NAME = "rhdemo-ephemere-${env.BUILD_NUMBER}"
-        RHDEMO_IMAGE = "${DOCKER_IMAGE_NAME}:build-${env.BUILD_NUMBER}"
 
         // Noms des conteneurs Docker
         CONTAINER_NGINX = 'rhdemo-ephemere-nginx'
@@ -161,9 +160,13 @@ pipeline {
                     // Mettre à jour les variables Docker
                     env.DOCKER_IMAGE_TAG = env.APP_VERSION
 
+                    // Construire le nom complet de l'image Docker avec version-buildnumber
+                    env.RHDEMO_IMAGE = "${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}-${env.BUILD_NUMBER}"
+
                     echo "✅ Version Maven détectée: ${env.APP_VERSION}"
                     echo "   JAR attendu: ${env.JAR_FILE}"
                     echo "   Docker tag: ${env.DOCKER_IMAGE_TAG}"
+                    echo "   Image Docker complète: ${env.RHDEMO_IMAGE}"
                 }
             }
         }
@@ -583,13 +586,20 @@ YMLEOF
                     echo "▶ Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
                     echo "   Version détectée: ${env.APP_VERSION}"
                     echo "   Image à construire: ${env.RHDEMO_IMAGE}"
-                    echo "⚠️  Nettoyage complet: suppression images existantes..."
+                    echo "⚠️  Nettoyage complet: suppression de toutes les images rhdemo-api existantes..."
                 }
 
-                // Supprimer les anciennes images Docker pour forcer reconstruction
+                // Supprimer TOUTES les anciennes images rhdemo-api pour forcer reconstruction et éviter accumulation
                 sh """
-                    docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image n'existe pas encore"
-                    docker rmi rhdemo-api:latest 2>/dev/null || echo "Image latest n'existe pas encore"
+                    echo "📊 Images rhdemo-api avant nettoyage:"
+                    docker images rhdemo-api --format "table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}" || true
+
+                    echo ""
+                    echo "🧹 Suppression de toutes les images rhdemo-api..."
+                    # Supprimer toutes les images avec le nom rhdemo-api (tous les tags)
+                    docker images rhdemo-api -q | xargs -r docker rmi -f 2>/dev/null || echo "Aucune image rhdemo-api à supprimer"
+
+                    echo "✅ Nettoyage terminé"
                 """
 
                 dir('rhDemo') {
@@ -682,6 +692,7 @@ YMLEOF
                         # Exporter les variables d'environnement nécessaires pour docker-compose
                         # Mapping des noms de variables entre secrets et docker-compose
                         export RHDEMO_IMAGE=${env.RHDEMO_IMAGE}
+                        export APP_VERSION=${env.APP_VERSION}-${env.BUILD_NUMBER}
                         export NGINX_IMAGE=${env.NGINX_IMAGE}
                         export POSTGRES_IMAGE=${env.POSTGRES_IMAGE}
                         export KEYCLOAK_IMAGE=${env.KEYCLOAK_IMAGE}

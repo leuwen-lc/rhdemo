@@ -683,10 +683,23 @@ YMLEOF
                     echo "   Image à construire: ${env.RHDEMO_IMAGE}"
                     echo "⚠️  Nettoyage complet: suppression images existantes..."
 
-                    // Supprimer les anciennes images Docker pour forcer reconstruction
+                    // Supprimer l'image du build actuel si elle existe (pour forcer reconstruction)
                     sh """
-                        docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image n'existe pas encore"
+                        docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || echo "Image build-${env.BUILD_NUMBER} n'existe pas encore"
                         docker rmi ${env.DOCKER_IMAGE_NAME}:latest 2>/dev/null || echo "Image latest n'existe pas encore"
+                    """
+
+                    // Nettoyer les anciennes images (garder seulement les 5 dernières)
+                    sh """
+                        echo "🧹 Nettoyage des anciennes images (conservation des 5 dernières)..."
+
+                        # Lister toutes les images build-* triées par date (plus récentes en premier)
+                        # Puis supprimer toutes sauf les 5 premières
+                        docker images ${env.DOCKER_IMAGE_NAME} --filter "reference=${env.DOCKER_IMAGE_NAME}:build-*" --format "{{.Repository}}:{{.Tag}}" | \
+                            tail -n +6 | \
+                            xargs -r docker rmi 2>/dev/null || echo "Aucune ancienne image à supprimer"
+
+                        echo "✅ Nettoyage terminé"
                     """
 
                     sh """
@@ -1151,11 +1164,6 @@ YMLEOF
 
                     cd ${EPHEMERE_INFRA_PATH}
 
-                    # Variables d'environnement pour Docker Compose
-                    # docker-compose.yml utilise image: rhdemo-api:\${APP_VERSION}
-                    export APP_VERSION=build-${env.BUILD_NUMBER}
-                    export WORKSPACE=\$(pwd)
-
                     # Export des versions d'images Docker (source de vérité : Jenkinsfile)
                     export NGINX_IMAGE=${env.NGINX_IMAGE}
                     export POSTGRES_IMAGE=${env.POSTGRES_IMAGE}
@@ -1167,6 +1175,11 @@ YMLEOF
                     export KEYCLOAK_ADMIN_USER="\${KEYCLOAK_ADMIN_USER}"
                     export KEYCLOAK_ADMIN_PASSWORD="\${KEYCLOAK_ADMIN_PASSWORD}"
                     export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET="\${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}"
+
+                    # IMPORTANT: Écraser APP_VERSION APRÈS le sourcing de env-vars.sh
+                    # car env-vars.sh pourrait définir APP_VERSION à partir du POM Maven
+                    export APP_VERSION=build-${env.BUILD_NUMBER}
+                    export WORKSPACE=\$(pwd)
 
                     # Réactiver l'écho APRÈS les exports de secrets
                     set -x
@@ -1181,6 +1194,7 @@ YMLEOF
                     
                     # Démarrer les conteneurs (plus besoin de docker-compose.jenkins.yml override)
                     echo "🚀 Démarrage des conteneurs Docker..."
+                    echo "   APP_VERSION=\$APP_VERSION (devrait être build-${env.BUILD_NUMBER})"
                     docker-compose -f docker-compose.yml -p ${COMPOSE_PROJECT_NAME} up -d
                     
                     # Connecter Jenkins au réseau ephemere pour accès direct aux services

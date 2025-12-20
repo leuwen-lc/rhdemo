@@ -331,15 +331,14 @@ curl -k https://rhdemo.ephemere.local/front/
 ## ⚠️ Points d'Attention
 
 ### Variable Substitution dans Jenkinsfile
-- **CRITIQUE** : Utiliser `sh """` (double quotes) pour permettre substitution Groovy des variables d'environnement
-- **Ordre de substitution** :
-  1. Groovy substitue `${env.VAR}` et `${VAR}` (variables Groovy) AVANT d'envoyer le script à bash
-  2. Bash substitue `\${VAR}` (échappées par `\`) lors de l'exécution du heredoc
-- **Dans le heredoc YAML** :
-  - Variables Groovy (TEST_DOMAIN, GATEWAY_IP) : `${VAR}` → substituées par Groovy
-  - Variables bash depuis env-vars.sh : `\${VAR}` → échappées pour substitution par bash
-  - Exemple : `username: \${KEYCLOAK_ADMIN_USER}` (bash) vs `root-url: https://${TEST_DOMAIN}` (Groovy)
-- Heredoc sans quotes (`<< YMLEOF`) permet substitution bash des variables `\${...}`
+- **CRITIQUE** : Utiliser `sh '''` (single quotes) pour éviter l'interprétation Groovy des variables
+- **Avec `sh '''`** : Toutes les variables `${VAR}` sont substituées par bash (pas par Groovy)
+- **Variables disponibles en bash** :
+  - Variables d'environnement Jenkins (définies dans `environment` block) : `TEST_DOMAIN`, `KEYCLOAK_DOMAIN`, etc.
+  - Variables bash locales : `GATEWAY_IP` (détectée dynamiquement)
+  - Variables chargées depuis env-vars.sh : `KEYCLOAK_ADMIN_USER`, secrets, etc.
+- **Dans le heredoc YAML** : Toutes les variables utilisent la syntaxe bash standard `${VAR}`
+- Heredoc sans quotes (`<< YMLEOF`) permet substitution bash de toutes les variables
 - Vérification ajoutée : `grep -A 5 "redirect-uris:" fichier.yml` pour valider substitution
 
 ### IP Gateway Docker
@@ -387,15 +386,14 @@ groovy.lang.MissingPropertyException: No such property: KEYCLOAK_ADMIN_USER for 
 
 **Cause** :
 - Utilisation de `sh """` (double quotes) fait que Groovy essaie de substituer **toutes** les variables `${...}`
-- Les variables bash provenant de `env-vars.sh` ne sont pas connues de Groovy
-- Groovy échoue en essayant de résoudre `${KEYCLOAK_ADMIN_USER}` avant même d'exécuter le script bash
+- Les variables bash (provenant de `env-vars.sh` ou créées dans le script) ne sont pas connues de Groovy
+- Groovy échoue en essayant de résoudre les variables avant même d'exécuter le script bash
 
 **Solution** :
-- Échapper les variables bash avec `\$` : `\${KEYCLOAK_ADMIN_USER}`
-- Laisser les variables Groovy sans échappement : `${TEST_DOMAIN}`, `${GATEWAY_IP}`
-- **Règle** :
-  - Variables Groovy (`env.VAR`, variables définies dans le pipeline) : `${VAR}`
-  - Variables bash (chargées par `source env-vars.sh`) : `\${VAR}`
+- **Utiliser `sh '''`** (single quotes) au lieu de `sh """`
+- Avec single quotes, Groovy ne substitue aucune variable, bash les substitue toutes
+- Les variables d'environnement Jenkins (définies dans `environment` block) sont automatiquement disponibles en bash
+- Exemple : `TEST_DOMAIN` défini dans `environment` est directement accessible comme `${TEST_DOMAIN}` en bash
 
 ---
 

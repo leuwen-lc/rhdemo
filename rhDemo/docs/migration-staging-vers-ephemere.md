@@ -342,7 +342,7 @@ Navigateur (host) → https://rhdemo.ephemere.local:58443
 
 ### Accès Tests Selenium/ZAP (Jenkins containers)
 ```
-Firefox (via ZAP) → https://172.18.0.1:58443 ou https://keycloak.ephemere.local:58443
+Firefox (via ZAP) → https://rhdemo.ephemere.local:58443 (MÊMES URLs que l'accès manuel!)
                 ↓
            ZAP connecté au réseau rhdemo-ephemere-network
                 ↓
@@ -350,14 +350,17 @@ Firefox (via ZAP) → https://172.18.0.1:58443 ou https://keycloak.ephemere.loca
                 ↓
            Spring Boot (X-Forwarded-Port: 58443)
                 ↓
-           Redirect URI: https://172.18.0.1:58443/login/oauth2/code/keycloak
+           Redirect URI: https://rhdemo.ephemere.local:58443/login/oauth2/code/keycloak
            ET https://keycloak.ephemere.local:58443/realms/RHDemo/...
                 ↓
            Firefox suit le redirect → ZAP → Nginx:58443 → Keycloak:8080
 ```
 
 **Points clés** :
-- ZAP est connecté au réseau `rhdemo-ephemere-network` (ligne 1124 du Jenkinsfile)
+- ✅ **URLs identiques** pour tests Selenium et accès manuel : `rhdemo.ephemere.local:58443`
+- ✅ **Plus besoin de détecter l'IP gateway Docker** : simplification majeure du Jenkinsfile
+- ✅ **Redirect URIs simplifiés** : pas d'IP variable à whitelister dans Keycloak
+- ZAP est connecté au réseau `rhdemo-ephemere-network`, peut résoudre les alias réseau
 - Nginx écoute sur 443 ET 58443 en interne pour permettre aux redirects OAuth2 de fonctionner
 - Les redirects OAuth2 utilisent `:58443` car Spring Boot reçoit `X-Forwarded-Port: 58443`
 - Sans `listen 58443` dans nginx, ZAP obtiendrait "Connection refused" sur les redirects Keycloak
@@ -378,7 +381,7 @@ Jenkins → https://rhdemo.ephemere.local:443 (alias réseau interne)
 | Contexte | Protocole | Domaine | Port | Commentaire |
 |----------|-----------|---------|------|-------------|
 | Utilisateur externe | HTTPS | rhdemo.ephemere.local | 58443 | Accès manuel navigateur via host |
-| Selenium/ZAP (Jenkins) | HTTPS | 172.18.0.1 ou keycloak.ephemere.local | 58443 | Tests automatisés depuis containers |
+| Selenium/ZAP (Jenkins) | HTTPS | rhdemo.ephemere.local | 58443 | **MÊMES URLs** que l'accès externe! |
 | Réseau Docker interne | HTTPS | rhdemo.ephemere.local | 443 | Healthcheck, communication standard |
 | Nginx (écoute interne) | HTTPS | - | 443 **ET** 58443 | Nginx écoute sur les deux ports |
 | Nginx (exposition hôte) | HTTPS | - | 58443 | Port mappé `58443:443` dans docker-compose |
@@ -387,15 +390,18 @@ Jenkins → https://rhdemo.ephemere.local:443 (alias réseau interne)
 - Port **443** : Communication standard entre conteneurs (healthcheck, etc.)
 - Port **58443** : Permet aux redirects OAuth2 (générés avec `:58443`) de fonctionner depuis ZAP/Selenium
 
+**Simplification majeure** : Depuis que nginx écoute sur le port 58443 en interne, les tests Selenium utilisent les **mêmes URLs** que les utilisateurs manuels. Plus besoin de détecter l'IP gateway Docker ni de whitelister des IPs variables dans Keycloak!
+
 ---
 
 ## 🔑 Points Clés de la Migration
 
-1. **host.docker.internal** : Permet aux conteneurs Jenkins d'accéder à l'hôte (comme utilisateur externe)
-2. **X-Forwarded-Port: 58443** : Indique à Spring Boot le port public pour construire les URLs
-3. **Redirect URIs avec port explicite** : Keycloak accepte `:58443` dans tous les domaines
-4. **Nommage images** : Format `version-buildnumber` pour cohérence complète
-5. **Nettoyage images** : Évite accumulation et problèmes d'espace disque
+1. **Nginx écoute sur deux ports en interne** : 443 (standard) ET 58443 (redirects OAuth2)
+2. **URLs identiques tests/manuel** : `rhdemo.ephemere.local:58443` pour tous les accès
+3. **X-Forwarded-Port: 58443** : Indique à Spring Boot le port public pour construire les URLs
+4. **Redirect URIs simplifiés** : Pas besoin de whitelister l'IP gateway variable
+5. **Nommage images** : Format `version-buildnumber` pour cohérence complète
+6. **Nettoyage images** : Évite accumulation et problèmes d'espace disque
 
 ---
 

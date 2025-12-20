@@ -9,12 +9,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *
  * CONTEXTE:
  * - En local: Spring Boot sert l'application à http://localhost:9000/
- * - En staging: nginx route /front/ vers le container rhdemo-app
+ * - En ephemere: nginx route /front/ vers le container rhdemo-app
  *
  * PROBLÈME:
  * - Vue.js avec publicPath: '/' génère des chemins absolus /js/app.js, /css/app.css
  * - Spring Boot cherche ces ressources dans /static/js/ et /static/css/ (OK en local)
- * - En staging, nginx reçoit /js/app.js mais doit le rediriger vers /front/js/app.js
+ * - En ephemere, nginx reçoit /js/app.js mais doit le rediriger vers /front/js/app.js
  *
  * SOLUTION:
  * - Mapper /js/** vers classpath:/static/js/

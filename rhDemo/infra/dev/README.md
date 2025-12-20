@@ -1,4 +1,4 @@
-    # Environnement de développement local
+# Environnement de développement local pour exécution du code applicatif en local ou depuis un IDE par exemple
 
 Prérequis 
 - Git en version récente
@@ -94,11 +94,14 @@ cd monCheminGit/rhDemoInitKeycloak
 ### 4. Initialiser la base de données (schéma + jeu de données fictif)
 
 
-# Exécuter le script SQL de création du schéma
+# Exécuter les scripts SQL d'initialisation
 
 ```bash
 cd monCheminGit/rhDemo
-docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgddl.sql
+# Créer le schéma (tables + index)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgschema.sql
+# Insérer les données de test (optionnel)
+docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgdata.sql
 ```
 
 ### 5. Créez un fichier secrets-rhdemo.yml
@@ -109,7 +112,7 @@ docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgddl.sql
     - Le client secret Keycloack défini en étape 3 
 - Saisissez un mot de passe quelconque pour la base de données H2 (tests d'intégration Spring uniquement)
 
-NB : le fichier secrets-rhdemo.yml contenant des secrets à usage uniquement local, il est dans le .gitignore contrairement au fichier secrets-staging.yml utilisé pour le déploiement mais qui est chiffré avec SOPS.
+NB : le fichier secrets-rhdemo.yml contenant des secrets à usage uniquement local, il est dans le .gitignore contrairement au fichier secrets-ephemere.yml utilisé pour le déploiement mais qui est chiffré avec SOPS.
 
 ### 6.Démarrer l'application rhDemo
 
@@ -167,7 +170,7 @@ docker-compose down -v
 | PostgreSQL | localhost:5432 | dbrhdemo / changeme |
 | Application rhDemo | http://localhost:9000 | (démarrer séparément) |
 
-## Différences avec l'environnement staging
+## Différences avec l'environnement ephemere
 
 | Aspect | Dev local | Staging |
 |--------|-----------|---------|
@@ -175,7 +178,7 @@ docker-compose down -v
 | Keycloak port | 6090 | 8080 (interne Docker) |
 | PostgreSQL port | 5432 (exposé) | 5432 (interne Docker) |
 | HTTPS | Non | Oui (nginx reverse proxy) |
-| Réseau | rhdemo-dev | rhdemo-staging |
+| Réseau | rhdemo-dev | rhdemo-ephemere |
 | Application | Lancée manuellement | Container Docker |
 
 ## Logs et débogage
@@ -217,5 +220,5 @@ docker-compose up -d
 
 - **Keycloak en mode dev**: Les données Keycloak sont perdues à chaque redémarrage (H2 en mémoire). Pour persister, il faudrait configurer une base PostgreSQL dédiée.
 - **PostgreSQL**: Les données sont persistées dans un volume Docker (`rhdemo-dev-db-data`)
-- **Port 6090**: Choisi pour éviter les conflits avec d'autres services locaux (Keycloak staging utilise 8080 en interne)
+- **Port 6090**: Choisi pour éviter les conflits avec d'autres services locaux (Keycloak ephemere utilise 8080 en interne)
 - **Réseau isolé**: Les services communiquent via le réseau Docker `rhdemo-dev-network`

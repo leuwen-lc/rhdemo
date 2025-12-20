@@ -68,8 +68,36 @@ echo ""
 echo "🔨 Build de l'image Jenkins personnalisée..."
 
 if [ -f Dockerfile.jenkins ]; then
-    docker build -f Dockerfile.jenkins -t rhdemo-jenkins:latest .
-    echo "✅ Image Jenkins construite avec succès"
+    # Vérifier si l'image existe déjà
+    if docker image inspect rhdemo-jenkins:latest &> /dev/null; then
+        echo "ℹ️  Image Jenkins existante trouvée"
+
+        # Vérifier si le Dockerfile a changé depuis le dernier build
+        DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
+        IMAGE_HASH=$(docker image inspect rhdemo-jenkins:latest --format '{{.Config.Labels.dockerfile_hash}}' 2>/dev/null || echo "")
+
+        if [ "$DOCKERFILE_HASH" != "$IMAGE_HASH" ]; then
+            echo "🔄 Dockerfile modifié, rebuild nécessaire..."
+            docker build -f Dockerfile.jenkins --build-arg DOCKERFILE_HASH=$DOCKERFILE_HASH --label dockerfile_hash=$DOCKERFILE_HASH -t rhdemo-jenkins:latest .
+            echo "✅ Image Jenkins reconstruite avec succès"
+        else
+            echo "✅ Image Jenkins à jour, pas de rebuild nécessaire"
+        fi
+    else
+        echo "📦 Première construction de l'image..."
+        DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
+        docker build -f Dockerfile.jenkins --build-arg DOCKERFILE_HASH=$DOCKERFILE_HASH --label dockerfile_hash=$DOCKERFILE_HASH -t rhdemo-jenkins:latest .
+        echo "✅ Image Jenkins construite avec succès"
+    fi
+
+    # Afficher les versions des outils installés
+    echo ""
+    echo "📦 Outils Kubernetes installés dans Jenkins:"
+    docker run --rm rhdemo-jenkins:latest sh -c "
+        (kubectl version --client --short 2>/dev/null || echo '  kubectl: non installé') &&
+        (helm version --short 2>/dev/null || echo '  helm: non installé') &&
+        (kind --version 2>/dev/null || echo '  kind: non installé')
+    " 2>/dev/null || echo "  ℹ️  Vérification des outils ignorée"
 else
     echo "⚠️  Dockerfile.jenkins non trouvé, utilisation de l'image officielle"
 fi

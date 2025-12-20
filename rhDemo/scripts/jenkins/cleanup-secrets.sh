@@ -12,7 +12,7 @@ SECRET_FILES=(
     "rhDemo/secrets/env-vars.sh"
     "rhDemo/secrets/secrets-rhdemo.yml"
     "rhDemo/secrets/secrets-decrypted.yml"
-    "rhDemoInitKeycloak/src/main/resources/application-staging.yml"
+    "rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
 )
 
 # Fonction pour supprimer un fichier de manière sécurisée

@@ -1,0 +1,105 @@
+{{- if .Values.rhdemo.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rhdemo-app
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo-app.labels" . | nindent 4 }}
+    app: rhdemo-app
+spec:
+  replicas: {{ .Values.rhdemo.replicaCount }}
+  selector:
+    matchLabels:
+      app: rhdemo-app
+  template:
+    metadata:
+      labels:
+        app: rhdemo-app
+        {{- include "rhdemo-app.labels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z {{ .Values.rhdemo.database.host }} {{ .Values.rhdemo.database.port }}; do echo waiting for postgresql-rhdemo; sleep 2; done;']
+      - name: wait-for-keycloak
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z keycloak {{ .Values.keycloak.service.port }}; do echo waiting for keycloak; sleep 2; done;']
+      containers:
+      - name: rhdemo-app
+        image: "{{ .Values.rhdemo.image.repository }}:{{ .Values.rhdemo.image.tag }}"
+        imagePullPolicy: {{ .Values.rhdemo.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.rhdemo.serverPort }}
+          protocol: TCP
+        env:
+        # Spring Boot - utiliser underscore pour Paketo
+        - name: SPRING_PROFILES_ACTIVE
+          value: {{ .Values.rhdemo.springProfile }}
+        - name: SERVER_PORT
+          value: "{{ .Values.rhdemo.serverPort }}"
+
+        # OAuth2 - Forcer l'URL de redirection avec le port externe
+        - name: SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_REDIRECT_URI
+          value: "https://rhdemo.{{ .Values.global.domain }}/login/oauth2/code/{registrationId}"
+
+        # Base de données PostgreSQL
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://{{ .Values.rhdemo.database.host }}:{{ .Values.rhdemo.database.port }}/{{ .Values.rhdemo.database.name }}"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: {{ .Values.rhdemo.database.user }}
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.rhdemo.database.passwordSecret.name }}
+              key: {{ .Values.rhdemo.database.passwordSecret.key }}
+
+        # Actuator
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: {{ .Values.rhdemo.actuator.endpoints.include }}
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: {{ .Values.rhdemo.actuator.health.showDetails }}
+
+        # JVM Options (Paketo)
+        - name: BPL_JVM_THREAD_COUNT
+          value: "{{ .Values.rhdemo.jvm.threadCount }}"
+        - name: BPL_SPRING_CLOUD_BINDINGS_DISABLED
+          value: "true"
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:MaxRAMPercentage={{ .Values.rhdemo.jvm.maxRamPercentage }} -XX:+Use{{ .Values.rhdemo.jvm.gcType }}"
+
+        volumeMounts:
+        - name: secrets
+          mountPath: {{ .Values.rhdemo.keycloak.secretsFile.mountPath }}
+          readOnly: true
+
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: http
+          initialDelaySeconds: {{ .Values.rhdemo.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.rhdemo.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.rhdemo.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.rhdemo.livenessProbe.failureThreshold }}
+
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: http
+          initialDelaySeconds: {{ .Values.rhdemo.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.rhdemo.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.rhdemo.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.rhdemo.readinessProbe.failureThreshold }}
+
+        resources:
+          {{- toYaml .Values.rhdemo.resources | nindent 10 }}
+
+      volumes:
+      - name: secrets
+        secret:
+          secretName: {{ .Values.rhdemo.keycloak.secretsFile.secretName }}
+          items:
+          - key: {{ .Values.rhdemo.keycloak.secretsFile.fileName }}
+            path: {{ .Values.rhdemo.keycloak.secretsFile.fileName }}
+{{- end }}

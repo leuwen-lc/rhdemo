@@ -31,14 +31,16 @@ def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
 
 /**
  * Attend qu'un service soit disponible via healthcheck HTTP
+ * Test effectué depuis Jenkins (qui doit être connecté au réseau Docker si nécessaire)
+ *
  * @param config Map de configuration avec les clés:
- *   - url: URL du healthcheck (requis)
+ *   - url: URL du healthcheck (requis) - peut être une URL réseau Docker (ex: http://keycloak-ephemere:8080)
  *   - timeout: Timeout en secondes (défaut: 60)
  *   - name: Nom du service pour les logs (défaut: 'Service')
  *   - container: Nom du container pour afficher les logs en cas d'échec (optionnel)
  *   - initialWait: Temps d'attente initial avant de commencer les checks (défaut: 0)
- *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: 200)
- *   - insecure: Ignorer les erreurs SSL (défaut: false)
+ *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: [200])
+ *   - insecure: Ignorer les erreurs SSL pour HTTPS (défaut: false)
  */
 def waitForHealthcheck(Map config) {
     def timeout = config.timeout ?: 60
@@ -58,7 +60,8 @@ def waitForHealthcheck(Map config) {
     sh """#!/bin/bash
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
-            HTTP_CODE=\$(curl ${insecure} -s -o /dev/null -w "%{http_code}" ${config.url} 2>/dev/null || echo "000")
+            # Test depuis Jenkins (connecté au réseau Docker si nécessaire)
+            HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"
@@ -90,7 +93,11 @@ def generateTrivyReport(String image, String reportName) {
         echo "🔍 Scan Trivy: \${IMAGE}"
 
         # Scan JSON pour analyse programmatique
+        # --skip-db-update : DB déjà mise à jour avant les scans parallèles (évite conflits de verrous)
+        # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         timeout 5m trivy image \\
+            --skip-db-update \\
+            --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
@@ -102,14 +109,17 @@ def generateTrivyReport(String image, String reportName) {
         fi
 
         # Scan format table pour lecture humaine
-        timeout 1m trivy image \\
+        timeout 3m trivy image \\
+            --skip-db-update \\
+            --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format table \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
-            "\${IMAGE}" 2>&1 || true
+            "\${IMAGE}" 2>&1 || echo "⚠️  Scan table timeout ou erreur pour \${NAME}"
 
         # Générer le rapport HTML stylisé
         if [ -f "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" ]; then
+            echo "📄 Génération rapport HTML pour \${NAME}..."
             {
                 echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
                 echo "<title>Trivy Report - \${IMAGE}</title>"
@@ -117,6 +127,19 @@ def generateTrivyReport(String image, String reportName) {
                 echo "<body><h1>🔒 Trivy Security Report</h1><h2>Image: \${IMAGE}</h2><pre>"
                 cat "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" | sed 's|CRITICAL|<span class="critical">CRITICAL</span>|g; s|HIGH|<span class="high">HIGH</span>|g; s|MEDIUM|<span class="medium">MEDIUM</span>|g'
                 echo '</pre></body></html>'
+            } > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.html"
+            echo "✅ Rapport HTML \${NAME}.html créé"
+        else
+            echo "⚠️  Fichier \${NAME}.txt introuvable - HTML non généré"
+            # Créer un HTML vide pour indiquer qu'il n'y a pas de rapport
+            {
+                echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+                echo "<title>Trivy Report - \${IMAGE}</title>"
+                echo '<style>body{font-family:monospace;margin:20px;background:#f5f5f5}</style></head>'
+                echo "<body><h1>⚠️  Rapport Trivy non disponible</h1>"
+                echo "<p>Le scan format table n'a pas pu être généré pour \${IMAGE}.</p>"
+                echo "<p>Consultez le rapport JSON pour plus de détails.</p>"
+                echo "</body></html>"
             } > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.html"
         fi
 
@@ -179,6 +202,17 @@ def aggregateTrivyResults() {
     )
 
     return result == 0
+}
+
+/**
+ * Crée un réseau Docker s'il n'existe pas déjà
+ * @param network Nom du réseau
+ */
+def dockerNetworkCreate(String network) {
+    echo "🌐 Création du réseau Docker ${network}..."
+    sh """
+        docker network create ${network} 2>/dev/null || echo "✓ Réseau ${network} existe déjà"
+    """
 }
 
 /**

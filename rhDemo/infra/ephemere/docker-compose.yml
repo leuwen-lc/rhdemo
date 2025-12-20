@@ -1,0 +1,184 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # Base de données PostgreSQL pour l'application RHDemo
+  # ═══════════════════════════════════════════════════════════════
+  rhdemo-db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: rhdemo-ephemere-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: rhdemo
+      POSTGRES_USER: rhdemo
+      POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD}
+    volumes:
+      - rhdemo-db-data:/var/lib/postgresql/data
+      # Note: pgddl.sql est copié via script init au lieu de bind mount
+      # pour éviter les problèmes de layers Docker corrompus
+    networks:
+      - rhdemo-ephemere
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rhdemo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Base de données PostgreSQL pour Keycloak
+  # ═══════════════════════════════════════════════════════════════
+  keycloak-db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: keycloak-ephemere-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - rhdemo-ephemere
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # Keycloak - Serveur d'authentification
+  # ═══════════════════════════════════════════════════════════════
+  keycloak:
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4.2}
+    container_name: keycloak-ephemere
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --db=postgres
+      - --db-url=jdbc:postgresql://keycloak-db:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=${KEYCLOAK_DB_PASSWORD}
+      - --proxy-headers=xforwarded
+      - --http-enabled=true
+      - --health-enabled=true
+      - --metrics-enabled=true
+    environment:
+      # Admin Keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Configuration hostname : URLs publiques via nginx HTTPS
+      # Force Keycloak à générer les URLs publiques avec HTTPS
+      # pour les redirections navigateur (page de login, etc.)
+      KC_HOSTNAME_URL: https://keycloak.ephemere.local:58443
+      KC_HOSTNAME_ADMIN_URL: https://keycloak.ephemere.local:58443
+
+      # La communication interne app→keycloak reste en HTTP:8080
+      # via l'alias keycloak-ephemere pour les performances
+
+      # Logging
+      KC_LOG_LEVEL: info
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      rhdemo-ephemere:
+        aliases:
+          - keycloak-ephemere
+          - keycloak.ephemere.local
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════
+  # Application RHDemo
+  # ═══════════════════════════════════════════════════════════════
+  rhdemo-app:
+    image: rhdemo-api:${APP_VERSION}
+    pull_policy: never 
+    container_name: rhdemo-ephemere-app
+    restart: unless-stopped
+    environment:
+      # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
+      SPRING_PROFILES_ACTIVE: ephemere
+      SERVER_PORT: 9000
+
+      # Base de données PostgreSQL
+      SPRING_DATASOURCE_URL: jdbc:postgresql://rhdemo-db:5432/rhdemo
+      SPRING_DATASOURCE_USERNAME: rhdemo
+
+      # ⚠️  SÉCURITÉ: Les secrets (mot de passe DB, secret Keycloak client)
+      # sont chargés depuis /workspace/secrets/secrets-rhdemo.yml via spring.config.import
+      # au lieu d'être passés en variables d'environnement.
+      # Ce fichier contient UNIQUEMENT les secrets nécessaires à rhDemo (moindre privilège)
+      # Exclus: mots de passe admin Keycloak, secrets infra, etc.
+      # Le fichier est copié via docker cp dans un stage Jenkins APRÈS le démarrage du container
+
+      # Actuator
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
+      MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when_authorized
+
+      # JVM Options (Paketo)
+      BPL_JVM_THREAD_COUNT: 50
+      BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+    depends_on:
+      rhdemo-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      rhdemo-ephemere:
+        aliases:
+          - rhdemo-ephemere-app
+          - rhdemo.ephemere.local
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════
+  # Nginx - Reverse Proxy avec HTTPS
+  # ═══════════════════════════════════════════════════════════════
+  nginx:
+    image: ${NGINX_IMAGE:-nginx:1.29.4-alpine}
+    container_name: rhdemo-ephemere-nginx
+    restart: unless-stopped
+    ports:
+      # Port 80 fermé pour sécurité - Tests utilisent HTTPS uniquement
+      # - "80:80"
+      - "58443:443"
+    volumes:
+      # Note: nginx.conf et conf.d copiés via docker cp au lieu de bind mount
+      # pour éviter les problèmes de layers Docker corrompus
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      - rhdemo-app
+      - keycloak
+    networks:
+      rhdemo-ephemere:
+        aliases:
+          - nginx
+          - rhdemo.ephemere.local
+          - keycloak.ephemere.local
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --no-check-certificate https://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  rhdemo-ephemere:
+    name: rhdemo-ephemere-network
+    driver: bridge
+
+volumes:
+  rhdemo-db-data:
+    name: rhdemo-ephemere-db-data
+  keycloak-db-data:
+    name: keycloak-ephemere-db-data
+  nginx-cache:
+    name: rhdemo-ephemere-nginx-cache

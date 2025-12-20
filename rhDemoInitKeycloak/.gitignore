@@ -37,4 +37,4 @@ Thumbs.db
 src/main/resources/application.yml
 
 # Configuration générée dynamiquement par Jenkins (contient secrets)
-src/main/resources/application-staging.yml
+src/main/resources/application-ephemere.yml

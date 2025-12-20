@@ -1,0 +1,19 @@
+{{- if .Values.keycloak.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    app: keycloak
+spec:
+  type: {{ .Values.keycloak.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.keycloak.service.port }}
+    targetPort: http
+    protocol: TCP
+  selector:
+    app: keycloak
+{{- end }}

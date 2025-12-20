@@ -37,7 +37,7 @@ public class SecurityConfig {
 
     /**
      * Extrait l'URL de base de Keycloak depuis l'URI d'autorisation OAuth2.
-     * Exemple: "https://keycloak.staging.local/realms/..." → "https://keycloak.staging.local"
+     * Exemple: "https://keycloak.ephemere.local/realms/..." → "https://keycloak.ephemere.local"
      */
     private String extractKeycloakBaseUrl() {
         if (keycloakAuthorizationUri == null || keycloakAuthorizationUri.isEmpty()) {
@@ -144,8 +144,15 @@ public class SecurityConfig {
 	)
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
-            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
+            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+            // Endpoints env accessibles sans authentification (phase de mise au point des environnements)
+                    .requestMatchers("/actuator/env", "/actuator/env/**").permitAll()
+            // Autres endpoints actuator réservés aux admins
             .requestMatchers("/actuator/**").hasRole("admin")
+            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
             // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
             .anyRequest().authenticated())
 	.oauth2Login(oauth2 -> oauth2

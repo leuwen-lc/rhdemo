@@ -151,7 +151,7 @@ dependencyCheck:
 ### Variables supprimées (inutilisées)
 
 Les variables suivantes ont été supprimées car non utilisées par le pipeline actuel :
-- `STAGING_SERVER_URL` - Le staging est déployé localement via Docker Compose
+- `EPHEMERE_SERVER_URL` - Le ephemere est déployé localement via Docker Compose
 - `PROD_SERVER_URL` - Pas de déploiement en production configuré
 - `GITHUB_TOKEN` - Non utilisé dans le pipeline actuel
 - `NVD_API_KEY` - La clé NVD doit être configurée comme credential Jenkins (non injectée via .env)

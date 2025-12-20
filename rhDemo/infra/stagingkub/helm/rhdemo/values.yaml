@@ -1,0 +1,268 @@
+# ═══════════════════════════════════════════════════════════════
+# Configuration globale
+# ═══════════════════════════════════════════════════════════════
+global:
+  namespace: rhdemo-stagingkub
+  environment: stagingkub
+  domain: stagingkub.local
+
+# ═══════════════════════════════════════════════════════════════
+# PostgreSQL pour RHDemo
+# ═══════════════════════════════════════════════════════════════
+postgresql-rhdemo:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  database:
+    name: rhdemo
+    user: rhdemo
+    # Le mot de passe sera fourni via secret externe ou --set
+    passwordSecret:
+      name: rhdemo-db-secret
+      key: password
+
+  persistence:
+    enabled: true
+    storageClass: ""  # Utilise le default storage class
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  service:
+    type: ClusterIP
+    port: 5432
+
+# ═══════════════════════════════════════════════════════════════
+# PostgreSQL pour Keycloak
+# ═══════════════════════════════════════════════════════════════
+postgresql-keycloak:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  database:
+    name: keycloak
+    user: keycloak
+    passwordSecret:
+      name: keycloak-db-secret
+      key: password
+
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 2Gi
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+  service:
+    type: ClusterIP
+    port: 5432
+
+# ═══════════════════════════════════════════════════════════════
+# Keycloak - Serveur d'authentification
+# ═══════════════════════════════════════════════════════════════
+keycloak:
+  enabled: true
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.4.2"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  admin:
+    user: admin
+    # Le mot de passe sera fourni via secret
+    passwordSecret:
+      name: keycloak-admin-secret
+      key: password
+
+  database:
+    host: postgresql-keycloak
+    port: 5432
+    name: keycloak
+    user: keycloak
+    passwordSecret:
+      name: keycloak-db-secret
+      key: password
+
+  hostname:
+    url: https://keycloak.stagingkub.local
+    adminUrl: https://keycloak.stagingkub.local
+
+  proxyHeaders: xforwarded
+  httpEnabled: true
+  healthEnabled: true
+  metricsEnabled: true
+
+  logLevel: info
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 15
+
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 15
+
+# ═══════════════════════════════════════════════════════════════
+# Application RHDemo
+# ═══════════════════════════════════════════════════════════════
+rhdemo:
+  enabled: true
+  image:
+    repository: rhdemo-api
+    tag: "1.1.0-SNAPSHOT"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  springProfile: stagingkub
+  serverPort: 9000
+
+  database:
+    host: postgresql-rhdemo
+    port: 5432
+    name: rhdemo
+    user: rhdemo
+    passwordSecret:
+      name: rhdemo-db-secret
+      key: password
+
+  keycloak:
+    # La configuration Keycloak (issuer-uri, client-secret, etc.)
+    # sera injectée via le secret secrets-rhdemo
+    secretsFile:
+      secretName: rhdemo-app-secrets
+      mountPath: /workspace/secrets
+      fileName: secrets-rhdemo.yml
+
+  actuator:
+    endpoints:
+      include: "health,info,metrics,prometheus"
+    health:
+      showDetails: when_authorized
+
+  jvm:
+    threadCount: 50
+    maxRamPercentage: 75.0
+    gcType: G1GC
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  service:
+    type: ClusterIP
+    port: 9000
+
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+# ═══════════════════════════════════════════════════════════════
+# Ingress - Exposition HTTPS
+# ═══════════════════════════════════════════════════════════════
+ingress:
+  enabled: true
+  className: nginx
+
+  hosts:
+    - host: rhdemo.stagingkub.local
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: rhdemo-app
+          servicePort: 9000
+
+    - host: keycloak.stagingkub.local
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: keycloak
+          servicePort: 8080
+
+  tls:
+    enabled: true
+    # Les certificats seront créés via cert-manager ou manuellement
+    secretName: rhdemo-tls-cert
+
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Configuration pour Keycloak derrière proxy
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Headers X-Forwarded-* sont gérés automatiquement par nginx-ingress
+    # en combinaison avec forward-headers-strategy: framework dans Spring Boot
+
+# ═══════════════════════════════════════════════════════════════
+# Nginx Ingress Controller
+# ═══════════════════════════════════════════════════════════════
+nginx-ingress:
+  enabled: true
+  # Si false, suppose que nginx-ingress est déjà installé dans le cluster
+  install: true
+
+  controller:
+    service:
+      type: NodePort
+      nodePorts:
+        http: 30080
+        https: 30443
+
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"

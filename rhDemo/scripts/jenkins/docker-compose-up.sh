@@ -1,21 +1,21 @@
 #!/bin/bash
 # Script: docker-compose-up.sh
-# Description: Démarre l'environnement Docker Compose pour staging
-# Usage: ./docker-compose-up.sh <compose_project> <staging_path>
+# Description: Démarre l'environnement Docker Compose pour ephemere
+# Usage: ./docker-compose-up.sh <compose_project> <ephemere_path>
 
 set -euo pipefail
 
 COMPOSE_PROJECT="${1:-}"
-STAGING_PATH="${2:-}"
+EPHEMERE_PATH="${2:-}"
 
-if [ -z "$COMPOSE_PROJECT" ] || [ -z "$STAGING_PATH" ]; then
-    echo "❌ Usage: $0 <compose_project> <staging_path>"
+if [ -z "$COMPOSE_PROJECT" ] || [ -z "$EPHEMERE_PATH" ]; then
+    echo "❌ Usage: $0 <compose_project> <ephemere_path>"
     exit 1
 fi
 
 echo "🐳 Démarrage de l'environnement Docker Compose"
 echo "   Projet: $COMPOSE_PROJECT"
-echo "   Path: $STAGING_PATH"
+echo "   Path: $EPHEMERE_PATH"
 
 # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
 set +x
@@ -27,7 +27,7 @@ else
     echo "⚠️  Fichier de secrets non trouvé: rhDemo/secrets/env-vars.sh"
 fi
 
-cd "$STAGING_PATH"
+cd "$EPHEMERE_PATH"
 
 # Variables d'environnement pour Docker Compose
 export APP_VERSION="${APP_VERSION:-build-${BUILD_NUMBER:-unknown}}"
@@ -47,23 +47,23 @@ set -x
 echo "✅ Secrets exportés avec succès (secrets non affichés pour sécurité)"
 
 # IMPORTANT: Nettoyage forcé des conteneurs existants pour éviter les conflits de noms
-echo "🧹 Nettoyage des conteneurs staging existants..."
-docker rm -f keycloak-staging-db rhdemo-staging-db keycloak-staging rhdemo-staging-app rhdemo-staging-nginx 2>/dev/null || true
+echo "🧹 Nettoyage des conteneurs ephemere existants..."
+docker rm -f keycloak-ephemere-db rhdemo-ephemere-db keycloak-ephemere rhdemo-ephemere-app rhdemo-ephemere-nginx 2>/dev/null || true
 echo "✅ Conteneurs existants supprimés"
 
 # Démarrer les conteneurs
 echo "🚀 Démarrage des conteneurs Docker..."
 docker-compose -f docker-compose.yml -p "$COMPOSE_PROJECT" up -d
 
-# Connecter Jenkins au réseau staging pour accès direct aux services
-echo "🔗 Connexion de Jenkins au réseau staging..."
+# Connecter Jenkins au réseau ephemere pour accès direct aux services
+echo "🔗 Connexion de Jenkins au réseau ephemere..."
 # Trouver le conteneur Jenkins principal (pas l'agent)
 JENKINS_CONTAINER=$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
 echo "Conteneur Jenkins trouvé: $JENKINS_CONTAINER"
 
 if [ -n "$JENKINS_CONTAINER" ]; then
-    docker network connect rhdemo-staging-network "$JENKINS_CONTAINER" 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
-    echo "✅ Jenkins ($JENKINS_CONTAINER) connecté au réseau rhdemo-staging-network"
+    docker network connect rhdemo-ephemere-network "$JENKINS_CONTAINER" 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+    echo "✅ Jenkins ($JENKINS_CONTAINER) connecté au réseau rhdemo-ephemere-network"
 else
     echo "❌ ERREUR: Conteneur Jenkins introuvable!"
     docker ps --filter "name=jenkins"
@@ -75,11 +75,11 @@ sleep 20
 
 # Copier les configurations nginx et certificats SSL
 echo "📋 Copie des configurations nginx..."
-docker cp nginx/nginx.conf rhdemo-staging-nginx:/etc/nginx/nginx.conf
-docker cp nginx/conf.d/. rhdemo-staging-nginx:/etc/nginx/conf.d/
+docker cp nginx/nginx.conf rhdemo-ephemere-nginx:/etc/nginx/nginx.conf
+docker cp nginx/conf.d/. rhdemo-ephemere-nginx:/etc/nginx/conf.d/
 
 if [ -d "certs" ]; then
-    docker cp certs/. rhdemo-staging-nginx:/etc/nginx/ssl/
+    docker cp certs/. rhdemo-ephemere-nginx:/etc/nginx/ssl/
     echo "✅ Configurations nginx et certificats copiés"
 else
     echo "✅ Configurations nginx copiées (certificats manquants)"
@@ -87,18 +87,18 @@ fi
 
 # Recharger la configuration nginx pour appliquer les changements
 echo "🔄 Rechargement de la configuration nginx..."
-docker exec rhdemo-staging-nginx nginx -t  # Test de la config
-docker exec rhdemo-staging-nginx nginx -s reload  # Reload
+docker exec rhdemo-ephemere-nginx nginx -t  # Test de la config
+docker exec rhdemo-ephemere-nginx nginx -s reload  # Reload
 echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
 
 # Vérifier que nginx écoute réellement sur le port 443
 echo "🔍 Vérification que nginx écoute sur le port 443..."
-if docker exec rhdemo-staging-nginx netstat -tuln | grep -q ':443'; then
+if docker exec rhdemo-ephemere-nginx netstat -tuln | grep -q ':443'; then
     echo "✅ Nginx écoute sur le port 443 (HTTPS)"
 else
     echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
     echo "Ports écoutés par nginx:"
-    docker exec rhdemo-staging-nginx netstat -tuln
+    docker exec rhdemo-ephemere-nginx netstat -tuln
     exit 1
 fi
 

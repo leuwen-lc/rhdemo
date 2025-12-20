@@ -73,12 +73,61 @@ public class EmployeAddPage {
             wait.until(ExpectedConditions.visibilityOfElementLocated(prenomInput));
         } catch (Exception e) {
             // DEBUG: Capturer l'état de la page en cas d'échec
+            String currentUrl = driver.getCurrentUrl();
+            String pageTitle = driver.getTitle();
+            String bodyHtml = driver.findElement(By.tagName("body")).getAttribute("innerHTML");
+
             logger.error("❌ Impossible de trouver le champ prenom");
-            logger.error("URL actuelle: {}", driver.getCurrentUrl());
-            logger.error("Titre de la page: {}", driver.getTitle());
-            logger.error("HTML du body (500 premiers caractères): {}",
-                driver.findElement(By.tagName("body")).getAttribute("innerHTML").substring(0, Math.min(500, driver.findElement(By.tagName("body")).getAttribute("innerHTML").length())));
-            takeScreenshot("Impossible de trouver le champ prenom.png");
+            logger.error("URL actuelle: {}", currentUrl);
+            logger.error("Titre de la page: {}", pageTitle);
+            logger.error("HTML du body (500 premiers caractères): \n{}",
+                bodyHtml.substring(0, Math.min(500, bodyHtml.length())));
+
+            // Si on détecte une page Keycloak avec erreur, logger plus de détails
+            if (pageTitle.contains("Keycloak") || currentUrl.contains("keycloak") || currentUrl.contains("realms")) {
+                logger.error("🔍 PAGE KEYCLOAK DÉTECTÉE - Analyse détaillée:");
+                logger.error("   → Ceci indique un problème d'authentification OAuth2/OIDC");
+
+                // Chercher le message d'erreur Keycloak dans le HTML
+                if (bodyHtml.contains("We are sorry")) {
+                    logger.error("   → Message Keycloak: 'We are sorry...' (erreur serveur Keycloak)");
+
+                    // Essayer d'extraire plus de détails de l'erreur
+                    try {
+                        String errorDetail = driver.findElement(By.cssSelector(".pf-v5-c-login__main-body")).getText();
+                        logger.error("   → Détail erreur: {}", errorDetail);
+                    } catch (Exception ignored) {
+                        // Si pas de détail disponible, continuer
+                    }
+                }
+
+                // Logger l'URL complète de Keycloak pour debug
+                if (currentUrl.contains("?")) {
+                    logger.error("   → URL Keycloak avec paramètres:");
+                    String[] urlParts = currentUrl.split("\\?");
+                    logger.error("      Base: {}", urlParts[0]);
+                    if (urlParts.length > 1) {
+                        String[] params = urlParts[1].split("&");
+                        for (String param : params) {
+                            // Masquer les valeurs sensibles (state, nonce)
+                            if (param.startsWith("state=") || param.startsWith("nonce=")) {
+                                logger.error("      {}=<MASKED>", param.split("=")[0]);
+                            } else {
+                                logger.error("      {}", param);
+                            }
+                        }
+                    }
+                }
+
+                logger.error("   → CAUSES POSSIBLES:");
+                logger.error("      1. redirect_uri non whitelisté dans Keycloak client config");
+                logger.error("      2. Problème de certificat SSL/TLS via proxy ZAP");
+                logger.error("      3. Cookies de session OAuth2 bloqués ou invalides");
+                logger.error("      4. Client ID invalide ou client désactivé dans Keycloak");
+                logger.error("   → VÉRIFIER: logs Keycloak archivés dans debug-logs/keycloak.log");
+            }
+
+            takeScreenshot("error-page-keycloak.png");
             throw e;
         }
         

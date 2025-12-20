@@ -1,0 +1,60 @@
+{{- if (index .Values "postgresql-rhdemo").enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-rhdemo-init
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app: postgresql-rhdemo
+data:
+  # Script d'initialisation de la base de données (SCHÉMA UNIQUEMENT)
+  # Ce script sera exécuté automatiquement par PostgreSQL au premier démarrage
+  # Il crée la structure de la base (tables, index) UNIQUEMENT si elle n'existe pas
+  # Cela préserve les données existantes en cas de redéploiement
+  # Note: Correspond au fichier pgschema.sql du projet
+  init-db.sql: |
+    -- ═══════════════════════════════════════════════════════════════
+    -- Schéma de base de données pour RHDemo
+    -- DDL (Data Definition Language) - Définition des structures
+    -- Exécuté automatiquement au premier démarrage de PostgreSQL
+    -- ═══════════════════════════════════════════════════════════════
+
+    -- Créer la table employes (IF NOT EXISTS = idempotent)
+    CREATE TABLE IF NOT EXISTS employes (
+      id BIGSERIAL PRIMARY KEY,
+      prenom VARCHAR(250) NOT NULL,
+      nom VARCHAR(250) NOT NULL,
+      mail VARCHAR(250) NOT NULL,
+      adresse VARCHAR(500)
+    );
+
+    -- Création des index pour optimiser les performances
+    -- Index sur le mail pour les recherches rapides et l'unicité
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employes_mail ON employes(mail);
+
+    -- Index sur le nom pour les recherches alphabétiques
+    CREATE INDEX IF NOT EXISTS idx_employes_nom ON employes(nom);
+
+    -- Index sur le prénom pour les recherches par prénom
+    CREATE INDEX IF NOT EXISTS idx_employes_prenom ON employes(prenom);
+
+    -- Index composite sur nom + prénom pour les recherches combinées
+    CREATE INDEX IF NOT EXISTS idx_employes_nom_prenom ON employes(nom, prenom);
+
+    -- Index partiel sur l'adresse (seulement pour les adresses non-nulles)
+    CREATE INDEX IF NOT EXISTS idx_employes_adresse ON employes(adresse) WHERE adresse IS NOT NULL;
+
+    -- Insérer des données de test (seulement si la table est vide)
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Jean', 'Dupont', 'jean.dupont@rhdemo.local', '1 Rue de Paris, 75001 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes LIMIT 1);
+
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Marie', 'Martin', 'marie.martin@rhdemo.local', '2 Avenue des Champs, 75008 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes WHERE mail = 'marie.martin@rhdemo.local');
+
+    INSERT INTO employes (prenom, nom, mail, adresse)
+    SELECT 'Pierre', 'Bernard', 'pierre.bernard@rhdemo.local', '3 Boulevard Saint-Germain, 75005 Paris'
+    WHERE NOT EXISTS (SELECT 1 FROM employes WHERE mail = 'pierre.bernard@rhdemo.local');
+{{- end }}

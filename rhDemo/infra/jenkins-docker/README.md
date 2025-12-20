@@ -2,6 +2,7 @@
 
 Infrastructure Jenkins complète avec support Docker-in-Docker et tous les plugins nécessaires pour exécuter le pipeline RHDemo.
 
+
 ## 📋 Table des matières
 
 - [Prérequis](#prérequis)
@@ -64,11 +65,11 @@ docker info
 │  │ • Docker-in-Docker (DinD)│      │                                            │  │
 │  │ • Lance conteneurs       │      │ • Proxy de sécurité pour tests Selenium    │  │
 │  │ • Build images           │      │ • Détection XSS, CSRF, SQLi, etc.          │  │
-│  │ • Deploy staging         │      │ • Analyse passive + Spider + Active Scan   │  │
+│  │ • Deploy ephemere         │      │ • Analyse passive + Spider + Active Scan   │  │
 │  │ • Démarrage ZAP          │      │ • Rapports HTML/JSON                       │  │
 │  └──────────────────────────┘      │                                            │  │
 │                                    │ Réseau: rhdemo-jenkins-network             │  │
-│                                    │ (accès staging via Jenkins multi-réseau)   │  │
+│                                    │ (accès ephemere via Jenkins multi-réseau)   │  │
 │  Services optionnels:              └────────────────────────────────────────────┘  │
 │  • jenkins-agent (agents distribués)                                              │
 │  • registry:5000 (Docker Registry local)                                          │
@@ -85,7 +86,7 @@ docker info
                                 ▼
                     ┌───────────────────────────────┐
                     │   Réseau Staging (externe)    │
-                    │   rhdemo-staging-network      │
+                    │   rhdemo-ephemere-network      │
                     │                               │
                     │ • Nginx (443)                 │
                     │ • RHDemo App (9000)           │
@@ -121,6 +122,7 @@ docker info
 | `registry` | Docker Registry local | 5000 | docker-compose.yml |
 
 ## ⚡ Installation rapide
+
 
 ### 1. Démarrage en une commande
 
@@ -159,7 +161,6 @@ infra/
 ├── .env.example               # Template des variables d'environnement
 ├── .env                       # Vos variables (à créer, non commité)
 ├── start-jenkins.sh           # Script de démarrage
-└── README.md                  # Ce fichier
 ```
 
 ### Configuration des secrets
@@ -178,9 +179,6 @@ infra/
    ```env
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
-
-   # SonarQube (optionnel)
-   SONAR_TOKEN=votre-token-sonarqube
 
    # Email notifications (optionnel)
    SMTP_USER=votre-email@gmail.com
@@ -201,6 +199,11 @@ Pour modifier la configuration :
 nano jenkins-casc.yaml
 docker-compose restart jenkins
 ```
+### Configuration de SOPS et des credentials dans Jenkins
+
+(Obligatoire pour pouvoir lancer le pipeline Jenkinsfile-CI)
+>>> Voir le fichier QUICKSTART.md
+
 
 ## 🎯 Utilisation
 
@@ -301,36 +304,10 @@ docker-compose exec jenkins bash
 - Configuration as Code (JCasC)
 - Job DSL
 
-</details>
+## 🔨 Création des pipelines CI et CD pour RHDemo
 
-## 🔨 Créer un pipeline pour RHDemo
+Les pipelines sont créés automatiquement au démarrage dans la section `jobs:` dans `jenkins-casc.yaml`.
 
-### Méthode 1 : Via l'interface Web
-
-1. Aller sur http://localhost:8080
-2. Cliquer sur **"New Item"**
-3. Nom : `rhdemo-api`
-4. Type : **"Pipeline"**
-5. Configuration :
-   - **Pipeline** → **Definition** : Pipeline script from SCM
-   - **SCM** : Git
-   - **Repository URL** : `https://github.com/leuwen-lc/rhdemo.git`
-   - **Script Path** : `Jenkinsfile`
-6. **Save**
-
-### Méthode 2 : Automatique via JCasC
-
-Le pipeline est créé automatiquement au démarrage si vous décommentez la section `jobs:` dans `jenkins-casc.yaml`.
-
-### Lancer un build
-
-1. Aller sur le job `rhdemo-api`
-2. Cliquer sur **"Build with Parameters"**
-3. Configurer :
-   - **DEPLOY_ENV** : `none`, `staging`, ou `production`
-   - **RUN_SELENIUM_TESTS** : `true`/`false`
-   - **RUN_SONAR** : `true`/`false`
-4. Cliquer sur **"Build"**
 
 ## 🐳 Docker-in-Docker (DinD)
 
@@ -379,6 +356,14 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 - `rhdemo-sonarqube-data` : Données SonarQube
 - `rhdemo-sonarqube-extensions` : Plugins SonarQube
 - `rhdemo-sonarqube-logs` : Logs SonarQube
+
+## 🐳 Docker-in-Docker (DinD)
+
+Jenkins peut exécuter des commandes Docker et docker-compose grâce au montage du socket Docker :
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/
 - `rhdemo-sonarqube-db` : Base de données PostgreSQL
 
 ### Email
@@ -451,7 +436,7 @@ OWASP ZAP (Zed Attack Proxy) est un proxy de sécurité qui intercepte le trafic
 
 **Architecture :**
 ```
-Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-staging) → RHDemo App
+Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-ephemere) → RHDemo App
                            ↓
                     Analyse passive
                     + Spider
@@ -462,9 +447,7 @@ Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-staging) → RHDemo App
 
 **Démarrage automatique :**
 
-ZAP démarre automatiquement lors du stage `🔒 Démarrage OWASP ZAP Proxy` dans le Jenkinsfile si :
-- Le paramètre `DEPLOY_ENV` ≠ `none`
-- Le paramètre `RUN_SELENIUM_TESTS` = `true`
+ZAP démarre automatiquement lors du stage `🔒 Démarrage OWASP ZAP Proxy` dans le Jenkinsfile-CI si le paramètre `RUN_SELENIUM_TESTS` = `true`
 
 **Architecture réseau dynamique :**
 
@@ -475,9 +458,9 @@ Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsf
    - Défini dans docker-compose.yml
    - Communication avec SonarQube, Registry, Jenkins Agent
 
-2. **Réseau temporaire** : `rhdemo-staging-network`
+2. **Réseau temporaire** : `rhdemo-ephemere-network`
    - Connecté lors du stage `📦 Déploiement ${params.DEPLOY_ENV}` (ligne 699)
-   - Permet l'accès aux alias DNS staging pour orchestration
+   - Permet l'accès aux alias DNS ephemere pour orchestration
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
 **ZAP :**
@@ -485,21 +468,21 @@ Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsf
    - Défini dans docker-compose.zap.yml
    - Permet la communication API avec Jenkins
 
-2. **Réseau temporaire** : `rhdemo-staging-network`
+2. **Réseau temporaire** : `rhdemo-ephemere-network`
    - Connecté lors du stage `🔒 Démarrage OWASP ZAP`
-   - Permet l'accès aux alias DNS (`rhdemo.staging.local`, `keycloak.staging.local`)
+   - Permet l'accès aux alias DNS (`rhdemo.ephemere.local`, `keycloak.ephemere.local`)
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
 **Cycle de vie réseau :**
 ```
-Stage "Déploiement"        : Jenkins connecté à rhdemo-staging-network
-Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-staging-network
-Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau staging
+Stage "Déploiement"        : Jenkins connecté à rhdemo-ephemere-network
+Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-ephemere-network
+Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau ephemere
 Post "Tests Selenium"      : ZAP déconnecté + Jenkins déconnecté
 ```
 
 Cette approche offre :
-- ✅ Accès DNS aux services staging uniquement durant le déploiement/tests
+- ✅ Accès DNS aux services ephemere uniquement durant le déploiement/tests
 - ✅ Isolation réseau stricte en dehors des phases actives
 - ✅ Sécurité renforcée (principe du moindre privilège)
 - ✅ Traçabilité complète du cycle de connexion/déconnexion
@@ -527,7 +510,7 @@ Les tests Selenium détectent automatiquement le proxy ZAP via les variables d'e
 - `ZAP_PROXY_HOST=owasp-zap`
 - `ZAP_PROXY_PORT=8090`
 
-Ces variables sont configurées dans le Jenkinsfile (stage `🌐 Tests Selenium IHM`).
+Ces variables sont configurées dans le Jenkinsfile-CI (stage `🌐 Tests Selenium IHM`).
 
 **Rapports ZAP :**
 

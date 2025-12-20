@@ -1,0 +1,20 @@
+{{- if (index .Values "postgresql-rhdemo").enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-rhdemo
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app: postgresql-rhdemo
+spec:
+  type: {{ (index .Values "postgresql-rhdemo").service.type }}
+  ports:
+  - name: postgresql
+    port: {{ (index .Values "postgresql-rhdemo").service.port }}
+    targetPort: postgresql
+    protocol: TCP
+  selector:
+    app: postgresql-rhdemo
+  clusterIP: None  # Headless service for StatefulSet
+{{- end }}

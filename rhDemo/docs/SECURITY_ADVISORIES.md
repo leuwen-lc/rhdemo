@@ -52,7 +52,7 @@ nginx:
 ```
 
 **Fichiers modifiés** :
-- `infra/staging/docker-compose.yml` (ligne 148)
+- `infra/ephemere/docker-compose.yml` (ligne 148)
 - `Jenkinsfile` (lignes 1078, 1129) - Mise à jour du stage Trivy
 
 **Version du correctif** :
@@ -168,7 +168,7 @@ nginx:
 ```
 
 **Fichiers modifiés** :
-- `infra/staging/docker-compose.yml` (ligne 148)
+- `infra/ephemere/docker-compose.yml` (ligne 148)
 - `Jenkinsfile` (lignes 1081, 1143)
 
 **Justification** :

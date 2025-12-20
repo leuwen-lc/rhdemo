@@ -24,7 +24,7 @@ class SecurityConfigCspDynamicTest {
 
     @ParameterizedTest(name = "extractKeycloakBaseUrl avec URI: {0}")
     @CsvSource({
-        "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.staging.local",
+        "https://keycloak.ephemere.local/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.ephemere.local",
         "http://localhost:8080/realms/rhdemo/protocol/openid-connect/auth, http://localhost:8080",
         "http://keycloak.example.com:80/realms/rhdemo/protocol/openid-connect/auth, http://keycloak.example.com",
         "https://keycloak.example.com:443/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.example.com"
@@ -71,15 +71,15 @@ class SecurityConfigCspDynamicTest {
         GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
         SecurityConfig config = new SecurityConfig(mockMapper);
         ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth");
+            "https://keycloak.ephemere.local/realms/rhdemo/protocol/openid-connect/auth");
 
         // Act
         String csp = (String) ReflectionTestUtils.invokeMethod(config, "buildCspDirectives");
 
         // Assert
         assertThat(csp)
-            .contains("connect-src 'self' https://keycloak.staging.local")
-            .contains("form-action 'self' https://keycloak.staging.local");
+            .contains("connect-src 'self' https://keycloak.ephemere.local")
+            .contains("form-action 'self' https://keycloak.ephemere.local");
     }
 
     @Test
@@ -133,7 +133,7 @@ class SecurityConfigCspDynamicTest {
         GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
         SecurityConfig config = new SecurityConfig(mockMapper);
         ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth");
+            "https://keycloak.ephemere.local/realms/rhdemo/protocol/openid-connect/auth");
 
         // Act
         String csp = (String) ReflectionTestUtils.invokeMethod(config, "buildCspDirectives");
@@ -152,7 +152,7 @@ class SecurityConfigCspDynamicTest {
         GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
         SecurityConfig config = new SecurityConfig(mockMapper);
         ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
-            "https://keycloak.staging.local/realms/rhdemo/protocol/openid-connect/auth");
+            "https://keycloak.ephemere.local/realms/rhdemo/protocol/openid-connect/auth");
 
         // Act
         String csp = (String) ReflectionTestUtils.invokeMethod(config, "buildCspDirectives");

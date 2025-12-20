@@ -1,0 +1,58 @@
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID:RHDemo}
+            client-secret: ${rhdemo.client.registration.keycloak.client.secret}
+            client-authentication-method: client_secret_post
+            scope: openid
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          keycloak:
+            # URL publique HTTPS pour le navigateur (redirection login)
+            authorization-uri: https://keycloak.ephemere.local:58443/realms/RHDemo/protocol/openid-connect/auth
+
+            # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
+            # (échange code→token, récupération JWKS)
+            # Utilise l'alias Docker Compose "keycloak-ephemere" pour accès réseau interne
+            token-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/token
+            jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
+
+            # NE PAS configurer issuer-uri ici car Spring essaierait de télécharger
+            # /.well-known/openid-configuration en HTTPS (échec SSL certificat auto-signé)
+            # L'issuer sera validé automatiquement depuis le token JWT reçu
+
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          # JWKS en HTTP interne pour validation des signatures JWT
+          jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
+
+          # NE PAS configurer issuer-uri ici non plus
+          # Spring utilisera l'issuer présent dans le token JWT pour validation
+
+# Configuration serveur pour reverse proxy
+server:
+  # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
+  forward-headers-strategy: framework
+
+# Logging pour debug
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: TRACE
+    org.springframework.web.client: DEBUG
+
+# Endpoints Actuator disponibles
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+  endpoint:
+    env:
+      show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS    

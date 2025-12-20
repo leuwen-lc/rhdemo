@@ -5,6 +5,8 @@ import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.openqa.selenium.By;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -16,6 +18,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.List;
 
@@ -45,8 +48,8 @@ public abstract class BaseSeleniumTest {
             WebDriverManager.chromedriver().setup();
             ChromeOptions options = new ChromeOptions();
 
-            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
-            // Permet à Chrome de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour ephemere
+            // Permet à Chrome de se connecter à https://rhdemo.ephemere.local:58443 et https://keycloak.ephemere.local:58443
             options.setAcceptInsecureCerts(true);
 
             // Configuration du proxy ZAP (si activé via variable d'environnement)
@@ -104,8 +107,8 @@ public abstract class BaseSeleniumTest {
                 options.setBinary(firefoxBinary);
             }
 
-            // IMPORTANT: Accepter les certificats SSL auto-signés pour staging
-            // Permet à Firefox de se connecter à https://rhdemo.staging.local et https://keycloak.staging.local
+            // IMPORTANT: Accepter les certificats SSL auto-signés pour ephemere
+            // Permet à Firefox de se connecter à https://rhdemo.ephemere.local:58443 et https://keycloak.ephemere.local:58443
             options.setAcceptInsecureCerts(true);
 
             // Configuration du proxy ZAP (si activé via variable d'environnement)
@@ -119,6 +122,13 @@ public abstract class BaseSeleniumTest {
                 proxy.setSslProxy(proxyAddress);
                 proxy.setNoProxy(""); // Tout passe par ZAP
                 options.setProxy(proxy);
+
+                // CRITIQUE: Préférences Firefox pour accepter les certificats du proxy ZAP
+                // ZAP intercepte HTTPS et re-signe avec son propre CA
+                options.addPreference("network.proxy.allow_hijacking_localhost", true);
+                options.addPreference("security.cert_pinning.enforcement_level", 0);
+                options.addPreference("security.enterprise_roots.enabled", true);
+
                 log.info("✅ Proxy ZAP configuré: {}", proxyAddress);
             }
 
@@ -157,24 +167,68 @@ public abstract class BaseSeleniumTest {
      */
     private static void authenticateKeycloak() {
         log.info("🔐 Authentification Keycloak en cours...");
-        
+        log.info("   Accès à: {}", TestConfig.HOME_URL);
+
         try {
             // Aller sur la page d'accueil (qui redirige vers Keycloak si pas authentifié)
             driver.get(TestConfig.HOME_URL);
-            
+
+            // Attendre un peu pour laisser les redirections se faire
+            Thread.sleep(2000);
+
+            String currentUrl = driver.getCurrentUrl();
+            log.info("   URL après chargement: {}", currentUrl);
+            log.info("   Titre de la page: {}", driver.getTitle());
+
             // Attendre que la page de login Keycloak soit chargée
             // On vérifie la présence du champ username
             WebDriverWait authWait = new WebDriverWait(driver, Duration.ofSeconds(TestConfig.AUTH_TIMEOUT));
-            
+
             // Locators Keycloak
             By usernameField = By.id("username");
             By passwordField = By.id("password");
             By loginButton = By.id("kc-login");
-            
+
             // Vérifier si on est sur la page de login Keycloak
-            if (driver.getCurrentUrl().contains("keycloak") || driver.getCurrentUrl().contains("realms")) {
+            // ATTENTION: Vérifier aussi le titre car avec IP gateway, l'URL peut ne pas contenir "keycloak"
+            String pageTitle = driver.getTitle();
+            boolean isKeycloakPage = currentUrl.contains("keycloak") || currentUrl.contains("realms") || pageTitle.contains("Keycloak");
+
+            if (isKeycloakPage) {
                 log.info("📋 Page de login Keycloak détectée");
-                
+                log.info("   URL complète: {}", currentUrl);
+                log.info("   Titre: {}", pageTitle);
+
+                // Vérifier d'abord si la page a du contenu
+                String bodyText = driver.findElement(By.tagName("body")).getText();
+                log.info("   Texte de la page (100 premiers caractères): {}",
+                    bodyText.length() > 100 ? bodyText.substring(0, 100) : bodyText);
+
+                // Si la page est vide ou le titre est vide, c'est probablement un problème de rendu
+                if (pageTitle.trim().isEmpty() || bodyText.trim().isEmpty()) {
+                    log.error("⚠️ Page Keycloak vide détectée - Problème potentiel:");
+                    log.error("   - Certificat SSL rejeté par le navigateur");
+                    log.error("   - JavaScript bloqué ou non exécuté");
+                    log.error("   - Content Security Policy (CSP) trop restrictif");
+                    log.error("   - Proxy ZAP interfère avec le rendu de la page");
+
+                    // Capturer le HTML complet pour debug
+                    String pageSource = driver.getPageSource();
+                    log.error("   HTML complet de la page (500 premiers caractères):");
+                    log.error("{}", pageSource.substring(0, Math.min(500, pageSource.length())));
+
+                    // Prendre un screenshot
+                    try {
+                        File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+                        File target = new File("target/screenshots/keycloak-page-vide.png");
+                        target.getParentFile().mkdirs();
+                        org.apache.commons.io.FileUtils.copyFile(scrFile, target);
+                        log.info("   Screenshot sauvegardé: target/screenshots/keycloak-page-vide.png");
+                    } catch (Exception e) {
+                        log.warn("   Impossible de prendre un screenshot: {}", e.getMessage());
+                    }
+                }
+
                 // Attendre que le formulaire soit visible
                 authWait.until(ExpectedConditions.visibilityOfElementLocated(usernameField));
                 
@@ -197,9 +251,9 @@ public abstract class BaseSeleniumTest {
                 
                 // Attendre la redirection vers l'application
                 authWait.until(ExpectedConditions.urlContains(TestConfig.BASE_URL));
-                
+
                 // Vérifier qu'on est bien authentifié (vérification stricte)
-                String currentUrl = driver.getCurrentUrl();
+                currentUrl = driver.getCurrentUrl();
                 log.info("🌐 URL après authentification: {}", currentUrl);
                 
                 if (currentUrl.contains("/login?error")) {

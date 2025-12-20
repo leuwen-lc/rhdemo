@@ -1,0 +1,1621 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Pipeline CI - RHDemo
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pipeline d'Intégration Continue (CI) pour l'application RHDemo
+ *
+ * OBJECTIF :
+ *   - Compiler et construire l'application (Backend + Frontend)
+ *   - Exécuter les tests unitaires et d'intégration
+ *   - Analyser la qualité du code (SonarQube, OWASP)
+ *   - Créer l'image Docker
+ *   - Tester l'application dans un environnement ephemere Docker Compose
+ *   - Exécuter les tests Selenium et OWASP ZAP
+ *   - Publier l'image Docker validée sur le registry
+ *
+ * RÉSULTAT :
+ *   - Image Docker taggée et publiée : rhdemo-api:<VERSION>
+ *   - Artifacts et rapports archivés
+ *   - Prête pour le déploiement CD
+ *
+ * DÉPLOIEMENT :
+ *   - Pour déployer sur Kubernetes stagingkub, utilisez le pipeline Jenkinsfile-CD
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+    }
+
+    tools {
+        jdk 'JDK21'
+        maven 'Maven3'
+    }
+
+    environment {
+        // Configuration application
+        APP_NAME = 'rhdemo-api'
+        DOCKER_IMAGE_NAME = "rhdemo-api"
+
+        // Configuration Docker
+        NGINX_IMAGE = "nginx:1.29.4-alpine"
+        POSTGRES_IMAGE = "postgres:16-alpine"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
+
+        // Configuration des tests
+        TEST_PORT = '9000'
+        TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
+
+        // Fichiers de secrets SOPS
+        SECRETS_FILE = 'rhDemo/secrets/secrets-ephemere.yml'
+        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
+        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
+        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+
+        // Configuration environnement ephemere (Docker Compose)
+        EPHEMERE_INFRA_PATH = 'rhDemo/infra/ephemere'
+        KEYCLOAK_INIT_PATH = 'rhDemoInitKeycloak'
+        TEST_DOMAIN = 'rhdemo.ephemere.local'
+        KEYCLOAK_DOMAIN = 'keycloak.ephemere.local'
+        COMPOSE_PROJECT_NAME = "rhdemo-ephemere-${env.BUILD_NUMBER}"
+
+        // Noms des conteneurs Docker
+        CONTAINER_NGINX = 'rhdemo-ephemere-nginx'
+        CONTAINER_APP = 'rhdemo-ephemere-app'
+        CONTAINER_KEYCLOAK = 'keycloak-ephemere'
+        CONTAINER_KEYCLOAK_DB = 'keycloak-ephemere-db'
+        CONTAINER_DB = 'rhdemo-ephemere-db'
+        CONTAINER_ZAP = 'rhdemo-jenkins-zap'
+
+        // Noms des réseaux Docker
+        NETWORK_EPHEMERE = 'rhdemo-ephemere-network'
+        NETWORK_JENKINS = 'rhdemo-jenkins-network'
+    }
+
+    parameters {
+        booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
+        booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
+        booleanParam(name: 'PUBLISH_IMAGE', defaultValue: true, description: 'Publier l\'image sur le registry après validation')
+        booleanParam(name: 'KEEP_EPHEMERE_ENV', defaultValue: false, description: 'Garder l\'environnement ephemere pour debug (ne pas nettoyer à la fin)')
+        string(name: 'IMAGE_TAG_SUFFIX', defaultValue: '', description: 'Suffixe optionnel pour le tag (ex: -rc1, -hotfix)')
+    }
+
+    stages {
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 1 : PRÉPARATION
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    lib.printSectionHeader("Pipeline CI - RHDemo")
+                    echo "Build: #${env.BUILD_NUMBER}"
+                    echo "Branch: ${env.GIT_BRANCH ?: 'N/A'}"
+                    echo "═══════════════════════════════════════════════════════"
+                }
+
+                // Checkout du code
+                checkout scm
+                sh 'git log -1 --pretty=format:"%h - %an : %s"'
+
+                script {
+                    echo '▶ Vérification des projets dans le workspace...'
+                    // rhDemoInitKeycloak et rhDemoAPITestIHM sont dans le MÊME repo que rhDemo
+                    // Le checkout SCM récupère tout le workspace (un seul .git à la racine)
+                }
+
+                sh '''
+                    echo "▶ Vérification rhDemoInitKeycloak..."
+                    if [ -d "rhDemoInitKeycloak" ]; then
+                        echo "✅ rhDemoInitKeycloak trouvé"
+                    else
+                        echo "❌ rhDemoInitKeycloak introuvable"
+                        exit 1
+                    fi
+
+                    echo "▶ Vérification rhDemoAPITestIHM..."
+                    if [ -d "rhDemoAPITestIHM" ]; then
+                        echo "✅ rhDemoAPITestIHM trouvé"
+                    else
+                        echo "❌ rhDemoAPITestIHM introuvable"
+                        exit 1
+                    fi
+
+                    echo ""
+                    echo "✅ Tous les projets du repository sont présents"
+                '''
+            }
+        }
+
+        stage('🔢 Lecture Version Maven') {
+            steps {
+                script {
+                    echo "▶ Lecture de la version depuis pom.xml..."
+
+                    // Lire la version depuis le pom.xml avec Maven (méthode robuste)
+                    env.APP_VERSION = sh(
+                        script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
+                        returnStdout: true
+                    ).trim()
+
+                    // Vérifier que la lecture a réussi
+                    if (!env.APP_VERSION || env.APP_VERSION == '') {
+                        error("❌ Impossible de lire la version depuis pom.xml")
+                    }
+
+                    // Construire le nom du fichier JAR avec la version lue
+                    env.JAR_FILE = "rhDemo/target/rhdemoAPI-${env.APP_VERSION}.jar"
+
+                    // Mettre à jour les variables Docker
+                    env.DOCKER_IMAGE_TAG = env.APP_VERSION
+
+                    // Construire le nom complet de l'image Docker avec version-buildnumber
+                    env.RHDEMO_IMAGE = "${env.DOCKER_IMAGE_NAME}:${env.APP_VERSION}-${env.BUILD_NUMBER}"
+
+                    echo "✅ Version Maven détectée: ${env.APP_VERSION}"
+                    echo "   JAR attendu: ${env.JAR_FILE}"
+                    echo "   Docker tag: ${env.DOCKER_IMAGE_TAG}"
+                    echo "   Image Docker complète: ${env.RHDEMO_IMAGE}"
+                }
+            }
+        }
+
+        stage('🔑 Initialisation Variables Dynamiques') {
+            steps {
+                script {
+                    echo '▶ Initialisation des variables dynamiques...'
+
+                    // Génération d'une clé API ZAP aléatoire pour la session
+                    def zapApiKey = sh(
+                        script: 'cat /dev/urandom | tr -dc \'a-zA-Z0-9\' | fold -w 32 | head -n 1',
+                        returnStdout: true
+                    ).trim()
+
+                    // Stocker comme variable d'environnement globale du pipeline
+                    env.ZAP_API_KEY = zapApiKey
+                    echo "✅ Clé API ZAP générée: ${zapApiKey.take(8)}..."
+                }
+            }
+        }
+
+        stage('🔓 Déchiffrement Secrets SOPS') {
+            steps {
+                script {
+                    echo '▶ Vérification SOPS et YQ...'
+                }
+                sh '''
+                    sops --version
+                    yq --version
+                '''
+
+                script {
+                    echo '▶ Déchiffrement du fichier de secrets...'
+                }
+
+                // Utiliser le credential sops-age-key de manière sécurisée
+                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
+                    sh '''
+                        # Créer le répertoire secrets s'il n'existe pas
+                        mkdir -p rhDemo/secrets
+
+                        # Déchiffrer le fichier de secrets
+                        echo "Déchiffrement de ${SECRETS_FILE}..."
+                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+
+                        # Vérifier que le fichier a été déchiffré
+                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
+                            echo "❌ Échec du déchiffrement"
+                            exit 1
+                        fi
+
+                        echo "✅ Secrets déchiffrés avec succès"
+
+                        # Extraire les valeurs pour les variables d'environnement
+                        # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets dans les logs
+                        set +x
+
+                        # Exporter les secrets comme variables d'environnement pour les stages suivants
+                        # Utilisation de substitution de variables sans affichage dans stdout
+                        {
+                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
+                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
+                            echo "# Désactiver le tracing pour ne pas logger les secrets"
+                            echo "{ set +x; } 2>/dev/null"
+                            echo ""
+
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
+
+                            # Mots de passe Keycloak pour environnement ephemere
+                            echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
+                            echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // \"admin\"' ${SECRETS_DECRYPTED})"
+
+                            # Utilisateurs et mots de passe de test (chiffrés dans SOPS)
+                            echo "export RHDEMO_TEST_ID_USER_ADMIN=$(yq eval '.rhdemo.test.iduseradmin' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_ID_USER_MAJ=$(yq eval '.rhdemo.test.idusermaj' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_ID_USER_CONSULT=$(yq eval '.rhdemo.test.iduserconsult' ${SECRETS_DECRYPTED})"
+                            echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})"
+
+                            # URLs des serveurs si elles existent
+                            if yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                                echo "export EPHEMERE_SERVER=$(yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED})"
+                            fi
+
+                            if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
+                                echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
+                            fi
+                        } > rhDemo/secrets/env-vars.sh 2>&1
+
+                        # Réactiver l'écho des commandes
+                        set -x
+
+                        # Afficher (sans montrer les valeurs)
+                        echo "✅ Variables d'environnement préparées"
+                    '''
+                }
+            }
+            post {
+                always {
+                    script {
+                        // Supprimer le fichier déchiffré pour la sécurité
+                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
+                    }
+                }
+            }
+        }
+
+        stage('🔐 Extraction secrets rhDemo') {
+            steps {
+                script {
+                    echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo (uniquement les secrets nécessaires)...'
+                }
+
+                sh '''
+                    # SÉCURITÉ: Désactiver l'écho des commandes
+                    set +x
+
+                    # Source les secrets
+                    . rhDemo/secrets/env-vars.sh
+
+                    # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
+                    # Ce fichier sera monté dans le container Docker de rhDemo
+                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+
+rhdemo:
+  datasource:
+    password:
+      pg: ${RHDEMO_DATASOURCE_PASSWORD_PG}
+      h2: ${RHDEMO_DATASOURCE_PASSWORD_H2}
+  client:
+    registration:
+      keycloak:
+        client:
+          secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+EOF
+
+                    # Réactiver l'écho
+                    set -x
+
+                    echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
+                '''
+            }
+        }
+
+        stage('🔧 Configuration rhDemoInitKeycloak') {
+            steps {
+                script {
+                    echo '▶ Génération de application-ephemere.yml pour rhDemoInitKeycloak...'
+                    echo '   (Sera utilisé directement via mvnw spring-boot:run, sans packaging JAR)'
+                }
+
+                sh '''
+                    # Variable TEST_DOMAIN disponible via env.TEST_DOMAIN (défini dans environment block)
+                    # Pas besoin de la redéfinir, elle est automatiquement accessible en bash
+                    echo "🔍 TEST_DOMAIN: ${TEST_DOMAIN}"
+
+                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
+                    set +x
+
+                    # Source les secrets déchiffrés
+                    . rhDemo/secrets/env-vars.sh
+
+                    # Générer application-ephemere.yml (sera utilisé directement par Maven)
+                    # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
+                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
+
+                    # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
+                    cat > "${CONFIG_FILE}" << YMLEOF
+# ========================================
+# Configuration Keycloak Server - EPHEMERE
+# Générée automatiquement par Jenkins CI/CD
+# ========================================
+keycloak:
+  # URL interne HTTP pour rhDemoInitKeycloak (exécuté dans le réseau Docker)
+  # Pas besoin de HTTPS car communication interne sécurisée par le réseau isolé
+  server-url: http://keycloak-ephemere:8080
+
+  admin:
+    realm: master
+    username: ${KEYCLOAK_ADMIN_USER}
+    password: ${KEYCLOAK_ADMIN_PASSWORD}
+
+  # ========================================
+  # Configuration du Realm RHDemo
+  # ========================================
+  realm:
+    name: RHDemo
+    display-name: RHDemo Application
+    enabled: true
+    registration-allowed: false
+    registration-email-as-username: false
+    reset-password-allowed: true
+    edit-username-allowed: false
+    login-with-email-allowed: true
+    duplicate-emails-allowed: false
+    remember-me: true
+    sso-session-idle-timeout: 1800
+    sso-session-max-lifespan: 36000
+    access-token-lifespan: 300
+
+  # ========================================
+  # Configuration du Client RHDemo
+  # ========================================
+  client:
+    client-id: RHDemo
+    name: RHDemo
+    secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
+    root-url: https://${TEST_DOMAIN}:58443/
+    base-url: ''
+    admin-url: ''
+    redirect-uris:
+      - https://${TEST_DOMAIN}:58443/*
+      - https://rhdemo.ephemere.local:58443/*
+      - https://keycloak.ephemere.local:58443/*
+      - http://localhost:9000/*
+    web-origins:
+      - https://${TEST_DOMAIN}:58443
+      - https://rhdemo.ephemere.local:58443
+      - https://keycloak.ephemere.local:58443
+      - http://localhost:9000
+    roles:
+      - ROLE_admin
+      - ROLE_consult
+      - ROLE_MAJ
+
+  # ========================================
+  # Configuration des Utilisateurs de test
+  # ========================================
+  users:
+    - username: ${RHDEMO_TEST_ID_USER_ADMIN}
+      password: ${RHDEMO_TEST_PWD_USER_ADMIN}
+      email: ${RHDEMO_TEST_ID_USER_ADMIN}@rhdemo.local
+      first-name: Admin
+      last-name: RHDemo
+      roles:
+        - ROLE_admin
+
+    - username: ${RHDEMO_TEST_ID_USER_CONSULT}
+      password: ${RHDEMO_TEST_PWD_USER_CONSULT}
+      email: ${RHDEMO_TEST_ID_USER_CONSULT}@rhdemo.local
+      first-name: Jean
+      last-name: Consultant
+      roles:
+        - ROLE_consult
+
+    - username: ${RHDEMO_TEST_ID_USER_MAJ}
+      password: ${RHDEMO_TEST_PWD_USER_MAJ}
+      email: ${RHDEMO_TEST_ID_USER_MAJ}@rhdemo.local
+      first-name: Marie
+      last-name: Manager
+      roles:
+        - ROLE_consult
+        - ROLE_MAJ
+YMLEOF
+
+                    # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
+                    set -x
+
+                    echo "✅ Fichier de configuration Keycloak généré: ${CONFIG_FILE}"
+                    echo "   Ce fichier sera utilisé par rhDemoInitKeycloak pour initialiser Keycloak"
+                    echo "   Redirect URIs configurés pour:"
+                    echo "     - https://${TEST_DOMAIN}:58443/*"
+                    echo "     - https://rhdemo.ephemere.local:58443/* (pour Selenium/ZAP)"
+
+                    echo ""
+                    echo "🔍 Vérification de la section redirect-uris dans le fichier généré:"
+                    grep -A 5 "redirect-uris:" "${CONFIG_FILE}" || echo "⚠️ Section redirect-uris non trouvée"
+                '''
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 2 : BUILD ET TESTS
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🔍 Vérification Environnement') {
+            steps {
+                script {
+                    echo '▶ Vérification de l\'environnement...'
+                }
+
+                sh '''
+                    # Charger les secrets
+                    . rhDemo/secrets/env-vars.sh
+
+                    echo "Java version:"
+                    java -version
+                    echo ""
+                    echo "Maven version:"
+                    cd rhDemo && ./mvnw -version
+                    echo ""
+                    echo "Variables d'environnement:"
+                    # Compter les variables RHDEMO sans afficher leurs valeurs (sécurité)
+                    RHDEMO_VAR_COUNT=$(env | grep -c "^RHDEMO_" || echo "0")
+                    echo "✅ $RHDEMO_VAR_COUNT variables RHDEMO configurées (valeurs masquées pour sécurité)"
+                '''
+            }
+        }
+
+        stage('🏗️ Compilation Maven') {
+            steps {
+                script {
+                    echo "▶ Compilation du projet Maven..."
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw clean compile -DskipTests'
+                }
+            }
+        }
+
+        stage('✅ Tests Unitaires') {
+            steps {
+                script {
+                    echo "▶ Exécution des tests unitaires..."
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw test'
+                }
+            }
+            post {
+                always {
+                    junit 'rhDemo/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('🔍 Analyse OWASP Dependency-Check') {
+            steps {
+                script {
+                    echo "▶ Analyse des vulnérabilités des dépendances..."
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw org.owasp:dependency-check-maven:check'
+                }
+            }
+            post {
+                always {
+                    // Archiver le rapport OWASP
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'rhDemo/target',
+                        reportFiles: 'dependency-check-report.html',
+                        reportName: 'OWASP Dependency-Check Report'
+                    ])
+                }
+            }
+        }
+
+        stage('📦 Build Maven') {
+            steps {
+                script {
+                    echo "▶ Build du projet (création du JAR)..."
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw package -DskipTests'
+                }
+            }
+        }
+
+        stage('📊 Analyse SonarQube') {
+            when {
+                expression { params.RUN_SONAR == true }
+            }
+            steps {
+                script {
+                    echo "▶ Analyse de la qualité du code avec SonarQube..."
+                }
+
+                withSonarQubeEnv('SonarQube') {
+                    dir('rhDemo') {
+                        sh './mvnw sonar:sonar'
+                    }
+                }
+            }
+        }
+
+        stage('🚦 Quality Gate SonarQube') {
+            when {
+                expression { params.RUN_SONAR == true }
+            }
+            steps {
+                script {
+                    echo "▶ Attente du résultat Quality Gate..."
+                }
+
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('📈 Couverture de Code') {
+            steps {
+                script {
+                    echo '▶ Génération du rapport de couverture JaCoCo...'
+                }
+
+                dir('rhDemo') {
+                    sh './mvnw jacoco:report'
+                }
+
+                jacoco(
+                    execPattern: '**/rhDemo/target/jacoco.exec',
+                    classPattern: '**/rhDemo/target/classes',
+                    sourcePattern: '**/rhDemo/src/main/java'
+                )
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 3 : DOCKER BUILD
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🐳 Build Image Docker') {
+            steps {
+                script {
+                    echo "▶ Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)..."
+                    echo "   Version détectée: ${env.APP_VERSION}"
+                    echo "   Image à construire: ${env.RHDEMO_IMAGE}"
+                    echo "⚠️  Nettoyage complet: suppression de toutes les images rhdemo-api existantes..."
+                }
+
+                // Supprimer TOUTES les anciennes images rhdemo-api pour forcer reconstruction et éviter accumulation
+                sh """
+                    echo "📊 Images rhdemo-api avant nettoyage:"
+                    docker images rhdemo-api --format "table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}" || true
+
+                    echo ""
+                    echo "🧹 Suppression de toutes les images rhdemo-api..."
+                    # Supprimer toutes les images avec le nom rhdemo-api (tous les tags)
+                    docker images rhdemo-api -q | xargs -r docker rmi -f 2>/dev/null || echo "Aucune image rhdemo-api à supprimer"
+
+                    echo "✅ Nettoyage terminé"
+                """
+
+                dir('rhDemo') {
+                    sh """
+                        DOCKER_BUILDKIT=0 docker build -t ${env.RHDEMO_IMAGE} \
+                                     -t rhdemo-api:latest \
+                                     --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                                     --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                                     --build-arg VERSION=${env.APP_VERSION} \
+                                     .
+                    """
+                }
+
+                script {
+                    echo "✅ Image Docker créée: ${env.RHDEMO_IMAGE}"
+
+                    // Lister les images créées et afficher la taille
+                    sh """
+                        echo "📊 Images créées:"
+                        docker images rhdemo-api --format "table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}"
+                    """
+                }
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 4 : DÉPLOIEMENT EPHEMERE DOCKER COMPOSE
+        // ════════════════════════════════════════════════════════════════
+
+        stage('⚙️ Configuration Environnement Test') {
+            steps {
+                script {
+                    echo '▶ Configuration de l\'environnement de test Docker Compose...'
+                    echo '   Nettoyage des containers et volumes du build précédent'
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        # Arrêter et supprimer les conteneurs du build précédent via docker-compose
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                        # Supprimer les containers avec noms fixes (peuvent rester d'un build précédent avec KEEP_EPHEMERE_ENV)
+                        echo "🧹 Suppression des containers avec noms fixes..."
+                        docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
+
+                        # Supprimer les volumes orphelins (créés par builds précédents avec noms différents)
+                        docker volume rm keycloak-ephemere-db-data rhdemo-ephemere-db-data rhdemo-ephemere-nginx-cache 2>/dev/null || true
+
+                        # IMPORTANT: Supprimer l'image nginx locale pour forcer sa recréation
+                        # Évite les problèmes de layers corrompus où nginx.conf a été créé comme répertoire
+                        echo "🧹 Suppression image nginx pour éviter layers corrompus..."
+                        docker rmi ${env.NGINX_IMAGE} 2>/dev/null || true
+
+                        # Nettoyer les réseaux orphelins
+                        docker network prune -f
+
+                        echo "✅ Environnement nettoyé"
+                    """
+                }
+            }
+        }
+
+        stage('🔐 Génération Certificats SSL') {
+            steps {
+                script {
+                    echo '▶ Génération des certificats SSL auto-signés...'
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        ./generate-certs.sh --domain ${env.TEST_DOMAIN} --domain ${env.KEYCLOAK_DOMAIN}
+                        echo "✅ Certificats SSL générés"
+                    """
+                }
+            }
+        }
+
+        stage('🚀 Démarrage Environnement Staging') {
+            steps {
+                script {
+                    echo "▶ Démarrage de l'environnement ephemere Docker Compose..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        # Source les secrets
+                        set +x
+                        . ../../secrets/env-vars.sh
+
+                        # Exporter les variables d'environnement nécessaires pour docker-compose
+                        # Mapping des noms de variables entre secrets et docker-compose
+                        export RHDEMO_IMAGE=${env.RHDEMO_IMAGE}
+                        export APP_VERSION=${env.APP_VERSION}-${env.BUILD_NUMBER}
+                        export NGINX_IMAGE=${env.NGINX_IMAGE}
+                        export POSTGRES_IMAGE=${env.POSTGRES_IMAGE}
+                        export KEYCLOAK_IMAGE=${env.KEYCLOAK_IMAGE}
+                        export RHDEMO_DB_PASSWORD=\${RHDEMO_DATASOURCE_PASSWORD_PG}
+                        export KEYCLOAK_DB_PASSWORD=\${KEYCLOAK_DB_PASSWORD}
+                        export KEYCLOAK_ADMIN=\${KEYCLOAK_ADMIN_USER}
+                        export KEYCLOAK_ADMIN_PASSWORD=\${KEYCLOAK_ADMIN_PASSWORD}
+
+                        set -x
+
+                        # Démarrer l'environnement (docker-compose créera automatiquement le réseau)
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} up -d
+
+                        echo "✅ Environnement ephemere démarré"
+                    """
+                }
+            }
+        }
+
+        stage('🔗 Connexion Jenkins au Réseau Staging') {
+            steps {
+                script {
+                    echo "▶ Connexion de Jenkins au réseau ephemere pour accès direct aux services..."
+                }
+
+                sh """
+                    # Trouver le conteneur Jenkins principal (pas l'agent)
+                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                    echo "📦 Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
+
+                    if [ -n "\$JENKINS_CONTAINER" ]; then
+                        docker network connect ${env.NETWORK_EPHEMERE} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
+                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau ${env.NETWORK_EPHEMERE}"
+                    else
+                        echo "❌ ERREUR: Conteneur Jenkins introuvable!"
+                        docker ps --filter "name=jenkins"
+                        exit 1
+                    fi
+                """
+            }
+        }
+
+        stage('📋 Configuration Nginx HTTPS') {
+            steps {
+                script {
+                    echo "▶ Copie des configurations Nginx et certificats SSL..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        echo "📋 Copie des configurations nginx..."
+                        docker cp nginx/nginx.conf ${env.CONTAINER_NGINX}:/etc/nginx/nginx.conf
+                        docker cp nginx/conf.d/. ${env.CONTAINER_NGINX}:/etc/nginx/conf.d/
+
+                        if [ -d "certs" ]; then
+                            docker cp certs/. ${env.CONTAINER_NGINX}:/etc/nginx/ssl/
+                            echo "✅ Configurations nginx et certificats copiés"
+                        else
+                            echo "✅ Configurations nginx copiées (certificats manquants)"
+                        fi
+
+                        # Recharger la configuration nginx pour appliquer les changements
+                        echo "🔄 Rechargement de la configuration nginx..."
+                        docker exec ${env.CONTAINER_NGINX} nginx -t  # Test de la config
+                        docker exec ${env.CONTAINER_NGINX} nginx -s reload  # Reload
+                        echo "✅ Nginx rechargé avec la nouvelle configuration HTTPS"
+
+                        # Vérifier que nginx écoute réellement sur le port 443
+                        echo "🔍 Vérification que nginx écoute sur le port 443..."
+                        if docker exec ${env.CONTAINER_NGINX} netstat -tuln | grep -q ':443'; then
+                            echo "✅ Nginx écoute sur le port 443 (HTTPS)"
+                        else
+                            echo "❌ ERREUR: Nginx n'écoute PAS sur le port 443!"
+                            echo "Ports écoutés par nginx:"
+                            docker exec ${env.CONTAINER_NGINX} netstat -tuln
+                            exit 1
+                        fi
+                    """
+                }
+            }
+        }
+
+        stage('⏳ Attente Services Staging') {
+            steps {
+                script {
+                    echo "▶ Attente du démarrage complet des services..."
+                }
+
+                sh """
+                    echo "▶ Attente PostgreSQL..."
+                    timeout 120 bash -c 'until docker exec ${env.CONTAINER_DB} pg_isready -U rhdemo > /dev/null 2>&1; do sleep 2; done'
+                    echo "✓ PostgreSQL prêt"
+
+                    echo "▶ Attente Keycloak DB..."
+                    timeout 120 bash -c 'until docker exec ${env.CONTAINER_KEYCLOAK_DB} pg_isready -U keycloak > /dev/null 2>&1; do sleep 2; done'
+                    echo "✓ Keycloak DB prêt"
+
+                    echo "✅ Bases de données prêtes"
+                    echo "   Note: Le healthcheck Keycloak sera fait dans un stage dédié ultérieur"
+                """
+            }
+        }
+
+        stage('💾 Initialisation Base de Données') {
+            steps {
+                script {
+                    echo "▶ Initialisation de la base de données ephemere..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh '''
+                        echo "▶ Vérification des fichiers SQL..."
+                        PGSCHEMA_PATH="../../pgschema.sql"
+                        PGDATA_PATH="../../pgdata.sql"
+
+                        if [ ! -f "$PGSCHEMA_PATH" ]; then
+                            echo "❌ Erreur: Fichier pgschema.sql introuvable à $PGSCHEMA_PATH"
+                            exit 1
+                        fi
+
+                        if [ ! -f "$PGDATA_PATH" ]; then
+                            echo "❌ Erreur: Fichier pgdata.sql introuvable à $PGDATA_PATH"
+                            exit 1
+                        fi
+
+                        echo "✓ Fichiers SQL trouvés"
+
+                        echo "▶ Copie des fichiers SQL dans le container..."
+                        docker cp "$PGSCHEMA_PATH" rhdemo-ephemere-db:/tmp/schema.sql
+                        docker cp "$PGDATA_PATH" rhdemo-ephemere-db:/tmp/data.sql
+
+                        echo "▶ Exécution du schéma SQL..."
+                        docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -f /tmp/schema.sql
+
+                        echo "▶ Insertion des données de test..."
+                        docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -f /tmp/data.sql
+
+                        echo "▶ Vérification..."
+                        EMPLOYEE_COUNT=$(docker exec rhdemo-ephemere-db psql -U rhdemo -d rhdemo -t -c "SELECT COUNT(*) FROM employes;" | tr -d ' ')
+
+                        echo "✅ Base de données initialisée"
+                        echo "   📊 Nombre d'employés: $EMPLOYEE_COUNT"
+
+                        # Vérifier qu'il y a des données (au moins 10 employés)
+                        if [ "$EMPLOYEE_COUNT" -lt 10 ]; then
+                            echo "❌ Erreur: Trop peu d'employés insérés ($EMPLOYEE_COUNT < 10)"
+                            exit 1
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('🏥 Healthcheck Keycloak') {
+            steps {
+                script {
+                    echo '▶ Attente démarrage Keycloak...'
+                    echo '   Test depuis Jenkins via le réseau Docker ephemere'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Keycloak depuis Jenkins (connecté au réseau ephemere)
+                    lib.waitForHealthcheck([
+                        name: 'Keycloak',
+                        url: "http://${env.CONTAINER_KEYCLOAK}:9000/health/ready",
+                        timeout: 60,
+                        initialWait: 45
+                        // Pas de container: test depuis Jenkins, pas docker exec
+                    ])
+                }
+            }
+        }
+
+        stage('🔑 Initialisation Keycloak') {
+            steps {
+                script {
+                    echo "▶ Initialisation du realm et des utilisateurs Keycloak..."
+                    echo "   Jenkins est maintenant connecté au réseau ephemere, keycloak-ephemere est résolvable"
+                }
+
+                dir(env.KEYCLOAK_INIT_PATH) {
+                    sh '''
+                        # Exécuter l'initialisation avec Maven
+                        echo "▶ Exécution de rhDemoInitKeycloak..."
+                        ../rhDemo/mvnw spring-boot:run -Dspring-boot.run.profiles=ephemere
+
+                        echo "✅ Keycloak initialisé avec succès"
+                    '''
+                }
+            }
+        }
+
+        stage('📋 Copie Secrets vers Container App') {
+            steps {
+                script {
+                    echo "▶ Copie du fichier de secrets dans le container applicatif..."
+                }
+
+                sh """
+                    # Créer le répertoire secrets dans le container
+                    # Ces commandes fonctionnent même si le container est en restart loop
+                    docker exec --user root ${env.CONTAINER_APP} mkdir -p /workspace/secrets
+                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
+
+                    # Copier le fichier de secrets
+                    docker cp ${env.SECRETS_RHDEMO} ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
+
+                    # Définir les permissions (user spring:spring)
+                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets/secrets-rhdemo.yml
+                    docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
+
+                    echo "✅ Secrets copiés dans le container"
+                """
+            }
+        }
+
+        stage('🔄 Redémarrage Application') {
+            steps {
+                script {
+                    echo "▶ Redémarrage du container applicatif pour charger les secrets..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        # Redémarrer via docker-compose pour charger les secrets
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} restart rhdemo-app
+                        echo "⏳ Attente du redémarrage (30s)..."
+                        sleep 30
+                    """
+                }
+            }
+        }
+
+        stage('🏥 Healthcheck Application RHDemo') {
+            steps {
+                script {
+                    echo '▶ Vérification santé de l\'application RHDemo...'
+                    echo '   Test depuis Jenkins via le réseau Docker ephemere'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Application RHDemo depuis Jenkins (connecté au réseau ephemere)
+                    lib.waitForHealthcheck([
+                        name: 'RHDemo App',
+                        url: "http://${env.CONTAINER_APP}:9000/front/",
+                        timeout: 90,
+                        acceptedCodes: [200, 301, 302]
+                        // Pas de container: test depuis Jenkins, pas docker exec
+                    ])
+                }
+            }
+        }
+
+        stage('🌐 Healthcheck Nginx HTTPS') {
+            steps {
+                script {
+                    echo '▶ Vérification de l\'accès HTTPS via nginx (test end-to-end)...'
+                    echo '   Test depuis Jenkins via alias réseau Docker'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Healthcheck Nginx HTTPS avec certificat auto-signé
+                    // Utilise l'alias réseau Docker défini dans docker-compose.yml
+                    lib.waitForHealthcheck([
+                        name: 'Nginx HTTPS',
+                        url: "https://${env.TEST_DOMAIN}/front/",
+                        timeout: 30,
+                        acceptedCodes: [200, 302],
+                        insecure: true
+                    ])
+
+                    echo '✅ Stack complète opérationnelle et accessible via HTTPS'
+                    echo '   Prêt pour les tests Selenium'
+                }
+            }
+        }
+
+        stage('🔍 Scan Sécurité Images Docker (Trivy)') {
+            options {
+                timeout(time: 8, unit: 'MINUTES')
+            }
+            steps {
+                script {
+                    echo "▶ Scan de sécurité des images Docker avec Trivy (parallélisé)..."
+                    echo "   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps"
+                    echo ""
+                    echo "   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées"
+                    echo "   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)"
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Créer le répertoire pour les rapports
+                    sh 'mkdir -p trivy-reports'
+
+                    // Télécharger/mettre à jour la base de données Trivy AVANT les scans parallèles
+                    // Évite les conflits de verrous lors de scans parallèles
+                    echo "📥 Téléchargement de la base de données Trivy..."
+                    sh '''
+                        trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                        echo "✅ Base de données Trivy prête"
+                    '''
+
+                    // Définir les images à scanner avec leurs noms de rapports
+                    def imagesToScan = [
+                        [image: env.POSTGRES_IMAGE, name: 'postgres'],
+                        [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
+                        [image: env.NGINX_IMAGE, name: 'nginx'],
+                        [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
+                    ]
+
+                    echo "📋 Images à scanner:"
+                    imagesToScan.each { img ->
+                        echo "   - ${img.name}: ${img.image}"
+                    }
+
+                    // Créer les stages parallèles de scan
+                    def scanStages = imagesToScan.collectEntries { img ->
+                        ["Scan ${img.name}": {
+                            lib.generateTrivyReport(img.image, img.name)
+                        }]
+                    }
+
+                    // Exécuter tous les scans en parallèle
+                    parallel(scanStages + [failFast: false])
+
+                    // Agrégation des résultats et vérification des seuils
+                    if (!lib.aggregateTrivyResults()) {
+                        error("Trivy a détecté des vulnérabilités CRITICAL bloquantes")
+                    }
+                }
+            }
+            post {
+                always {
+                    // Archiver tous les rapports Trivy
+                    archiveArtifacts artifacts: 'trivy-reports/**/*', allowEmptyArchive: true
+
+                    // Publier le rapport HTML agrégé
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'trivy-reports',
+                        reportFiles: 'trivy-aggregate-report.html',
+                        reportName: 'Trivy Security Scan Report'
+                    ])
+                }
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 5 : TESTS SELENIUM ET OWASP ZAP
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🔒 Démarrage OWASP ZAP Proxy') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo '▶ Démarrage du proxy OWASP ZAP pour analyse de sécurité...'
+                    echo '   Le trafic Selenium sera intercepté et analysé par ZAP'
+                }
+
+                sh """#!/bin/bash
+                    # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                    echo "🔐 Utilisation de ZAP_API_KEY: ${env.ZAP_API_KEY.take(8)}..."
+
+                    # IMPORTANT: ZAP est maintenant dans l'environnement Jenkins, pas ephemere
+                    cd rhDemo/infra/jenkins-docker
+
+                    # Nettoyage : supprimer le conteneur ZAP existant s'il existe
+                    if docker ps -a --format '{{.Names}}' | grep -q '^rhdemo-jenkins-zap\$'; then
+                        echo "🧹 Suppression du conteneur ZAP existant..."
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Conteneur ZAP supprimé"
+                    fi
+
+                    # Démarrage d'un nouveau conteneur ZAP avec la clé API correcte
+                    echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
+                    echo "   Réseau: rhdemo-jenkins-network"
+                    echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+
+                    echo "⏳ Attente du démarrage de ZAP (30s max)..."
+                    timeout=30
+                    while [ \$timeout -gt 0 ]; do
+                        if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
+                            echo "✅ ZAP démarré et accessible"
+                            break
+                        fi
+                        sleep 2
+                        timeout=\$((timeout - 2))
+                    done
+
+                    if [ \$timeout -le 0 ]; then
+                        echo "❌ Timeout: ZAP n'est pas prêt après 30s"
+                        docker logs --tail=20 rhdemo-jenkins-zap
+                        exit 1
+                    fi
+
+                    echo "📊 ZAP Status:"
+                    docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} | jq .
+
+                    echo ""
+                    echo "🔗 Connexion de ZAP au réseau ephemere..."
+                    docker network connect rhdemo-ephemere-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà connecté au réseau ephemere"
+
+                    echo ""
+                    echo "✅ OWASP ZAP prêt à intercepter le trafic Selenium"
+                    echo "   Container: rhdemo-jenkins-zap"
+                    echo "   Réseau 1: rhdemo-jenkins-network (API + Proxy)"
+                    echo "   Réseau 2: rhdemo-ephemere-network (accès application via connexion dynamique)"
+                    echo "   Port unique (API + Proxy): owasp-zap:8090"
+                """
+            }
+        }
+
+        stage('🧪 Tests Selenium') {
+            when {
+                expression { params.RUN_SELENIUM_TESTS == true }
+            }
+            steps {
+                script {
+                    echo "▶ Exécution des tests Selenium avec proxy ZAP..."
+                }
+
+                dir(env.TEST_PROJECT_PATH) {
+                    sh """
+                        # Source les secrets pour les tests
+                        set +x
+                        . ../rhDemo/secrets/env-vars.sh
+
+                        # URLs via nginx avec HTTPS
+                        # Depuis que nginx écoute aussi sur le port 58443 en interne (réseau Docker),
+                        # Selenium/ZAP peuvent utiliser directement les mêmes URLs que les utilisateurs externes:
+                        # rhdemo.ephemere.local:58443 et keycloak.ephemere.local:58443
+                        #
+                        # Avantages:
+                        # - URLs identiques pour tests et accès manuel (cohérence)
+                        # - Plus besoin de détecter l'IP gateway
+                        # - Redirect URIs OAuth2 simplifiés (pas d'IP à whitelister)
+                        # - Résolution DNS stable via alias réseau Docker
+                        #
+                        # Note: ZAP est connecté au réseau rhdemo-ephemere-network (ligne 1117),
+                        # il peut donc résoudre les alias réseau et accéder au port 58443 de nginx
+
+                        APP_URL="https://rhdemo.ephemere.local:58443"
+                        KEYCLOAK_URL="https://keycloak.ephemere.local:58443/realms/RHDemo"
+
+                        # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
+                        # Ces variables seront passées via propriétés Maven à TestConfig
+                        # Username chargé depuis secrets-ephemere.yml (pas de valeur en dur)
+                        TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
+                        TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
+
+                        # Configuration du proxy ZAP pour intercepter le trafic Selenium
+                        # BaseSeleniumTest.java détecte ces variables et configure le proxy WebDriver
+                        export ZAP_PROXY_HOST=owasp-zap
+                        export ZAP_PROXY_PORT=8090
+
+                        echo "📍 Configuration des tests Selenium:"
+                        echo "   APP_URL: \${APP_URL}"
+                        echo "   KEYCLOAK_URL: \${KEYCLOAK_URL}"
+                        echo "   TEST_USERNAME: \${TEST_USERNAME} (ROLE_consult + ROLE_MAJ)"
+                        echo "   Mode: Headless"
+                        echo "   ZAP Proxy: \${ZAP_PROXY_HOST}:\${ZAP_PROXY_PORT}"
+                        echo "   (Healthcheck HTTPS validé avant ce stage)"
+
+                        set -x
+
+                        # Lancement des tests avec TOUTES les configs via propriétés Maven
+                        # TestConfig charge dans l'ordre: Maven properties > env vars > YAML
+                        cd \${WORKSPACE}/rhDemo && ./mvnw clean test -f ../\${TEST_PROJECT_PATH}/pom.xml \\
+                            -Dtest.baseurl=\${APP_URL} \\
+                            -Dtest.keycloak.url=\${KEYCLOAK_URL} \\
+                            -Dselenium.headless=true \\
+                            -Dtest.username=\${TEST_USERNAME} \\
+                            -Dtest.password=\${TEST_PASSWORD}
+                    """
+                }
+            }
+            post {
+                failure {
+                    script {
+                        echo '📋 Échec des tests Selenium - Collecte des logs des conteneurs...'
+
+                        sh '''
+                            # Créer le répertoire pour les logs de debug
+                            mkdir -p debug-logs
+
+                            echo "📝 Collecte des logs Docker..."
+
+                            # Logs de l'application Spring Boot (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-ephemere-app"; then
+                                echo "  - Application Spring Boot..."
+                                docker logs rhdemo-ephemere-app --tail 500 > debug-logs/app-springboot.log 2>&1
+                            fi
+
+                            # Logs Keycloak (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "keycloak-ephemere"; then
+                                echo "  - Keycloak..."
+                                docker logs keycloak-ephemere --tail 500 > debug-logs/keycloak.log 2>&1
+                            fi
+
+                            # Logs Nginx (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-ephemere-nginx"; then
+                                echo "  - Nginx..."
+                                docker logs rhdemo-ephemere-nginx --tail 500 > debug-logs/nginx.log 2>&1
+                            fi
+
+                            # Logs ZAP (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-jenkins-zap"; then
+                                echo "  - OWASP ZAP..."
+                                docker logs rhdemo-jenkins-zap --tail 500 > debug-logs/zap.log 2>&1
+                            fi
+
+                            # Informations réseau pour debug
+                            echo "  - Configuration réseau Docker..."
+                            docker network inspect rhdemo-ephemere-network > debug-logs/network-ephemere.json 2>&1 || echo "Network non trouvé" > debug-logs/network-ephemere.json
+                            docker network inspect rhdemo-jenkins-network > debug-logs/network-jenkins.json 2>&1 || echo "Network non trouvé" > debug-logs/network-jenkins.json
+
+                            # État des conteneurs
+                            echo "  - État des conteneurs..."
+                            docker ps -a --filter "name=ephemere" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}" > debug-logs/containers-status.txt
+
+                            echo "✅ Logs collectés dans debug-logs/"
+                            ls -lh debug-logs/
+                        '''
+
+                        // Archiver les logs de debug
+                        archiveArtifacts artifacts: 'debug-logs/*', fingerprint: true, allowEmptyArchive: true
+                    }
+                }
+                always {
+                    script {
+                        // Archiver les rapports de tests
+                        junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
+
+                        // Archiver les screenshots en cas d'échec
+                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+
+                        // Génération du rapport OWASP ZAP avant déconnexion
+                        echo '📊 Génération du rapport OWASP ZAP...'
+                        sh """#!/bin/bash
+                            # Sauvegarder le workspace actuel
+                            WORKSPACE_DIR=\$(pwd)
+
+                            # Créer le répertoire pour les rapports ZAP dans le workspace
+                            mkdir -p "\${WORKSPACE_DIR}/zap-reports"
+
+                            # Utiliser la clé API ZAP définie comme variable d'environnement Jenkins
+                            ZAP_API_KEY="${env.ZAP_API_KEY}"
+                            ZAP_HOST="owasp-zap"
+                            ZAP_PORT="8090"
+
+                            echo "🔍 Récupération du rapport ZAP depuis http://\${ZAP_HOST}:\${ZAP_PORT}"
+                            echo "   Clé API utilisée: \${ZAP_API_KEY:0:8}..."
+
+                            # Tester d'abord la connexion à ZAP
+                            if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
+                                echo "✅ Connexion à ZAP réussie"
+
+                                # Générer le rapport HTML
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                else
+                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                fi
+
+                                # Générer également le rapport JSON pour analyse
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
+                                else
+                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                fi
+                            else
+                                echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
+                            fi
+                        """
+
+                        // Archiver les rapports ZAP
+                        archiveArtifacts artifacts: 'zap-reports/*', fingerprint: true, allowEmptyArchive: true
+
+                        // Déconnexion de ZAP du réseau ephemere après les tests
+                        echo '🔌 Déconnexion de ZAP du réseau ephemere...'
+                        sh '''
+                            docker network disconnect rhdemo-ephemere-network rhdemo-jenkins-zap 2>/dev/null || echo "⚠️  ZAP déjà déconnecté du réseau ephemere"
+                            echo "✅ ZAP déconnecté du réseau ephemere (reste sur jenkins-network)"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('📝 Génération Rapports') {
+            steps {
+                script {
+                    echo '▶ Publication des rapports HTML...'
+
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                    // Définir tous les rapports à publier
+                    def reports = [
+                        ['rhDemo/target/site/jacoco', 'index.html', 'Code Coverage (JaCoCo)'],
+                        ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
+                        ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
+                        ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
+                        ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
+                        ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
+                        ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']
+                    ]
+
+                    lib.publishHTMLReports(reports)
+                }
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 6 : PUBLICATION DE L'IMAGE
+        // ════════════════════════════════════════════════════════════════
+
+        stage('🏷️ Tag et Publication Image') {
+            when {
+                expression { params.PUBLISH_IMAGE == true }
+            }
+            steps {
+                script {
+                    echo "▶ Tag et publication de l'image Docker sur le registry..."
+
+                    // Déterminer le tag final avec auto-incrémentation pour SNAPSHOT
+                    def baseVersion = env.APP_VERSION
+                    def finalTag
+
+                    if (baseVersion.contains('SNAPSHOT')) {
+                        // Pour les SNAPSHOT : ajouter le numéro de build pour garantir l'unicité
+                        finalTag = "${baseVersion}-${env.BUILD_NUMBER}${params.IMAGE_TAG_SUFFIX}"
+                        echo "   Mode SNAPSHOT détecté : ajout du build number"
+                        echo "   Version Maven: ${baseVersion}"
+                        echo "   Build number: ${env.BUILD_NUMBER}"
+                    } else {
+                        // Pour les releases : utiliser la version telle quelle
+                        finalTag = "${baseVersion}${params.IMAGE_TAG_SUFFIX}"
+                        echo "   Mode RELEASE"
+                        echo "   Version Maven: ${baseVersion}"
+                    }
+
+                    env.FINAL_IMAGE_TAG = finalTag
+                    echo "   Tag final: ${finalTag}"
+                }
+
+                sh """
+                    # Détecter le nom du registry
+                    REGISTRY_NAME=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+
+                    if [ -z "\$REGISTRY_NAME" ]; then
+                        echo "❌ Erreur: Aucun registry Docker trouvé sur le port 5000"
+                        exit 1
+                    fi
+
+                    echo "▶ Registry détecté: \$REGISTRY_NAME"
+
+                    # Tag de l'image avec la version finale
+                    echo "▶ Tag de l'image: ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    docker tag ${env.RHDEMO_IMAGE} ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+
+                    # Tag pour le registry (utiliser localhost:5000 depuis Jenkins)
+                    echo "▶ Tag pour le registry: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+
+                    # Push vers le registry
+                    echo "▶ Push vers le registry..."
+                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+
+                    # Tag latest
+                    echo "▶ Tag latest..."
+                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
+                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
+
+                    echo "✅ Image publiée sur le registry:"
+                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:latest"
+                """
+            }
+        }
+
+        stage('🧹 Nettoyage Registry SNAPSHOT') {
+            when {
+                allOf {
+                    expression { params.PUBLISH_IMAGE == true }
+                    expression { env.APP_VERSION.contains('SNAPSHOT') }
+                }
+            }
+            steps {
+                script {
+                    echo "▶ Nettoyage des anciennes images SNAPSHOT du registry..."
+                    echo "   Politique de rétention: garder les 3 dernières versions"
+                }
+
+                sh """
+                    REGISTRY_URL="http://localhost:5000"
+                    IMAGE_NAME="${env.DOCKER_IMAGE_NAME}"
+                    RETENTION_COUNT=3
+
+                    echo "▶ Récupération de la liste des tags SNAPSHOT..."
+
+                    # Récupérer tous les tags de l'image
+                    ALL_TAGS=\$(curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
+
+                    if [ -z "\$ALL_TAGS" ]; then
+                        echo "ℹ️  Aucun tag trouvé dans le registry"
+                        exit 0
+                    fi
+
+                    # Filtrer uniquement les tags SNAPSHOT avec numéro de build
+                    SNAPSHOT_TAGS=\$(echo "\$ALL_TAGS" | grep "SNAPSHOT-[0-9]" | sort -V || true)
+
+                    if [ -z "\$SNAPSHOT_TAGS" ]; then
+                        echo "ℹ️  Aucune image SNAPSHOT avec numéro de build trouvée"
+                        exit 0
+                    fi
+
+                    # Compter le nombre de tags SNAPSHOT
+                    TAG_COUNT=\$(echo "\$SNAPSHOT_TAGS" | wc -l)
+                    echo "📊 Nombre d'images SNAPSHOT trouvées: \$TAG_COUNT"
+
+                    if [ "\$TAG_COUNT" -le "\$RETENTION_COUNT" ]; then
+                        echo "✅ Nombre d'images ≤ \$RETENTION_COUNT, aucun nettoyage nécessaire"
+                        exit 0
+                    fi
+
+                    # Calculer combien d'images à supprimer
+                    TO_DELETE_COUNT=\$(( TAG_COUNT - RETENTION_COUNT ))
+                    echo "🗑️  Suppression des \$TO_DELETE_COUNT images les plus anciennes..."
+
+                    # Garder seulement les N derniers tags
+                    TAGS_TO_DELETE=\$(echo "\$SNAPSHOT_TAGS" | head -n \$TO_DELETE_COUNT)
+
+                    # Supprimer les anciennes images
+                    for TAG in \$TAGS_TO_DELETE; do
+                        echo "  ➤ Suppression de \${IMAGE_NAME}:\${TAG}..."
+
+                        # Récupérer le manifest avec le bon Accept header pour obtenir le digest
+                        DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
+                            \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${TAG} \\
+                            | grep -i "Docker-Content-Digest" \\
+                            | awk '{print \$2}' \\
+                            | tr -d '\\r')
+
+                        if [ -n "\$DIGEST" ]; then
+                            # Supprimer le manifest (cela marque l'image pour suppression)
+                            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \\
+                                \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
+
+                            if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
+                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \${DIGEST:0:20}...)"
+                            else
+                                echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$HTTP_CODE)"
+                            fi
+                        else
+                            echo "    ⚠️  Impossible de récupérer le digest pour \${TAG}"
+                        fi
+                    done
+
+                    echo ""
+                    echo "✅ Nettoyage des tags terminé"
+                    echo "📋 Images SNAPSHOT restantes:"
+                    curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
+
+                    echo ""
+                    echo "▶ Exécution du garbage collection du registry pour libérer l'espace disque..."
+
+                    # Trouver le container du registry
+                    REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1)
+
+                    if [ -z "\$REGISTRY_CONTAINER" ]; then
+                        echo "⚠️  Container registry introuvable, garbage collection ignoré"
+                    else
+                        echo "   Registry container: \$REGISTRY_CONTAINER"
+
+                        # Exécuter le garbage collector en mode read-only d'abord pour voir ce qui serait supprimé
+                        echo "   Analyse des blobs à supprimer..."
+                        BLOBS_TO_DELETE=\$(docker exec \$REGISTRY_CONTAINER registry garbage-collect --dry-run /etc/docker/registry/config.yml 2>&1 | grep -c "would delete" || echo "0")
+
+                        if [ "\$BLOBS_TO_DELETE" -gt 0 ]; then
+                            echo "   💾 \$BLOBS_TO_DELETE blob(s) seront supprimés"
+
+                            # Exécuter le garbage collector en mode suppression réelle
+                            docker exec \$REGISTRY_CONTAINER registry garbage-collect /etc/docker/registry/config.yml
+
+                            echo "   ✅ Garbage collection terminé, espace disque libéré"
+                        else
+                            echo "   ℹ️  Aucun blob à supprimer"
+                        fi
+                    fi
+
+                    echo ""
+                    echo "✅ Nettoyage complet du registry terminé"
+                """
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // PHASE 7 : ARCHIVAGE ET RAPPORTS
+        // ════════════════════════════════════════════════════════════════
+
+        stage('📦 Archivage Artifacts') {
+            steps {
+                script {
+                    echo "▶ Archivage des artifacts..."
+                }
+
+                // Archiver le JAR
+                archiveArtifacts artifacts: 'rhDemo/target/*.jar', fingerprint: true
+
+                // Archiver les rapports de tests
+                archiveArtifacts artifacts: 'rhDemo/target/surefire-reports/**', allowEmptyArchive: true
+
+                // Archiver le rapport OWASP Dependency-Check
+                archiveArtifacts artifacts: 'rhDemo/target/dependency-check-report.html', allowEmptyArchive: true
+            }
+        }
+
+    } // fin stages
+
+    post {
+        always {
+            script {
+                // Charger la bibliothèque
+                def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+
+                lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
+
+                // Nettoyage de l'environnement ephemere
+                if (!params.KEEP_EPHEMERE_ENV) {
+                    echo "🧹 Nettoyage de l'environnement ephemere..."
+
+                    // Déconnecter Jenkins du réseau ephemere
+                    sh """
+                        JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
+                        if [ -n "\$JENKINS_CONTAINER" ]; then
+                            docker network disconnect ${env.NETWORK_EPHEMERE} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
+                            echo "✅ Jenkins déconnecté du réseau ephemere"
+                        fi
+                    """
+
+                    // Arrêter et supprimer le container ZAP
+                    echo "🧹 Nettoyage du container OWASP ZAP..."
+                    sh """
+                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                        echo "✅ Container ZAP supprimé"
+                    """
+
+                    dir(env.EPHEMERE_INFRA_PATH) {
+                        sh """
+                            # Arrêter et supprimer l'environnement Docker Compose
+                            docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                            # Supprimer les containers isolés
+                            docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
+
+                            # Supprimer l'image de build temporaire
+                            docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || true
+                        """
+                    }
+
+                    echo "✅ Nettoyage terminé"
+                } else {
+                    echo "🔧 Mode DEBUG: Environnement ephemere préservé pour tests manuels"
+                    echo "⚠️  RAPPEL: L'environnement sera nettoyé au prochain build"
+                    echo "📋 Containers actifs: ${env.CONTAINER_NGINX}, ${env.CONTAINER_APP}, ${env.CONTAINER_DB}, ${env.CONTAINER_KEYCLOAK}"
+                    echo "🌐 URLs d'accès:"
+                    echo "   - RHDemo: https://rhdemo.ephemere.local"
+                    echo "   - Keycloak: https://keycloak.ephemere.local"
+                }
+
+                // Supprimer les fichiers de secrets de manière sécurisée
+                lib.cleanupSecrets([
+                    env.SECRETS_DECRYPTED,
+                    env.SECRETS_ENV_VARS,
+                    env.SECRETS_RHDEMO
+                ])
+
+                echo "✅ Nettoyage terminé"
+            }
+        }
+        success {
+            script {
+                echo "✅ Build réussi !"
+                if (params.PUBLISH_IMAGE) {
+                    echo "📦 Image publiée: ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                    echo "🚀 Prête pour le déploiement CD"
+                    echo ""
+                    echo "Pour déployer sur stagingkub, utilisez le pipeline Jenkinsfile-CD avec:"
+                    echo "   IMAGE_TAG=${env.FINAL_IMAGE_TAG}"
+                }
+            }
+        }
+        failure {
+            script {
+                echo "❌ Build échoué !"
+                echo "Consultez les logs pour plus de détails."
+            }
+        }
+    }
+}

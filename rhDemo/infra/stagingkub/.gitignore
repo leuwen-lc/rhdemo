@@ -1,0 +1,21 @@
+# Certificats SSL générés
+certs/
+*.crt
+*.key
+*.pem
+
+# Fichiers temporaires
+*.tmp
+*.bak
+
+# Secrets locaux (ne jamais commiter)
+secrets/
+*.secret
+
+# Fichiers de configuration personnalisés
+values-custom.yaml
+values-*.yaml
+!values.yaml
+
+# Logs
+*.log

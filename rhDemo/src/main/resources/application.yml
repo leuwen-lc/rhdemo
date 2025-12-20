@@ -4,7 +4,7 @@ spring:
 
   # Import des secrets depuis fichiers externes
   # En dev local: créer secrets/secrets-rhdemo.yml depuis secrets.yml.template
-  # En staging Docker: fichier monté dans /workspace/secrets/secrets-rhdemo.yml
+  # En ephemere Docker: fichier monté dans /workspace/secrets/secrets-rhdemo.yml
   config:
     import:
       - optional:file:./secrets/secrets-rhdemo.yml
@@ -24,7 +24,7 @@ spring:
   
   # OAuth2 / Keycloak
   # Configuration pour développement local
-  # Pour staging, voir application-staging.yml
+  # Pour ephemere, voir application-ephemere.yml
   # Pour production, surcharger via variables d'environnement
   security:
     oauth2:
@@ -77,6 +77,9 @@ management:
     web:
       exposure:
         include: '*'
+  endpoint:
+    env:
+      show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS
 
 # SpringDoc / Swagger
 springdoc:

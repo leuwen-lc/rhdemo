@@ -1,6 +1,6 @@
 # Projet école — preuve de concept
 
-Ce dépôt contient un projet école servant de preuve de concept visant sur un ensemble de sujets techniques basés sur le développement d'une application web full‑stack (Spring Boot + Vue.js) et son déploiement automatisé (CI/CD) dans un environnement de staging.
+Ce dépôt contient un projet école servant de preuve de concept visant sur un ensemble de sujets techniques basés sur le développement d'une application web full‑stack (Spring Boot + Vue.js) et son déploiement automatisé (CI/CD) dans un environnement de ephemere.
 
 ## Objectifs
 - Expérimenter des outils et méthodes standards et largement adoptés.
@@ -11,7 +11,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Mettre en place une structure solide et évolutive même si le projet reste simple (layers, API, client riche, OIDC, gestion des rôles)
 - Inclure une chaine CI/CD évoluée avec test-automatisés, déploiement en containers,....
 - Basé à 100% sur du logiciel libre, indépendance avec les grandes plateformes gitlab/github et leurs solutions intégrées.
-- Pour garder le coté preuve de concept facile à déployer, tout, y compris le staging et la chaine CI/CD doit pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
+- Pour garder le coté preuve de concept facile à déployer, tout, y compris le ephemere et la chaine CI/CD doit pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
 
 ## Quelques orientations
 - Favoriser l'utilisation des composants fournis (Element Plus) plutôt que de sur‑spécifier l'IHM.
@@ -44,10 +44,12 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisaiton d'un outil centralisé de type Hashicorp Vault demande une expertise plus spécialisée mais reste possible sans modifier l'applicatif (TODO).
 - Entêtes CSP mis au plus strict possible sur l'applicatif : interdiction notamment du javascript inline, puissant moteur d'injections XSS.
 - Dépendances : Scan par OWASP Dependency‑Check, échec de la chaine si CVSS >=7.
-- Scans des images docker utilisées dans le staging avec Trivy 
+- Scans des images docker utilisées dans le ephemere avec Trivy 
 - CI : Sonar avec quality gate mais profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut, sécurité toute faille potentielle doit être revue).
 - Activation d'un proxy ZAP pour analyse dynamique intégrée au CI/CD durant le stage de tests en Selenium.
 - TLS : activer TLS sur les endpoints publics sur le staging (certificats auto-signés sur cet env).
+- TLS : activer TLS sur les endpoints publics sur le ephemere (certificats auto-signés sur cet env).
+- Logging / monitoring basique : succès/échecs d'authentification, erreurs applicatives, métriques de disponibilité (TODO).
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
 
 ## Installation 
@@ -57,9 +59,11 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Pour env de développement : PostgresSQL 16 ou supérieur, Keycloak 26.4 ou supérieur
 - Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de staging.
 - Pour déploiement env de staging : Docker Compose avec un réseau dédié dans un premier temps. 
+- Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de ephemere.
+- Pour déploiement env de ephemere : Docker Compose avec un réseau dédié dans un premier temps. Evolution possible sur un Kubernetes light  (TODO)
 
 ## Limites 
-- Le fait de déployer via CI/CD dans un premier environnement de staging permet de démontrer la portabilité de l'application
+- Le fait de déployer via CI/CD dans un premier environnement de ephemere permet de démontrer la portabilité de l'application
 - Par contre par nature ce projet n'est pas pret pour la production. il resterait un travail important de configuration de tous les composants en cible production : 
    - élimination des modules périphériques de l'application (comme le module de documentation et test openapi voir http://localhost:9000 sur l'application)
    - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...)
@@ -78,12 +82,12 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
    - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base. 
    - Connectez vous (par défaut sur http;//localhost:9000/front)
 
-### Utiliser la chaine CI/CD et déployer l'environnement de staging :
+### Utiliser la chaine CI/CD et déployer l'environnement de ephemere :
    - Allez dans rhDemo/infra/jenkins-docker et suivez la doc d'install Jenkins/SonarQube/Zap avec le docker-compose et les procédures d'initialisation (plugin et conf) fournis
    - Installez SOPS et une clé age (voir dans rhDemo/docs/SOPS_SETUP.md)
-   - Fabriquez un fichier de secrets de l'environnement de staging à partir du template secrets-staging.yml.template puis chiffrez le avec SOPS sous secrets-staging.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)
+   - Fabriquez un fichier de secrets de l'environnement de ephemere à partir du template secrets-ephemere.yml.template puis chiffrez le avec SOPS sous secrets-ephemere.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)
    - Référencez au niveau des credentials Jenkins : 
-      - sous l'id "sops-age-key" votre fichier contenant la paire de clés age nécessaire au déchiffrage de secrets-staging.yml
+      - sous l'id "sops-age-key" votre fichier contenant la paire de clés age nécessaire au déchiffrage de secrets-ephemere.yml
       - sous l'id "jenkins-sonar-token" la clé d'échange avec sonarQube (à générer sur sonarQube)
       - sous l'id "nvd-api-key" et "ossindex-credentials" deux clés à obtenir pour accélérer les téléchargement des dépendances et CVE liées à OWASP Dependency Check (voir le README.md)
       - (facultatif) sous l'id "mail.credentials" un compte sur un serveur de mails permettant l'envoi SMTP

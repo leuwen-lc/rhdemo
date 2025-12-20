@@ -96,6 +96,29 @@ host.docker.internal
 - Proxy ZAP (application Java) ne peut pas résoudre ce nom
 - Besoin d'une IP réelle accessible depuis le réseau Docker
 
+### 6. Nginx route les requêtes IP vers le mauvais serveur
+
+**Symptôme** : Accès via IP gateway `https://172.18.0.1:58443/front/` affiche "Page not found" de Keycloak
+
+**Erreur** :
+```
+URL actuelle: https://172.18.0.1:58443/front/
+Titre de la page: Sign in to Keycloak
+Détail erreur: Page not found
+```
+
+**Détails** :
+- Configuration nginx avec `server_name` spécifiques (rhdemo.ephemere.local, keycloak.ephemere.local)
+- Accès via IP ne matche aucun `server_name`
+- Nginx route vers le premier serveur trouvé (Keycloak) au lieu de l'application
+- Keycloak retourne 404 car `/front/` n'existe pas dans Keycloak
+
+**Cause racine** :
+- Absence de serveur par défaut dans nginx
+- `server_name` ne supporte pas l'accès via IP
+- Tests Selenium doivent accéder via IP gateway pour compatibility ZAP
+- Nginx doit savoir router les requêtes IP vers l'application et non vers Keycloak
+
 ---
 
 ## ✅ Solutions Implémentées
@@ -224,6 +247,38 @@ echo "✅ Nettoyage terminé"
 - Suppression de toutes les images `rhdemo-api` avant chaque build
 - Évite accumulation et saturation disque
 - Force reconstruction complète
+
+### Solution 5 : Nginx serveur par défaut pour accès via IP
+
+**Fichier** : `rhDemo/infra/ephemere/nginx/conf.d/rhdemo.conf` (ligne 32-34)
+
+**Changement** :
+
+```nginx
+server {
+    listen 443 ssl default_server;  # Serveur par défaut pour les accès via IP
+    http2 on;
+    server_name rhdemo.ephemere.local _;  # _ = wildcard pour tout servername non matché
+```
+
+**Avant** :
+```nginx
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name rhdemo.ephemere.local;  # Seulement ce domaine
+```
+
+**Problème résolu** :
+- Accès via IP `https://172.18.0.1:58443` était routé vers Keycloak (premier serveur trouvé)
+- Keycloak retournait "Page not found" car `/front/` n'existe pas
+- Tests Selenium échouaient immédiatement
+
+**Résultat** :
+- ✅ Nginx route les requêtes IP vers l'application (serveur par défaut)
+- ✅ Selenium peut accéder via IP gateway sans erreur 404
+- ✅ Accès par domaine (`rhdemo.ephemere.local`) fonctionne toujours
+- ✅ Compatible avec ZAP proxy et redirect URIs OAuth2
 
 ---
 

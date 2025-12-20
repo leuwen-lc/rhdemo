@@ -187,8 +187,14 @@ public abstract class BaseSeleniumTest {
             By loginButton = By.id("kc-login");
 
             // Vérifier si on est sur la page de login Keycloak
-            if (currentUrl.contains("keycloak") || currentUrl.contains("realms")) {
+            // ATTENTION: Vérifier aussi le titre car avec IP gateway, l'URL peut ne pas contenir "keycloak"
+            String pageTitle = driver.getTitle();
+            boolean isKeycloakPage = currentUrl.contains("keycloak") || currentUrl.contains("realms") || pageTitle.contains("Keycloak");
+
+            if (isKeycloakPage) {
                 log.info("📋 Page de login Keycloak détectée");
+                log.info("   URL complète: {}", currentUrl);
+                log.info("   Titre: {}", pageTitle);
                 
                 // Attendre que le formulaire soit visible
                 authWait.until(ExpectedConditions.visibilityOfElementLocated(usernameField));

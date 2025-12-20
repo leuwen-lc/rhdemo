@@ -5,6 +5,8 @@ import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.openqa.selenium.By;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -16,6 +18,7 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.List;
 
@@ -195,7 +198,37 @@ public abstract class BaseSeleniumTest {
                 log.info("📋 Page de login Keycloak détectée");
                 log.info("   URL complète: {}", currentUrl);
                 log.info("   Titre: {}", pageTitle);
-                
+
+                // Vérifier d'abord si la page a du contenu
+                String bodyText = driver.findElement(By.tagName("body")).getText();
+                log.info("   Texte de la page (100 premiers caractères): {}",
+                    bodyText.length() > 100 ? bodyText.substring(0, 100) : bodyText);
+
+                // Si la page est vide ou le titre est vide, c'est probablement un problème de rendu
+                if (pageTitle.trim().isEmpty() || bodyText.trim().isEmpty()) {
+                    log.error("⚠️ Page Keycloak vide détectée - Problème potentiel:");
+                    log.error("   - Certificat SSL rejeté par le navigateur");
+                    log.error("   - JavaScript bloqué ou non exécuté");
+                    log.error("   - Content Security Policy (CSP) trop restrictif");
+                    log.error("   - Proxy ZAP interfère avec le rendu de la page");
+
+                    // Capturer le HTML complet pour debug
+                    String pageSource = driver.getPageSource();
+                    log.error("   HTML complet de la page (500 premiers caractères):");
+                    log.error("{}", pageSource.substring(0, Math.min(500, pageSource.length())));
+
+                    // Prendre un screenshot
+                    try {
+                        File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+                        File target = new File("target/screenshots/keycloak-page-vide.png");
+                        target.getParentFile().mkdirs();
+                        org.apache.commons.io.FileUtils.copyFile(scrFile, target);
+                        log.info("   Screenshot sauvegardé: target/screenshots/keycloak-page-vide.png");
+                    } catch (Exception e) {
+                        log.warn("   Impossible de prendre un screenshot: {}", e.getMessage());
+                    }
+                }
+
                 // Attendre que le formulaire soit visible
                 authWait.until(ExpectedConditions.visibilityOfElementLocated(usernameField));
                 

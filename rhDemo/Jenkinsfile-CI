@@ -1199,15 +1199,6 @@ YMLEOF
                 }
             }
             post {
-                always {
-                    script {
-                        // Archiver les rapports de tests
-                        junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
-
-                        // Archiver les screenshots en cas d'échec
-                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
-                    }
-                }
                 failure {
                     script {
                         echo '📋 Échec des tests Selenium - Collecte des logs des conteneurs...'
@@ -1265,6 +1256,12 @@ YMLEOF
                 }
                 always {
                     script {
+                        // Archiver les rapports de tests
+                        junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
+
+                        // Archiver les screenshots en cas d'échec
+                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'
                         sh """#!/bin/bash

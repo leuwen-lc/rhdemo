@@ -164,22 +164,30 @@ public abstract class BaseSeleniumTest {
      */
     private static void authenticateKeycloak() {
         log.info("🔐 Authentification Keycloak en cours...");
-        
+        log.info("   Accès à: {}", TestConfig.HOME_URL);
+
         try {
             // Aller sur la page d'accueil (qui redirige vers Keycloak si pas authentifié)
             driver.get(TestConfig.HOME_URL);
-            
+
+            // Attendre un peu pour laisser les redirections se faire
+            Thread.sleep(2000);
+
+            String currentUrl = driver.getCurrentUrl();
+            log.info("   URL après chargement: {}", currentUrl);
+            log.info("   Titre de la page: {}", driver.getTitle());
+
             // Attendre que la page de login Keycloak soit chargée
             // On vérifie la présence du champ username
             WebDriverWait authWait = new WebDriverWait(driver, Duration.ofSeconds(TestConfig.AUTH_TIMEOUT));
-            
+
             // Locators Keycloak
             By usernameField = By.id("username");
             By passwordField = By.id("password");
             By loginButton = By.id("kc-login");
-            
+
             // Vérifier si on est sur la page de login Keycloak
-            if (driver.getCurrentUrl().contains("keycloak") || driver.getCurrentUrl().contains("realms")) {
+            if (currentUrl.contains("keycloak") || currentUrl.contains("realms")) {
                 log.info("📋 Page de login Keycloak détectée");
                 
                 // Attendre que le formulaire soit visible
@@ -204,9 +212,9 @@ public abstract class BaseSeleniumTest {
                 
                 // Attendre la redirection vers l'application
                 authWait.until(ExpectedConditions.urlContains(TestConfig.BASE_URL));
-                
+
                 // Vérifier qu'on est bien authentifié (vérification stricte)
-                String currentUrl = driver.getCurrentUrl();
+                currentUrl = driver.getCurrentUrl();
                 log.info("🌐 URL après authentification: {}", currentUrl);
                 
                 if (currentUrl.contains("/login?error")) {

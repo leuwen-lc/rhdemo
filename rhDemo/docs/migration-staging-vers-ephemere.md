@@ -420,7 +420,31 @@ groovy.lang.MissingPropertyException: No such property: KEYCLOAK_ADMIN_USER for 
    - Vérifier les logs du conteneur `keycloak-ephemere`
    - Attendre que le healthcheck soit vert avant les tests
 
-**Commandes de diagnostic** :
+4. **Proxy ZAP interfère avec OAuth2/OIDC**
+   - Le proxy ZAP intercepte et re-signe les certificats HTTPS
+   - Peut causer des problèmes avec les cookies Secure/SameSite
+   - Peut perturber les redirections complexes de Keycloak
+
+**Logs de debug automatiques** :
+
+En cas d'échec du stage Selenium, les éléments suivants sont automatiquement archivés:
+
+- **Screenshots** : `target/screenshots/error-page-keycloak.png`
+- **Logs conteneurs** : archivés dans `debug-logs/`
+  - `app-springboot.log` : Logs de l'application (500 dernières lignes)
+  - `keycloak.log` : Logs Keycloak (500 dernières lignes)
+  - `nginx.log` : Logs Nginx (500 dernières lignes)
+  - `zap.log` : Logs OWASP ZAP (500 dernières lignes)
+  - `network-ephemere.json` : Configuration réseau Docker ephemere
+  - `network-jenkins.json` : Configuration réseau Docker jenkins
+  - `containers-status.txt` : État des conteneurs
+  - `gateway-ip.txt` : IP gateway détectée
+- **Logs Selenium enrichis** : Analyse automatique de la page Keycloak avec:
+  - URL complète avec paramètres OAuth2 (state, nonce masqués)
+  - Message d'erreur Keycloak extrait
+  - Causes possibles suggérées
+
+**Commandes de diagnostic manuelles** :
 
 ```bash
 # Vérifier le fichier généré

@@ -1206,7 +1206,65 @@ YMLEOF
 
                         // Archiver les screenshots en cas d'échec
                         archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+                    }
+                }
+                failure {
+                    script {
+                        echo '📋 Échec des tests Selenium - Collecte des logs des conteneurs...'
 
+                        sh '''
+                            # Créer le répertoire pour les logs de debug
+                            mkdir -p debug-logs
+
+                            echo "📝 Collecte des logs Docker..."
+
+                            # Logs de l'application Spring Boot (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-ephemere-app"; then
+                                echo "  - Application Spring Boot..."
+                                docker logs rhdemo-ephemere-app --tail 500 > debug-logs/app-springboot.log 2>&1
+                            fi
+
+                            # Logs Keycloak (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "keycloak-ephemere"; then
+                                echo "  - Keycloak..."
+                                docker logs keycloak-ephemere --tail 500 > debug-logs/keycloak.log 2>&1
+                            fi
+
+                            # Logs Nginx (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-ephemere-nginx"; then
+                                echo "  - Nginx..."
+                                docker logs rhdemo-ephemere-nginx --tail 500 > debug-logs/nginx.log 2>&1
+                            fi
+
+                            # Logs ZAP (dernières 500 lignes)
+                            if docker ps --format '{{.Names}}' | grep -q "rhdemo-jenkins-zap"; then
+                                echo "  - OWASP ZAP..."
+                                docker logs rhdemo-jenkins-zap --tail 500 > debug-logs/zap.log 2>&1
+                            fi
+
+                            # Informations réseau pour debug
+                            echo "  - Configuration réseau Docker..."
+                            docker network inspect rhdemo-ephemere-network > debug-logs/network-ephemere.json 2>&1 || echo "Network non trouvé" > debug-logs/network-ephemere.json
+                            docker network inspect rhdemo-jenkins-network > debug-logs/network-jenkins.json 2>&1 || echo "Network non trouvé" > debug-logs/network-jenkins.json
+
+                            # État des conteneurs
+                            echo "  - État des conteneurs..."
+                            docker ps -a --filter "name=ephemere" --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}" > debug-logs/containers-status.txt
+
+                            # Détection IP gateway
+                            GATEWAY_IP=$(docker network inspect rhdemo-jenkins-network --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}')
+                            echo "Gateway IP détectée: ${GATEWAY_IP}" > debug-logs/gateway-ip.txt
+
+                            echo "✅ Logs collectés dans debug-logs/"
+                            ls -lh debug-logs/
+                        '''
+
+                        // Archiver les logs de debug
+                        archiveArtifacts artifacts: 'debug-logs/*', fingerprint: true, allowEmptyArchive: true
+                    }
+                }
+                always {
+                    script {
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'
                         sh """#!/bin/bash

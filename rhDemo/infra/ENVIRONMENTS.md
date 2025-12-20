@@ -17,35 +17,17 @@ Ce document décrit les différents environnements disponibles pour le déploiem
 
 ## 🔧 Configuration Jenkins
 
-### Paramètre DEPLOY_ENV
-
-Dans le pipeline Jenkins, le paramètre `DEPLOY_ENV` contrôle l'environnement de déploiement :
-
-```groovy
-choice(name: 'DEPLOY_ENV',
-       choices: ['ephemere', 'stagingkub', 'production', 'none'],
-       description: 'Environnement de déploiement')
-```
-
-### Comportement selon l'environnement
-
-| Stage | none | ephemere | stagingkub | production |
-|-------|------|----------|------------|------------|
-| Checkout | ✅ | ✅ | ✅ | ✅ |
-| Lecture Version Maven | ❌ | ✅ | ✅ | ✅ |
-| Compilation Backend | ✅ | ✅ | ✅ | ✅ |
-| Build Frontend | ✅ | ✅ | ✅ | ✅ |
-| Build Docker Image | ❌ | ✅ | ✅ | ✅ |
-| Tag Image Docker | ❌ | ✅ | ❌ | ✅ |
-| Load Image to KinD | ❌ | ❌ | ✅ | ❌ |
-| Update K8s Secrets | ❌ | ❌ | ✅ | ❌ |
-| Deploy to Kubernetes | ❌ | ❌ | ✅ | ❌ |
-| Démarrage Docker Compose | ❌ | ✅ | ❌ | ✅ |
-| Tests Unitaires | ✅ | ✅ | ✅ | ✅ |
-| Tests Selenium | ❌ | ✅ | ⚠️ À impl. | ✅ |
-| SonarQube | ✅ | ✅ | ✅ | ✅ |
-
----
+Deux pipelines sont disponibles :
+Jenkinsfile-CI qui réalise 
+- toutes les étapes de build, 
+- tests unitaires et d'intégration, 
+- les controles qualité et sécurité 
+- déploie sur l'environnement ephemere
+- lance les tests Selenium avec ZAP
+- pousse le container applicatif dans le registry local
+Jenkinsfile-CD qui 
+- récupère le container applicatif
+- déploie sur l'environnement stagingkub (namespace d'un cluster Kind)
 
 ## 🐳 Environnement: `ephemere` (Docker Compose)
 
@@ -90,7 +72,7 @@ cd rhDemo/infra/ephemere
 docker-compose up -d
 ```
 
-### URLs d'accès
+### URLs d'accès (choisir l'option "KEEP_EPHEMERE_ENV dans Jenkins)
 
 - Application : https://rhdemo.ephemere.local:58443
 - Keycloak : https://keycloak.ephemere.local:58443
@@ -173,11 +155,11 @@ DEPLOY_ENV=stagingkub
 
 ### Avantages
 
-✅ Teste les déploiements Kubernetes
+✅ Démontre le déploiement Kubernetes
 ✅ Validation des Helm Charts
 ✅ Readiness/Liveness probes
 ✅ Rolling updates
-✅ Scaling horizontal facile
+✅ Scaling horizontal plus facile 
 ✅ Production-ready (si prod = K8s)
 ✅ GitOps compatible
 
@@ -190,40 +172,6 @@ DEPLOY_ENV=stagingkub
 
 ---
 
-## 🔄 Migration ephemere → stagingkub
-
-### Quand migrer ?
-
-Migrez vers stagingkub si :
-- La production utilise Kubernetes
-- Vous voulez tester les Helm charts
-- Vous avez besoin de rolling updates
-- Vous voulez valider les probes K8s
-
-### Guide de migration
-
-1. **Initialiser stagingkub**
-   ```bash
-   cd rhDemo/infra/stagingkub
-   ./scripts/init-stagingkub.sh
-   ```
-
-2. **Tester le déploiement**
-   ```bash
-   ./scripts/deploy.sh 1.1.0-SNAPSHOT
-   ```
-
-3. **Valider les tests**
-   - Accès application : ✅
-   - Accès Keycloak : ✅
-   - Login utilisateur : ✅
-   - API fonctionnelle : ✅
-
-4. **Basculer Jenkins vers stagingkub**
-   - Modifier `DEPLOY_ENV` par défaut si souhaité
-   - Ou laisser le choix à l'utilisateur
-
----
 
 ## 🆚 Comparaison détaillée
 
@@ -273,9 +221,7 @@ Migrez vers stagingkub si :
 
 ### Puis-je utiliser les deux environnements en même temps ?
 
-Oui, mais ephemere utilise le port 58443 et stagingkub utilise le port 443. Vous devrez :
-- Utiliser des domaines différents dans `/etc/hosts`
-- OU arrêter un environnement avant de démarrer l'autre
+Oui, ephemere utilise le port 58443 et stagingkub utilise le port 443.
 
 ### Lequel utiliser pour le développement local ?
 
@@ -289,16 +235,9 @@ Oui, mais ephemere utilise le port 58443 et stagingkub utilise le port 443. Vous
 - Tester les rolling updates
 - Reproduire un comportement production
 
-### Comment choisir entre ephemere et stagingkub dans Jenkins ?
-
-Lors du lancement du build, sélectionnez le paramètre `DEPLOY_ENV` :
-- `ephemere` : Déploiement Docker Compose classique
-- `stagingkub` : Déploiement Kubernetes (KinD)
-- `none` : Build + tests uniquement (pas de déploiement)
-
 ### Les secrets sont-ils les mêmes ?
 
-Oui, les deux environnements utilisent les mêmes secrets sources (SOPS), mais :
+Non, les deux environnements utilisent chacun leur fichier secrets sources (SOPS) :
 - **ephemere** : Injectés via variables d'environnement et `docker cp`
 - **stagingkub** : Stockés dans Kubernetes Secrets
 

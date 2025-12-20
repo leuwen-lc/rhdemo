@@ -1,13 +1,239 @@
-# Migration Staging → Ephemere - Problèmes et Solutions
+# Migration de l'environnement staging → ephemere
 
-## Contexte
+**Date** : 18 décembre 2025
+**Environnement source** : `staging`
+**Environnement cible** : `ephemere`
+**Changements principaux** :
+- Domaines : `*.staging.local` → `*.ephemere.local`
+- Port HTTPS externe : `443` → `58443`
+- Containers/Networks/Volumes : `*-staging-*` → `*-ephemere-*`
 
-Migration de l'environnement de test de **staging** vers **ephemere** avec changement de port d'accès externe de **443** vers **58443**.
+**⚠️ IMPORTANT** : L'environnement `stagingkub` (Kubernetes) reste **INCHANGÉ**
 
-## Date
-2025-12-19
+  - [Contexte et objectifs](#contexte-et-objectifs)
+    - [Objectifs de la migration](#objectifs-de-la-migration)
+    - [Périmètre](#périmètre)
+  - [Détail des changements techniques](#détail-des-changements-techniques)
+    - [1. Renommage des ressources Docker](#1-renommage-des-ressources-docker)
+      - [Containers](#containers)
+      - [Networks](#networks)
+      - [Volumes](#volumes)
+    - [2. Changement de domaines](#2-changement-de-domaines)
+    - [3. Changement de port HTTPS externe](#3-changement-de-port-https-externe)
+    - [4. Configuration réseau](#4-configuration-réseau)
+  - [Points critiques OAuth2](#points-critiques-oauth2)
+    - [1. X-Forwarded-Port header](#1-x-forwarded-port-header)
+    - [2. URLs publiques Keycloak](#2-urls-publiques-keycloak)
+    - [3. Configuration Spring OAuth2](#3-configuration-spring-oauth2)
+    - [4. Communication interne app ↔ keycloak](#4-communication-interne-app--keycloak)
+  - [Configuration et déploiement](#configuration-et-déploiement)
+    - [1. Configuration /etc/hosts](#1-configuration-etchosts)
+    - [2. Déploiement Jenkins](#2-déploiement-jenkins)
+  - [Notes importantes](#notes-importantes)
+    - [1. Environnement stagingkub PRÉSERVÉ](#1-environnement-stagingkub-préservé)
+    - [2. Communication interne vs externe](#2-communication-interne-vs-externe)
+    - [3. Architecture flexible des tests](#3-architecture-flexible-des-tests)
+  - [📋 Problèmes Rencontrés](#-problèmes-rencontrés)
+    - [1. Nommage incohérent des images Docker](#1-nommage-incohérent-des-images-docker)
+    - [2. Erreur "Invalid parameter: redirect\_uri" lors de l'authentification](#2-erreur-invalid-parameter-redirect_uri-lors-de-lauthentification)
+    - [3. Échec des tests Selenium - Timeout sur champ username](#3-échec-des-tests-selenium---timeout-sur-champ-username)
+    - [4. Accumulation d'images Docker](#4-accumulation-dimages-docker)
+    - [5. Proxy ZAP ne peut pas résoudre host.docker.internal](#5-proxy-zap-ne-peut-pas-résoudre-hostdockerinternal)
+    - [6. Nginx route les requêtes IP vers le mauvais serveur](#6-nginx-route-les-requêtes-ip-vers-le-mauvais-serveur)
+  - [✅ Solutions Implémentées](#-solutions-implémentées)
+    - [Solution 1 : Harmonisation du nommage des images](#solution-1--harmonisation-du-nommage-des-images)
+    - [Solution 2 : Configuration redirect URIs Keycloak avec port explicite](#solution-2--configuration-redirect-uris-keycloak-avec-port-explicite)
+    - [Solution 3 : Accès Selenium via IP Gateway Docker](#solution-3--accès-selenium-via-ip-gateway-docker)
+    - [Solution 4 : Nettoyage automatique des images Docker](#solution-4--nettoyage-automatique-des-images-docker)
+    - [Solution 5 : Nginx serveur par défaut pour accès via IP](#solution-5--nginx-serveur-par-défaut-pour-accès-via-ip)
+    - [Solution 6 : Nginx écoute aussi sur le port 58443 en interne](#solution-6--nginx-écoute-aussi-sur-le-port-58443-en-interne)
+  - [🎯 Architecture Réseau Finale](#-architecture-réseau-finale)
+  - [📊 Tableau Récapitulatif des Ports](#-tableau-récapitulatif-des-ports)
+  - [🔑 Points Clés de la Migration](#-points-clés-de-la-migration)
+  - [🚀 Tests de Validation](#-tests-de-validation)
+  - [📝 Fichiers Modifiés](#-fichiers-modifiés)
+  - [⚠️ Points d'Attention](#️-points-dattention)
+  - [📚 Références](#-références)
 
 ---
+
+## Contexte et objectifs
+
+### Objectifs de la migration
+
+1. **Renommer l'environnement** : `staging` → `ephemere` pour mieux refléter la nature temporaire de cet environnement
+2. **Changer le port HTTPS** d'écoute sur la machine host : `443` → `58443` pour éviter les conflits avec d'autres services
+3. **Mettre à jour toutes les références** dans les 3 projets du repository
+
+### Périmètre
+
+- ✅ Projet principal : `rhDemo`
+- ✅ Sous-projet tests : `rhDemoAPITestIHM`
+- ✅ Sous-projet initialisation : `rhDemoInitKeycloak`
+- ⛔ **NON MODIFIÉ** : `stagingkub` (environnement Kubernetes séparé)
+
+
+
+**Note** : Le code fonctionnel n'a PAS été modifié car il utilise une architecture flexible (Maven properties, variables d'environnement, YAML).
+
+
+## Détail des changements techniques
+
+### 1. Renommage des ressources Docker
+
+#### Containers
+| Ancien nom | Nouveau nom |
+|------------|-------------|
+| `rhdemo-staging-db` | `rhdemo-ephemere-db` |
+| `keycloak-staging-db` | `keycloak-ephemere-db` |
+| `keycloak-staging` | `keycloak-ephemere` |
+| `rhdemo-staging-app` | `rhdemo-ephemere-app` |
+| `rhdemo-staging-nginx` | `rhdemo-ephemere-nginx` |
+
+#### Networks
+| Ancien nom | Nouveau nom |
+|------------|-------------|
+| `rhdemo-staging` | `rhdemo-ephemere` |
+| `rhdemo-staging-network` | `rhdemo-ephemere-network` |
+
+#### Volumes
+| Ancien nom | Nouveau nom |
+|------------|-------------|
+| `rhdemo-staging-db-data` | `rhdemo-ephemere-db-data` |
+| `keycloak-staging-db-data` | `keycloak-ephemere-db-data` |
+| `rhdemo-staging-nginx-cache` | `rhdemo-ephemere-nginx-cache` |
+
+### 2. Changement de domaines
+
+| Type | Ancien | Nouveau |
+|------|--------|---------|
+| Application | `rhdemo.staging.local` | `rhdemo.ephemere.local` |
+| Keycloak | `keycloak.staging.local` | `keycloak.ephemere.local` |
+
+### 3. Changement de port HTTPS externe
+
+| Contexte | Ancien | Nouveau |
+|----------|--------|---------|
+| Port mapping Docker | `443:443` | `58443:443` |
+| URL externe | `https://rhdemo.staging.local` | `https://rhdemo.ephemere.local:58443` |
+| Port interne nginx | `443` | `443` (inchangé) |
+
+### 4. Configuration réseau
+
+**Communication externe (navigateur → nginx)** :
+```
+https://rhdemo.ephemere.local:58443 → Docker port mapping 58443:443 → nginx:443
+```
+
+**Communication interne (app → keycloak)** :
+```
+http://keycloak-ephemere:8080 (HTTP sur réseau Docker interne)
+```
+
+---
+
+## Points critiques OAuth2
+
+### 1. X-Forwarded-Port header
+
+**Fichier** : `rhDemo/infra/ephemere/nginx/conf.d/rhdemo.conf:76`
+
+```nginx
+proxy_set_header X-Forwarded-Port 58443;  # Port HTTPS public
+```
+
+**Importance** : CRITIQUE
+- Spring Boot utilise ce header pour construire les URLs de redirection OAuth2
+- Sans ce header avec le bon port, les redirections OAuth2 échoueront
+
+### 2. URLs publiques Keycloak
+
+**Fichier** : `rhDemo/infra/ephemere/docker-compose.yml:71-72`
+
+```yaml
+KC_HOSTNAME_URL: https://keycloak.ephemere.local:58443
+KC_HOSTNAME_ADMIN_URL: https://keycloak.ephemere.local:58443
+```
+
+**Importance** : CRITIQUE
+- Force Keycloak à générer les bonnes URLs publiques
+- Le navigateur doit utiliser le port 58443
+
+### 3. Configuration Spring OAuth2
+
+**Fichier** : `rhDemo/src/main/resources/application-ephemere.yml:16`
+
+```yaml
+authorization-uri: https://keycloak.ephemere.local:58443/realms/RHDemo/protocol/openid-connect/auth
+```
+
+**Importance** : CRITIQUE
+- URL de redirection vers la page de login Keycloak
+- Doit inclure le port 58443
+
+### 4. Communication interne app ↔ keycloak
+
+**Fichiers** : `application-ephemere.yml:21-22, 32`
+
+```yaml
+token-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/token
+jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
+```
+
+**Importance** : CRITIQUE
+- Utilise HTTP sur le réseau Docker interne (performances)
+- Utilise l'alias `keycloak-ephemere` du service Docker
+
+---
+
+## Configuration et déploiement
+
+### 1. Configuration /etc/hosts
+
+Ajouter sur la machine hôte :
+
+```bash
+127.0.0.1  rhdemo.ephemere.local
+127.0.0.1  keycloak.ephemere.local
+```
+### 2. Déploiement Jenkins
+
+Dans Jenkins, sélectionner :
+- **Paramètre** : `DEPLOY_ENV = ephemere`
+- **Secrets** : Utiliser `secrets-ephemere.yml`
+
+
+## Notes importantes
+
+### 1. Environnement stagingkub PRÉSERVÉ
+
+L'environnement Kubernetes `stagingkub` reste **TOTALEMENT INCHANGÉ** :
+- Domaines : `*.stagingkub.local`
+- Port : `443` (via NodePort 30443)
+- Namespace : `rhdemo-staging`
+- Tous les fichiers dans `rhDemo/infra/stagingkub/` intacts
+
+### 2. Communication interne vs externe
+
+**Externe (navigateur)** :
+- HTTPS avec port 58443
+- Domaines : `*.ephemere.local:58443`
+
+**Interne Docker** :
+- HTTP port 8080 (Keycloak) ou 9000 (App)
+- Utilise aliases réseau Docker
+- Pas de port dans les URLs
+- nginx écoute néanmoins en interne également sur 58443 pour traiter les appels via Selenium/Zap qui se connectent au réseau interne de ephemere
+
+### 3. Architecture flexible des tests
+
+Les projets de test (`rhDemoAPITestIHM`, `rhDemoInitKeycloak`) utilisent une architecture flexible qui accepte la configuration via :
+1. Maven properties (`-Dtest.baseurl=...`)
+2. Variables d'environnement
+3. Fichiers YAML
+
+Aucun changement de code fonctionnel n'a été nécessaire.
+
 
 ## 📋 Problèmes Rencontrés
 
@@ -358,7 +584,7 @@ Firefox (via ZAP) → https://rhdemo.ephemere.local:58443 (MÊMES URLs que l'acc
 
 **Points clés** :
 - ✅ **URLs identiques** pour tests Selenium et accès manuel : `rhdemo.ephemere.local:58443`
-- ✅ **Plus besoin de détecter l'IP gateway Docker** : simplification majeure du Jenkinsfile
+- ✅ **Pas besoin de détecter l'IP gateway Docker** : simplification majeure du Jenkinsfile
 - ✅ **Redirect URIs simplifiés** : pas d'IP variable à whitelister dans Keycloak
 - ZAP est connecté au réseau `rhdemo-ephemere-network`, peut résoudre les alias réseau
 - Nginx écoute sur 443 ET 58443 en interne pour permettre aux redirects OAuth2 de fonctionner
@@ -390,7 +616,7 @@ Jenkins → https://rhdemo.ephemere.local:443 (alias réseau interne)
 - Port **443** : Communication standard entre conteneurs (healthcheck, etc.)
 - Port **58443** : Permet aux redirects OAuth2 (générés avec `:58443`) de fonctionner depuis ZAP/Selenium
 
-**Simplification majeure** : Depuis que nginx écoute sur le port 58443 en interne, les tests Selenium utilisent les **mêmes URLs** que les utilisateurs manuels. Plus besoin de détecter l'IP gateway Docker ni de whitelister des IPs variables dans Keycloak!
+**Simplification majeure** : Depuis que nginx écoute sur le port 58443 en interne, les tests Selenium utilisent les **mêmes URLs** que les utilisateurs manuels. Pas besoin de détecter l'IP gateway Docker ni de whitelister des IPs variables dans Keycloak!
 
 ---
 
@@ -462,135 +688,11 @@ curl -k https://rhdemo.ephemere.local/front/
 - Heredoc sans quotes (`<< YMLEOF`) permet substitution bash de toutes les variables
 - Vérification ajoutée : `grep -A 5 "redirect-uris:" fichier.yml` pour valider substitution
 
-### IP Gateway Docker
-- L'IP de la gateway est détectée dynamiquement à chaque build
-- Typiquement : `172.17.0.1`, `172.18.0.1`, etc.
-- Compatible tous systèmes (Linux, Mac, Windows)
-- Permet au proxy ZAP de résoudre correctement l'adresse
-
 ### Compatibilité Proxy ZAP
 - **CRITIQUE** : ZAP ne peut pas résoudre `host.docker.internal`
-- Solution : utiliser IP gateway détectée dynamiquement
-- ZAP doit pouvoir accéder à l'hôte via cette IP pour intercepter le trafic HTTPS
+- Solution : ZAP doit pouvoir accéder à au réseau ephemere - nginx doit écouter également en interne sur le port 58443
 
-### Certificats SSL
-- Certificats auto-signés acceptés via `setAcceptInsecureCerts(true)` dans Selenium
-- Firefox configuré pour accepter certificats invalides
-- Production : utiliser certificats valides (Let's Encrypt)
 
-### Proxy ZAP
-- Configuré pour intercepter trafic HTTPS
-- Préférences Firefox ajoutées pour compatibilité proxy ZAP
-- Exclure Keycloak du proxy si problèmes de certificats persistent
-
----
-
-## 🔄 Rollback
-
-Pour revenir à l'ancienne configuration :
-
-1. Rétablir port 443 dans docker-compose.yml
-2. Supprimer port explicite des redirect URIs Keycloak
-3. Selenium : utiliser alias réseau `https://rhdemo.ephemere.local`
-4. Rétablir `X-Forwarded-Port: $server_port` dans nginx
-
----
-
-## 🔧 Troubleshooting
-
-### Erreur "No such property: KEYCLOAK_ADMIN_USER" lors du build Jenkins
-
-**Symptômes** :
-```
-groovy.lang.MissingPropertyException: No such property: KEYCLOAK_ADMIN_USER for class: groovy.lang.Binding
-```
-
-**Cause** :
-- Utilisation de `sh """` (double quotes) fait que Groovy essaie de substituer **toutes** les variables `${...}`
-- Les variables bash (provenant de `env-vars.sh` ou créées dans le script) ne sont pas connues de Groovy
-- Groovy échoue en essayant de résoudre les variables avant même d'exécuter le script bash
-
-**Solution** :
-- **Utiliser `sh '''`** (single quotes) au lieu de `sh """`
-- Avec single quotes, Groovy ne substitue aucune variable, bash les substitue toutes
-- Les variables d'environnement Jenkins (définies dans `environment` block) sont automatiquement disponibles en bash
-- Exemple : `TEST_DOMAIN` défini dans `environment` est directement accessible comme `${TEST_DOMAIN}` en bash
-
----
-
-### Erreur "We are sorry..." de Keycloak lors des tests
-
-**Symptômes** :
-- Selenium accède à `https://<GATEWAY_IP>:58443/front/ajout`
-- Redirection vers Keycloak fonctionne
-- Keycloak affiche "We are sorry..." au lieu du formulaire de login
-
-**Causes possibles** :
-
-1. **Variables non substituées dans application-ephemere.yml**
-   - Vérifier les logs Jenkins pour la section "Vérification de la section redirect-uris"
-   - Les redirect URIs doivent montrer l'IP réelle (ex: `172.18.0.1`) et non `${GATEWAY_IP}`
-   - Si `${GATEWAY_IP}` apparaît littéralement, problème de substitution bash
-
-2. **Redirect URI non whitelisté dans Keycloak**
-   - Vérifier que `https://<GATEWAY_IP>:58443/*` est dans la liste des redirect URIs
-   - Accéder à l'admin Keycloak : `https://keycloak.ephemere.local:58443/admin`
-   - Aller dans le realm RHDemo > Client RHDemo > Settings > Valid redirect URIs
-
-3. **Problème de timing (Keycloak pas complètement initialisé)**
-   - Vérifier les logs du conteneur `keycloak-ephemere`
-   - Attendre que le healthcheck soit vert avant les tests
-
-4. **Proxy ZAP interfère avec OAuth2/OIDC**
-   - Le proxy ZAP intercepte et re-signe les certificats HTTPS
-   - Peut causer des problèmes avec les cookies Secure/SameSite
-   - Peut perturber les redirections complexes de Keycloak
-
-5. **ZAP ne peut pas se connecter au port 58443 en interne**
-   - Symptôme : Logs montrent `ZAP Error [HttpHostConnectException]: Connect to https://keycloak.ephemere.local:58443 failed: Connection refused`
-   - Cause : Le port 58443 est mappé uniquement vers le host (`58443:443` dans docker-compose.yml)
-   - À l'intérieur du réseau Docker, nginx écoute uniquement sur le port 443
-   - Spring Boot génère des redirects OAuth2 avec `:58443` à cause du header `X-Forwarded-Port: 58443`
-   - Firefox (via ZAP) essaie de suivre ce redirect mais le port 58443 n'existe pas en interne
-
-**Logs de debug automatiques** :
-
-En cas d'échec du stage Selenium, les éléments suivants sont automatiquement archivés:
-
-- **Screenshots** : `target/screenshots/error-page-keycloak.png`
-- **Logs conteneurs** : archivés dans `debug-logs/`
-  - `app-springboot.log` : Logs de l'application (500 dernières lignes)
-  - `keycloak.log` : Logs Keycloak (500 dernières lignes)
-  - `nginx.log` : Logs Nginx (500 dernières lignes)
-  - `zap.log` : Logs OWASP ZAP (500 dernières lignes)
-  - `network-ephemere.json` : Configuration réseau Docker ephemere
-  - `network-jenkins.json` : Configuration réseau Docker jenkins
-  - `containers-status.txt` : État des conteneurs
-  - `gateway-ip.txt` : IP gateway détectée
-- **Logs Selenium enrichis** : Analyse automatique de la page Keycloak avec:
-  - URL complète avec paramètres OAuth2 (state, nonce masqués)
-  - Message d'erreur Keycloak extrait
-  - Causes possibles suggérées
-
-**Commandes de diagnostic manuelles** :
-
-```bash
-# Vérifier le fichier généré
-cat rhDemoInitKeycloak/src/main/resources/application-ephemere.yml | grep -A 10 "redirect-uris"
-
-# Vérifier les logs Keycloak
-docker logs keycloak-ephemere | tail -50
-
-# Tester manuellement l'authentification avec l'IP gateway
-curl -k -v "https://<GATEWAY_IP>:58443/front/"
-
-# Vérifier la configuration du client dans Keycloak (via API)
-# Remplacer <ADMIN_TOKEN> par un token admin Keycloak valide
-curl -k "https://keycloak.ephemere.local:58443/admin/realms/RHDemo/clients" \
-  -H "Authorization: Bearer <ADMIN_TOKEN>" | jq '.[] | select(.clientId=="RHDemo") | .redirectUris'
-```
-
----
 
 ## 📚 Références
 
@@ -600,3 +702,4 @@ curl -k "https://keycloak.ephemere.local:58443/admin/realms/RHDemo/clients" \
 - [Selenium Firefox Options](https://www.selenium.dev/documentation/webdriver/browsers/firefox/)
 - [Jenkins Pipeline Shell Step](https://www.jenkins.io/doc/pipeline/steps/workflow-durable-task-step/#sh-shell-script)
 - [Bash Heredoc](https://tldp.org/LDP/abs/html/here-docs.html)
+

@@ -186,7 +186,7 @@ jobs:
                   url('https://github.com/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evol-kub')
+                branches('*/master')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -272,7 +272,7 @@ jobs:
                   url('https://github.com/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evol-kub')
+                branches('*/master')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -303,82 +303,3 @@ jobs:
         }
       }
 
-  # ─────────────────────────────────────────────────────────────────
-  # PIPELINE MONOLITHIQUE (DÉPRÉCIÉ)
-  # ⚠️  NE PLUS UTILISER - Conservé pour compatibilité temporaire
-  # ─────────────────────────────────────────────────────────────────
-  - script: |
-      pipelineJob('rhdemo-pipeline-deprecated') {
-        displayName('⚠️  RHDemo - Pipeline Monolithique (DÉPRÉCIÉ)')
-        description('''⚠️  CE PIPELINE EST DÉPRÉCIÉ - NE PLUS UTILISER
-
-        Utilisez à la place :
-        • RHDemo-CI : Build, tests et publication
-        • RHDemo-CD : Déploiement Kubernetes
-
-        Ce job sera supprimé dans une version future.
-
-        📖 Documentation : docs/PIPELINES_CI_CD.md''')
-
-        disabled(true)
-
-        parameters {
-          choice {
-            name('DEPLOY_ENV')
-            choices(['none', 'ephemere', 'stagingkub'])
-            description('⚠️  DÉPRÉCIÉ - Utilisez RHDemo-CI et RHDemo-CD')
-          }
-          booleanParam {
-            name('RUN_SELENIUM_TESTS')
-            defaultValue(true)
-            description('Exécuter les tests Selenium')
-          }
-          booleanParam {
-            name('RUN_SONAR')
-            defaultValue(false)
-            description('Exécuter l\'analyse SonarQube')
-          }
-          booleanParam {
-            name('SKIP_MANUAL_APPROVAL')
-            defaultValue(false)
-            description('Ignorer l\'approbation manuelle')
-          }
-        }
-
-        definition {
-          cpsScm {
-            scm {
-              git {
-                remote {
-                  url('https://github.com/leuwen-lc/rhdemo.git')
-                  // Pas de credentials nécessaire pour un repository public
-                }
-                branches('*/evol-kub')
-                extensions {
-                  cloneOptions {
-                    shallow(false)
-                    depth(0)
-                    honorRefspec(true)
-                  }
-                }
-              }
-            }
-            scriptPath('rhDemo/Jenkinsfile')
-            lightweight(true)
-          }
-        }
-
-        properties {
-          buildDiscarder {
-            strategy {
-              logRotator {
-                numToKeepStr('10')
-                daysToKeepStr('30')
-                artifactNumToKeepStr('5')
-                artifactDaysToKeepStr('15')
-              }
-            }
-          }
-          disableConcurrentBuilds()
-        }
-      }

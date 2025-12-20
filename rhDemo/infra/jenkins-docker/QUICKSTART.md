@@ -10,7 +10,7 @@ cd rhDemo/infra
 cp .env.example .env
 nano .env  # Éditer avec vos valeurs
 
-# 3. Démarrer Jenkins
+# 3. Builder et Démarrer Jenkins
 ./start-jenkins.sh
 
 # 4. Accéder à Jenkins
@@ -34,122 +34,17 @@ nano .env  # Éditer avec vos valeurs
 # OBLIGATOIRE
 JENKINS_ADMIN_PASSWORD=VotreMotDePasseSecurise
 
-# Optionnel - SonarQube
-SONAR_TOKEN=votre-token-sonarqube
-```
+## 🎯 Créer les pipeline RHDemo
+Ils sont créés automatiquement par jenkins-casc.yaml si non existants au démarrage de Jenkins
 
-**Note** : La clé NVD API pour OWASP Dependency-Check doit être configurée manuellement dans Jenkins (voir README.md section "Configuration NVD API Key")
+## Gestion des secrets avec SOPS pour exécuter la chaine Jenkinsfile-CI 
+- Installez SOPS et une clé age (voir dans rhDemo/docs/SOPS_SETUP.md)
+- Fabriquez un fichier de secrets de l'environnement de ephemere à partir du template secrets-ephemere.yml.template 
+- chiffrez le avec SOPS sous secrets-ephemere.yml (celui stocké sur git nécessiterait ma clé privée pour être déchiffré)
 
-
-## 🎯 Créer un pipeline RHDemo
-
-### Option 1 : Interface Web
-
-1. **http://localhost:8080** → New Item
-2. **Nom**: `rhdemo-api`
-3. **Type**: Pipeline
-4. **Pipeline**:
-   - Definition: `Pipeline script from SCM`
-   - SCM: `Git`
-   - Repository: `https://github.com/leuwen-lc/rhdemo.git`
-   - Script Path: `Jenkinsfile`
-5. **Save** → **Build Now**
-
-### Option 2 : Automatique (JCasC)
-
-Décommenter la section `jobs:` dans `jenkins-casc.yaml` avant de démarrer.
-
-## 🧪 Tester l'installation
-
-```bash
-# Test complet
-./test-jenkins.sh
-
-# Vérifications manuelles
-docker-compose ps                           # Conteneurs actifs
-docker-compose logs -f jenkins              # Logs Jenkins
-docker-compose exec jenkins docker ps       # Docker-in-Docker
-```
-
-## 🔧 Commandes essentielles
-
-```bash
-# Démarrer
-./start-jenkins.sh
-docker-compose up -d
-
-# Arrêter
-docker-compose stop
-docker-compose down
-
-# Redémarrer
-docker-compose restart jenkins
-
-# Logs
-docker-compose logs -f jenkins
-
-# Accès shell
-docker-compose exec jenkins bash
-```
-
-## 📊 Vérifier que tout fonctionne
-
-✅ **Jenkins Web UI** : http://localhost:8080  
-✅ **Docker Registry** : http://localhost:5000  
-✅ **Healthcheck** : `docker inspect rhdemo-jenkins | grep Health`  
-✅ **Plugins** : Jenkins → Manage Jenkins → Manage Plugins  
-✅ **Docker-in-Docker** : `docker-compose exec jenkins docker ps`  
-✅ **Maven** : `docker-compose exec jenkins mvn -version`  
-✅ **Java** : `docker-compose exec jenkins java -version`  
-
-## ⚠️ Problèmes courants
-
-### Port 8080 déjà utilisé
-
-```bash
-# Changer le port dans docker-compose.yml
-ports:
-  - "8081:8080"  # Utiliser 8081
-```
-
-### Docker permission denied
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### Jenkins ne démarre pas
-
-```bash
-# Voir les logs
-docker-compose logs jenkins
-
-# Reconstruire l'image
-docker-compose build --no-cache jenkins
-docker-compose up -d --force-recreate
-```
-
-## 🔒 Sécurité
-
-⚠️ **CHANGEZ** le mot de passe admin immédiatement !  
-⚠️ **NE COMMITEZ PAS** le fichier `.env`  
-⚠️ **UTILISEZ HTTPS** en production (nginx à ajouter)  
-⚠️ **SAUVEGARDEZ** régulièrement `/var/jenkins_home`  
-
-## 📚 Documentation complète
-
-- **README.md** : Guide détaillé
-- **ARCHITECTURE.txt** : Schéma de l'infrastructure
-- **Jenkinsfile** (racine) : Pipeline RHDemo complet
-
-## 🆘 Support
-
-1. Vérifier `docker-compose logs jenkins`
-2. Lire `README.md`
-3. Tester avec `./test-jenkins.sh`
-4. Consulter https://www.jenkins.io/doc/
-
----
-
-**🎉 C'est tout ! Jenkins est prêt pour exécuter le pipeline RHDemo avec support Docker-in-Docker.**
+## Secrets à positionner dans les credentials Jenkins pour pouvoir exécuter la chaine Jenkinsfile-CI 
+Dans l'interface d'administration Jenkins, créez les credentials Jenkins suivants : 
+      - sous l'id "sops-age-key" votre fichier contenant la paire de clés age nécessaire au déchiffrage de secrets-ephemere.yml
+      - sous l'id "jenkins-sonar-token" la clé d'échange avec sonarQube (à générer préalablement en se connectant à sonarQube http://localhost:9020 My account/security/generate tokens
+      - sous l'id "nvd-api-key" et "ossindex-credentials" deux clés à obtenir pour accélérer les téléchargement des dépendances et CVE liées à OWASP Dependency Check (voir le README.md)
+      - (facultatif) sous l'id "mail.credentials" un compte sur un serveur de mails permettant l'envoi SMTP

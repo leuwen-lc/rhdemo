@@ -1,4 +1,4 @@
-    # Environnement de développement local
+# Environnement de développement local pour exécution du code applicatif en local ou depuis un IDE par exemple
 
 Prérequis 
 - Git en version récente

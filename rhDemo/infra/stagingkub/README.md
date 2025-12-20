@@ -196,7 +196,7 @@ kubectl get ns rhdemo-stagingkub
 
 ### Méthode 1 : Déploiement via Jenkins
 
-1. Ouvrir le pipeline Jenkins
+1. Ouvrir le pipeline Jenkins CD
 2. Cliquer sur "Build with Parameters"
 3. Sélectionner `DEPLOY_ENV = stagingkub`
 4. Lancer le build

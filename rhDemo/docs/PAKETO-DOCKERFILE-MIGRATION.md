@@ -259,35 +259,6 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
 - ✅ Moins d'espace disque sur les nodes Kubernetes
 - ✅ Déploiement plus rapide
 
-## 🚀 Déploiement
-
-### Première fois après migration
-
-1. **Rebuilder Jenkins** (si pas déjà fait)
-   ```bash
-   cd /home/leno-vo/git/repository/rhDemo/infra/jenkins-docker
-   ./start-jenkins.sh
-   ```
-
-2. **Lancer le pipeline Jenkins**
-   - Aller sur http://localhost:8080
-   - Lancer un build avec `DEPLOY_ENV=stagingkub`
-
-3. **Vérifier les logs Jenkins**
-   - Le stage `🏗️ Build Docker Image` doit afficher :
-     ```
-     🐳 Construction de l'image Docker avec Dockerfile (Eclipse Temurin 21)...
-     ```
-
-4. **Vérifier le déploiement**
-   ```bash
-   kubectl get pods -n rhdemo-stagingkub
-   kubectl logs -f <pod-name> -n rhdemo-stagingkub
-   ```
-
-### Déploiements suivants
-
-Le pipeline fonctionne normalement, aucun changement pour l'utilisateur.
 
 ## 🔧 Configuration JVM
 
@@ -354,6 +325,5 @@ Avec le nouveau Dockerfile, l'utilisateur est `spring:spring` (UID 1000).
 
 ---
 
-**Auteur** : Migration automatisée via Claude Code
 **Date** : 2025-12-11
 **Version** : 1.0.0

@@ -260,7 +260,7 @@ Variable d'environnement:      jdbc:postgresql://postgresql-rhdemo:5432/rhdemo
 
 ---
 
-## 🎯 6. Résumé : Comment ça marche en production
+## 🎯 6. Résumé : Comment ça marche 
 
 ### Lors du déploiement CD (Jenkinsfile-CD) :
 

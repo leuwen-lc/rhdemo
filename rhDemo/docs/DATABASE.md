@@ -13,10 +13,10 @@ Le projet utilise deux fichiers SQL distincts pour séparer la **structure** de 
 - Création des 5 index pour optimiser les performances
 
 **Usage** :
-- ✅ **Environnement de production** : Oui
 - ✅ **Environnement de ephemere (Docker Compose)** : Oui
-- ✅ **Environnement de stagingkub (Kubernetes)** : Oui (automatique)
 - ✅ **Environnement de développement** : Oui
+- ✅ **Environnement de stagingkub (Kubernetes)** : Oui (automatique si pas de table existante)
+
 
 **Exécution** :
 ```bash
@@ -41,10 +41,9 @@ psql -h your-db-host -U your-user -d your-database < pgschema.sql
 - 304 employés fictifs pour les tests
 
 **Usage** :
-- ❌ **Environnement de production** : **NON** (ne pas utiliser en production !)
 - ✅ **Environnement de ephemere (Docker Compose)** : Oui
 - ✅ **Environnement de développement** : Oui
-- ⚠️ **Environnement de stagingkub (Kubernetes)** : À la demande uniquement (non automatique)
+- ⚠️ **Environnement de stagingkub (Kubernetes)** : Non a priori car on simule un fonctionnement prod ou la base persiste d'installation en installation
 
 **Exécution** :
 ```bash
@@ -58,17 +57,6 @@ docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < pgdata.sql
 kubectl exec -it postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo < pgdata.sql
 ```
 
-## 🔄 Migration depuis `pgddl.sql`
-
-**Ancien fichier** : `pgddl.sql` (maintenant supprimé)
-- Contenait à la fois DDL et DML (schéma + données)
-- Non optimal pour la gestion des environnements
-
-**Nouveau système** : `pgschema.sql` + `pgdata.sql`
-- ✅ Séparation claire entre structure et données
-- ✅ Meilleure gestion par environnement
-- ✅ Protection des données en production
-- ✅ Init automatique du schéma en Kubernetes
 
 ## 📊 Structure de la table `employes`
 
@@ -108,22 +96,13 @@ docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < ../../pgdata.sql
 ### Staging (Docker Compose)
 
 ```bash
-cd rhDemo/infra/ephemere
-
 # Option 1 : Script automatique
-./init-database.sh
+Via Jenkins (Jenkinsfile-CI)
 
 # Option 2 : Manuel
 docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < ../../pgschema.sql
 docker exec -i rhdemo-ephemere-db psql -U rhdemo -d rhdemo < ../../pgdata.sql
 ```
-
-Le script `init-database.sh` :
-- ✅ Vérifie que PostgreSQL est prêt
-- ✅ Demande confirmation avant de réinitialiser
-- ✅ Exécute `pgschema.sql` puis `pgdata.sql`
-- ✅ Vérifie que les données sont insérées
-- ✅ Affiche les index créés
 
 ### Stagingkub (Kubernetes)
 
@@ -144,16 +123,6 @@ kubectl cp pgdata.sql postgresql-rhdemo-0:/tmp/data.sql -n rhdemo-stagingkub
 kubectl exec postgresql-rhdemo-0 -n rhdemo-stagingkub -- psql -U rhdemo -d rhdemo -f /tmp/data.sql
 ```
 
-### Production
-
-⚠️ **Important** :
-- ✅ **Utiliser uniquement** `pgschema.sql`
-- ❌ **NE PAS utiliser** `pgdata.sql` (données de test !)
-
-```bash
-# Adapter selon votre infrastructure
-psql -h production-db-host -U prod_user -d prod_database < pgschema.sql
-```
 
 ## 🔧 Modifications du schéma
 
@@ -167,14 +136,8 @@ Si vous modifiez la structure de la base :
    ```
 4. **Redéployer en stagingkub (Kubernetes)** : Le nouveau schéma sera appliqué au prochain pod créé avec un volume vierge
 
-## 📝 Scripts automatisés
-
-| Script | Environnement | Description |
-|--------|---------------|-------------|
-| `infra/dev/start.sh` | Dev local | Affiche les commandes d'init DB |
-| `infra/ephemere/init-database.sh` | Staging (Docker Compose) | Init complète (schéma + données) |
-| `Jenkinsfile-CI` | Pipeline CI | Init automatique en ephemere (Docker Compose) |
-| ConfigMap K8s | Stagingkub (Kubernetes) | Init automatique du schéma uniquement |
+## TODO
+Ajouter une gestion incrémentale et versionnée du schéma avec Liquibase
 
 ## ❓ FAQ
 
@@ -200,4 +163,3 @@ R: Oui, ils font partie de `pgschema.sql` et sont créés en même temps que la 
 ---
 
 **Dernière mise à jour** : 2025-12-12
-**Auteur** : Migration automatisée via Claude Code

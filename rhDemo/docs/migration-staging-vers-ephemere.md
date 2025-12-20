@@ -282,35 +282,91 @@ server {
 
 ---
 
+### Solution 6 : Nginx écoute aussi sur le port 58443 en interne
+
+**Fichiers** :
+- `rhDemo/infra/ephemere/nginx/conf.d/rhdemo.conf` (ligne 33)
+- `rhDemo/infra/ephemere/nginx/conf.d/keycloak.conf` (ligne 24)
+
+**Changement** :
+
+```nginx
+# rhdemo.conf
+server {
+    listen 443 ssl default_server;  # Standard interne
+    listen 58443 ssl;  # Port externe, pour redirects OAuth2 depuis containers
+    http2 on;
+    server_name rhdemo.ephemere.local _;
+```
+
+```nginx
+# keycloak.conf
+server {
+    listen 443 ssl;
+    listen 58443 ssl;  # Port externe, pour redirects OAuth2 depuis containers
+    http2 on;
+    server_name keycloak.ephemere.local;
+```
+
+**Problème résolu** :
+- ZAP (et Selenium) sont à l'intérieur du réseau Docker ephemere
+- Spring Boot génère des redirects OAuth2 avec `:58443` (à cause de `X-Forwarded-Port: 58443`)
+- Exemple : `https://keycloak.ephemere.local:58443/realms/RHDemo/protocol/openid-connect/auth?...`
+- Firefox (via ZAP) essaie de se connecter à `:58443` mais nginx n'écoutait que sur `:443` en interne
+- Erreur : `ZAP Error [HttpHostConnectException]: Connect to https://keycloak.ephemere.local:58443 failed: Connection refused`
+
+**Résultat** :
+- ✅ Nginx écoute maintenant sur 443 ET 58443 à l'intérieur du réseau Docker
+- ✅ Le port 58443 est mappé vers l'extérieur via `58443:443` dans docker-compose.yml (MAIS nginx écoute désormais directement sur 58443 aussi)
+- ✅ ZAP peut suivre les redirects OAuth2 avec `:58443` sans erreur de connexion
+- ✅ Compatible avec accès manuel (navigateur → host:58443 → nginx:443)
+
+**Note importante** : Le mapping de port dans docker-compose.yml (`58443:443`) signifie "port host:port container". Mais ici, nginx écoute maintenant AUSSI sur le port 58443 en interne, ce qui permet aux autres containers du même réseau de s'y connecter directement.
+
+---
+
 ## 🎯 Architecture Réseau Finale
 
 ### Accès Utilisateur Manuel
 ```
-Navigateur → https://rhdemo.ephemere.local:58443
-         ↓
-    Nginx (port 58443:443)
-         ↓
-    Spring Boot (X-Forwarded-Port: 58443)
-         ↓
-    Redirect URI: https://rhdemo.ephemere.local:58443/login/oauth2/code/keycloak
-```
-
-### Accès Tests Selenium (Jenkins)
-```
-Firefox (Jenkins) → https://host.docker.internal:58443
+Navigateur (host) → https://rhdemo.ephemere.local:58443
                 ↓
-           Nginx (port 58443:443)
+          Host mapping (58443 → nginx:443)
+                ↓
+           Nginx:443 (docker-compose port mapping 58443:443)
                 ↓
            Spring Boot (X-Forwarded-Port: 58443)
                 ↓
-           Redirect URI: https://host.docker.internal:58443/login/oauth2/code/keycloak
+           Redirect URI: https://rhdemo.ephemere.local:58443/login/oauth2/code/keycloak
 ```
+
+### Accès Tests Selenium/ZAP (Jenkins containers)
+```
+Firefox (via ZAP) → https://172.18.0.1:58443 ou https://keycloak.ephemere.local:58443
+                ↓
+           ZAP connecté au réseau rhdemo-ephemere-network
+                ↓
+           Nginx:58443 (écoute AUSSI en interne sur 58443 pour redirects OAuth2)
+                ↓
+           Spring Boot (X-Forwarded-Port: 58443)
+                ↓
+           Redirect URI: https://172.18.0.1:58443/login/oauth2/code/keycloak
+           ET https://keycloak.ephemere.local:58443/realms/RHDemo/...
+                ↓
+           Firefox suit le redirect → ZAP → Nginx:58443 → Keycloak:8080
+```
+
+**Points clés** :
+- ZAP est connecté au réseau `rhdemo-ephemere-network` (ligne 1124 du Jenkinsfile)
+- Nginx écoute sur 443 ET 58443 en interne pour permettre aux redirects OAuth2 de fonctionner
+- Les redirects OAuth2 utilisent `:58443` car Spring Boot reçoit `X-Forwarded-Port: 58443`
+- Sans `listen 58443` dans nginx, ZAP obtiendrait "Connection refused" sur les redirects Keycloak
 
 ### Healthcheck Jenkins
 ```
 Jenkins → https://rhdemo.ephemere.local:443 (alias réseau interne)
       ↓
-  Nginx (port interne 443)
+  Nginx:443 (port standard interne)
       ↓
   Spring Boot
 ```
@@ -321,11 +377,15 @@ Jenkins → https://rhdemo.ephemere.local:443 (alias réseau interne)
 
 | Contexte | Protocole | Domaine | Port | Commentaire |
 |----------|-----------|---------|------|-------------|
-| Utilisateur externe | HTTPS | rhdemo.ephemere.local | 58443 | Accès manuel navigateur |
-| Selenium (Jenkins) | HTTPS | host.docker.internal | 58443 | Tests automatisés |
-| Réseau Docker interne | HTTPS | rhdemo.ephemere.local | 443 | Healthcheck, communication inter-conteneurs |
-| Nginx (écoute interne) | HTTPS | - | 443 | Port conteneur |
-| Nginx (exposition hôte) | HTTPS | - | 58443 | Port mappé `58443:443` |
+| Utilisateur externe | HTTPS | rhdemo.ephemere.local | 58443 | Accès manuel navigateur via host |
+| Selenium/ZAP (Jenkins) | HTTPS | 172.18.0.1 ou keycloak.ephemere.local | 58443 | Tests automatisés depuis containers |
+| Réseau Docker interne | HTTPS | rhdemo.ephemere.local | 443 | Healthcheck, communication standard |
+| Nginx (écoute interne) | HTTPS | - | 443 **ET** 58443 | Nginx écoute sur les deux ports |
+| Nginx (exposition hôte) | HTTPS | - | 58443 | Port mappé `58443:443` dans docker-compose |
+
+**Note importante** : Nginx écoute maintenant sur **deux ports en interne** :
+- Port **443** : Communication standard entre conteneurs (healthcheck, etc.)
+- Port **58443** : Permet aux redirects OAuth2 (générés avec `:58443`) de fonctionner depuis ZAP/Selenium
 
 ---
 
@@ -479,6 +539,13 @@ groovy.lang.MissingPropertyException: No such property: KEYCLOAK_ADMIN_USER for 
    - Le proxy ZAP intercepte et re-signe les certificats HTTPS
    - Peut causer des problèmes avec les cookies Secure/SameSite
    - Peut perturber les redirections complexes de Keycloak
+
+5. **ZAP ne peut pas se connecter au port 58443 en interne**
+   - Symptôme : Logs montrent `ZAP Error [HttpHostConnectException]: Connect to https://keycloak.ephemere.local:58443 failed: Connection refused`
+   - Cause : Le port 58443 est mappé uniquement vers le host (`58443:443` dans docker-compose.yml)
+   - À l'intérieur du réseau Docker, nginx écoute uniquement sur le port 443
+   - Spring Boot génère des redirects OAuth2 avec `:58443` à cause du header `X-Forwarded-Port: 58443`
+   - Firefox (via ZAP) essaie de suivre ce redirect mais le port 58443 n'existe pas en interne
 
 **Logs de debug automatiques** :
 

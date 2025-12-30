@@ -10,45 +10,47 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Fournir une IHM riche côté client avec Vue.js et le design system Element Plus.
 - Mettre en place une structure solide et évolutive même si le projet reste simple (layers, API, client riche, OIDC, gestion des rôles)
 - Inclure une chaine CI/CD évoluée avec test-automatisés, déploiement en containers,....
-- Basé à 100% sur du logiciel libre, indépendance avec les grandes plateformes gitlab/github et leurs solutions intégrées.
+- Basé à 100% sur du logiciel libre, indépendance maximale avec les grandes plateformes gitlab/github et leurs solutions intégrées.
 - Pour garder le coté preuve de concept facile à déployer, tout, y compris l'environnement ephemere et la chaine CI/CD doit pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
 
 ## Quelques orientations
 - Favoriser l'utilisation des composants fournis (Element Plus) plutôt que de sur‑spécifier l'IHM.
 - Rendre les tests IHM robustes (usage de marqueurs `data-testid`), tout en vérifiant l'accessibilité d'Element Plus dans le contexte de l'application.
-- Mettre en place une solutions éprouvées pour l'authentification et la gestion des identités. La gestion des identités par l'applicatif n'est plus acceptable même sur des petits projets.
+- Mettre en place une solutions éprouvée pour l'authentification et la gestion des identités. La gestion des identités par l'applicatif n'est plus acceptable même sur des petits projets.
 - Séparer les responsabilités : Backend For Frontend (BFF), c'est le backend qui obtiens les jetons auprès du fournisseur d'identité et les stocke pour sécuriser les flows d'authentification.
 - Montrer le déploiement sur un cluster Kubernetes léger (KinD)
 
 ## Fonctionnalités
 - Application basique CRUD (Create / Read / Update / Delete) sur une base simplifiée d'employés.
 - ... Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
-- Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit.
+- Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit et les réponses aux requètes deviennent trop lourdes sans pagination.
 
 ## Architecture
 - Back‑end : Spring Boot, Spring Security
   - Architecture logicielle classique en 3 couches (évolutive en cas de besoin vers DTO ou Architecture hexagonale).
    Pattern Backend For Front-end (BFF) :
   - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
-  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF sera activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
+  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
 - Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
 - Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
+  Deux chaines CI/CD séparées :
+  - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
+  - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
 
 ## Tests
-- Tests d'intégration (avec base H2) pour le back‑end intégré dans la chaine de build (Maven).
-- Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse.
+- Tests d'intégration au sens Spring Boot avec base en mémoire H2 pour le back‑end. Tests intégrés dans la chaine de build (Maven).
+- Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse. Tests dans un projet indépendant, activés dans la chaine CI.
 - Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
 
 ## Accent mis sur le DevSecOps 
 - Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Utilisation de Spring Security : Inteface Keycloak OIDC (custom pour récupérer les roles des utilisateurs dans l'idtoken), activation de l'anti-CSRF (via cookie spécialisé) sur le module principal lié à l'utilisation du pattern BFF. Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes (Spring actuator, documentation Open API/swagger, etc...)
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisaiton d'un outil centralisé de type Hashicorp Vault demande une expertise plus spécialisée mais reste possible sans modifier l'applicatif (TODO).
-- Entêtes CSP mis au plus strict possible sur l'applicatif : interdiction notamment du javascript inline, puissant moteur d'injections XSS.
+- Entêtes CSP réglées au plus strict possible sur l'applicatif : interdiction notamment du javascript inline, puissant moteur d'injections XSS.
 - Dépendances : Scan par OWASP Dependency‑Check, échec de la chaine si CVSS >=7.
 - Scans des images docker utilisées dans l'environnement CI ephemere avec Trivy 
-- CI : Sonar avec quality gate mais profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut, sécurité toute faille potentielle doit être revue).
+- CI : Sonar avec quality gate. Profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, Code Smell uniquement de niveau medium et haut, sécurité toute faille potentielle doit être revue).
 - Activation d'un proxy ZAP pour analyse dynamique intégrée au CI/CD durant le stage de tests en Selenium.
-- TLS : activer TLS sur les endpoints publics sur le staging (certificats auto-signés sur cet env).
 - TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (certificats auto-signés pour l'instant).
 - Logging / monitoring basique : succès/échecs d'authentification, erreurs applicatives, métriques de disponibilité (TODO).
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
@@ -58,8 +60,6 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 - Java 21+ 
 - Pour édition/lancement mode dev : VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue. Possibilité d'utiliser également Spring Tool Suite (Eclipse)
 - Pour env de développement : PostgresSQL 16 ou supérieur, Keycloak 26.4 ou supérieur
-- Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de staging.
-- Pour déploiement env de staging : Docker Compose avec un réseau dédié dans un premier temps. 
 - Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement au réseau de ephemere.
 - Pour déploiement env de ephemere : Docker Compose avec un réseau dédié dans un premier temps.
 - Pour déploiement env staginkub : KinD 0.30 ou + 
@@ -81,7 +81,8 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 <pre>git clone https://github.com/leuwen-lc/rhdemo.git</pre>
 
 ### En dev ou test local : 
-   - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base. 
+   - Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base.
+   - Depuis le répertoire rhDemo, lancez la commande ./mvnw spring-boot:run
    - Connectez vous (par défaut sur http;//localhost:9000/front)
 
 ### Utiliser la chaine CI et déployer dans l'environnement ephemere :
@@ -89,14 +90,14 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
    - Lancez le pipeline rhDemo/Jenkinsfile-CI
 
 ## Utliser la chaine CD et déployer dans l'environnement stagingkub
-    - Installez Jenkins et déroulez la chaine Jenkins-CI (étape ci-dessus)
+    - Installez et utilisez la chaine CI (ci-dessus)
     - Installez Kind 0.30 et supérieur et des versions récentes kubectl et helm
-    - suivez les documentations fournies dans rhDemo/infra/stagingkub
+    - suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
     - lancez le pipelne rhDemo/Jenkinsfile-CD
 
 ## Changelog 
   Version 1.1
-  - Déployer sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (kind) en gardant les données applicatives/keycloack d'un déploiement sur l'autre
+  - Déployer sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
   - Découper la chaine CI/CD actuelle en
       - CI (build, tests unitaires et intégration, déploiement éphémère pour test selenium, scans qualité et sécurité, publication de l'image docker sur dépot docker local)
       - CD utilisation de l'image docker publiée pour déploiement sur l'environnement stagingkib 

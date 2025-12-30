@@ -1,8 +1,4 @@
-# Guide d'utilisation - Nouveau Menu de Navigation
-
-## Fonctionnalités ajoutées
-
-Votre application Vue.js a maintenant été améliorée avec un menu de navigation complet pour gérer les employés. Voici les nouvelles fonctionnalités :
+# Guide d'utilisation - Navigation
 
 ### 🏠 Page d'Accueil (/)
 - Menu principal avec accès à toutes les fonctionnalités
@@ -25,7 +21,7 @@ Votre application Vue.js a maintenant été améliorée avec un menu de navigati
 - **Liens de retour** : Chaque page propose un retour vers l'accueil
 - **Navigation contextuelle** : Actions rapides disponibles sur chaque carte d'employé
 
-## Interface améliorée
+## Interface
 
 - Design moderne avec cartes et icônes
 - Responsive (adapté mobile/tablette)
@@ -34,10 +30,9 @@ Votre application Vue.js a maintenant été améliorée avec un menu de navigati
 
 ## Accès
 
-- **Développement** : http://localhost:8081/
-- **Production** : Intégré dans Spring Boot sur http://localhost:9000/
+Intégré dans Spring Boot sur http://localhost:9000/
 
-## Structure des nouveaux fichiers
+## Structure des fichiers
 
 ```
 frontend/src/components/
@@ -59,4 +54,3 @@ frontend/src/components/
 - `/employe/:id` - Détails d'un employé
 - `/edition/:id` - Édition d'un employé
 
-L'application est maintenant prête à être utilisée avec toutes les fonctionnalités demandées !

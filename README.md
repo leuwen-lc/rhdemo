@@ -73,6 +73,10 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
    - mettre en place un système de collecte de métriques et logs complet avec tableau de bord et seuils d'alertes
    - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins et utilisation d'un deuxième Jenkins dédié production.
    - mettre en place les mécanismes de scalabilité (Redis, etc...)
+- Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :
+  - manque énormément d'informations sur les employes,
+  - l'adresse est dans un seul champ, elle devrait être dans une table à part et répondre aux normes internationales,
+  - (etc ...)
 
 ## Utiliser le projet
 - Prérequis : un PC sur Linux avec 16Go de RAM
@@ -105,11 +109,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
     Bizarement le build Paketo est également plus volumineux.
 
 ## Feuille de route
-  Version 1.2
-  - Transformer le champ adresse en champs d'adresse normalisés. Je n'avais pas prévu du tout de fonctionnel au départ mais l'adresse sur un seul chammp fait trop mal aux yeux.
-  - Ajouter un filtre sur le tableau des employes (en principe standard avec Element Plus/Spring Boot)
- 
-  Versions ultérieures 
+  - Ajouter un champ de recherche dans chaque colonne de la liste des employes
   - Faire une revue des pipeline CI et CD selon le top10 risques de sécurité owasp https://owasp.org/www-project-top-10-ci-cd-security-risks/
   - Ajouter une collecte centralisée de logs et de métriques sur l'environnement stagingkub
   - Ajouter un mécanisme de mise à jour du schéma basé sur Liquibase

@@ -61,6 +61,18 @@ spec:
         - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
           value: {{ .Values.rhdemo.actuator.health.showDetails }}
 
+        # Logging levels
+        - name: LOGGING_LEVEL_ROOT
+          value: "{{ .Values.rhdemo.logging.level.root }}"
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB
+          value: "{{ .Values.rhdemo.logging.level.org_springframework_web }}"
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY
+          value: "{{ .Values.rhdemo.logging.level.org_springframework_security }}"
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY_OAUTH2
+          value: "{{ .Values.rhdemo.logging.level.org_springframework_security_oauth2 }}"
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CLIENT
+          value: "{{ .Values.rhdemo.logging.level.org_springframework_web_client }}"
+
         # JVM Options (Paketo)
         - name: BPL_JVM_THREAD_COUNT
           value: "{{ .Values.rhdemo.jvm.threadCount }}"

@@ -176,7 +176,7 @@ echo "127.0.0.1 grafana.stagingkub.local" | sudo tee -a /etc/hosts
 Avant d'exécuter le script, vous **devez** configurer un mot de passe fort:
 
 ```bash
-cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub
+cd /home/leno-voealms/RHDemo/protocol/openid-connect/auth?response_type=code&client_id=RHDemo&scope=openid&state=gSR8Y0oSqE93g_RXVKgkMUx_MX91Q1F9XlIbMGhsYA8%3D&redirect_uri=https://rhdemo.stagingkub.local/login/oauth2/code/keycloak&nonce=pb64HUUjrurOMqvUFUCASjdIgAjGAJ4I9u_31qtKXZo/git/repository/rhDemo/infra/stagingkub
 
 # Générer un mot de passe fort
 PASSWORD=$(openssl rand -base64 32)

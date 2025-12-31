@@ -178,6 +178,15 @@ rhdemo:
     health:
       showDetails: when_authorized
 
+  # Configuration des niveaux de logs
+  logging:
+    level:
+      root: INFO
+      org_springframework_web: INFO
+      org_springframework_security: INFO
+      org_springframework_security_oauth2: INFO
+      org_springframework_web_client: INFO
+
   jvm:
     threadCount: 50
     maxRamPercentage: 75.0

@@ -110,11 +110,14 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 
 ## Feuille de route
   - Ajouter un champ de recherche dans chaque colonne de la liste des employes
+  - Evaluer d'aures outils dans la chaine CI/CD :
+      - Génération de SBOM (liste des composants logiciels) avec Syft, CycloneDX ou Owasp Dependency Track
+      - Snyk (sécurité des dépendances coté front-end)
   - Faire une revue des pipeline CI et CD selon le top10 risques de sécurité owasp https://owasp.org/www-project-top-10-ci-cd-security-risks/
   - Ajouter une collecte centralisée de logs et de métriques sur l'environnement stagingkub
   - Ajouter un mécanisme de mise à jour du schéma basé sur Liquibase
   - Ajouter Redis pour gérer les sessions partagées
-  - Ajouter l'opérateur cloudnativePG sur stagingkub
+  - Ajouter l'opérateur cloudnativePG sur stagingkub pour gérer la base rhDemo
   - Ajouter une Network Politcy de niveau prod.
     
 

@@ -1,6 +1,6 @@
 # Projet école — preuve de concept
 
-Ce dépôt contient un projet école servant de preuve de concept visant sur un ensemble de sujets techniques basés sur le développement d'une application web full‑stack (Spring Boot + Vue.js) et son déploiement automatisé (CI/CD) dans un environnement de ephemere.
+Ce dépôt contient un projet école servant de preuve de concept visant sur un ensemble de sujets techniques basés sur le développement d'une application web full‑stack (Spring Boot + Vue.js) et son déploiement automatisé (CI/CD) dans un environnement ephemere pour tests selenium/zap puis dans un cluster kubernetes KinD.
 
 ## Objectifs
 - Expérimenter des outils et méthodes standards et largement adoptés.
@@ -100,13 +100,17 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
     - lancez le pipelne rhDemo/Jenkinsfile-CD
 
 ## Changelog 
-  Version 1.1
+  Version 1.1.0-RELEASE
   - Déploiement sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
   - Découpage de la chaine CI/CD en
       - CI (build, tests unitaires et intégration, déploiement éphémère pour test selenium, scans qualité et sécurité, publication de l'image docker sur dépot docker local)
       - CD utilisation de l'image docker publiée pour déploiement sur l'environnement stagingkib 
   - Suppression du build du container applicatif par Paketo qui générait trop de dépendances externes au build (et le faisait planter quand elles sont busy) et utiliser un build docker classique basé sur l'image OpenJDK21 de Eclipse Temurin.
     Bizarement le build Paketo est également plus volumineux.
+  
+  Version 1.1.1-RELEASE
+  - Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/LOKI_STACK_INTEGRATION.md
+  - Ajout de possibilité de réglage niveaux de logs rhDemo via rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
 
 ## Feuille de route
   - Ajouter un champ de recherche dans chaque colonne de la liste des employes

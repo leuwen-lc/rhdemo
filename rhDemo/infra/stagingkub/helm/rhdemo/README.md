@@ -122,8 +122,8 @@ Ce fichier contient **TOUTES** les valeurs configurables :
 ```yaml
 global:                           # Variables globales
   namespace: rhdemo-stagingkub       # Namespace Kubernetes
-  environment: ephemere            # Environnement (staging/prod)
-  domain: ephemere.local           # Domaine DNS
+  environment: stagingkub            # Environnement (staging/prod)
+  domain: stagingkub.local           # Domaine DNS
 
 postgresql-rhdemo:                # Config PostgreSQL RHDemo
   enabled: true                   # Activer ce composant ?

@@ -1,0 +1,100 @@
+# Configuration Grafana
+# Chart: grafana/grafana v8.x
+# Date: 2025-12-31
+
+###########################################
+# Admin (À CONFIGURER AVANT INSTALLATION)
+###########################################
+adminUser: admin
+# ⚠️ SÉCURITÉ: Définir un mot de passe fort avant installation
+# adminPassword doit être défini avec un mot de passe sécurisé
+# Exemple: openssl rand -base64 32
+adminPassword: ""  # TODO: Renseigner un mot de passe fort
+
+###########################################
+# Resources
+###########################################
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+###########################################
+# Persistence
+###########################################
+persistence:
+  enabled: false
+
+###########################################
+# Ingress
+###########################################
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - grafana.stagingkub.local
+  tls:
+    - secretName: grafana-tls-cert
+      hosts:
+        - grafana.stagingkub.local
+
+###########################################
+# Datasources
+###########################################
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki-gateway:80
+        isDefault: true
+        jsonData:
+          maxLines: 1000
+
+###########################################
+# Dashboards
+###########################################
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+###########################################
+# Configuration
+###########################################
+grafana.ini:
+  server:
+    domain: grafana.stagingkub.local
+    root_url: https://grafana.stagingkub.local
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  users:
+    allow_sign_up: false
+  auth.anonymous:
+    enabled: false
+
+###########################################
+# Plugins
+###########################################
+plugins:
+  - grafana-piechart-panel
+
+###########################################
+# ServiceMonitor
+###########################################
+serviceMonitor:
+  enabled: false

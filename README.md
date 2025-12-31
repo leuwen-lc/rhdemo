@@ -93,7 +93,7 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
    - Allez dans rhDemo/infra/jenkins-docker et suivez le QUICKSTART.md et pour en savoir plus le README.md 
    - Lancez le pipeline rhDemo/Jenkinsfile-CI
 
-## Utliser la chaine CD et déployer dans l'environnement stagingkub
+### Utliser la chaine CD et déployer dans l'environnement stagingkub
     - Installez et utilisez la chaine CI (ci-dessus)
     - Installez Kind 0.30 et supérieur et des versions récentes kubectl et helm
     - suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
@@ -101,11 +101,11 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
 
 ## Changelog 
   Version 1.1
-  - Déployer sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
-  - Découper la chaine CI/CD actuelle en
+  - Déploiement sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
+  - Découpage de la chaine CI/CD en
       - CI (build, tests unitaires et intégration, déploiement éphémère pour test selenium, scans qualité et sécurité, publication de l'image docker sur dépot docker local)
       - CD utilisation de l'image docker publiée pour déploiement sur l'environnement stagingkib 
-  - Supprimer le build du container applicatif par Paketo qui génére trop de dépendances externes au build (et le fait planter quand elles sont busy) et utiliser un build docker classique basé sur l'image OpenJDK21 de Ecilse Temurin.
+  - Suppression du build du container applicatif par Paketo qui générait trop de dépendances externes au build (et le faisait planter quand elles sont busy) et utiliser un build docker classique basé sur l'image OpenJDK21 de Eclipse Temurin.
     Bizarement le build Paketo est également plus volumineux.
 
 ## Feuille de route

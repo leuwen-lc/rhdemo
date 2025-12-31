@@ -1006,8 +1006,11 @@ YMLEOF
                     // Évite les conflits de verrous lors de scans parallèles
                     echo "📥 Téléchargement de la base de données Trivy..."
                     sh '''
+                        # Télécharger la base de vulnérabilités
                         trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
-                        echo "✅ Base de données Trivy prête"
+                        # Télécharger la base Java DB (pour scanner rhdemo-app)
+                        trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                        echo "✅ Bases de données Trivy prêtes (vuln + java)"
                     '''
 
                     // Définir les images à scanner avec leurs noms de rapports
@@ -1092,20 +1095,27 @@ YMLEOF
                     echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
                     ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
 
-                    echo "⏳ Attente du démarrage de ZAP (30s max)..."
-                    timeout=30
+                    echo "⏳ Attente du démarrage de ZAP (60s max)..."
+                    echo "   (ZAP doit charger ses add-ons, créer le certificat CA, etc.)"
+                    timeout=60
+                    attempt=0
                     while [ \$timeout -gt 0 ]; do
+                        attempt=\$((attempt + 1))
                         if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
-                            echo "✅ ZAP démarré et accessible"
+                            echo "✅ ZAP démarré et accessible (après \$((60 - timeout))s)"
                             break
+                        fi
+                        if [ \$((attempt % 5)) -eq 0 ]; then
+                            echo "   Attente... (\$((60 - timeout))s écoulées, reste \${timeout}s)"
                         fi
                         sleep 2
                         timeout=\$((timeout - 2))
                     done
 
                     if [ \$timeout -le 0 ]; then
-                        echo "❌ Timeout: ZAP n'est pas prêt après 30s"
-                        docker logs --tail=20 rhdemo-jenkins-zap
+                        echo "❌ Timeout: ZAP n'est pas prêt après 60s"
+                        echo "📋 Derniers logs de ZAP:"
+                        docker logs --tail=50 rhdemo-jenkins-zap
                         exit 1
                     fi
 

@@ -92,11 +92,19 @@ def generateTrivyReport(String image, String reportName) {
 
         echo "🔍 Scan Trivy: \${IMAGE}"
 
+        # Créer un répertoire de cache dédié pour ce scan (évite les conflits de verrous)
+        TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-\${NAME}"
+        mkdir -p "\${TRIVY_CACHE_DIR}"
+        export TRIVY_CACHE_DIR
+
         # Scan JSON pour analyse programmatique
         # --skip-db-update : DB déjà mise à jour avant les scans parallèles (évite conflits de verrous)
+        # --skip-java-db-update : Évite la mise à jour de la Java DB en parallèle
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
+        # Cache dédié via TRIVY_CACHE_DIR pour éviter les conflits de verrous entre scans parallèles
         timeout 5m trivy image \\
             --skip-db-update \\
+            --skip-java-db-update \\
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format json \\
@@ -111,11 +119,15 @@ def generateTrivyReport(String image, String reportName) {
         # Scan format table pour lecture humaine
         timeout 3m trivy image \\
             --skip-db-update \\
+            --skip-java-db-update \\
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             --format table \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
             "\${IMAGE}" 2>&1 || echo "⚠️  Scan table timeout ou erreur pour \${NAME}"
+
+        # Nettoyer le cache dédié après le scan pour économiser l'espace disque
+        rm -rf "\${TRIVY_CACHE_DIR}"
 
         # Générer le rapport HTML stylisé
         if [ -f "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" ]; then

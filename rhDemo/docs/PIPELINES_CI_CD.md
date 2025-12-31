@@ -114,7 +114,10 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Tests sécurité OWASP ZAP
 
 #### Phase 6 : Publication
-- Tag de l'image avec la version finale
+- Tag de l'image avec la version finale :
+  - **SNAPSHOT** : `<VERSION>-<BUILD_NUMBER>` (ex: `1.1.0-SNAPSHOT-95`)
+  - **RELEASE** : `<VERSION>` (ex: `1.0.0-RELEASE`)
+- Tag supplémentaire : `latest` (toujours mis à jour vers la dernière image validée)
 - Push vers le registry Docker local
 
 #### Phase 7 : Archivage
@@ -145,7 +148,9 @@ IMAGE_TAG_SUFFIX=-rc1
 
 ### Artifacts produits
 
-- Image Docker : `rhdemo-api:<VERSION>[<SUFFIX>]`
+- Images Docker publiées sur le registry :
+  - **SNAPSHOT** : `rhdemo-api:1.1.0-SNAPSHOT-95` + `rhdemo-api:latest`
+  - **RELEASE** : `rhdemo-api:1.0.0-RELEASE` + `rhdemo-api:latest`
 - JAR : `target/*.jar`
 - Rapports :
   - Tests unitaires : `target/surefire-reports/**`
@@ -167,7 +172,9 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 
 #### Phase 1 : Préparation
 - Checkout du code source
-- Détermination de la version de l'image à déployer
+- Détermination de la version de l'image à déployer :
+  - **Avec paramètre `IMAGE_TAG`** : Utilise le tag spécifié (ex: `1.1.0-SNAPSHOT-95`)
+  - **Sans paramètre** : Utilise le tag `latest` (dernière image validée par CI)
 - Déchiffrement des secrets SOPS
 - Extraction des secrets applicatifs
 
@@ -189,26 +196,32 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 
 | Paramètre | Type | Défaut | Description |
 |-----------|------|--------|-------------|
-| `IMAGE_TAG` | String | `""` | Tag de l'image à déployer. Si vide, utilise la version de `pom.xml` |
+| `IMAGE_TAG` | String | `""` | Tag de l'image à déployer (ex: `1.1.0-SNAPSHOT-95`, `1.0.0-RELEASE`). **Si vide, utilise `latest`** (dernière image validée par CI) |
 | `FORCE_RECREATE_PODS` | Boolean | `false` | Forcer la recréation des pods (rollout restart) |
 | `SKIP_HEALTH_CHECK` | Boolean | `false` | Ne pas attendre les health checks |
 
 ### Exemple d'utilisation
 
 ```bash
-# Déploiement de la dernière version (depuis pom.xml)
+# Déploiement automatique de la dernière image validée par CI (tag 'latest')
 # Pas de paramètres nécessaires
+# → Utilise rhdemo-api:latest
 
-# Déploiement d'une version spécifique
-IMAGE_TAG=1.1.0-SNAPSHOT
+# Déploiement d'une version SNAPSHOT spécifique (avec numéro de build)
+IMAGE_TAG=1.1.0-SNAPSHOT-95
+# → Utilise rhdemo-api:1.1.0-SNAPSHOT-95
+
+# Déploiement d'une version RELEASE spécifique
+IMAGE_TAG=1.0.0-RELEASE
+# → Utilise rhdemo-api:1.0.0-RELEASE
 
 # Déploiement avec recréation forcée des pods
-IMAGE_TAG=1.1.0-SNAPSHOT
+IMAGE_TAG=1.1.0-SNAPSHOT-95
 FORCE_RECREATE_PODS=true
 
 # Déploiement rapide sans health checks
-IMAGE_TAG=1.1.0-SNAPSHOT
 SKIP_HEALTH_CHECK=true
+# → Utilise rhdemo-api:latest sans attendre les health checks
 ```
 
 ### Pré-requis
@@ -274,10 +287,17 @@ Il est conservé pour compatibilité temporaire mais **sera supprimé dans une v
 ### 2. Déploiement sur stagingkub
 
 ```bash
-# Après un build CI réussi
-1. Noter le tag de l'image publiée (ex: 1.1.0-SNAPSHOT)
-2. Déclencher Jenkinsfile-CD avec le paramètre IMAGE_TAG
-3. Vérifier le déploiement :
+# Option A : Déploiement automatique de la dernière version (recommandé pour dev)
+1. Après un build CI réussi → l'image 'latest' est mise à jour
+2. Déclencher Jenkinsfile-CD SANS paramètre
+3. Le CD déploie automatiquement rhdemo-api:latest
+
+# Option B : Déploiement d'une version spécifique (recommandé pour prod)
+1. Noter le tag de l'image publiée par CI (ex: 1.1.0-SNAPSHOT-95)
+2. Déclencher Jenkinsfile-CD avec IMAGE_TAG=1.1.0-SNAPSHOT-95
+3. Le CD déploie exactement cette version
+
+# Dans les deux cas, vérifier le déploiement :
    - Pods ready
    - Health checks OK
    - Application accessible
@@ -292,34 +312,146 @@ Il est conservé pour compatibilité temporaire mais **sera supprimé dans une v
 └──────┬───────┘
        │
        ▼
-┌──────────────────────────────────────┐
-│     Jenkinsfile-CI (automatique)     │
-│  - Build                             │
-│  - Tests                             │
-│  - Docker build                      │
-│  - Tests Selenium + ZAP              │
-│  - Publish image                     │
-└──────┬───────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│       Jenkinsfile-CI (automatique)             │
+│  - Build #95                                   │
+│  - Tests                                       │
+│  - Docker build                                │
+│  - Tests Selenium + ZAP                        │
+│  - Publish image                               │
+└──────┬─────────────────────────────────────────┘
        │
-       │ ✅ Image publiée : rhdemo-api:1.1.0-SNAPSHOT
+       │ ✅ Images publiées sur registry :
+       │    - rhdemo-api:1.1.0-SNAPSHOT-95
+       │    - rhdemo-api:latest (updated)
        │
        ▼
-┌──────────────────────────────────────┐
-│     Jenkinsfile-CD (manuel)          │
-│  Paramètre: IMAGE_TAG=1.1.0-SNAPSHOT │
-│  - Pull image                        │
-│  - Deploy Helm                       │
-│  - Health checks                     │
-└──────┬───────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│       Jenkinsfile-CD (manuel)                  │
+│                                                │
+│  Option A (dev) : Sans paramètre               │
+│    → Déploie rhdemo-api:latest                 │
+│    → imagePullPolicy: Always                   │
+│                                                │
+│  Option B (prod) : IMAGE_TAG=1.1.0-SNAPSHOT-95 │
+│    → Déploie rhdemo-api:1.1.0-SNAPSHOT-95      │
+│    → imagePullPolicy: Always                   │
+│                                                │
+│  - Pull image depuis registry                  │
+│  - Deploy Helm                                 │
+│  - Health checks                               │
+└──────┬─────────────────────────────────────────┘
        │
        │ ✅ Déployé sur stagingkub
        │
        ▼
-┌──────────────────────────────────────┐
-│  Application accessible              │
-│  - https://rhdemo.stagingkub.local      │
-│  - https://keycloak.stagingkub.local    │
-└──────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│        Application accessible                  │
+│  - https://rhdemo.stagingkub.local             │
+│  - https://keycloak.stagingkub.local           │
+└────────────────────────────────────────────────┘
+```
+
+---
+
+## 🏷️ Versioning des images Docker
+
+### Stratégie de tagging
+
+Le pipeline CI applique automatiquement une stratégie de versioning basée sur la version Maven dans `pom.xml` :
+
+#### SNAPSHOT (développement)
+
+```xml
+<!-- Dans pom.xml -->
+<version>1.1.0-SNAPSHOT</version>
+```
+
+**Tags créés par CI** :
+- `rhdemo-api:1.1.0-SNAPSHOT-95` (avec numéro de build unique)
+- `rhdemo-api:latest` (mis à jour à chaque build)
+
+**Raison** : Chaque build SNAPSHOT est unique grâce au numéro de build Jenkins. Cela permet de :
+- Tracer exactement quelle version est déployée
+- Revenir à un build antérieur si nécessaire
+- Éviter les conflits de cache
+
+#### RELEASE (production)
+
+```xml
+<!-- Dans pom.xml -->
+<version>1.0.0-RELEASE</version>
+```
+
+**Tags créés par CI** :
+- `rhdemo-api:1.0.0-RELEASE` (version fixe)
+- `rhdemo-api:latest` (mis à jour à chaque build)
+
+**Raison** : Les versions RELEASE sont immuables, pas besoin de numéro de build.
+
+### Politique de pull (imagePullPolicy)
+
+Le pipeline CD adapte automatiquement la politique de pull selon le tag :
+
+| Tag | imagePullPolicy | Raison |
+|-----|----------------|--------|
+| `latest` | `Always` | Garantit qu'on récupère toujours la dernière image du registry |
+| `*-SNAPSHOT-*` | `Always` | Force le pull pour éviter d'utiliser une version en cache |
+| `*-RELEASE` | `IfNotPresent` | Version fixe, peut utiliser le cache |
+
+### Exemples de workflow
+
+#### Développement actif (SNAPSHOT)
+
+```bash
+# Build CI #95
+pom.xml → 1.1.0-SNAPSHOT
+CI → Pousse rhdemo-api:1.1.0-SNAPSHOT-95 + latest
+
+# Déploiement CD automatique
+CD (sans paramètre) → Déploie rhdemo-api:latest (=1.1.0-SNAPSHOT-95)
+
+# Build CI #96
+CI → Pousse rhdemo-api:1.1.0-SNAPSHOT-96 + latest (updated)
+
+# Déploiement CD automatique
+CD (sans paramètre) → Déploie rhdemo-api:latest (=1.1.0-SNAPSHOT-96)
+  ↳ Avec imagePullPolicy=Always, récupère automatiquement la nouvelle version
+```
+
+#### Release en production
+
+```bash
+# Build CI avec version RELEASE
+pom.xml → 1.0.0-RELEASE
+CI → Pousse rhdemo-api:1.0.0-RELEASE + latest
+
+# Déploiement CD avec tag spécifique
+CD avec IMAGE_TAG=1.0.0-RELEASE → Déploie exactement cette version
+  ↳ Avec imagePullPolicy=IfNotPresent, utilise le cache si disponible
+```
+
+### Nettoyage automatique du registry
+
+Le pipeline CI nettoie automatiquement les anciennes images SNAPSHOT pour économiser l'espace disque :
+
+- **Politique de rétention** : Garde les 3 derniers builds SNAPSHOT
+- **Garbage collection** : Libère l'espace disque après suppression
+- **Images RELEASE** : Jamais supprimées automatiquement
+
+**Exemple** :
+```
+Avant build #98 :
+  - rhdemo-api:1.1.0-SNAPSHOT-95
+  - rhdemo-api:1.1.0-SNAPSHOT-96
+  - rhdemo-api:1.1.0-SNAPSHOT-97
+  - rhdemo-api:latest
+
+Après build #98 :
+  - rhdemo-api:1.1.0-SNAPSHOT-96
+  - rhdemo-api:1.1.0-SNAPSHOT-97
+  - rhdemo-api:1.1.0-SNAPSHOT-98
+  - rhdemo-api:latest
 ```
 
 ---
@@ -493,5 +625,5 @@ docker exec <jenkins-container-name> ping -c 3 rhdemo-control-plane
 
 ---
 
-**Dernière mise à jour** : 2025-12-12
-**Auteur** : Migration automatisée via Claude Code
+**Dernière mise à jour** : 2025-12-31
+**Auteur** : Documentation mise à jour pour refléter la stratégie de versioning avec tag `latest`

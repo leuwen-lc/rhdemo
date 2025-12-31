@@ -62,7 +62,7 @@ pipeline {
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
-            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT, 1.0.0-rc1). Si vide, utilisera la dernière version publiée.'
+            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT-95, 1.0.0-RELEASE). Si vide, utilisera "latest" (dernière image validée par CI).'
         )
         booleanParam(
             name: 'FORCE_RECREATE_PODS',
@@ -106,21 +106,13 @@ pipeline {
                         env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG
                         echo "▶ Tag fourni en paramètre: ${env.DEPLOY_IMAGE_TAG}"
                     } else {
-                        // Lire la version depuis pom.xml via Maven
-                        echo "▶ Aucun tag fourni, lecture depuis pom.xml..."
+                        // Par défaut, utiliser le tag 'latest' qui pointe toujours vers la dernière image validée par CI
+                        echo "▶ Aucun tag fourni, utilisation du tag 'latest' (dernière image validée par CI)..."
+                        env.DEPLOY_IMAGE_TAG = "latest"
 
-                        dir('rhDemo') {
-                            env.DEPLOY_IMAGE_TAG = sh(
-                                script: './mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
-                                returnStdout: true
-                            ).trim()
-                        }
-
-                        if (!env.DEPLOY_IMAGE_TAG) {
-                            error("❌ Impossible de déterminer la version de l'image")
-                        }
-
-                        echo "▶ Version détectée depuis pom.xml: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "ℹ️  Le tag 'latest' est automatiquement mis à jour par le pipeline CI"
+                        echo "   Pour déployer une version spécifique, utilisez le paramètre IMAGE_TAG"
+                        echo "   Exemple: IMAGE_TAG=1.1.0-SNAPSHOT-95"
                     }
 
                     echo "✅ Version de l'image à déployer: ${env.DEPLOY_IMAGE_TAG}"
@@ -416,14 +408,15 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Déterminer la politique de pull d'image
-                    # Pour les SNAPSHOT : Always (force le pull à chaque déploiement)
+                    # Pour 'latest' ou SNAPSHOT : Always (force le pull à chaque déploiement)
                     # Pour les releases : IfNotPresent (utilise le cache si disponible)
                     PULL_POLICY="IfNotPresent"
-                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -q "SNAPSHOT"; then
+                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -qE "(SNAPSHOT|latest)"; then
                         PULL_POLICY="Always"
-                        echo "⚠️  Version SNAPSHOT détectée : imagePullPolicy=Always"
+                        echo "⚠️  Tag dynamique détecté (${env.DEPLOY_IMAGE_TAG}) : imagePullPolicy=Always"
+                        echo "   L'image sera toujours récupérée du registry pour garantir la dernière version"
                     else
-                        echo "ℹ️  Version RELEASE : imagePullPolicy=IfNotPresent"
+                        echo "ℹ️  Version RELEASE fixe : imagePullPolicy=IfNotPresent"
                     fi
 
                     # Déployer ou mettre à jour avec Helm

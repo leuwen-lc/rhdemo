@@ -1,0 +1,87 @@
+# Configuration Loki moderne (chart grafana/loki)
+# Chart: grafana/loki v6.x
+# Date: 2025-12-31
+
+###########################################
+# Mode de déploiement
+###########################################
+deploymentMode: SingleBinary
+
+###########################################
+# Configuration Loki
+###########################################
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: 'filesystem'
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    retention_period: 168h  # 7 jours
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+
+###########################################
+# Backend unique (SingleBinary mode)
+###########################################
+singleBinary:
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+
+###########################################
+# Services désactivés (mode SingleBinary)
+###########################################
+read:
+  replicas: 0
+
+write:
+  replicas: 0
+
+backend:
+  replicas: 0
+
+###########################################
+# Monitoring
+###########################################
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+  serviceMonitor:
+    enabled: false
+
+  lokiCanary:
+    enabled: false
+
+###########################################
+# Test
+###########################################
+test:
+  enabled: false

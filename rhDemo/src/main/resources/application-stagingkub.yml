@@ -39,13 +39,9 @@ server:
   # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
   forward-headers-strategy: framework
 
-# Logging pour debug
-logging:
-  level:
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.security.oauth2: TRACE
-    org.springframework.web.client: DEBUG
+# Logging
+# Les niveaux de logs sont configurés via les variables d'environnement injectées par Helm
+# Voir: infra/stagingkub/helm/rhdemo/values.yaml (section rhdemo.logging)
 
 # Endpoints Actuator disponibles
 management:

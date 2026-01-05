@@ -1,9 +1,9 @@
 #!/bin/bash
 
 ###########################################
-# Script d'installation Loki moderne
+# Script d'installation Loki Stack
 # Charts: grafana/loki, grafana/promtail, grafana/grafana
-# Date: 2025-12-31
+# Date: 2026-01-05
 ###########################################
 
 set -e
@@ -17,6 +17,7 @@ NC='\033[0m'
 
 NAMESPACE="loki-stack"
 DOMAIN="grafana.stagingkub.local"
+VALUES_DIR="../helm/observability"
 
 log() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -24,7 +25,7 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo -e "${GREEN}═══════════════════════════════════${NC}"
-echo -e "${GREEN}  Installation Loki Stack Moderne  ${NC}"
+echo -e "${GREEN}  Installation Loki Stack  ${NC}"
 echo -e "${GREEN}═══════════════════════════════════${NC}"
 echo ""
 
@@ -37,9 +38,9 @@ success "Prérequis OK"
 
 # 2. Vérification mot de passe Grafana
 log "Vérification de la configuration Grafana..."
-GRAFANA_PASSWORD=$(grep "^adminPassword:" ../grafana-values.yaml | awk '{print $2}' | tr -d '"')
+GRAFANA_PASSWORD=$(grep "^adminPassword:" $VALUES_DIR/grafana-values.yaml | awk '{print $2}' | tr -d '"')
 if [ -z "$GRAFANA_PASSWORD" ] || [ "$GRAFANA_PASSWORD" = '""' ]; then
-    error "Le mot de passe Grafana n'est pas configuré dans grafana-values.yaml. Veuillez définir adminPassword avec un mot de passe fort."
+    error "Le mot de passe Grafana n'est pas configuré dans $VALUES_DIR/grafana-values.yaml. Veuillez définir adminPassword avec un mot de passe fort."
 fi
 success "Configuration Grafana validée"
 
@@ -73,7 +74,7 @@ fi
 log "Installation de Loki..."
 helm upgrade --install loki grafana/loki \
     -n $NAMESPACE \
-    -f ../loki-modern-values.yaml \
+    -f $VALUES_DIR/loki-modern-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
 success "Loki installé"
 
@@ -81,7 +82,7 @@ success "Loki installé"
 log "Installation de Promtail..."
 helm upgrade --install promtail grafana/promtail \
     -n $NAMESPACE \
-    -f ../promtail-values.yaml \
+    -f $VALUES_DIR/promtail-values.yaml \
     --wait --timeout 2m >/dev/null 2>&1
 success "Promtail installé"
 
@@ -89,7 +90,7 @@ success "Promtail installé"
 log "Installation de Grafana..."
 helm upgrade --install grafana grafana/grafana \
     -n $NAMESPACE \
-    -f ../grafana-values.yaml \
+    -f $VALUES_DIR/grafana-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
 success "Grafana installé"
 
@@ -109,7 +110,7 @@ echo -e "${GREEN}    Installation Terminée ! ✓      ${NC}"
 echo -e "${GREEN}═══════════════════════════════════${NC}"
 echo ""
 echo -e "${BLUE}Grafana:${NC} https://$DOMAIN"
-echo -e "${BLUE}Login:${NC} admin / (mot de passe configuré dans grafana-values.yaml)"
+echo -e "${BLUE}Login:${NC} admin / (mot de passe configuré dans helm/observability/grafana-values.yaml)"
 echo ""
 echo -e "${BLUE}Pods:${NC}"
 kubectl get pods -n $NAMESPACE

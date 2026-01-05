@@ -16,7 +16,7 @@ cd /home/leno-vo/git/repository/rhDemo
 **⚠️ SÉCURITÉ: Cette étape est obligatoire**
 
 ```bash
-cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability
 
 # Générer un mot de passe fort
 PASSWORD=$(openssl rand -base64 32)
@@ -32,11 +32,11 @@ nano grafana-values.yaml  # ou vim, code, etc.
 
 **Important:** Conservez ce mot de passe en lieu sûr (gestionnaire de mots de passe).
 
-### Étape 3: Installer Loki Stack (Charts Modernes)
+### Étape 3: Installer Loki Stack
 
 ```bash
 cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
-./install-loki-modern.sh
+./install-loki.sh
 ```
 
 Le script va automatiquement:
@@ -173,7 +173,7 @@ kubectl rollout restart deployment -n loki-stack loki-stack-grafana
 
 ### Modifier la Rétention des Logs
 
-Éditer: `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml`
+Éditer: `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml`
 
 ```yaml
 loki:
@@ -185,14 +185,14 @@ Appliquer:
 ```bash
 helm upgrade loki grafana/loki \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml
 ```
 
 ### Changer le Password Grafana
 
 **Méthode 1: Avant installation**
 
-Éditer `grafana-values.yaml`:
+Éditer `helm/observability/grafana-values.yaml`:
 ```yaml
 adminPassword: "VotreNouveauMotDePasse"
 ```
@@ -289,4 +289,4 @@ sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
 ---
 
 **Auteur:** Documentation rhDemo
-**Date:** 30 décembre 2025
+**Date:** 5 janvier 2026

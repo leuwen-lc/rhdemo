@@ -1003,14 +1003,25 @@ YMLEOF
                     sh 'mkdir -p trivy-reports'
 
                     // Télécharger/mettre à jour la base de données Trivy AVANT les scans parallèles
-                    // Évite les conflits de verrous lors de scans parallèles
-                    echo "📥 Téléchargement de la base de données Trivy..."
+                    // La DB est téléchargée dans un cache partagé qui sera copié pour chaque scan
+                    // Évite les conflits d'accès concurrent entre scans parallèles
+                    echo "📥 Téléchargement de la base de données Trivy dans le cache partagé..."
                     sh '''
-                        # Télécharger la base de vulnérabilités
+                        # Créer et utiliser le répertoire de cache partagé
+                        TRIVY_CACHE_DIR="$(pwd)/.trivy-cache-shared"
+                        mkdir -p "${TRIVY_CACHE_DIR}"
+                        export TRIVY_CACHE_DIR
+
+                        # Télécharger la base de vulnérabilités dans le cache partagé
+                        echo "📥 Téléchargement de la base de vulnérabilités..."
                         trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+
                         # Télécharger la base Java DB (pour scanner rhdemo-app)
+                        echo "📥 Téléchargement de la Java DB..."
                         trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
-                        echo "✅ Bases de données Trivy prêtes (vuln + java)"
+
+                        echo "✅ Bases de données Trivy prêtes dans ${TRIVY_CACHE_DIR} (vuln + java)"
+                        echo "   Chaque scan parallèle copiera ce cache pour éviter les conflits d'accès"
                     '''
 
                     // Définir les images à scanner avec leurs noms de rapports

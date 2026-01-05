@@ -93,13 +93,23 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
    - Allez dans rhDemo/infra/jenkins-docker et suivez le QUICKSTART.md et pour en savoir plus le README.md 
    - Lancez le pipeline rhDemo/Jenkinsfile-CI
 
-### Utliser la chaine CD et déployer dans l'environnement stagingkub
+### Utliser la chaine CD et déployer dans l'environnement stagingkub :
     - Installez et utilisez la chaine CI (ci-dessus)
     - Installez Kind 0.30 et supérieur et des versions récentes kubectl et helm
     - suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
     - lancez le pipelne rhDemo/Jenkinsfile-CD
 
 ## Changelog 
+  Version 1.1.2-RELEASE
+  - Configuration des caches Loki (11Go de mémoire par défaut ce qui compromettait l'exécution locale)
+  - Fichers values helm déplacés dans rhDemo/infra/stagingkub/helm/observability
+  - Suppression des définitions de niveau de logs dans applications-stagingkub.yaml pour prioriser la configuration helm dans values.yaml
+  - Duplication des caches Trivy pour éviter les coflits d'accès lors des scans en parallèle dans la chaine CI.
+
+  Version 1.1.1-RELEASE
+  - Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/LOKI_STACK_INTEGRATION.md
+  - Ajout de possibilité de réglage niveaux de logs rhDemo via rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+  - 
   Version 1.1.0-RELEASE
   - Déploiement sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
   - Découpage de la chaine CI/CD en
@@ -108,9 +118,9 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
   - Suppression du build du container applicatif par Paketo qui générait trop de dépendances externes au build (et le faisait planter quand elles sont busy) et utiliser un build docker classique basé sur l'image OpenJDK21 de Eclipse Temurin.
     Bizarement le build Paketo est également plus volumineux.
   
-  Version 1.1.1-RELEASE
-  - Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/LOKI_STACK_INTEGRATION.md
-  - Ajout de possibilité de réglage niveaux de logs rhDemo via rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+
+  
+
 
 ## Feuille de route
   - Ajouter un champ de recherche dans chaque colonne de la liste des employes

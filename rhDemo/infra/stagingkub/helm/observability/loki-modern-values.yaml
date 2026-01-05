@@ -54,6 +54,33 @@ singleBinary:
     storageClass: ""
 
 ###########################################
+# Caches (réduits pour environnement contraint)
+###########################################
+chunksCache:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 100m
+      memory: 512Mi
+  allocatedMemory: 256  # MB alloués au cache memcached
+
+resultsCache:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+  allocatedMemory: 128  # MB alloués au cache memcached
+
+###########################################
 # Services désactivés (mode SingleBinary)
 ###########################################
 read:

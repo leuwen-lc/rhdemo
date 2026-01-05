@@ -1,6 +1,6 @@
 # INTÉGRATION LOKI STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 31 décembre 2025
+**Date:** 5 janvier 2026
 **Version:** 2.0 (Charts Modernes)
 **Environnement:** stagingkub (Kubernetes KinD)
 
@@ -192,7 +192,7 @@ sed -i "s/adminPassword: \"\"/adminPassword: \"$PASSWORD\"/" grafana-values.yaml
 
 ```bash
 cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
-./install-loki-modern.sh
+./install-loki.sh
 ```
 
 Ce script effectue automatiquement:
@@ -249,7 +249,7 @@ kubectl get namespaces | grep loki
 
 Les fichiers de configuration sont déjà présents dans le projet:
 
-**Loki:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml`
+**Loki:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml`
 
 ```yaml
 # Configuration Loki moderne (chart grafana/loki)
@@ -298,7 +298,7 @@ backend:
   replicas: 0
 ```
 
-**Promtail:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/promtail-values.yaml`
+**Promtail:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml`
 
 ```yaml
 # Configuration Promtail
@@ -341,7 +341,7 @@ resources:
     memory: 256Mi
 ```
 
-**Grafana:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-values.yaml`
+**Grafana:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml`
 
 ```yaml
 # Configuration Grafana
@@ -433,19 +433,19 @@ rm -rf $TMP
 # Installer Loki (mode SingleBinary)
 helm upgrade --install loki grafana/loki \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml \
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml \
   --wait --timeout 3m
 
 # Installer Promtail
 helm upgrade --install promtail grafana/promtail \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/promtail-values.yaml \
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml \
   --wait --timeout 2m
 
 # Installer Grafana
 helm upgrade --install grafana grafana/grafana \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-values.yaml \
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml \
   --wait --timeout 3m
 
 # Vérifier l'installation
@@ -540,7 +540,7 @@ loki:
 ```bash
 helm upgrade loki grafana/loki \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml
 ```
 
 ### 5.3 Augmenter les Ressources (si nécessaire)
@@ -1103,17 +1103,17 @@ helm search repo grafana/grafana
 # Upgrade Loki
 helm upgrade loki grafana/loki \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/loki-modern-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml
 
 # Upgrade Promtail
 helm upgrade promtail grafana/promtail \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/promtail-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml
 
 # Upgrade Grafana
 helm upgrade grafana grafana/grafana \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml
 
 # Vérifier rollout
 kubectl rollout status statefulset -n loki-stack loki
@@ -1218,7 +1218,7 @@ sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
 
 **Auteur:** Claude Code
 **Version:** 2.0 (Charts Modernes)
-**Date:** 31 décembre 2025
+**Date:** 5 janvier 2026
 
 ---
 
@@ -1233,7 +1233,7 @@ Cette version utilise les charts Helm modernes séparés au lieu du chart monoli
 - ✅ Architecture: SingleBinary mode pour Loki (au lieu de composants séparés)
 - ✅ Schéma de stockage: tsdb + schema v13 (au lieu de boltdb-shipper + v11)
 - ✅ Service Loki: `loki-gateway:80` (au lieu de `loki:3100`)
-- ✅ Installation via script automatique: `install-loki-modern.sh`
+- ✅ Installation via script automatique: `install-loki.sh`
 
 **Fichiers de configuration:**
 - `loki-modern-values.yaml` - Configuration Loki

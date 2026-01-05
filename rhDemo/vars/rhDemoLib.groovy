@@ -92,16 +92,27 @@ def generateTrivyReport(String image, String reportName) {
 
         echo "🔍 Scan Trivy: \${IMAGE}"
 
-        # Créer un répertoire de cache dédié pour ce scan (évite les conflits de verrous)
+        # Créer un cache dédié pour ce scan en copiant le cache partagé
+        # Évite les conflits d'accès concurrent entre scans parallèles
+        # La DB a été téléchargée une seule fois dans .trivy-cache-shared
+        TRIVY_CACHE_SHARED="\${WORKSPACE_DIR}/.trivy-cache-shared"
         TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-\${NAME}"
-        mkdir -p "\${TRIVY_CACHE_DIR}"
+
+        if [ -d "\${TRIVY_CACHE_SHARED}" ]; then
+            echo "📦 Copie du cache partagé vers cache dédié \${NAME}..."
+            cp -r "\${TRIVY_CACHE_SHARED}" "\${TRIVY_CACHE_DIR}"
+            echo "✅ Cache dédié prêt"
+        else
+            echo "⚠️  Cache partagé non trouvé, création d'un cache vide"
+            mkdir -p "\${TRIVY_CACHE_DIR}"
+        fi
+
         export TRIVY_CACHE_DIR
 
         # Scan JSON pour analyse programmatique
-        # --skip-db-update : DB déjà mise à jour avant les scans parallèles (évite conflits de verrous)
-        # --skip-java-db-update : Évite la mise à jour de la Java DB en parallèle
+        # --skip-db-update : DB déjà copiée depuis le cache partagé
+        # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
-        # Cache dédié via TRIVY_CACHE_DIR pour éviter les conflits de verrous entre scans parallèles
         timeout 5m trivy image \\
             --skip-db-update \\
             --skip-java-db-update \\

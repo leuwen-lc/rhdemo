@@ -94,7 +94,32 @@ helm upgrade --install grafana grafana/grafana \
     --wait --timeout 3m >/dev/null 2>&1
 success "Grafana installé"
 
-# 9. DNS
+# 9. Déploiement du dashboard rhDemo
+log "Déploiement du dashboard rhDemo..."
+DASHBOARD_FILE="../grafana-dashboard-rhdemo.json"
+if [ -f "$DASHBOARD_FILE" ]; then
+    # Extraire le contenu du dashboard (sans le wrapper API)
+    cat "$DASHBOARD_FILE" | jq '.dashboard' > /tmp/rhdemo-logs.json 2>/dev/null || {
+        warn "jq non disponible, utilisation du fichier tel quel"
+        cp "$DASHBOARD_FILE" /tmp/rhdemo-logs.json
+    }
+
+    kubectl create configmap grafana-dashboard-rhdemo \
+        --from-file="rhdemo-logs.json=/tmp/rhdemo-logs.json" \
+        --namespace="$NAMESPACE" \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+
+    kubectl patch configmap grafana-dashboard-rhdemo -n $NAMESPACE \
+        -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
+
+    rm -f /tmp/rhdemo-logs.json
+
+    success "Dashboard rhDemo déployé"
+else
+    warn "Dashboard $DASHBOARD_FILE introuvable, ignoré"
+fi
+
+# 10. DNS
 log "Configuration DNS..."
 if ! grep -q "$DOMAIN" /etc/hosts 2>/dev/null; then
     echo "127.0.0.1 $DOMAIN" | sudo tee -a /etc/hosts >/dev/null
@@ -103,7 +128,7 @@ else
     warn "DNS déjà configuré"
 fi
 
-# 10. Affichage final
+# 11. Affichage final
 echo ""
 echo -e "${GREEN}═══════════════════════════════════${NC}"
 echo -e "${GREEN}    Installation Terminée ! ✓      ${NC}"
@@ -111,6 +136,7 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "${BLUE}Grafana:${NC} https://$DOMAIN"
 echo -e "${BLUE}Login:${NC} admin / (mot de passe configuré dans helm/observability/grafana-values.yaml)"
+echo -e "${BLUE}Dashboard:${NC} rhDemo - Logs Application (automatiquement disponible)"
 echo ""
 echo -e "${BLUE}Pods:${NC}"
 kubectl get pods -n $NAMESPACE

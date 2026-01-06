@@ -566,32 +566,35 @@ loki:
     ingestion_burst_size_mb: 40
 ```
 
-### 5.4 Ajouter des Dashboards Pré-configurés
+### 5.4 Dashboard rhDemo Pré-configuré (Déploiement Automatique)
 
-**Via Grafana UI** (après installation):
+**✅ Déploiement automatique lors de l'installation**
 
-1. Aller sur https://grafana.stagingkub.local
-2. Login: `admin` / (votre mot de passe configuré)
-3. Dashboards → Import
-4. Utiliser ID: `13639` (Logs / App Dashboard)
-5. Sélectionner datasource: Loki
+Le script `install-loki.sh` déploie automatiquement le dashboard "rhDemo - Logs Application". Aucune action manuelle requise!
 
-**Via ConfigMap** (automatique):
+**Dashboard inclus:**
+- 🔴 **Logs d'Erreurs** : Logs contenant "ERROR"
+- 📊 **Rate d'Erreurs** : Nombre d'erreurs par minute
+- 📈 **Volume de Logs** : Volume par application
+- 🔍 **Logs Temps Réel** : Tous les logs de l'app
+- 🔐 **Logs Keycloak** : Authentification
+- 🗄️ **Logs PostgreSQL** : Logs des bases de données
+- ⚠️ **Compteur WARN** : Logs WARNING dernière heure
+- 🔴 **Compteur ERROR** : Logs ERROR dernière heure
+- 📊 **Top 10 Pods** : Pods avec le plus de logs
 
-Un dashboard pré-configuré est disponible dans le projet:
-- `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo.json`
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo.json`
 
-Pour l'importer:
-1. Grafana → Dashboards → Import
-2. Upload le fichier JSON
-3. Sélectionner datasource: Loki
-4. Save
+**Mise à jour manuelle du dashboard:**
 
-Le dashboard inclut:
-- Logs en temps réel des différents composants
-- Graphiques d'erreurs par minute
-- Top 10 des erreurs les plus fréquentes
-- Volume de logs par application
+Si vous modifiez le fichier JSON et souhaitez redéployer sans réinstaller toute la stack :
+
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh
+```
+
+**Documentation complète:** Voir [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
 ---
 
@@ -770,28 +773,42 @@ logcli query --tail '{namespace="rhdemo-stagingkub", app="rhdemo-app"}'
 
 ## 8. DASHBOARDS GRAFANA
 
-### 8.1 Dashboard rhDemo - Logs d'Application
+### 8.1 Dashboard rhDemo - Logs d'Application (Pré-configuré)
 
-**Créer manuellement:**
+**✅ Dashboard automatiquement disponible après installation!**
 
-1. Grafana → Dashboards → New Dashboard
-2. Add Panel → Logs
-3. Query: `{namespace="rhdemo-stagingkub", app="rhdemo-app"}`
-4. Options:
-   - Visualization: Logs
-   - Time range: Last 6 hours
-   - Show labels: app, pod, container
-   - Dedupe: exact
-5. Save Dashboard: "rhDemo Application Logs"
+Le dashboard "rhDemo - Logs Application" est déployé automatiquement lors de l'installation de la stack Loki.
 
-**Panels recommandés:**
+**Accès:** Grafana → Dashboards → "rhDemo - Logs Application"
 
-| Panel | Query | Type |
-|-------|-------|------|
-| **Logs Stream** | `{namespace="rhdemo-stagingkub", app="rhdemo-app"}` | Logs |
-| **Error Rate** | `sum(rate({namespace="rhdemo-stagingkub", app="rhdemo-app"} \|= "ERROR" [5m]))` | Graph |
-| **Top Errors** | `topk(10, count_over_time({namespace="rhdemo-stagingkub", app="rhdemo-app"} \|= "ERROR" [1h]))` | Table |
-| **Logs by Level** | `sum by (level) (count_over_time({namespace="rhdemo-stagingkub", app="rhdemo-app"} \| json [5m]))` | Pie Chart |
+**Contenu du dashboard:**
+
+| Panel | Description | Query |
+|-------|-------------|-------|
+| 🔴 **Logs d'Erreurs** | Logs contenant ERROR | `{namespace="rhdemo-stagingkub", app="rhdemo-app"} \|= "ERROR"` |
+| 📊 **Rate d'Erreurs** | Erreurs par minute | `sum(count_over_time({...} \|= "ERROR" [1m]))` |
+| 📈 **Volume de Logs** | Volume par app (rate 5min) | `sum by (app) (rate({namespace="rhdemo-stagingkub"}[5m]))` |
+| �� **Logs Temps Réel** | Tous les logs de l'app | `{namespace="rhdemo-stagingkub", app="rhdemo-app"}` |
+| 🔐 **Logs Keycloak** | Authentification | `{..., app="keycloak"} \|~ "Login\|logout\|authenticated"` |
+| 🗄️ **Logs PostgreSQL** | Logs database | `{..., app=~"postgresql-.*"}` |
+| 📊 **Top 10 Pods** | Pods avec le plus de logs | `topk(10, sum by (pod) (count_over_time({...}[1h])))` |
+| ⚠️ **Logs WARN** | Compteur WARNING (1h) | `sum(count_over_time({...} \|= "WARN" [1h]))` |
+| 🔴 **Logs ERROR** | Compteur ERROR (1h) | `sum(count_over_time({...} \|= "ERROR" [1h]))` |
+
+**Personnalisation:**
+
+Pour modifier le dashboard:
+1. Dupliquer le dashboard (Dashboard → Settings → Save As)
+2. Modifier la copie selon vos besoins
+3. Le dashboard original reste disponible
+
+Pour déployer une nouvelle version du dashboard source:
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh
+```
+
+**Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
 ### 8.2 Dashboard Keycloak - Logs d'Authentification
 
@@ -1212,32 +1229,4 @@ sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
 - Slack: https://slack.grafana.com/
 - Forum: https://community.grafana.com/
 
----
 
-**Fin du document**
-
-**Auteur:** Claude Code
-**Version:** 2.0 (Charts Modernes)
-**Date:** 5 janvier 2026
-
----
-
-## NOTES DE MIGRATION
-
-### Version 2.0 - Migration vers Charts Modernes
-
-Cette version utilise les charts Helm modernes séparés au lieu du chart monolithique `loki-stack` (deprecated):
-
-**Changements principaux:**
-- ✅ Chart `grafana/loki-stack` → `grafana/loki` v6.x + `grafana/promtail` v6.x + `grafana/grafana` v8.x
-- ✅ Architecture: SingleBinary mode pour Loki (au lieu de composants séparés)
-- ✅ Schéma de stockage: tsdb + schema v13 (au lieu de boltdb-shipper + v11)
-- ✅ Service Loki: `loki-gateway:80` (au lieu de `loki:3100`)
-- ✅ Installation via script automatique: `install-loki.sh`
-
-**Fichiers de configuration:**
-- `loki-modern-values.yaml` - Configuration Loki
-- `promtail-values.yaml` - Configuration Promtail
-- `grafana-values.yaml` - Configuration Grafana
-
-**Guide rapide:** [LOKI_QUICKSTART.md](../infra/stagingkub/LOKI_QUICKSTART.md)

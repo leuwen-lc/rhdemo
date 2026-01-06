@@ -6,14 +6,14 @@
 # Configuration Promtail
 ###########################################
 config:
-  # URL de Loki
+  # URL de Loki (FQDN pour résolution DNS cross-namespace)
   clients:
-    - url: http://loki-gateway/loki/api/v1/push
+    - url: http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push
       tenant_id: ""
 
-  # Position des logs
+  # Position des logs - utiliser le volume monté en écriture
   positions:
-    filename: /tmp/positions.yaml
+    filename: /run/promtail/positions.yaml
 
   # Scrape configs
   snippets:

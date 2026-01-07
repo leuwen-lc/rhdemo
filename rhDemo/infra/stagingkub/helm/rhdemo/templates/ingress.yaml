@@ -1,29 +1,35 @@
 {{- if .Values.ingress.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# Ingress pour l'application RHDemo
+# ═══════════════════════════════════════════════════════════════
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: rhdemo-ingress
+  name: rhdemo-app-ingress
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rhdemo-app
   annotations:
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    # Security headers pour RHDemo (CSP gérée par Spring Boot SecurityConfig)
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls.enabled }}
   tls:
   - hosts:
-    {{- range .Values.ingress.hosts }}
-    - {{ .host }}
-    {{- end }}
+    - {{ (index .Values.ingress.hosts 0).host }}
     secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
-  {{- range .Values.ingress.hosts }}
-  - host: {{ .host }}
+  - host: {{ (index .Values.ingress.hosts 0).host }}
     http:
       paths:
-      {{- range .paths }}
+      {{- range (index .Values.ingress.hosts 0).paths }}
       - path: {{ .path }}
         pathType: {{ .pathType }}
         backend:
@@ -32,5 +38,46 @@ spec:
             port:
               number: {{ .servicePort }}
       {{- end }}
+---
+# ═══════════════════════════════════════════════════════════════
+# Ingress pour Keycloak avec CSP spécifique
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    # CSP pour Keycloak (protection Trivy/ZAP)
+    # Note: Keycloak nécessite 'unsafe-inline' et 'unsafe-eval' pour fonctionner
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'; media-src 'self'; manifest-src 'self'; worker-src 'self'" always;
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+  - hosts:
+    - {{ (index .Values.ingress.hosts 1).host }}
+    secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
+  rules:
+  - host: {{ (index .Values.ingress.hosts 1).host }}
+    http:
+      paths:
+      {{- range (index .Values.ingress.hosts 1).paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+        backend:
+          service:
+            name: {{ .serviceName }}
+            port:
+              number: {{ .servicePort }}
+      {{- end }}
 {{- end }}

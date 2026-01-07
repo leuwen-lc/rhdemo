@@ -123,7 +123,10 @@ class SecurityConfigCspDynamicTest {
             .contains("frame-ancestors 'self'")
             .contains("form-action 'self'")
             .contains("object-src 'none'")
-            .contains("base-uri 'self'");
+            .contains("base-uri 'self'")
+            .contains("media-src 'self'")
+            .contains("manifest-src 'self'")
+            .contains("worker-src 'self'");
     }
 
     @Test

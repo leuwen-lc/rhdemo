@@ -39,6 +39,14 @@ server:
   # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
   forward-headers-strategy: framework
 
+  # Configuration des cookies de session pour environnement HTTPS
+  servlet:
+    session:
+      cookie:
+        secure: true  # Flag Secure pour JSESSIONID (protection Trivy/ZAP)
+        http-only: true  # Empêche l'accès JavaScript au cookie de session
+        same-site: lax  # Protection CSRF supplémentaire
+
 # Logging pour debug
 logging:
   level:

@@ -30,6 +30,10 @@ public class SecurityConfig {
     @org.springframework.beans.factory.annotation.Value("${spring.security.oauth2.client.provider.keycloak.authorization-uri:}")
     private String keycloakAuthorizationUri;
 
+    // Flag Secure pour les cookies (activé via application-ephemere.yml et application-stagingkub.yml)
+    @org.springframework.beans.factory.annotation.Value("${server.servlet.session.cookie.secure:false}")
+    private boolean cookieSecureFlag;
+
     // Autowired par défaut avec Spring Boot
     public SecurityConfig(GrantedAuthoritiesKeyCloakMapper keycloakmapper) {
         this.keycloakmapper = keycloakmapper;
@@ -73,6 +77,9 @@ public class SecurityConfig {
      * - form-action: Soumission de formulaires vers l'app et Keycloak (pour login OAuth2)
      * - object-src 'none': Interdit les plugins obsolètes (Flash, Java applets)
      * - base-uri 'self': Empêche l'injection de balises <base>
+     * - media-src 'self': Ressources média (audio/vidéo) uniquement locales
+     * - manifest-src 'self': Manifest PWA uniquement local
+     * - worker-src 'self': Web Workers et Service Workers uniquement locaux
      *
      * Protection renforcée:
      * Tous les scripts et styles ont été externalisés dans des fichiers séparés:
@@ -117,18 +124,38 @@ public class SecurityConfig {
         }
 
         csp.append("object-src 'none'; ");
-        csp.append("base-uri 'self'");
+        csp.append("base-uri 'self'; ");
+        // Directives supplémentaires pour conformité sécurité (Trivy/ZAP)
+        csp.append("media-src 'self'; ");       // Audio/vidéo uniquement locaux
+        csp.append("manifest-src 'self'; ");    // PWA manifest uniquement local
+        csp.append("worker-src 'self'");        // Web/Service Workers uniquement locaux
         // Note: upgrade-insecure-requests retiré car il force HTTPS pour TOUTES les ressources
         // ce qui peut causer des problèmes en développement local (HTTP)
 
         return csp.toString();
     }
+
+    /**
+     * Configure le repository de tokens CSRF avec les flags de sécurité appropriés.
+     *
+     * Le flag Secure est activé uniquement dans les environnements avec HTTPS (ephemere, stagingkub)
+     * via la propriété server.servlet.session.cookie.secure définie dans les fichiers de profil.
+     *
+     * @return Le repository CSRF configuré
+     */
+    private CookieCsrfTokenRepository createCsrfTokenRepository() {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        // Applique le même flag Secure que les cookies de session (configuré par profil)
+        repository.setCookieCustomizer(cookieCustomizer -> cookieCustomizer.secure(cookieSecureFlag));
+        return repository;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
-	http 
+	http
 	// Active la protection CSRF avec cookie accessible en JavaScript
 	.csrf(csrf -> csrf
-	    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()) //NOSONAR - Ce cookie doit être lu par le js pour qu'il puisse renvoyer le token attendu par le serveur
+	    .csrfTokenRepository(createCsrfTokenRepository()) //NOSONAR - Ce cookie doit être lu par le js pour qu'il puisse renvoyer le token attendu par le serveur
 	    .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
 	    // Ignorer CSRF pour les endpoints publics et actuator
 	    .ignoringRequestMatchers("/who", "/error*", "/api-docs", "/actuator/**") //NOSONAR - désactivation CSRF pour pages spécifiques peu sensibles ou modules annexes prets à l'emploi

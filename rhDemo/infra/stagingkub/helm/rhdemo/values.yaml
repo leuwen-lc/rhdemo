@@ -105,9 +105,8 @@ keycloak:
       name: keycloak-db-secret
       key: password
 
-  hostname:
-    url: https://keycloak.stagingkub.local
-    adminUrl: https://keycloak.stagingkub.local
+  # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
+  hostname: keycloak.stagingkub.local
 
   proxyHeaders: xforwarded
   httpEnabled: true

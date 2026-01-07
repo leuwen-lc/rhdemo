@@ -1,4 +1,11 @@
 spring:
+  # Surcharge de la configuration HikariCP pour stagingkub (environnement proche prod)
+  datasource:
+    hikari:
+      # Pool plus grand pour stagingkub (proche production)
+      maximum-pool-size: 20
+      minimum-idle: 5
+
   security:
     oauth2:
       client:
@@ -38,6 +45,13 @@ spring:
 server:
   # Utiliser les headers X-Forwarded-* de nginx pour construire les URLs correctes
   forward-headers-strategy: framework
+
+# Désactivation de la documentation API SpringDoc en stagingkub
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
 
 # Logging
 # Les niveaux de logs sont configurés via les variables d'environnement injectées par Helm

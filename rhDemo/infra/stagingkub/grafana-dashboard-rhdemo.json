@@ -32,7 +32,7 @@
         },
         "targets": [
           {
-            "expr": "{namespace=\"rhdemo-stagingkub\", app=\"rhdemo-app\"} |= \"ERROR\"",
+            "expr": "{namespace=\"rhdemo-stagingkub\", app=\"rhdemo-app\"} |~ \"ERROR|WARN\"",
             "refId": "A"
           }
         ],
@@ -225,7 +225,7 @@
       },
       {
         "id": 5,
-        "title": "🔐 Logs Keycloak (Authentification)",
+        "title": "🔐 Logs Keycloak",
         "type": "logs",
         "datasource": {
           "type": "loki",
@@ -239,7 +239,7 @@
         },
         "targets": [
           {
-            "expr": "{namespace=\"rhdemo-stagingkub\", app=\"keycloak\"} |~ \"Login|logout|authenticated\"",
+            "expr": "{namespace=\"rhdemo-stagingkub\", app=\"keycloak\"}",
             "refId": "A"
           }
         ],

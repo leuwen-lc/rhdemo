@@ -16,11 +16,39 @@ spring:
     username: dbrhdemo
     password: ${rhdemo.datasource.password.pg}
     driver-class-name: org.postgresql.Driver
+
+    # Configuration HikariCP pour éviter les warnings de connexion fermée
+    hikari:
+      # Temps max qu'une connexion peut rester dans le pool (30 min)
+      # Doit être < au timeout de PostgreSQL (souvent 60 min par défaut)
+      max-lifetime: 1800000  # 30 minutes en millisecondes
+
+      # Temps max qu'une connexion peut rester inactive avant d'être fermée (10 min)
+      idle-timeout: 600000   # 10 minutes
+
+      # Taille du pool
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+      # Test de connexion avant utilisation
+      connection-test-query: SELECT 1
+
+      # Validation timeout
+      validation-timeout: 5000
+
+      # Temps d'attente max pour obtenir une connexion du pool
+      connection-timeout: 30000
+
+      # Keepalive pour détecter les connexions mortes
+      keepalive-time: 300000  # 5 minutes
   
   # Evite l'ecrasement du schema data.sql par JPA
   jpa:
     hibernate:
       ddl-auto: validate
+    # Désactivation explicite de open-in-view pour éviter le warning
+    # (et éviter les requêtes lazy lors du rendu des vues)
+    open-in-view: false
   
   # OAuth2 / Keycloak
   # Configuration pour développement local

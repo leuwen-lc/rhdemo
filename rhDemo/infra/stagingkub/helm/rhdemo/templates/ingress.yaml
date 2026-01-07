@@ -13,7 +13,7 @@ metadata:
   annotations:
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     # Security headers pour RHDemo (CSP gérée par Spring Boot SecurityConfig)
-    nginx.ingress.kubernetes.io/configuration-snippet: |
+    nginx.ingress.kubernetes.io/server-snippet: |
       add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
       add_header X-Content-Type-Options "nosniff" always;
       add_header Referrer-Policy "strict-origin-when-cross-origin" always;
@@ -54,7 +54,7 @@ metadata:
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
     # CSP pour Keycloak (protection Trivy/ZAP)
     # Note: Keycloak nécessite 'unsafe-inline' et 'unsafe-eval' pour fonctionner
-    nginx.ingress.kubernetes.io/configuration-snippet: |
+    nginx.ingress.kubernetes.io/server-snippet: |
       add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
       add_header X-Content-Type-Options "nosniff" always;
       add_header Referrer-Policy "strict-origin-when-cross-origin" always;

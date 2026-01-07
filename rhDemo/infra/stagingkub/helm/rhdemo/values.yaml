@@ -267,6 +267,10 @@ nginx-ingress:
         http: 30080
         https: 30443
 
+    # Configuration pour masquer la version nginx (protection Trivy/ZAP)
+    config:
+      server-tokens: "false"
+
     resources:
       requests:
         memory: "128Mi"

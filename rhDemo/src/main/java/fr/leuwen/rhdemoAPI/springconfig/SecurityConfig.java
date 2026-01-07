@@ -69,11 +69,11 @@ public class SecurityConfig {
      * - default-src 'self': Par défaut, n'autorise que les ressources du même origine
      * - script-src 'self': Scripts locaux uniquement (SÉCURISÉ - pas de 'unsafe-inline' ni 'unsafe-eval')
      * - style-src 'self': Styles locaux uniquement (SÉCURISÉ - pas de 'unsafe-inline')
-     * - img-src 'self' data: https:: Images locales + data URIs + HTTPS externe
+     * - img-src 'self' data: https:: Images locales + data URIs
      * - font-src 'self' data:: Polices locales + data URIs
      * - connect-src: Connexions AJAX vers l'app et Keycloak (extrait dynamiquement de la config)
      * - frame-src 'self': iframes uniquement du même origine
-     * - frame-ancestors 'self': Empêche l'embedding dans d'autres sites (protection clickjacking)
+     * - frame-ancestors 'none': Empêche l'embedding dans une iframe (protection clickjacking)
      * - form-action: Soumission de formulaires vers l'app et Keycloak (pour login OAuth2)
      * - object-src 'none': Interdit les plugins obsolètes (Flash, Java applets)
      * - base-uri 'self': Empêche l'injection de balises <base>
@@ -103,7 +103,7 @@ public class SecurityConfig {
         csp.append("script-src 'self'; ");
         // Styles: Tous externalisés - plus besoin de 'unsafe-inline'
         csp.append("style-src 'self'; ");
-        csp.append("img-src 'self' data: https:; ");  // data: pour les images base64
+        csp.append("img-src 'self' data:; ");  // data: pour les images base64
         csp.append("font-src 'self' data:; ");
 
         // Connexions AJAX: application + Keycloak (si configuré)
@@ -113,8 +113,7 @@ public class SecurityConfig {
             csp.append("connect-src 'self'; ");
         }
 
-        csp.append("frame-src 'self'; ");
-        csp.append("frame-ancestors 'self'; ");
+        csp.append("frame-ancestors 'none'; ");
 
         // Soumission de formulaires: application + Keycloak (pour login OAuth2)
         if (!keycloakBaseUrl.isEmpty()) {
@@ -165,6 +164,8 @@ public class SecurityConfig {
 	.headers(headers -> headers
 	    // Désactiver X-Frame-Options car géré par nginx (évite les headers dupliqués)
 	    .frameOptions(frame -> frame.disable())
+	    // Désactiver HSTS car géré par nginx (évite les headers dupliqués)
+	    .httpStrictTransportSecurity(hsts -> hsts.disable())
 	    // Configurer Content-Security-Policy (CSP) pour protéger contre XSS et injections
 	    .contentSecurityPolicy(csp -> csp
 	        .policyDirectives(buildCspDirectives())

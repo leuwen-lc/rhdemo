@@ -47,24 +47,33 @@ Unable to connect to the server: dial tcp 127.0.0.1:33309: connect: connection r
 docker network connect kind rhdemo-jenkins
 ```
 
-#### b) Configuration kubectl dynamique : [Jenkinsfile:862-919](../../../Jenkinsfile#L862-L919)
+#### b) Configuration kubectl dynamique : [Jenkinsfile-CD:233-287](../Jenkinsfile-CD#L233-L287)
 
-Nouvelle étape ajoutée au pipeline : `☸️ Configure Kubernetes Access`
+Étape dans le pipeline : `☸️ Configure Kubernetes Access`
 
 Cette étape :
 1. ✅ Vérifie que le cluster KinD existe
 2. ✅ Connecte Jenkins au réseau `kind` automatiquement
-3. ✅ Génère une kubeconfig adaptée avec `https://rhdemo-control-plane:6443`
-4. ✅ Installe la kubeconfig dans `$HOME/.kube/config`
-5. ✅ Vérifie l'accès avec `kubectl cluster-info`
-6. ✅ Active le contexte `kind-rhdemo`
+3. ✅ **Connecte le registry au réseau `kind` automatiquement** (ajouté 2026-01-09)
+4. ✅ Génère une kubeconfig adaptée avec `https://rhdemo-control-plane:6443`
+5. ✅ Installe la kubeconfig dans `$HOME/.kube/config`
+6. ✅ Vérifie l'accès avec `kubectl cluster-info`
+7. ✅ Active le contexte `kind-rhdemo`
 
 **Code clé** :
 ```bash
-# Connexion automatique au réseau kind
+# Connexion automatique de Jenkins au réseau kind
 JENKINS_CONTAINER=$(hostname)
 if ! docker network inspect kind 2>/dev/null | grep -q "$JENKINS_CONTAINER"; then
     docker network connect kind $JENKINS_CONTAINER
+fi
+
+# Connexion automatique du registry au réseau kind (ajouté 2026-01-09)
+REGISTRY_CONTAINER=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+if [ -n "$REGISTRY_CONTAINER" ]; then
+    if ! docker network inspect kind 2>/dev/null | grep -q "$REGISTRY_CONTAINER"; then
+        docker network connect kind $REGISTRY_CONTAINER
+    fi
 fi
 
 # Génération kubeconfig avec nom DNS interne
@@ -76,6 +85,7 @@ kind get kubeconfig --name rhdemo | \
 **Résultat** :
 ```bash
 ✅ Jenkins déjà connecté au réseau kind
+✅ Registry 'rhdemo-docker-registry' déjà connecté au réseau kind (IP: 172.21.0.4)
 ✅ Configuration kubectl installée
 ✅ Accès au cluster KinD confirmé
 ✅ Contexte 'kind-rhdemo' activé
@@ -83,7 +93,86 @@ kind get kubeconfig --name rhdemo | \
 
 ---
 
-### 3. ✅ VÉRIFICATION : Commandes kubectl et helm
+### 3. ❌ PROBLÈME : ImagePullBackOff sur les pods Kubernetes (ajouté 2026-01-09)
+
+**Symptôme** :
+```bash
+rhdemo-app-56bd96bc49-7tbvd   0/1     ImagePullBackOff   0   46h
+```
+
+```
+Events:
+  Type     Reason   Age                 From     Message
+  ----     ------   ----                ----     -------
+  Normal   Pulling  31m (x58 over 5h)   kubelet  Pulling image "localhost:5000/rhdemo-api:latest"
+  Warning  Failed   4m (x1317 over 5h)  kubelet  Error: ImagePullBackOff
+```
+
+**Cause** :
+- Le registry Docker `rhdemo-docker-registry` n'était **pas connecté au réseau `kind`**
+- Les pods Kubernetes dans le cluster KinD essaient de pull l'image via `localhost:5000`
+- `localhost` depuis un pod Kubernetes fait référence au pod lui-même, pas à l'hôte
+- Le cluster KinD ne peut accéder au registry que s'il est sur le même réseau Docker
+
+**Diagnostic** :
+```bash
+# Vérifier que le registry existe
+docker ps | grep registry
+# ✅ rhdemo-docker-registry existe et écoute sur 0.0.0.0:5000
+
+# Vérifier que l'image existe dans le registry
+curl http://localhost:5000/v2/rhdemo-api/tags/list
+# ✅ {"name":"rhdemo-api","tags":["latest",...]}
+
+# Vérifier la connexion réseau du registry
+docker network inspect kind | grep rhdemo-docker-registry
+# ❌ Pas de résultat - registry NON connecté au réseau kind
+```
+
+**Solution appliquée** : [Jenkinsfile-CD:260-279](../Jenkinsfile-CD#L260-L279)
+
+Ajout dans le stage `☸️ Configure Kubernetes Access` :
+```bash
+# Connecter le registry au réseau kind si nécessaire
+REGISTRY_CONTAINER=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+if [ -n "$REGISTRY_CONTAINER" ]; then
+    if ! docker network inspect kind 2>/dev/null | grep -q "$REGISTRY_CONTAINER"; then
+        echo "⚠️  Registry '$REGISTRY_CONTAINER' NON connecté au réseau kind"
+        echo "▶ Connexion du registry au réseau kind..."
+        docker network connect kind $REGISTRY_CONTAINER
+        echo "✅ Registry connecté au réseau kind"
+    else
+        echo "✅ Registry déjà connecté au réseau kind"
+    fi
+fi
+```
+
+**Résolution manuelle (si nécessaire)** :
+```bash
+# Connecter manuellement le registry au réseau kind
+docker network connect kind rhdemo-docker-registry
+
+# Supprimer le pod en erreur pour forcer une nouvelle tentative de pull
+kubectl delete pod rhdemo-app-56bd96bc49-7tbvd -n rhdemo-stagingkub
+
+# Vérifier que le nouveau pod démarre correctement
+kubectl get pods -n rhdemo-stagingkub -w
+```
+
+**Résultat** :
+```bash
+✅ Registry connecté au réseau kind (IP: 172.21.0.4)
+✅ Pod rhdemo-app passe de ImagePullBackOff à Running
+✅ Application accessible via https://rhdemo.stagingkub.local
+```
+
+**Prévention** :
+- Le pipeline Jenkinsfile-CD vérifie et connecte automatiquement le registry à chaque déploiement
+- Le script `init-stagingkub.sh` connecte le registry lors de l'initialisation du cluster
+
+---
+
+### 4. ✅ VÉRIFICATION : Commandes kubectl et helm
 
 Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenkins :
 
@@ -168,7 +257,10 @@ Avant de lancer un build Jenkins avec `DEPLOY_ENV=stagingkub` :
 - [ ] Registry actif : `docker ps | grep registry`
 - [ ] Jenkins démarré : `docker ps | grep rhdemo-jenkins`
 - [ ] Jenkins connecté au réseau kind : `docker network inspect kind | grep rhdemo-jenkins`
+- [ ] **Registry connecté au réseau kind** : `docker network inspect kind | grep registry` ⚠️ **Critique pour éviter ImagePullBackOff**
 - [ ] Secrets SOPS disponibles : `ls rhDemo/secrets/env-vars.sh`
+
+**Note** : Les connexions Jenkins et Registry au réseau kind sont vérifiées et établies automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`).
 
 **Commande d'initialisation** :
 ```bash
@@ -245,6 +337,15 @@ kind get kubeconfig --name rhdemo | \
 
 ---
 
+## 📝 Historique des modifications
+
+| Date | Modification | Auteur |
+|------|-------------|--------|
+| 2025-12-11 | Création initiale - Connexion Jenkins au réseau kind | Claude Code |
+| 2026-01-09 | Ajout connexion automatique du registry au réseau kind | Claude Code |
+
+---
+
 **Date de création** : 2025-12-11
-**Dernière mise à jour** : 2025-12-11
+**Dernière mise à jour** : 2026-01-09
 **Auteur** : Configuration automatisée via Claude Code

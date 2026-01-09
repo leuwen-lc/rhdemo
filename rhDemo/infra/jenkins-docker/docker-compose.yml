@@ -9,6 +9,7 @@ services:
     image: rhdemo-jenkins:latest
     container_name: rhdemo-jenkins
     restart: unless-stopped
+    stop_grace_period: 60s  # Temps d'arrêt gracieux
     
     # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
     # L'accès Docker se fait via le groupe docker (GID 984 de l'hôte)
@@ -112,6 +113,7 @@ services:
     image: sonarqube:25.11.0.114957-community
     container_name: rhdemo-sonarqube
     restart: unless-stopped
+    stop_grace_period: 30s  # Temps d'arrêt gracieux
 
     ports:
       - "9020:9000"
@@ -126,6 +128,13 @@ services:
       - SONAR_JDBC_USERNAME=sonar
       - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
       - SONAR_WEB_PORT=9000
+    
+      # Limiter Elasticsearch (Search)
+      - SONAR_SEARCH_JAVAOPTS=-Xms512m -Xmx512m
+      # Limiter le Web
+      # SONAR_WEB_JAVAOPTS=-Xms512m -Xmx512m
+      # Limiter le Compute Engine
+      # SONAR_CE_JAVAOPTS=-Xms512m -Xmx512m
 
     networks:
       - jenkins-network

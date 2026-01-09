@@ -257,6 +257,27 @@ EOF
                         echo "✅ Jenkins déjà connecté au réseau kind"
                     fi
 
+                    # Connecter le registry au réseau kind si nécessaire
+                    echo "▶ Vérification de la connexion du registry au réseau kind..."
+                    REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+                    if [ -n "\$REGISTRY_CONTAINER" ]; then
+                        if ! docker network inspect kind 2>/dev/null | grep -q "\$REGISTRY_CONTAINER"; then
+                            echo "⚠️  Registry '\$REGISTRY_CONTAINER' NON connecté au réseau kind"
+                            echo "▶ Connexion du registry au réseau kind..."
+                            if docker network connect kind \$REGISTRY_CONTAINER 2>&1; then
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry connecté au réseau kind (IP: \$REGISTRY_IP)"
+                            else
+                                echo "⚠️  Impossible de connecter le registry au réseau kind"
+                            fi
+                        else
+                            REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                            echo "✅ Registry '\$REGISTRY_CONTAINER' déjà connecté au réseau kind (IP: \$REGISTRY_IP)"
+                        fi
+                    else
+                        echo "⚠️  Aucun registry trouvé sur le port 5000"
+                    fi
+
                     # Générer une kubeconfig adaptée pour Jenkins
                     # Remplace l'adresse localhost par le nom DNS du container control-plane
                     echo "▶ Génération de la configuration kubectl..."

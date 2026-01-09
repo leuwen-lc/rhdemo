@@ -118,8 +118,31 @@ docker info
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
-| `jenkins-agent` | Agent Jenkins (optionnel) | - | docker-compose.yml |
+| `jenkins-agent` | Agent Jenkins (optionnel - builds distribués) | - | docker-compose.yml |
 | `registry` | Docker Registry local | 5000 | docker-compose.yml |
+
+### 🤖 Agent Jenkins (désactivé par défaut)
+
+⚠️ **L'agent Jenkins est désactivé** car l'image standard `jenkins/inbound-agent` ne contient pas les outils nécessaires pour exécuter les pipelines RHDemo.
+
+**Outils manquants dans l'agent standard :**
+- Maven 3.9.6 (build Java)
+- Docker Compose (environnement ephemere)
+- Firefox ESR (tests Selenium)
+- SOPS (déchiffrement secrets)
+- Node.js/npm (build frontend)
+- kubectl, Helm, kind (déploiement Kubernetes)
+- Trivy, yq (sécurité et parsing)
+
+**Configuration actuelle :**
+- ✅ Le master Jenkins exécute tous les jobs
+- ✅ Le master a tous les outils nécessaires (voir [Dockerfile.jenkins](Dockerfile.jenkins))
+- ✅ `numExecutors: 2` permet d'exécuter 2 jobs en parallèle
+- ✅ `mode: NORMAL` permet au master d'exécuter n'importe quel job
+
+**Pour activer un agent distribué :**
+
+Il faudrait créer une image personnalisée basée sur [Dockerfile.jenkins](Dockerfile.jenkins) avec tous les outils. Voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) pour plus de détails.
 
 ## ⚡ Installation rapide
 
@@ -612,6 +635,20 @@ docker volume rm rhdemo-maven-repository
 # Redémarrer
 ./start-jenkins.sh
 ```
+
+### L'agent Jenkins se relance en boucle
+
+**Symptôme :** Logs montrant "Secret is required for inbound agents"
+
+**Solution :**
+
+L'agent Jenkins est désactivé par défaut car il ne contient pas les outils nécessaires (Maven, Docker Compose, Firefox, SOPS, etc.).
+
+Si vous avez décommenté le service jenkins-agent dans docker-compose.yml :
+1. Re-commentez le service dans docker-compose.yml
+2. Redémarrez : `docker compose up -d`
+
+Pour activer un agent fonctionnel, voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) (nécessite la création d'une image personnalisée).
 
 ## 📈 Monitoring
 

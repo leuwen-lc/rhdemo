@@ -76,28 +76,34 @@ services:
   # ═══════════════════════════════════════════════════════════════════
   # JENKINS AGENT (optionnel - pour builds distribués)
   # ═══════════════════════════════════════════════════════════════════
-  jenkins-agent:
-    image: jenkins/inbound-agent:latest-jdk21
-    container_name: rhdemo-jenkins-agent
-    restart: unless-stopped
-    
-    environment:
-      - JENKINS_URL=http://jenkins:8080
-      - JENKINS_AGENT_NAME=docker-agent
-      - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
-      # À configurer après le premier lancement de Jenkins
-      # - JENKINS_SECRET=<secret-from-jenkins>
-    
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /usr/bin/docker:/usr/bin/docker
-      - jenkins_agent_workspace:/home/jenkins/agent
-    
-    networks:
-      - jenkins-network
-    
-    depends_on:
-      - jenkins
+  # ⚠️ DÉSACTIVÉ : L'image jenkins/inbound-agent ne contient pas les outils
+  #    nécessaires pour exécuter les pipelines RHDemo (Maven, Docker Compose,
+  #    Firefox, SOPS, kubectl, Helm, etc.)
+  #
+  # Pour activer un agent, il faudrait créer une image personnalisée basée
+  # sur Dockerfile.jenkins avec tous les outils requis.
+  #
+  # jenkins-agent:
+  #   image: jenkins/inbound-agent:latest-jdk21
+  #   container_name: rhdemo-jenkins-agent
+  #   restart: unless-stopped
+  #
+  #   environment:
+  #     - JENKINS_URL=http://jenkins:8080
+  #     - JENKINS_AGENT_NAME=docker-agent
+  #     - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
+  #     - JENKINS_SECRET=${JENKINS_SECRET}
+  #
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /usr/bin/docker:/usr/bin/docker
+  #     - jenkins_agent_workspace:/home/jenkins/agent
+  #
+  #   networks:
+  #     - jenkins-network
+  #
+  #   depends_on:
+  #     - jenkins
 
   # ═══════════════════════════════════════════════════════════════════
   # SONARQUBE - Analyse qualité du code

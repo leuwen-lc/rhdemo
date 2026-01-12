@@ -442,17 +442,17 @@ EOF
 
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
-                    # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
+                    # Note: --create-namespace crée automatiquement le namespace s'il n'existe pas
                     echo "▶ Lancement du déploiement Helm..."
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace ${env.K8S_NAMESPACE} \\
+                      --create-namespace \\
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
                       --set rhdemo.image.pullPolicy=\${PULL_POLICY} \\
                       --wait \\
-                      --timeout 10m \\
-                      --debug \\
-                      --atomic
+                      --timeout 15m \\
+                      --debug
 
                     echo ""
                     echo "✅ Déploiement Helm réussi"

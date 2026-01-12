@@ -21,7 +21,13 @@ spec:
       initContainers:
       - name: wait-for-db
         image: busybox:1.36
+        {{- if (index .Values "postgresql-rhdemo").cloudnativepg.enabled }}
+        # CloudNativePG: service avec suffix -rw (read-write)
+        command: ['sh', '-c', 'until nc -z {{ .Values.rhdemo.database.host }}-rw {{ .Values.rhdemo.database.port }}; do echo waiting for postgresql-rhdemo-rw; sleep 2; done;']
+        {{- else }}
+        # StatefulSet classique
         command: ['sh', '-c', 'until nc -z {{ .Values.rhdemo.database.host }} {{ .Values.rhdemo.database.port }}; do echo waiting for postgresql-rhdemo; sleep 2; done;']
+        {{- end }}
       - name: wait-for-keycloak
         image: busybox:1.36
         command: ['sh', '-c', 'until nc -z keycloak {{ .Values.keycloak.service.port }}; do echo waiting for keycloak; sleep 2; done;']
@@ -46,7 +52,11 @@ spec:
 
         # Base de données PostgreSQL
         - name: SPRING_DATASOURCE_URL
+          {{- if (index .Values "postgresql-rhdemo").cloudnativepg.enabled }}
+          value: "jdbc:postgresql://{{ .Values.rhdemo.database.host }}-rw:{{ .Values.rhdemo.database.port }}/{{ .Values.rhdemo.database.name }}"
+          {{- else }}
           value: "jdbc:postgresql://{{ .Values.rhdemo.database.host }}:{{ .Values.rhdemo.database.port }}/{{ .Values.rhdemo.database.name }}"
+          {{- end }}
         - name: SPRING_DATASOURCE_USERNAME
           value: {{ .Values.rhdemo.database.user }}
         - name: SPRING_DATASOURCE_PASSWORD

@@ -1,0 +1,202 @@
+# ═══════════════════════════════════════════════════════════════
+# Configuration Prometheus pour stagingkub
+# ═══════════════════════════════════════════════════════════════
+#
+# Installation via kube-prometheus-stack (Prometheus + Operator + Grafana)
+# https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+#
+# Installation :
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm install prometheus prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f prometheus-values.yaml
+#
+# ═══════════════════════════════════════════════════════════════
+
+# ────────────────────────────────────────────────────────────────
+# Prometheus Operator
+# ────────────────────────────────────────────────────────────────
+prometheusOperator:
+  enabled: true
+
+  # Resources modérées pour environnement local
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ────────────────────────────────────────────────────────────────
+# Prometheus Server
+# ────────────────────────────────────────────────────────────────
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    # Rétention des métriques
+    retention: 7d
+    retentionSize: "5GB"
+
+    # Storage pour les métriques
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Resources pour stagingkub (environnement local)
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+    # ServiceMonitor selector (scrape tous les ServiceMonitors)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+    # PodMonitor selector (important pour CloudNativePG)
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+
+    # Scrape interval
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    # Activer les metrics depuis l'API Kubernetes
+    additionalScrapeConfigs: []
+
+# ────────────────────────────────────────────────────────────────
+# Grafana (désactivé car déjà installé via loki-stack)
+# ────────────────────────────────────────────────────────────────
+grafana:
+  enabled: false
+  # On utilise le Grafana existant dans le namespace loki-stack
+  # Il faut juste ajouter Prometheus comme datasource
+
+# ────────────────────────────────────────────────────────────────
+# AlertManager (optionnel pour staging)
+# ────────────────────────────────────────────────────────────────
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ────────────────────────────────────────────────────────────────
+# Node Exporter (métriques des nodes Kubernetes)
+# ────────────────────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+# ────────────────────────────────────────────────────────────────
+# Kube State Metrics (métriques des ressources Kubernetes)
+# ────────────────────────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+# ────────────────────────────────────────────────────────────────
+# Désactiver composants non nécessaires pour staging
+# ────────────────────────────────────────────────────────────────
+kubeControllerManager:
+  enabled: false  # Pas accessible sur KinD
+
+kubeScheduler:
+  enabled: false  # Pas accessible sur KinD
+
+kubeProxy:
+  enabled: false  # Pas nécessaire pour staging
+
+kubeEtcd:
+  enabled: false  # Pas accessible sur KinD
+
+# ────────────────────────────────────────────────────────────────
+# Service Monitors additionnels
+# ────────────────────────────────────────────────────────────────
+# CloudNativePG créera automatiquement ses PodMonitors
+# Prometheus les détectera via podMonitorSelector: {}
+
+# ────────────────────────────────────────────────────────────────
+# Configuration supplémentaire
+# ────────────────────────────────────────────────────────────────
+# Désactiver les règles d'alertes par défaut (trop verbeux pour staging)
+defaultRules:
+  create: true
+  rules:
+    alertmanager: false
+    etcd: false
+    configReloaders: true
+    general: true
+    k8s: true
+    kubeApiserverAvailability: false
+    kubeApiserverSlos: false
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: false
+    kubeScheduler: false
+    kubeStateMetrics: true
+    network: true
+    node: true
+    nodeExporterAlerting: true
+    nodeExporterRecording: true
+    prometheus: true
+    prometheusOperator: true
+
+# ═══════════════════════════════════════════════════════════════
+# Notes d'installation
+# ═══════════════════════════════════════════════════════════════
+#
+# 1. Installation de kube-prometheus-stack :
+#    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#    helm repo update
+#    helm install prometheus prometheus-community/kube-prometheus-stack \
+#      -n monitoring --create-namespace \
+#      -f prometheus-values.yaml
+#
+# 2. Vérifier l'installation :
+#    kubectl get pods -n monitoring
+#    kubectl get servicemonitor -A
+#    kubectl get podmonitor -A
+#
+# 3. Configurer Grafana pour utiliser Prometheus :
+#    - Ajouter Prometheus comme datasource dans Grafana (loki-stack)
+#    - URL: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+#
+# 4. CloudNativePG :
+#    - CloudNativePG créera automatiquement des PodMonitors
+#    - Prometheus les détectera et commencera à scraper les métriques
+#    - Les dashboards Grafana utiliseront cette datasource
+#
+# 5. Accès à Prometheus :
+#    kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+#    # http://localhost:9090
+#
+# 6. Accès à AlertManager :
+#    kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093
+#    # http://localhost:9093
+#
+# ═══════════════════════════════════════════════════════════════

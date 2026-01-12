@@ -1,7 +1,7 @@
-# INTÉGRATION LOKI STACK - ENVIRONMENT STAGINGKUB
+# INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 5 janvier 2026
-**Version:** 2.0 (Charts Modernes)
+**Date:** 10 janvier 2026
+**Version:** 3.0 (Stack Complète: Prometheus + Loki)
 **Environnement:** stagingkub (Kubernetes KinD)
 
 **⚠️ Sécurité:** Consultez [/infra/stagingkub/SECURITY.md](../infra/stagingkub/SECURITY.md) pour les bonnes pratiques de configuration sécurisée.
@@ -16,7 +16,7 @@
 4. [Installation](#4-installation)
 5. [Configuration](#5-configuration)
 6. [Accès et Utilisation](#6-accès-et-utilisation)
-7. [Queries LogQL Utiles](#7-queries-logql-utiles)
+7. [Queries LogQL et PromQL](#7-queries-logql-et-promql)
 8. [Dashboards Grafana](#8-dashboards-grafana)
 9. [Troubleshooting](#9-troubleshooting)
 10. [Maintenance](#10-maintenance)
@@ -27,28 +27,45 @@
 
 ### 1.1 Objectif
 
-Déployer une stack de collecte de logs centralisée pour l'environnement stagingkub avec:
+Déployer une stack d'observabilité complète pour l'environnement stagingkub avec:
+- **Prometheus + Operator**: Collecte et stockage des métriques (métriques applicatives, infrastructure, bases de données)
+- **Loki**: Système d'agrégation et indexation des logs
 - **Promtail**: Agent de collecte des logs (DaemonSet)
-- **Loki**: Système d'agrégation et indexation (StatefulSet)
-- **Grafana**: Interface de visualisation et recherche
+- **Grafana**: Interface unifiée de visualisation (métriques + logs)
 
-### 1.2 Stack PLG (Promtail + Loki + Grafana)
+### 1.2 Stack Complète (Prometheus + Loki + Grafana)
 
-**Promtail** collecte les logs de tous les pods → **Loki** les stocke et indexe → **Grafana** permet la recherche et visualisation.
+**Architecture de collecte:**
+- **Métriques**: Prometheus scrape les endpoints `/metrics` → Stocke dans TSDB → Grafana visualise
+- **Logs**: Promtail collecte les logs → Loki les stocke et indexe → Grafana visualise
 
-**Charts utilisés (modernes):**
+**Charts utilisés:**
+- `prometheus-community/kube-prometheus-stack` (Prometheus + Operator + AlertManager)
 - `grafana/loki` v6.x (mode SingleBinary)
 - `grafana/promtail` v6.x
 - `grafana/grafana` v8.x
 
 ### 1.3 Bénéfices
 
+**Métriques (Prometheus):**
+✅ Métriques temps réel de tous les composants Kubernetes
+✅ Métriques CloudNativePG (bases de données PostgreSQL)
+✅ Alerting automatisé via AlertManager
+✅ Détection automatique des PodMonitors/ServiceMonitors
+✅ Retention 7 jours, storage 10Gi
+
+**Logs (Loki):**
 ✅ Logs centralisés de tous les composants (rhDemo, Keycloak, PostgreSQL)
 ✅ Recherche rapide avec LogQL (langage type PromQL)
 ✅ Rétention configurable des logs
 ✅ Faible consommation ressources (comparé à ELK stack)
-✅ Interface Grafana familière
 ✅ Pas de schéma rigide (indexation par labels uniquement)
+
+**Grafana (Visualisation unifiée):**
+✅ Interface unique pour métriques ET logs
+✅ Corrélation métriques/logs (même timeline)
+✅ Dashboards pré-configurés (rhDemo Logs + CloudNativePG)
+✅ Exploration interactive (Explore)
 
 ---
 
@@ -56,9 +73,52 @@ Déployer une stack de collecte de logs centralisée pour l'environnement stagin
 
 ### 2.1 Composants Déployés
 
+**Deux namespaces:**
+- `monitoring`: Prometheus + Operator + AlertManager
+- `loki-stack`: Loki + Promtail + Grafana
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Namespace: loki-stack                                      │
+│  Namespace: monitoring (MÉTRIQUES)                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Prometheus Operator (Deployment)                    │  │
+│  │ - Gère automatiquement Prometheus/AlertManager      │  │
+│  │ - Surveille les PodMonitors/ServiceMonitors        │  │
+│  │ - CPU: 100m / Memory: 128Mi                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Prometheus Server (StatefulSet)                     │  │
+│  │ - Service: prometheus-kube-prometheus-prometheus    │  │
+│  │ - Port: 9090                                        │  │
+│  │ - PVC: 10Gi (rétention 7j, 5GB max)               │  │
+│  │ - Scrape interval: 30s                             │  │
+│  │ - CPU: 200m / Memory: 512Mi                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ AlertManager (StatefulSet)                          │  │
+│  │ - Gestion des alertes Prometheus                   │  │
+│  │ - Port: 9093                                        │  │
+│  │ - CPU: 50m / Memory: 64Mi                          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Node Exporter (DaemonSet)                           │  │
+│  │ - Métriques des nodes Kubernetes                   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Kube State Metrics (Deployment)                     │  │
+│  │ - Métriques des ressources Kubernetes              │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  Namespace: loki-stack (LOGS + VISUALISATION)               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -82,16 +142,23 @@ Déployer une stack de collecte de logs centralisée pour l'environnement stagin
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Grafana (Deployment, replicas: 1)                  │  │
 │  │ - Service: grafana:80 (ClusterIP)                  │  │
-│  │ - Ingress: grafana.stagingkub.local                │  │
-│  │ - DataSource: Loki (http://loki-gateway:80)       │  │
-│  │ - Admin: admin / rhDemoAdmin2025                   │  │
+│  │ - Ingress: grafana.stagingkub.local (HTTPS)       │  │
+│  │                                                     │  │
+│  │ DataSources configurées:                           │  │
+│  │ • Loki: http://loki-gateway:80                    │  │
+│  │ • Prometheus: http://prometheus-kube-prometheus-  │  │
+│  │               prometheus.monitoring.svc:9090       │  │
+│  │                                                     │  │
+│  │ - Admin: admin / (voir grafana-values.yaml)       │  │
 │  │ - CPU: 250m / Memory: 256Mi                        │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Labels Collectés
+### 2.2 Labels et Métriques Collectés
+
+**Labels Logs (Loki via Promtail):**
 
 Promtail enrichit automatiquement les logs avec ces labels:
 
@@ -104,8 +171,28 @@ Promtail enrichit automatiquement les logs avec ces labels:
 | `job` | `rhdemo-stagingkub/rhdemo-app` | Namespace/app |
 | `stream` | `stdout` ou `stderr` | Stream de sortie |
 
+**Métriques Prometheus:**
+
+Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
+
+| Source | Métriques Collectées | Configuration |
+|--------|---------------------|---------------|
+| **Node Exporter** | Métriques nodes (CPU, RAM, disque, réseau) | DaemonSet automatique |
+| **Kube State Metrics** | État ressources K8s (pods, deployments, etc.) | Deployment automatique |
+| **CloudNativePG** | Métriques PostgreSQL (connexions, backups, WAL) | PodMonitor créé par l'opérateur |
+| **Application rhDemo** | Métriques Spring Boot Actuator | ServiceMonitor à créer (optionnel) |
+
+**Métriques CloudNativePG importantes:**
+- `cnpg_pg_up` - Statut du cluster (1=UP, 0=DOWN)
+- `cnpg_backends_total` - Connexions actives
+- `cnpg_pg_database_size_bytes` - Taille des bases
+- `cnpg_pg_backup_last_available_timestamp` - Âge dernier backup
+- `cnpg_pg_backup_duration_seconds` - Durée des backups
+- `cnpg_pg_wal_files` - Nombre de fichiers WAL
+
 ### 2.3 Flux de Données
 
+**Flux Logs:**
 ```
 [rhdemo-app Pod] → stdout/stderr → /var/log/pods/rhdemo-stagingkub_rhdemo-app-xxx/
                                                     ↓
@@ -118,6 +205,20 @@ Promtail enrichit automatiquement les logs avec ces labels:
                                             Indexation + Stockage
                                                     ↓
                                           [Grafana Explore] ← Requête LogQL
+```
+
+**Flux Métriques:**
+```
+[PostgreSQL Pod]      [Nodes]      [Pods K8s]
+   :9187/metrics      :9100         kube-state-metrics
+         ↓                ↓                ↓
+         └────────────────┴────────────────┘
+                         ↓
+           [Prometheus Server] (scrape toutes les 30s)
+                         ↓
+              Stockage TSDB (7 jours)
+                         ↓
+           [Grafana] ← Requêtes PromQL
 ```
 
 ---
@@ -141,14 +242,33 @@ kind version  # v0.20+
 
 ### 3.3 Ressources Disponibles
 
-**Ressources totales requises pour Loki Stack:**
+**Ressources totales requises pour Observability Stack complète:**
+
+**Namespace monitoring (Prometheus):**
+
+| Composant | CPU Request | Memory Request | Storage |
+|-----------|-------------|----------------|---------|
+| Prometheus Operator | 100m | 128Mi | - |
+| Prometheus Server | 200m | 512Mi | 10Gi (PVC) |
+| AlertManager | 50m | 64Mi | 2Gi (PVC) |
+| Node Exporter | ~20m | ~32Mi | - |
+| Kube State Metrics | ~10m | ~64Mi | - |
+| **Sous-total monitoring** | **~380m** | **~800Mi** | **12Gi** |
+
+**Namespace loki-stack (Logs + Visualisation):**
 
 | Composant | CPU Request | Memory Request | Storage |
 |-----------|-------------|----------------|---------|
 | Promtail | 100m | 128Mi | - |
 | Loki | 250m | 256Mi | 5Gi (PVC) |
 | Grafana | 250m | 256Mi | - |
-| **TOTAL** | **600m** | **640Mi** | **5Gi** |
+| **Sous-total loki-stack** | **600m** | **640Mi** | **5Gi** |
+
+**TOTAL OBSERVABILITY STACK:**
+
+| Total | CPU Request | Memory Request | Storage |
+|-------|-------------|----------------|---------|
+| **Somme** | **~980m (~1 CPU)** | **~1.44Gi** | **17Gi** |
 
 **Vérifier ressources disponibles:**
 
@@ -176,7 +296,7 @@ echo "127.0.0.1 grafana.stagingkub.local" | sudo tee -a /etc/hosts
 Avant d'exécuter le script, vous **devez** configurer un mot de passe fort:
 
 ```bash
-cd /home/leno-voealms/RHDemo/protocol/openid-connect/auth?response_type=code&client_id=RHDemo&scope=openid&state=gSR8Y0oSqE93g_RXVKgkMUx_MX91Q1F9XlIbMGhsYA8%3D&redirect_uri=https://rhdemo.stagingkub.local/login/oauth2/code/keycloak&nonce=pb64HUUjrurOMqvUFUCASjdIgAjGAJ4I9u_31qtKXZo/git/repository/rhDemo/infra/stagingkub
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability
 
 # Générer un mot de passe fort
 PASSWORD=$(openssl rand -base64 32)
@@ -188,40 +308,61 @@ sed -i "s/adminPassword: \"\"/adminPassword: \"$PASSWORD\"/" grafana-values.yaml
 # IMPORTANT: Sauvegarder ce mot de passe dans un gestionnaire de mots de passe
 ```
 
-**Script d'installation clé en main:**
+**Script d'installation clé en main (Stack complète):**
 
 ```bash
 cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
-./install-loki.sh
+./install-observability.sh
 ```
 
-Ce script effectue automatiquement:
-- ✅ Vérification des prérequis
-- ✅ Validation de la configuration du mot de passe
-- ✅ Ajout du repository Helm Grafana
-- ✅ Création du namespace `loki-stack`
-- ✅ Génération du certificat TLS
-- ✅ Installation de Loki (mode SingleBinary)
-- ✅ Installation de Promtail
-- ✅ Installation de Grafana
+**Ce script installe la stack complète (Prometheus + Loki + Grafana):**
+
+**Namespace monitoring:**
+- ✅ Prometheus Operator + Prometheus Server
+- ✅ AlertManager (alertes)
+- ✅ Node Exporter (métriques nodes)
+- ✅ Kube State Metrics (métriques K8s)
+- ✅ PodMonitor/ServiceMonitor auto-détection
+
+**Namespace loki-stack:**
+- ✅ Loki (logs, mode SingleBinary)
+- ✅ Promtail (collecte logs DaemonSet)
+- ✅ Grafana (visualisation unifiée)
+- ✅ Datasource Prometheus auto-configurée
+- ✅ Datasource Loki auto-configurée
+- ✅ Dashboards pré-chargés (rhDemo Logs + CloudNativePG)
+
+**Autres actions:**
+- ✅ Vérification des prérequis (kubectl, helm, kind-rhdemo)
+- ✅ Validation mot de passe Grafana
+- ✅ Ajout repositories Helm (prometheus-community + grafana)
+- ✅ Création namespaces (monitoring + loki-stack)
+- ✅ Génération certificat TLS Grafana
 - ✅ Configuration DNS dans `/etc/hosts`
 
-**Durée:** ~2-3 minutes
+**Durée:** ~5-8 minutes
 
-Pour un guide rapide, voir: [LOKI_QUICKSTART.md](../infra/stagingkub/LOKI_QUICKSTART.md)
+**Accès après installation:**
+- **Grafana**: https://grafana.stagingkub.local (admin / voir grafana-values.yaml)
+- **Prometheus**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090`
+- **AlertManager**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093`
 
 ### 4.2 Installation Manuelle
 
-#### 4.2.1 Ajouter le Repository Helm Grafana
+#### 4.2.1 Ajouter les Repositories Helm
 
 ```bash
-# Ajouter le repo officiel Grafana
+# Repository Prometheus Community
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
+# Repository Grafana
 helm repo add grafana https://grafana.github.io/helm-charts
 
 # Mettre à jour
 helm repo update
 
 # Vérifier charts disponibles
+helm search repo prometheus-community/kube-prometheus-stack
 helm search repo grafana/loki
 helm search repo grafana/promtail
 helm search repo grafana/grafana
@@ -229,25 +370,103 @@ helm search repo grafana/grafana
 
 **Output attendu:**
 ```
-NAME                    CHART VERSION   APP VERSION     DESCRIPTION
-grafana/loki            6.x.x           3.x.x           Loki: like Prometheus, but for logs
-grafana/promtail        6.x.x           3.x.x           Promtail log collector
-grafana/grafana         8.x.x           11.x.x          The open observability platform
+NAME                                            CHART VERSION   APP VERSION     DESCRIPTION
+prometheus-community/kube-prometheus-stack      65.x.x          v0.77.x         Prometheus Operator + Prometheus + ...
+grafana/loki                                    6.x.x           3.x.x           Loki: like Prometheus, but for logs
+grafana/promtail                                6.x.x           3.x.x           Promtail log collector
+grafana/grafana                                 8.x.x           11.x.x          The open observability platform
 ```
 
-#### 4.2.2 Créer le Namespace
+#### 4.2.2 Créer les Namespaces
 
 ```bash
-# Créer namespace dédié pour Loki Stack
+# Namespace pour Prometheus
+kubectl create namespace monitoring
+
+# Namespace pour Loki + Grafana
 kubectl create namespace loki-stack
 
 # Vérifier
-kubectl get namespaces | grep loki
+kubectl get namespaces | grep -E 'monitoring|loki'
 ```
 
 #### 4.2.3 Créer les Fichiers de Configuration
 
 Les fichiers de configuration sont déjà présents dans le projet:
+
+**Prometheus:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/prometheus-values.yaml`
+
+```yaml
+# Configuration Prometheus + Operator
+# Chart: prometheus-community/kube-prometheus-stack
+
+prometheusOperator:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    retention: 7d
+    retentionSize: "5GB"
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # ⭐ Important pour CloudNativePG
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}  # Scrape TOUS les PodMonitors
+    podMonitorNamespaceSelector: {}
+
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}  # Scrape TOUS les ServiceMonitors
+
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+
+# Grafana désactivé (installé séparément dans loki-stack)
+grafana:
+  enabled: false
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+# Désactiver composants non accessibles sur KinD
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+```
 
 **Loki:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml`
 
@@ -380,6 +599,14 @@ datasources:
         isDefault: true
         jsonData:
           maxLines: 1000
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+        isDefault: false
+        editable: true
+        jsonData:
+          timeInterval: 30s
 
 grafana.ini:
   server:
@@ -429,31 +656,50 @@ rm -rf $TMP
 
 #### 4.2.5 Installer les Charts
 
+**Ordre d'installation: Prometheus → Loki → Promtail → Grafana**
+
 ```bash
-# Installer Loki (mode SingleBinary)
+# 1. Installer Prometheus + Operator (namespace monitoring)
+helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --values /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/prometheus-values.yaml \
+  --wait --timeout 10m
+
+# Vérifier installation Prometheus
+kubectl get pods -n monitoring
+helm list -n monitoring
+
+# 2. Installer Loki (mode SingleBinary)
 helm upgrade --install loki grafana/loki \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml \
   --wait --timeout 3m
 
-# Installer Promtail
+# 3. Installer Promtail
 helm upgrade --install promtail grafana/promtail \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml \
   --wait --timeout 2m
 
-# Installer Grafana
+# 4. Installer Grafana (avec les 2 datasources)
 helm upgrade --install grafana grafana/grafana \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml \
   --wait --timeout 3m
 
-# Vérifier l'installation
+# Vérifier les installations
+helm list -n monitoring
 helm list -n loki-stack
 ```
 
 **Output attendu:**
+
 ```
+# Namespace monitoring
+NAME            NAMESPACE       REVISION        STATUS          CHART                              APP VERSION
+prometheus      monitoring      1               deployed        kube-prometheus-stack-65.x.x       v0.77.x
+
+# Namespace loki-stack
 NAME            NAMESPACE       REVISION        STATUS          CHART                   APP VERSION
 loki            loki-stack      1               deployed        loki-6.x.x              3.x.x
 promtail        loki-stack      1               deployed        promtail-6.x.x          3.x.x
@@ -463,7 +709,18 @@ grafana         loki-stack      1               deployed        grafana-8.x.x   
 #### 4.2.6 Vérifier le Déploiement
 
 ```bash
-# Vérifier tous les pods
+# Vérifier pods Prometheus (namespace monitoring)
+kubectl get pods -n monitoring
+
+# Output attendu:
+# NAME                                                   READY   STATUS    RESTARTS   AGE
+# prometheus-kube-prometheus-operator-xxx                1/1     Running   0          5m
+# prometheus-prometheus-kube-prometheus-prometheus-0     2/2     Running   0          5m
+# alertmanager-prometheus-kube-prometheus-alertmanager-0 2/2     Running   0          5m
+# prometheus-kube-state-metrics-xxx                      1/1     Running   0          5m
+# prometheus-prometheus-node-exporter-xxx                1/1     Running   0          5m
+
+# Vérifier pods Loki Stack
 kubectl get pods -n loki-stack
 
 # Output attendu:
@@ -472,10 +729,13 @@ kubectl get pods -n loki-stack
 # promtail-xxxxx                  1/1     Running   0          2m
 # grafana-xxxxx                   1/1     Running   0          2m
 
-# Vérifier les services
+# Vérifier les services (monitoring)
+kubectl get svc -n monitoring
+
+# Vérifier les services (loki-stack)
 kubectl get svc -n loki-stack
 
-# Output attendu:
+# Output attendu loki-stack:
 # NAME              TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)    AGE
 # loki-gateway      ClusterIP   10.96.xxx.xxx    <none>        80/TCP     2m
 # grafana           ClusterIP   10.96.xxx.xxx    <none>        80/TCP     2m
@@ -483,8 +743,15 @@ kubectl get svc -n loki-stack
 # Vérifier l'ingress
 kubectl get ingress -n loki-stack
 
-# Vérifier le PVC
+# Vérifier les PVCs (deux namespaces)
+kubectl get pvc -n monitoring
 kubectl get pvc -n loki-stack
+
+# Vérifier les PodMonitors (CloudNativePG en créera automatiquement)
+kubectl get podmonitor -A
+
+# Vérifier les ServiceMonitors
+kubectl get servicemonitor -A
 ```
 
 #### 4.2.7 Vérifier la Collecte des Logs
@@ -610,21 +877,48 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Navigation:**
 1. Menu → Explore
-2. Sélectionner datasource: **Loki**
-3. Construire requête LogQL
+2. Sélectionner datasource: **Loki** (logs) ou **Prometheus** (métriques)
+3. Construire requête LogQL ou PromQL
 
-### 6.2 Interface Grafana Explore
+### 6.2 Accéder à Prometheus (optionnel)
+
+```bash
+# Port-forward vers Prometheus
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+
+# Accéder à http://localhost:9090
+```
+
+**URL:** http://localhost:9090
+
+**Features:**
+- Status → Targets (vérifier tous les scrapes)
+- Status → Service Discovery (vérifier PodMonitors/ServiceMonitors)
+- Graph (requêtes PromQL manuelles)
+
+### 6.3 Accéder à AlertManager (optionnel)
+
+```bash
+# Port-forward vers AlertManager
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093
+
+# Accéder à http://localhost:9093
+```
+
+### 6.4 Interface Grafana Explore
 
 **Éléments clés:**
 
 | Élément | Description |
 |---------|-------------|
-| **Datasource** | Loki (par défaut) |
-| **Query Editor** | Construire requête LogQL |
-| **Log Browser** | Labels disponibles (namespace, pod, app, etc.) |
+| **Datasource** | Loki (logs) ou Prometheus (métriques) |
+| **Query Editor** | Construire requête LogQL ou PromQL |
+| **Log Browser** | (Loki) Labels disponibles (namespace, pod, app, etc.) |
+| **Metric Browser** | (Prometheus) Métriques disponibles |
 | **Time Range** | Sélecteur période (Last 5m, Last 1h, etc.) |
-| **Live** | Tail logs en temps réel |
+| **Live** | Tail logs en temps réel (Loki) |
 | **Log Details** | Clic sur une ligne → détails + labels |
+| **Split View** | Comparer logs et métriques côte à côte |
 
 ### 6.3 Modes de Recherche
 
@@ -646,9 +940,11 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 ---
 
-## 7. QUERIES LOGQL UTILES
+## 7. QUERIES LOGQL ET PROMQL
 
-### 7.1 Logs par Composant
+### 7.1 Queries LogQL (Logs avec Loki)
+
+#### 7.1.1 Logs par Composant
 
 **Tous les logs rhDemo app:**
 ```logql
@@ -760,13 +1056,129 @@ sum by (app) (rate({namespace="rhdemo-stagingkub"}[5m]))
 topk(10, sum by (pod) (count_over_time({namespace="rhdemo-stagingkub"}[1h])))
 ```
 
-### 7.7 Logs en Temps Réel (Live Tail)
+#### 7.1.6 Logs en Temps Réel (Live Tail)
 
 **Bouton "Live" dans Grafana Explore** OU:
 
 ```bash
 # Via CLI (logcli)
 logcli query --tail '{namespace="rhdemo-stagingkub", app="rhdemo-app"}'
+```
+
+### 7.2 Queries PromQL (Métriques avec Prometheus)
+
+#### 7.2.1 Métriques CloudNativePG (PostgreSQL)
+
+**Status des clusters PostgreSQL:**
+```promql
+cnpg_pg_up{namespace="rhdemo-stagingkub"}
+```
+
+**Connexions actives par cluster:**
+```promql
+cnpg_backends_total{namespace="rhdemo-stagingkub"}
+```
+
+**Taille des bases de données (bytes):**
+```promql
+cnpg_pg_database_size_bytes{namespace="rhdemo-stagingkub"}
+```
+
+**Taille des bases en GB:**
+```promql
+cnpg_pg_database_size_bytes{namespace="rhdemo-stagingkub"} / 1024 / 1024 / 1024
+```
+
+**Transactions committées (rate 5min):**
+```promql
+rate(cnpg_pg_stat_database_xact_commit{namespace="rhdemo-stagingkub"}[5m])
+```
+
+**Transactions rollback (rate 5min):**
+```promql
+rate(cnpg_pg_stat_database_xact_rollback{namespace="rhdemo-stagingkub"}[5m])
+```
+
+**Âge du dernier backup (secondes):**
+```promql
+time() - cnpg_pg_backup_last_available_timestamp{namespace="rhdemo-stagingkub"}
+```
+
+**Alertes si backup > 24h:**
+```promql
+(time() - cnpg_pg_backup_last_available_timestamp{namespace="rhdemo-stagingkub"}) > 86400
+```
+
+**Durée des backups (secondes):**
+```promql
+cnpg_pg_backup_duration_seconds{namespace="rhdemo-stagingkub"}
+```
+
+**Fichiers WAL (Write-Ahead Log):**
+```promql
+cnpg_pg_wal_files{namespace="rhdemo-stagingkub"}
+```
+
+#### 7.2.2 Métriques Kubernetes (Kube State Metrics)
+
+**Pods en cours d'exécution par namespace:**
+```promql
+kube_pod_status_phase{namespace="rhdemo-stagingkub", phase="Running"}
+```
+
+**Pods en erreur:**
+```promql
+kube_pod_status_phase{namespace="rhdemo-stagingkub", phase=~"Failed|Unknown"}
+```
+
+**Nombre de restarts de containers:**
+```promql
+kube_pod_container_status_restarts_total{namespace="rhdemo-stagingkub"}
+```
+
+**Deployments avec replicas disponibles:**
+```promql
+kube_deployment_status_replicas_available{namespace="rhdemo-stagingkub"}
+```
+
+#### 7.2.3 Métriques Nodes (Node Exporter)
+
+**CPU utilisé par node (%):**
+```promql
+100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+```
+
+**Mémoire utilisée (%):**
+```promql
+100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))
+```
+
+**Espace disque utilisé (%):**
+```promql
+100 - ((node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100)
+```
+
+**Network traffic (bytes/sec):**
+```promql
+rate(node_network_receive_bytes_total[5m])
+rate(node_network_transmit_bytes_total[5m])
+```
+
+#### 7.2.4 Métriques Application (Spring Boot Actuator - si activé)
+
+**Requêtes HTTP par seconde:**
+```promql
+rate(http_server_requests_seconds_count{namespace="rhdemo-stagingkub"}[5m])
+```
+
+**Latence HTTP 95e percentile:**
+```promql
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
+```
+
+**Erreurs HTTP 5xx:**
+```promql
+sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
 ```
 
 ---
@@ -810,7 +1222,40 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
-### 8.2 Dashboard Keycloak - Logs d'Authentification
+### 8.2 Dashboard CloudNativePG - Métriques PostgreSQL (Pré-configuré)
+
+**✅ Dashboard automatiquement disponible après installation!**
+
+Le dashboard "CloudNativePG - RHDemo Stagingkub" est déployé automatiquement lors de l'installation de la stack Observabilité.
+
+**Accès:** Grafana → Dashboards → "CloudNativePG - RHDemo Stagingkub"
+
+**Datasource:** Prometheus
+
+**Contenu du dashboard (9 panneaux):**
+
+| Panel | Type | Description | Métriques |
+|-------|------|-------------|-----------|
+| **Status Keycloak DB** | Gauge | Statut cluster Keycloak (UP/DOWN) | `cnpg_pg_up{cluster="postgresql-keycloak"}` |
+| **Status RHDemo DB** | Gauge | Statut cluster RHDemo (UP/DOWN) | `cnpg_pg_up{cluster="postgresql-rhdemo"}` |
+| **Connexions actives** | Timeseries | Connexions actives par cluster | `cnpg_backends_total` |
+| **Taille des bases** | Timeseries | Taille en bytes par database | `cnpg_pg_database_size_bytes` |
+| **Transactions PostgreSQL** | Timeseries | Commits et rollbacks (rate) | `rate(cnpg_pg_stat_database_xact_commit[5m])` |
+| **Âge dernier backup Keycloak** | Gauge | Temps depuis dernier backup | `time() - cnpg_pg_backup_last_available_timestamp` |
+| **Âge dernier backup RHDemo** | Gauge | Temps depuis dernier backup | `time() - cnpg_pg_backup_last_available_timestamp` |
+| **Fichiers WAL** | Timeseries | Nombre de fichiers Write-Ahead Log | `cnpg_pg_wal_files` |
+| **Durée des backups** | Bars | Durée en secondes des backups | `cnpg_pg_backup_duration_seconds` |
+
+**Alertes configurées:**
+- ⚠️ **Jaune** si backup > 1h (3600s)
+- 🔴 **Rouge** si backup > 24h (86400s)
+
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-dashboard-cnpg.json`
+
+**Note importante:**
+Ce dashboard nécessite que CloudNativePG soit installé avec `monitoring.enablePodMonitor: true` pour exposer les métriques.
+
+### 8.4 Dashboard Keycloak - Logs d'Authentification (Custom)
 
 **Query principale:**
 ```logql
@@ -840,7 +1285,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 | **Connection Pool** | Extraction connections actives | Connections |
 | **Error Log** | `{app=~"postgresql-.*"} \|= "ERROR"` | Erreurs SQL |
 
-### 8.4 Dashboard Consolidé - Vue d'Ensemble
+### 8.5 Dashboard Consolidé - Vue d'Ensemble
 
 **Variables:**
 
@@ -856,7 +1301,7 @@ Créer variables pour filtrer dynamiquement:
 {namespace="rhdemo-stagingkub", app=~"$app", pod=~"$pod"}
 ```
 
-### 8.5 Exporter/Importer Dashboard
+### 8.6 Exporter/Importer Dashboard
 
 **Exporter:**
 
@@ -940,36 +1385,119 @@ ls -la /var/log/pods/rhdemo-stagingkub*/
 tail -f /var/log/pods/rhdemo-stagingkub_rhdemo-app-*/rhdemo-app/*.log
 ```
 
-### 9.3 Grafana - Datasource Loki Inaccessible
+### 9.3 Prometheus ne Scrape Pas les Métriques
 
-**Symptôme:** "Data source connected, but no labels received"
+**Symptôme:** Métriques CloudNativePG ou autres absentes dans Grafana
+
+**Vérification:**
+
+```bash
+# Vérifier pods Prometheus
+kubectl get pods -n monitoring
+
+# Vérifier les targets Prometheus
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+
+# Accéder à http://localhost:9090/targets
+# Chercher les targets en état "DOWN"
+```
+
+**Vérifier PodMonitors/ServiceMonitors:**
+
+```bash
+# Lister tous les PodMonitors
+kubectl get podmonitor -A
+
+# Lister tous les ServiceMonitors
+kubectl get servicemonitor -A
+
+# Vérifier logs Prometheus Operator
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus-operator
+```
+
+**Causes fréquentes:**
+
+| Problème | Solution |
+|----------|----------|
+| `podMonitorSelector` trop restrictif | Vérifier `podMonitorSelector: {}` dans prometheus-values.yaml |
+| PodMonitor dans mauvais namespace | Vérifier `podMonitorNamespaceSelector: {}` |
+| Port métrique incorrect | Vérifier que le pod expose bien le port (ex: 9187 pour CloudNativePG) |
+| Network policy bloque scrape | Vérifier network policies entre namespaces |
+
+**Test manuel scrape:**
+
+```bash
+# Port-forward vers pod CloudNativePG
+kubectl port-forward -n rhdemo-stagingkub postgresql-keycloak-1 9187:9187
+
+# Vérifier métriques exposées
+curl http://localhost:9187/metrics | grep cnpg
+```
+
+### 9.4 Grafana - Datasource Loki ou Prometheus Inaccessible
+
+**Symptôme Loki:** "Data source connected, but no labels received"
+**Symptôme Prometheus:** "Data source is working" mais pas de métriques
 
 **Vérification:**
 
 ```bash
 # Tester connexion depuis pod Grafana
-kubectl exec -n loki-stack -it loki-stack-grafana-xxxxx -- sh
+kubectl exec -n loki-stack -it deployment/grafana -- sh
 
 # Curl Loki
-wget -O- http://loki:3100/ready
+wget -O- http://loki-gateway:80/ready
 
-# Tester API labels
-wget -O- http://loki:3100/loki/api/v1/labels
+# Tester API labels Loki
+wget -O- http://loki-gateway:80/loki/api/v1/labels
+
+# Curl Prometheus
+wget -O- http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/-/healthy
+
+# Tester query Prometheus
+wget -O- 'http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090/api/v1/query?query=up'
 ```
 
 **Solution:**
 
-Vérifier que le service `loki` existe:
+Vérifier que les services existent:
 
 ```bash
-kubectl get svc -n loki-stack loki
+# Service Loki
+kubectl get svc -n loki-stack loki-gateway
 
-# Output attendu:
-# NAME   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-# loki   ClusterIP   10.96.xxx.xxx   <none>        3100/TCP   5m
+# Service Prometheus
+kubectl get svc -n monitoring prometheus-kube-prometheus-prometheus
 ```
 
-### 9.4 Ingress Grafana ne Fonctionne Pas
+**Reconfigurer datasource Prometheus si nécessaire:**
+
+```bash
+# Créer ConfigMap pour datasource Prometheus
+cat <<EOF | kubectl apply -n loki-stack -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-prometheus
+  labels:
+    grafana_datasource: "1"
+data:
+  prometheus-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+        isDefault: false
+        editable: true
+EOF
+
+# Redémarrer Grafana
+kubectl rollout restart deployment/grafana -n loki-stack
+```
+
+### 9.5 Ingress Grafana ne Fonctionne Pas
 
 **Symptôme:** `curl https://grafana.stagingkub.local` timeout
 
@@ -1004,7 +1532,7 @@ kubectl get svc -n loki-stack loki-stack-grafana
    # Accéder: http://localhost:3000
    ```
 
-### 9.5 Logs Trop Volumineux (PVC Plein)
+### 9.6 Logs Trop Volumineux (PVC Plein)
 
 **Symptôme:** Loki ne peut plus écrire
 
@@ -1041,7 +1569,7 @@ kubectl exec -n loki-stack loki-0 -- df -h /loki
    kubectl rollout restart statefulset -n loki-stack loki
    ```
 
-### 9.6 Requêtes LogQL Lentes
+### 9.7 Requêtes LogQL Lentes
 
 **Symptôme:** Timeout ou >10s pour afficher logs
 
@@ -1106,16 +1634,43 @@ kubectl exec -n loki-stack loki-0 -- tar xzf /tmp/loki-backup-20251230.tar.gz -C
 kubectl scale statefulset -n loki-stack loki --replicas=1
 ```
 
-### 10.2 Mise à Jour Loki Stack
+### 10.2 Backup Métriques Prometheus
+
+**Stratégie:**
+
+Prometheus stocke dans PVC `prometheus-kube-prometheus-prometheus-db`. Pour backup:
 
 ```bash
-# Mettre à jour repo Helm
+# Snapshot Prometheus (via API)
+curl -X POST http://localhost:9090/api/v1/admin/tsdb/snapshot
+
+# Créer backup du PVC
+kubectl exec -n monitoring prometheus-prometheus-kube-prometheus-prometheus-0 \
+  -- tar czf /tmp/prometheus-backup.tar.gz /prometheus
+
+# Copier localement
+kubectl cp monitoring/prometheus-prometheus-kube-prometheus-prometheus-0:/tmp/prometheus-backup.tar.gz \
+  ./prometheus-backup-$(date +%Y%m%d).tar.gz
+```
+
+**Note:** Pour production, utiliser [Thanos](https://thanos.io/) ou [Cortex](https://cortexmetrics.io/) pour backup long-terme.
+
+### 10.3 Mise à Jour Observability Stack
+
+```bash
+# Mettre à jour repos Helm
 helm repo update
 
-# Vérifier nouvelle version
+# Vérifier nouvelles versions
+helm search repo prometheus-community/kube-prometheus-stack
 helm search repo grafana/loki
 helm search repo grafana/promtail
 helm search repo grafana/grafana
+
+# Upgrade Prometheus Stack
+helm upgrade prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --values /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/prometheus-values.yaml
 
 # Upgrade Loki
 helm upgrade loki grafana/loki \
@@ -1132,29 +1687,41 @@ helm upgrade grafana grafana/grafana \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml
 
-# Vérifier rollout
+# Vérifier rollouts
+kubectl rollout status statefulset -n monitoring prometheus-prometheus-kube-prometheus-prometheus
 kubectl rollout status statefulset -n loki-stack loki
 kubectl rollout status daemonset -n loki-stack promtail
 kubectl rollout status deployment -n loki-stack grafana
 ```
 
-### 10.3 Rotation des Logs (Automatique)
+### 10.4 Rotation des Logs et Métriques (Automatique)
 
-**Configuration actuelle:** 7 jours (défini dans loki-modern-values.yaml)
+**Logs (Loki):**
+- Rétention: 7 jours (168h défini dans `loki-modern-values.yaml`)
+- Suppression automatique via `loki.limits_config.retention_period: 168h`
+- Compaction automatique en mode SingleBinary
 
-Loki supprime automatiquement les logs >7 jours via:
-- `loki.limits_config.retention_period: 168h`
+**Métriques (Prometheus):**
+- Rétention: 7 jours (défini dans `prometheus-values.yaml`)
+- Taille max: 5GB (retentionSize)
+- Suppression automatique par Prometheus TSDB
 
-En mode SingleBinary, la compaction est gérée automatiquement par le composant unique.
-
-**Vérifier compaction:**
+**Vérifier compaction Loki:**
 
 ```bash
 # Logs Loki (rechercher compaction)
 kubectl logs -n loki-stack loki-0 | grep -i compactor
 ```
 
-### 10.4 Monitoring de Loki (avec Prometheus)
+**Vérifier TSDB Prometheus:**
+
+```bash
+# Status TSDB
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
+# Accéder à http://localhost:9090/tsdb-status
+```
+
+### 10.5 Monitoring de la Stack Observabilité
 
 **Si Prometheus déployé:**
 
@@ -1185,22 +1752,40 @@ spec:
 | `loki_request_duration_seconds` | Latence requêtes |
 | `loki_distributor_lines_received_total` | Lignes de logs reçues |
 
-### 10.5 Désinstallation
+### 10.6 Désinstallation
+
+**Désinstallation complète de la stack Observabilité:**
 
 ```bash
-# Désinstaller les Helm releases
+# Désinstaller Prometheus Stack
+helm uninstall prometheus -n monitoring
+
+# Désinstaller Loki Stack
 helm uninstall loki -n loki-stack
 helm uninstall promtail -n loki-stack
 helm uninstall grafana -n loki-stack
 
-# Supprimer PVC (ATTENTION: perte de données)
+# Supprimer PVCs (ATTENTION: perte de données)
+kubectl delete pvc -n monitoring --all
 kubectl delete pvc -n loki-stack --all
 
-# Supprimer namespace
+# Supprimer namespaces
+kubectl delete namespace monitoring
 kubectl delete namespace loki-stack
 
 # Retirer du DNS
 sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
+```
+
+**Désinstallation partielle (garder Loki, supprimer Prometheus):**
+
+```bash
+# Désinstaller uniquement Prometheus
+helm uninstall prometheus -n monitoring
+kubectl delete pvc -n monitoring --all
+kubectl delete namespace monitoring
+
+# Loki et Grafana restent fonctionnels (logs uniquement)
 ```
 
 ---
@@ -1209,24 +1794,54 @@ sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
 
 ### Documentation Officielle
 
+**Prometheus:**
+- **Prometheus:** https://prometheus.io/docs/introduction/overview/
+- **PromQL:** https://prometheus.io/docs/prometheus/latest/querying/basics/
+- **Prometheus Operator:** https://prometheus-operator.dev/
+- **kube-prometheus-stack:** https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+**Loki:**
 - **Loki:** https://grafana.com/docs/loki/latest/
 - **Promtail:** https://grafana.com/docs/loki/latest/send-data/promtail/
 - **LogQL:** https://grafana.com/docs/loki/latest/query/
-- **Helm Charts:**
-  - Loki: https://github.com/grafana/helm-charts/tree/main/charts/loki
-  - Promtail: https://github.com/grafana/helm-charts/tree/main/charts/promtail
-  - Grafana: https://github.com/grafana/helm-charts/tree/main/charts/grafana
+
+**Grafana:**
+- **Grafana:** https://grafana.com/docs/grafana/latest/
+- **Dashboards:** https://grafana.com/grafana/dashboards/
+
+**Helm Charts:**
+- Prometheus Stack: https://github.com/prometheus-community/helm-charts
+- Loki: https://github.com/grafana/helm-charts/tree/main/charts/loki
+- Promtail: https://github.com/grafana/helm-charts/tree/main/charts/promtail
+- Grafana: https://github.com/grafana/helm-charts/tree/main/charts/grafana
+
+**CloudNativePG:**
+- Monitoring: https://cloudnative-pg.io/documentation/current/monitoring/
 
 ### Tutoriels
 
+**Prometheus:**
+- [Getting Started with Prometheus](https://prometheus.io/docs/prometheus/latest/getting_started/)
+- [PromQL Cheat Sheet](https://promlabs.com/promql-cheat-sheet/)
+- [Prometheus Best Practices](https://prometheus.io/docs/practices/)
+
+**Loki:**
 - [Getting Started with Loki](https://grafana.com/docs/loki/latest/getting-started/)
 - [LogQL Cheat Sheet](https://megamorf.gitlab.io/cheat-sheets/loki/)
 - [Grafana Loki Workshops](https://github.com/grafana/loki/tree/main/docs/workshops)
 
 ### Communauté
 
-- GitHub: https://github.com/grafana/loki
-- Slack: https://slack.grafana.com/
-- Forum: https://community.grafana.com/
+- **Prometheus GitHub:** https://github.com/prometheus/prometheus
+- **Loki GitHub:** https://github.com/grafana/loki
+- **Grafana Slack:** https://slack.grafana.com/
+- **Grafana Forum:** https://community.grafana.com/
+- **CNCF Slack:** https://slack.cncf.io/
+
+### Documentation Projet rhDemo
+
+- [CLOUDNATIVEPG_FAQ.md](./CLOUDNATIVEPG_FAQ.md) - FAQ CloudNativePG
+- [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md) - Documentation dashboard rhDemo Logs
+- [ACTION_PLAN_PERSISTENCE.md](./ACTION_PLAN_PERSISTENCE.md) - Plan migration CloudNativePG
 
 

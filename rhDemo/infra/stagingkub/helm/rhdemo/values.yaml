@@ -10,7 +10,8 @@ global:
 # PostgreSQL pour RHDemo
 # ═══════════════════════════════════════════════════════════════
 postgresql-rhdemo:
-  enabled: true
+  # ⚠️ StatefulSet PostgreSQL classique (désactivé - CloudNativePG utilisé)
+  enabled: false
   image:
     repository: postgres
     tag: "16-alpine"
@@ -20,6 +21,7 @@ postgresql-rhdemo:
     name: rhdemo
     user: rhdemo
     # Le mot de passe sera fourni via secret externe ou --set
+    password: ""  # À fournir via --set ou secret
     passwordSecret:
       name: rhdemo-db-secret
       key: password
@@ -42,11 +44,83 @@ postgresql-rhdemo:
     type: ClusterIP
     port: 5432
 
+  # ═══════════════════════════════════════════════════════════════
+  # CloudNativePG - Remplacement moderne du StatefulSet
+  # ═══════════════════════════════════════════════════════════════
+  cloudnativepg:
+    # ⚠️ CloudNativePG activé (postgresql-rhdemo.enabled doit être false)
+    enabled: true
+
+    # Image PostgreSQL (CloudNativePG utilise ses propres images)
+    imageName: ghcr.io/cloudnative-pg/postgresql:16
+
+    # Nombre d'instances
+    # 1 = Single instance (recommandé staging, ~512MB RAM)
+    # 3 = Haute disponibilité (1 primary + 2 replicas, ~1.5GB RAM)
+    instances: 1
+
+    # Configuration du stockage
+    storage:
+      size: 2Gi
+      class: ""  # Utilise le default storage class
+
+    # Secret d'authentification (créé automatiquement par le template)
+    auth:
+      secretName: postgresql-rhdemo-auth
+
+    # Initialisation de la base de données
+    initdb:
+      useConfigMap: true  # Utilise le SQL intégré dans le template Cluster
+
+    # Monitoring Prometheus
+    monitoring:
+      enabled: true
+      podMonitorLabels: {}
+
+    # Configuration des backups
+    backup:
+      enabled: true
+      retentionPolicy: "7d"
+      schedule: "0 2 * * *"  # 2h du matin tous les jours
+      suspend: false
+      immediate: false
+      volumeSnapshotClassName: ""
+      barmanObjectStore: null  # Pour S3/MinIO (null = désactivé)
+
+    # Configuration PostgreSQL
+    postgresql:
+      maxConnections: "100"
+      sharedBuffers: "128MB"
+      effectiveCacheSize: "256MB"
+      maintenanceWorkMem: "64MB"
+      workMem: "4MB"
+      walLevel: "replica"
+      maxWalSize: "1GB"
+      minWalSize: "80MB"
+      logDestination: "stderr"
+      loggingCollector: "off"
+      logStatement: "none"
+
+    # Ressources (appliquées à chaque instance)
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+    # Placement optionnel
+    affinity: {}
+    nodeSelector: {}
+    tolerations: []
+
 # ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour Keycloak
 # ═══════════════════════════════════════════════════════════════
 postgresql-keycloak:
-  enabled: true
+  # ⚠️ StatefulSet PostgreSQL classique (désactivé - CloudNativePG utilisé)
+  enabled: false
   image:
     repository: postgres
     tag: "16-alpine"
@@ -55,6 +129,7 @@ postgresql-keycloak:
   database:
     name: keycloak
     user: keycloak
+    password: ""  # À fournir via --set ou secret
     passwordSecret:
       name: keycloak-db-secret
       key: password
@@ -97,7 +172,7 @@ keycloak:
       key: password
 
   database:
-    host: postgresql-keycloak
+    host: postgresql-keycloak-rw
     port: 5432
     name: keycloak
     user: keycloak
@@ -139,6 +214,73 @@ keycloak:
     timeoutSeconds: 5
     failureThreshold: 15
 
+  # ═══════════════════════════════════════════════════════════════
+  # CloudNativePG - Remplacement moderne du StatefulSet pour Keycloak
+  # ═══════════════════════════════════════════════════════════════
+  cloudnativepg:
+    # ⚠️ CloudNativePG activé (postgresql-keycloak.enabled doit être false)
+    enabled: true
+
+    # Image PostgreSQL (CloudNativePG utilise ses propres images)
+    imageName: ghcr.io/cloudnative-pg/postgresql:16
+
+    # Nombre d'instances
+    # 1 = Single instance (recommandé staging, ~512MB RAM)
+    # 3 = Haute disponibilité (1 primary + 2 replicas, ~1.5GB RAM)
+    instances: 1
+
+    # Configuration du stockage
+    storage:
+      size: 2Gi
+      class: ""  # Utilise le default storage class
+
+    # Secret d'authentification (créé automatiquement par le template)
+    auth:
+      secretName: postgresql-keycloak-auth
+
+    # Monitoring Prometheus
+    monitoring:
+      enabled: true
+      podMonitorLabels: {}
+
+    # Configuration des backups
+    backup:
+      enabled: true
+      retentionPolicy: "7d"
+      schedule: "0 1 * * *"  # 1h du matin tous les jours
+      suspend: false
+      immediate: false
+      volumeSnapshotClassName: ""
+      barmanObjectStore: null  # Pour S3/MinIO (null = désactivé)
+
+    # Configuration PostgreSQL
+    postgresql:
+      maxConnections: "100"
+      sharedBuffers: "128MB"
+      effectiveCacheSize: "256MB"
+      maintenanceWorkMem: "64MB"
+      workMem: "4MB"
+      walLevel: "replica"
+      maxWalSize: "1GB"
+      minWalSize: "80MB"
+      logDestination: "stderr"
+      loggingCollector: "off"
+      logStatement: "none"
+
+    # Ressources (appliquées à chaque instance)
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+    # Placement optionnel
+    affinity: {}
+    nodeSelector: {}
+    tolerations: []
+
 # ═══════════════════════════════════════════════════════════════
 # Application RHDemo
 # ═══════════════════════════════════════════════════════════════
@@ -155,7 +297,7 @@ rhdemo:
   serverPort: 9000
 
   database:
-    host: postgresql-rhdemo
+    host: postgresql-rhdemo-rw
     port: 5432
     name: rhdemo
     user: rhdemo

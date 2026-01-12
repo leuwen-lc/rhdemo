@@ -100,6 +100,9 @@ Ce dépôt contient un projet école servant de preuve de concept visant sur un 
     - lancez le pipelne rhDemo/Jenkinsfile-CD
 
 ## Changelog 
+  Version 1.1.3
+  - Amélioration des rapports ZAP : Suppression des numéros de version NGINX dans la réponse http, élimination des doublons dans l'éntête HSTS (gérée désormais uniquement par NGINX, pas par Spring Boot), durcissement de la configuration CSP rhDemo.
+  - Suppression de warnings keycloak et spring en améliorant la configuration.
   Version 1.1.2-RELEASE
   - Configuration des caches Loki (11Go de mémoire par défaut ce qui compromettait l'exécution locale)
   - Fichers values helm déplacés dans rhDemo/infra/stagingkub/helm/observability

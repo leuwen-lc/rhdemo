@@ -1,3 +1,4 @@
+ubectl get pods -n cnpg-system
 {{- if .Values.keycloak.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -21,7 +22,13 @@ spec:
       initContainers:
       - name: wait-for-db
         image: busybox:1.36
+        {{- if .Values.keycloak.cloudnativepg.enabled }}
+        # CloudNativePG: service avec suffix -rw (read-write)
+        command: ['sh', '-c', 'until nc -z {{ .Values.keycloak.database.host }}-rw {{ .Values.keycloak.database.port }}; do echo waiting for postgresql-keycloak-rw; sleep 2; done;']
+        {{- else }}
+        # StatefulSet classique
         command: ['sh', '-c', 'until nc -z {{ .Values.keycloak.database.host }} {{ .Values.keycloak.database.port }}; do echo waiting for postgresql-keycloak; sleep 2; done;']
+        {{- end }}
       containers:
       - name: keycloak
         image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
@@ -29,7 +36,11 @@ spec:
         args:
         - start-dev
         - --db=postgres
+        {{- if .Values.keycloak.cloudnativepg.enabled }}
+        - --db-url=jdbc:postgresql://{{ .Values.keycloak.database.host }}-rw:{{ .Values.keycloak.database.port }}/{{ .Values.keycloak.database.name }}
+        {{- else }}
         - --db-url=jdbc:postgresql://{{ .Values.keycloak.database.host }}:{{ .Values.keycloak.database.port }}/{{ .Values.keycloak.database.name }}
+        {{- end }}
         - --db-username={{ .Values.keycloak.database.user }}
         - --proxy-headers={{ .Values.keycloak.proxyHeaders }}
         - --http-enabled={{ .Values.keycloak.httpEnabled }}

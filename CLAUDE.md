@@ -144,9 +144,14 @@ Le dépôt contient **3 projets distincts** :
   - App : https://rhdemo.stagingkub.local
   - Keycloak : https://keycloak.stagingkub.local
 - **Observabilité** : Promtail → Loki → Grafana (logs centralisés)
+- **Persistance des données** :
+  - extraMounts KinD : `/home/leno-vo/kind-data/rhdemo-stagingkub`
+  - Survit aux redémarrages machine
+  - Configuration dans [kind-config.yaml](rhDemo/infra/stagingkub/kind-config.yaml)
 - **Scripts** :
   - Init : `./scripts/init-stagingkub.sh`
   - Deploy : `./scripts/deploy.sh <version>`
+  - Init Keycloak : `./scripts/init-keycloak-stagingkub.sh`
 
 ### 4. **jenkins-docker** (CI/CD Jenkins)
 - **Localisation** : `rhDemo/infra/jenkins-docker/`
@@ -323,6 +328,7 @@ Le dépôt contient **3 projets distincts** :
 - **Application** : [src/main/resources/application.yml](rhDemo/src/main/resources/application.yml)
 - **Base données** : [pgschema.sql](rhDemo/pgschema.sql) + [pgdata.sql](rhDemo/pgdata.sql)
 - **Docker** : [Dockerfile](rhDemo/Dockerfile)
+- **KinD stagingkub** : [infra/stagingkub/kind-config.yaml](rhDemo/infra/stagingkub/kind-config.yaml)
 
 ### Pipelines
 - **CI** : [Jenkinsfile-CI](rhDemo/Jenkinsfile-CI) (ligne 1-50 visible)
@@ -346,12 +352,18 @@ Le dépôt contient **3 projets distincts** :
 - [TESTS_SECURITY_COVERAGE.md](rhDemo/docs/TESTS_SECURITY_COVERAGE.md) - Couverture tests sécu
 - [SECURITY_ADVISORIES.md](rhDemo/docs/SECURITY_ADVISORIES.md) - Advisories de sécurité
 
-### Infrastructure
+### Infrastructure & Déploiement
 - [infra/dev/README.md](rhDemo/infra/dev/README.md) - Setup dev local
 - [infra/ephemere/README.md](rhDemo/infra/ephemere/README.md) - Environnement ephemere
 - [infra/stagingkub/README.md](rhDemo/infra/stagingkub/README.md) - Environnement Kubernetes
+- [infra/stagingkub/kind-config.yaml](rhDemo/infra/stagingkub/kind-config.yaml) - Configuration KinD avec persistance
+- [infra/stagingkub/scripts/README-INIT-KEYCLOAK.md](rhDemo/infra/stagingkub/scripts/README-INIT-KEYCLOAK.md) - Initialisation Keycloak
 - [infra/jenkins-docker/QUICKSTART.md](rhDemo/infra/jenkins-docker/QUICKSTART.md) - Démarrage rapide Jenkins
 - [infra/jenkins-docker/README.md](rhDemo/infra/jenkins-docker/README.md) - Configuration Jenkins
+- [**docs/CLOUDNATIVEPG_MIGRATION.md**](rhDemo/docs/CLOUDNATIVEPG_MIGRATION.md) - 🆕 Migration vers CloudNativePG (backups automatiques)
+- [**docs/CLOUDNATIVEPG_FAQ.md**](rhDemo/docs/CLOUDNATIVEPG_FAQ.md) - 🆕 FAQ CloudNativePG (HA optionnelle, Grafana)
+- [**docs/PERSISTENCE_DATA_RECOVERY.md**](rhDemo/docs/PERSISTENCE_DATA_RECOVERY.md) - 🆕 Recovery après perte données
+- [**docs/ACTION_PLAN_PERSISTENCE.md**](rhDemo/docs/ACTION_PLAN_PERSISTENCE.md) - 🆕 Plan d'action persistance
 
 ### Technique
 - [DATABASE.md](rhDemo/docs/DATABASE.md) - Configuration PostgreSQL
@@ -386,7 +398,15 @@ Application volontairement simpliste :
 
 ## 🗓️ Changelog
 
-### Version 1.1.2-RELEASE (Actuelle)
+### Version 1.1.3 (En cours)
+- **Persistance des données KinD** : Configuration extraMounts pour survivre aux redémarrages machine
+- Création fichier `kind-config.yaml` persistant avec montage `/home/leno-vo/kind-data/rhdemo-stagingkub`
+- Modification `init-stagingkub.sh` pour utiliser la configuration persistante
+- Documentation migration vers CloudNativePG (voir [CLOUDNATIVEPG_MIGRATION.md](rhDemo/docs/CLOUDNATIVEPG_MIGRATION.md))
+- Amélioration rapports ZAP : Suppression versions NGINX, élimination doublons HSTS, durcissement CSP
+- Suppression warnings Keycloak et Spring Boot
+
+### Version 1.1.2-RELEASE
 - Configuration caches Loki (réduction mémoire de 11Go → acceptable)
 - Déplacement fichiers Helm values dans `infra/stagingkub/helm/observability`
 - Suppression niveaux logs dans `application-stagingkub.yaml` (priorité à `values.yaml`)
@@ -412,7 +432,14 @@ Application volontairement simpliste :
 
 ### Scalabilité
 - [ ] Redis pour sessions partagées
-- [ ] Opérateur CloudNativePG sur stagingkub
+- [🔄] **Migration vers CloudNativePG** (en cours)
+  - [x] Configuration extraMounts KinD pour persistance
+  - [x] Documentation complète créée
+  - [ ] Installation opérateur CloudNativePG
+  - [ ] Migration PostgreSQL Keycloak
+  - [ ] Migration PostgreSQL RHDemo
+  - [ ] Configuration backups automatiques quotidiens
+  - [ ] Tests Point-In-Time Recovery
 
 ### Sécurité & Qualité
 - [ ] Génération SBOM (Syft, CycloneDX, OWASP Dependency Track)
@@ -461,6 +488,17 @@ Application volontairement simpliste :
 - Clusters éphémères faciles à créer/détruire
 - Compatible CI/CD (Docker-in-Docker)
 - Représentatif d'un vrai cluster K8s
+- **extraMounts** pour persistance des données hors du conteneur
+
+### Pourquoi CloudNativePG ?
+- Opérateur Kubernetes natif pour PostgreSQL
+- Backups automatiques avec rétention configurable
+- Point-In-Time Recovery (PITR) intégré
+- Haute disponibilité (replicas) prête à activer
+- PgBouncer intégré pour pooling de connexions
+- Monitoring Prometheus natif
+- Projet CNCF mature et activement maintenu
+- Alternative open source à des solutions propriétaires (AWS RDS, etc.)
 
 ---
 

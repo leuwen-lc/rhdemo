@@ -94,31 +94,29 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${RED}❌ Le cluster KinD 'rhdemo' n'existe pas.${NC}"
     echo -e "${YELLOW}Création du cluster KinD 'rhdemo'...${NC}"
 
-    # Créer un fichier de configuration KinD avec support du registry local
-    # Note: Les ports 80/443 (host) sont mappés vers les NodePorts de l'Ingress Controller
-    # Ces NodePorts (31792/32616) sont assignés automatiquement par le manifeste Ingress Nginx
-    cat <<EOF > /tmp/kind-config.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: rhdemo
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
-    endpoint = ["http://${REGISTRY_NAME}:5000"]
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 31792
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 32616
-    hostPort: 443
-    protocol: TCP
-EOF
+    # Créer le répertoire de persistance sur l'hôte
+    PERSISTENCE_DIR="/home/leno-vo/kind-data/rhdemo-stagingkub"
+    echo -e "${YELLOW}Création du répertoire de persistance : ${PERSISTENCE_DIR}${NC}"
+    mkdir -p "${PERSISTENCE_DIR}"
+    chmod 755 "${PERSISTENCE_DIR}"
+    echo -e "${GREEN}✅ Répertoire de persistance créé${NC}"
 
-    kind create cluster --config /tmp/kind-config.yaml
-    rm /tmp/kind-config.yaml
-    echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé${NC}"
+    # Utiliser le fichier kind-config.yaml du répertoire stagingkub
+    KIND_CONFIG_FILE="${STAGINGKUB_DIR}/kind-config.yaml"
+
+    if [ ! -f "${KIND_CONFIG_FILE}" ]; then
+        echo -e "${RED}❌ Fichier kind-config.yaml non trouvé : ${KIND_CONFIG_FILE}${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Utilisation de la configuration : ${KIND_CONFIG_FILE}${NC}"
+    echo -e "${BLUE}Configuration :${NC}"
+    echo -e "${BLUE}  - Persistance des données : ${PERSISTENCE_DIR}${NC}"
+    echo -e "${BLUE}  - Registry Docker : ${REGISTRY_NAME}:${REGISTRY_PORT}${NC}"
+    echo -e "${BLUE}  - Ports mappés : 80 → 31792, 443 → 32616${NC}"
+
+    kind create cluster --config "${KIND_CONFIG_FILE}"
+    echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé avec persistance des données${NC}"
 
     # Connecter le registry au réseau KinD
     echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"

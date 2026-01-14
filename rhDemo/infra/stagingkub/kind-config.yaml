@@ -1,71 +1,20 @@
-# ═══════════════════════════════════════════════════════════════
-# Configuration KinD pour le cluster stagingkub
-# ═══════════════════════════════════════════════════════════════
-#
-# Ce fichier configure le cluster Kubernetes-in-Docker (KinD) pour
-# l'environnement stagingkub avec :
-#   - Support du registry Docker local (localhost:5000)
-#   - Mapping des ports pour Ingress Nginx (80/443 → NodePorts)
-#   - Persistance des données via extraMounts (survit au redémarrage machine)
-#
-# Usage:
-#   kind create cluster --config kind-config.yaml
-#
-# ═══════════════════════════════════════════════════════════════
-
+# Configuration KinD pour le cluster rhdemo
+# Permet la persistance des données PostgreSQL via extraMounts
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: rhdemo
-
-# Configuration du registry Docker local pour containerd
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-    endpoint = ["http://kind-registry:5000"]
-
 nodes:
 - role: control-plane
-
-  # Mapping des ports pour l'Ingress Nginx
-  # Les NodePorts 31792/32616 sont configurés dans le manifest Ingress Nginx
+  extraMounts:
+  # Montage pour persistance PostgreSQL rhdemo
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo
+    containerPath: /mnt/data/postgresql-rhdemo
+  # Montage pour persistance PostgreSQL keycloak
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-keycloak
+    containerPath: /mnt/data/postgresql-keycloak
   extraPortMappings:
-  - containerPort: 31792  # HTTP NodePort
+  - containerPort: 80
     hostPort: 80
     protocol: TCP
-  - containerPort: 32616  # HTTPS NodePort
+  - containerPort: 443
     hostPort: 443
     protocol: TCP
-
-  # ⭐ PERSISTANCE DES DONNÉES
-  # Monte un répertoire de l'hôte dans le node KinD pour persister les volumes
-  # Cela permet aux données de survivre au redémarrage de la machine
-  extraMounts:
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub
-    containerPath: /var/local-path-provisioner
-    readOnly: false
-    # Propagation bidirectionnelle : changements visibles dans les deux sens
-    propagation: Bidirectional
-
-# ═══════════════════════════════════════════════════════════════
-# Notes importantes
-# ═══════════════════════════════════════════════════════════════
-#
-# 1. Répertoire de persistance :
-#    - Hôte : /home/leno-vo/kind-data/rhdemo-stagingkub
-#    - Node KinD : /var/local-path-provisioner
-#    - Ce répertoire contient tous les PersistentVolumes (PostgreSQL, etc.)
-#
-# 2. Sauvegarde manuelle possible :
-#    tar -czf stagingkub-backup-$(date +%Y%m%d).tar.gz \
-#      /home/leno-vo/kind-data/rhdemo-stagingkub
-#
-# 3. Après redémarrage machine :
-#    - Le cluster KinD redémarre automatiquement (Docker restart policy)
-#    - Les données persistent grâce à extraMounts
-#    - Les pods redémarrent avec leurs données intactes
-#
-# 4. Migration future vers CloudNativePG :
-#    - Les données actuelles seront migrées depuis ce volume
-#    - CloudNativePG utilisera le même système de persistance
-#
-# ═══════════════════════════════════════════════════════════════

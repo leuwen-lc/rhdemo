@@ -7,6 +7,19 @@ global:
   domain: stagingkub.local
 
 # ═══════════════════════════════════════════════════════════════
+# Backups PostgreSQL (CronJobs)
+# ═══════════════════════════════════════════════════════════════
+postgresqlBackup:
+  enabled: true
+  retentionDays: 7  # Garder les backups pendant 7 jours
+
+  rhdemo:
+    schedule: "0 2 * * *"  # 2h du matin tous les jours
+
+  keycloak:
+    schedule: "0 3 * * *"  # 3h du matin tous les jours
+
+# ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour RHDemo
 # ═══════════════════════════════════════════════════════════════
 postgresql-rhdemo:

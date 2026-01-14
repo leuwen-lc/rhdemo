@@ -1,0 +1,155 @@
+{{- if .Values.postgresqlBackup.enabled }}
+---
+# CronJob pour backup PostgreSQL RHDemo
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-rhdemo-backup
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql-rhdemo-backup
+spec:
+  schedule: {{ .Values.postgresqlBackup.rhdemo.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgresql-rhdemo-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:16-alpine
+            env:
+            - name: PGHOST
+              value: {{ (index .Values "postgresql-rhdemo").service.name }}
+            - name: PGPORT
+              value: {{ (index .Values "postgresql-rhdemo").service.port | quote }}
+            - name: PGDATABASE
+              value: {{ (index .Values "postgresql-rhdemo").database.name }}
+            - name: PGUSER
+              value: {{ (index .Values "postgresql-rhdemo").database.user }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.name }}
+                  key: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.key }}
+            - name: BACKUP_RETENTION_DAYS
+              value: {{ .Values.postgresqlBackup.retentionDays | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              BACKUP_DIR="/backups"
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="${BACKUP_DIR}/rhdemo_${TIMESTAMP}.sql.gz"
+
+              echo "🔄 Démarrage backup PostgreSQL RHDemo..."
+              echo "   Database: ${PGDATABASE}"
+              echo "   Host: ${PGHOST}:${PGPORT}"
+              echo "   File: ${BACKUP_FILE}"
+
+              # Créer le backup
+              pg_dump -Fc -f - | gzip > "${BACKUP_FILE}"
+
+              # Vérifier la taille
+              SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+              echo "✅ Backup créé avec succès (taille: ${SIZE})"
+
+              # Nettoyer les anciens backups (garder derniers N jours)
+              echo "🗑️  Suppression des backups de plus de ${BACKUP_RETENTION_DAYS} jours..."
+              find "${BACKUP_DIR}" -name "rhdemo_*.sql.gz" -type f -mtime +${BACKUP_RETENTION_DAYS} -delete
+
+              echo "✅ Backup terminé"
+              ls -lh "${BACKUP_DIR}" | tail -10
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /home/leno-vo/kind-data/rhdemo-stagingkub/backups/rhdemo
+              type: DirectoryOrCreate
+
+---
+# CronJob pour backup PostgreSQL Keycloak
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-keycloak-backup
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql-keycloak-backup
+spec:
+  schedule: {{ .Values.postgresqlBackup.keycloak.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgresql-keycloak-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:16-alpine
+            env:
+            - name: PGHOST
+              value: {{ .Values.keycloak.database.service }}
+            - name: PGPORT
+              value: {{ .Values.keycloak.database.port | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.keycloak.database.name }}
+            - name: PGUSER
+              value: {{ .Values.keycloak.database.user }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.passwordSecret.name }}
+                  key: {{ .Values.keycloak.database.passwordSecret.key }}
+            - name: BACKUP_RETENTION_DAYS
+              value: {{ .Values.postgresqlBackup.retentionDays | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              BACKUP_DIR="/backups"
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="${BACKUP_DIR}/keycloak_${TIMESTAMP}.sql.gz"
+
+              echo "🔄 Démarrage backup PostgreSQL Keycloak..."
+              echo "   Database: ${PGDATABASE}"
+              echo "   Host: ${PGHOST}:${PGPORT}"
+              echo "   File: ${BACKUP_FILE}"
+
+              # Créer le backup
+              pg_dump -Fc -f - | gzip > "${BACKUP_FILE}"
+
+              # Vérifier la taille
+              SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+              echo "✅ Backup créé avec succès (taille: ${SIZE})"
+
+              # Nettoyer les anciens backups (garder derniers N jours)
+              echo "🗑️  Suppression des backups de plus de ${BACKUP_RETENTION_DAYS} jours..."
+              find "${BACKUP_DIR}" -name "keycloak_*.sql.gz" -type f -mtime +${BACKUP_RETENTION_DAYS} -delete
+
+              echo "✅ Backup terminé"
+              ls -lh "${BACKUP_DIR}" | tail -10
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /home/leno-vo/kind-data/rhdemo-stagingkub/backups/keycloak
+              type: DirectoryOrCreate
+{{- end }}

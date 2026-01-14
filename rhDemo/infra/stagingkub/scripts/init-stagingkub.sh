@@ -258,10 +258,10 @@ if [ -f "$SECRETS_FILE" ]; then
         echo -e "${YELLOW}Déchiffrement des secrets avec SOPS...${NC}"
         sops -d "$SECRETS_FILE" > "$SECRETS_DECRYPTED"
 
-        # Extraire les mots de passe depuis le fichier déchiffré
-        RHDEMO_DB_PASSWORD=$(grep 'rhdemo-db-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
-        KEYCLOAK_DB_PASSWORD=$(grep 'keycloak-db-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
-        KEYCLOAK_ADMIN_PASSWORD=$(grep 'keycloak-admin-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
+        # Extraire les mots de passe depuis le fichier déchiffré avec yq (version apt)
+        RHDEMO_DB_PASSWORD=$(yq -r '.rhdemo.datasource.password.pg' "$SECRETS_DECRYPTED")
+        KEYCLOAK_DB_PASSWORD=$(yq -r '.keycloak.db.password' "$SECRETS_DECRYPTED")
+        KEYCLOAK_ADMIN_PASSWORD=$(yq -r '.keycloak.admin.password // "admin"' "$SECRETS_DECRYPTED")
 
         rm "$SECRETS_DECRYPTED"
         echo -e "${GREEN}✅ Secrets déchiffrés${NC}"

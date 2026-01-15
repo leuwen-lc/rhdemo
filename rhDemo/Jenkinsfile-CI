@@ -1423,17 +1423,23 @@ YMLEOF
                     echo "▶ Tag pour le registry: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                     docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
-                    # Push vers le registry
+                    # Push vers le registry et capturer la sortie pour extraire le digest
                     echo "▶ Push vers le registry..."
-                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+                    PUSH_OUTPUT=\$(docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG} 2>&1)
+                    echo "\$PUSH_OUTPUT"
 
-                    # Récupérer le digest de l'image publiée
+                    # Récupérer le digest depuis la sortie du push (format: "tag: digest: sha256:xxx size: yyy")
                     echo "▶ Récupération du digest de l'image..."
-                    DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                        http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.FINAL_IMAGE_TAG} \
-                        | grep -i "Docker-Content-Digest" \
-                        | awk '{print \$2}' \
-                        | tr -d '\r')
+                    DIGEST=\$(echo "\$PUSH_OUTPUT" | grep -oE 'sha256:[a-f0-9]{64}' | head -1)
+
+                    if [ -z "\$DIGEST" ]; then
+                        echo "⚠️  Digest non trouvé dans la sortie du push, tentative via API registry..."
+                        # Fallback: récupérer via l'API du registry avec GET au lieu de HEAD
+                        DIGEST=\$(curl -s -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                            http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.FINAL_IMAGE_TAG} \
+                            | grep -oE '"digest"[[:space:]]*:[[:space:]]*"sha256:[a-f0-9]{64}"' \
+                            | grep -oE 'sha256:[a-f0-9]{64}' | head -1)
+                    fi
 
                     if [ -z "\$DIGEST" ]; then
                         echo "❌ Impossible de récupérer le digest de l'image"

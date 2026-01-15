@@ -277,7 +277,6 @@ EOF
 
                         # Vérifier la connexion au réseau kind et l'alias
                         if ! docker network inspect kind 2>/dev/null | grep -q "\$REGISTRY_CONTAINER"; then
-                            echo "⚠️  Registry '\$REGISTRY_CONTAINER' NON connecté au réseau kind"
                             echo "▶ Connexion du registry au réseau kind avec alias..."
                             docker network disconnect kind \$REGISTRY_CONTAINER 2>/dev/null || true
                             if docker network connect kind \$REGISTRY_CONTAINER --alias kind-registry 2>&1; then
@@ -345,30 +344,13 @@ EOF
 
                     if [ -z "\$REGISTRY_NAME" ]; then
                         echo "❌ Aucun registry actif sur le port 5000"
-
-                        # Chercher un registry existant (même arrêté)
-                        EXISTING_REGISTRY=\$(docker ps -a --filter "publish=5000" --format '{{.Names}}' | head -n 1)
-
-                        if [ -n "\$EXISTING_REGISTRY" ]; then
-                            echo "▶ Registry trouvé mais arrêté: \$EXISTING_REGISTRY"
-                            echo "  Démarrage du registry..."
-                            docker start \$EXISTING_REGISTRY
-                            REGISTRY_NAME="\$EXISTING_REGISTRY"
-                            sleep 2
-                        else
-                            echo "❌ Aucun registry Docker trouvé"
-                            echo "   Créez d'abord un registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
-                            exit 1
-                        fi
+                        exit 1
                     fi
 
                     echo "✅ Registry détecté: \$REGISTRY_NAME"
 
-                    # Note: La vérification du nom 'kind-registry' a déjà été faite dans le stage précédent
-                    # Si on arrive ici, c'est que le registry a le bon nom
-
                     # Vérifier que l'image existe dans le registry
-                    REGISTRY_URL="http://localhost:5000"
+                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
 
                     echo "▶ Vérification de l'image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}..."
 
@@ -716,8 +698,11 @@ EOF
                     rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
                     rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
                 """
-
                 echo "✅ Nettoyage terminé"
+                
+                //Déconnecter Jenkins du réseau Kind
+                docker network disconnect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter Jenkins du réseau kind"
+
             }
         }
         success {

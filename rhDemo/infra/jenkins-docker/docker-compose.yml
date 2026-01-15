@@ -180,7 +180,7 @@ services:
   # ═══════════════════════════════════════════════════════════════════
   registry:
     image: registry:2
-    container_name: rhdemo-docker-registry
+    container_name: kind-registry
     restart: unless-stopped
 
     ports:
@@ -229,7 +229,7 @@ volumes:
     driver: local
 
   registry_data:
-    name: rhdemo-docker-registry
+    name: kind-registry-data
     driver: local
 
 # ═══════════════════════════════════════════════════════════════════

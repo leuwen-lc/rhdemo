@@ -261,21 +261,48 @@ EOF
                     echo "▶ Vérification de la connexion du registry au réseau kind..."
                     REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
                     if [ -n "\$REGISTRY_CONTAINER" ]; then
+                        # Vérifier que le registry s'appelle bien 'kind-registry'
+                        if [ "\$REGISTRY_CONTAINER" != "kind-registry" ]; then
+                            echo "❌ ERREUR: Registry trouvé '\$REGISTRY_CONTAINER' mais le nom attendu est 'kind-registry'"
+                            echo ""
+                            echo "   Cela indique une mauvaise manipulation ou une configuration incorrecte."
+                            echo ""
+                            echo "   Pour corriger:"
+                            echo "   1. docker stop \$REGISTRY_CONTAINER && docker rm \$REGISTRY_CONTAINER"
+                            echo "   2. cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
+                            echo ""
+                            echo "   Voir la documentation: rhDemo/docs/REGISTRY_SETUP.md"
+                            exit 1
+                        fi
+
+                        # Vérifier la connexion au réseau kind et l'alias
                         if ! docker network inspect kind 2>/dev/null | grep -q "\$REGISTRY_CONTAINER"; then
                             echo "⚠️  Registry '\$REGISTRY_CONTAINER' NON connecté au réseau kind"
-                            echo "▶ Connexion du registry au réseau kind..."
-                            if docker network connect kind \$REGISTRY_CONTAINER 2>&1; then
+                            echo "▶ Connexion du registry au réseau kind avec alias..."
+                            docker network disconnect kind \$REGISTRY_CONTAINER 2>/dev/null || true
+                            if docker network connect kind \$REGISTRY_CONTAINER --alias kind-registry 2>&1; then
                                 REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
-                                echo "✅ Registry connecté au réseau kind (IP: \$REGISTRY_IP)"
+                                echo "✅ Registry connecté au réseau kind avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
                             else
                                 echo "⚠️  Impossible de connecter le registry au réseau kind"
                             fi
                         else
-                            REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
-                            echo "✅ Registry '\$REGISTRY_CONTAINER' déjà connecté au réseau kind (IP: \$REGISTRY_IP)"
+                            # Vérifier l'alias
+                            if ! docker network inspect kind 2>/dev/null | grep -q '"kind-registry"'; then
+                                echo "⚠️  Registry connecté mais alias 'kind-registry' manquant"
+                                echo "▶ Reconnexion avec alias..."
+                                docker network disconnect kind \$REGISTRY_CONTAINER 2>/dev/null || true
+                                docker network connect kind \$REGISTRY_CONTAINER --alias kind-registry
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry reconnecté avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
+                            else
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry '\$REGISTRY_CONTAINER' déjà connecté au réseau kind avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
+                            fi
                         fi
                     else
                         echo "⚠️  Aucun registry trouvé sur le port 5000"
+                        echo "   Démarrez le registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                     fi
 
                     # Générer une kubeconfig adaptée pour Jenkins
@@ -330,15 +357,18 @@ EOF
                             sleep 2
                         else
                             echo "❌ Aucun registry Docker trouvé"
-                            echo "   Créez d'abord un registry ou exécutez le pipeline CI"
+                            echo "   Créez d'abord un registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                             exit 1
                         fi
                     fi
 
                     echo "✅ Registry détecté: \$REGISTRY_NAME"
 
+                    # Note: La vérification du nom 'kind-registry' a déjà été faite dans le stage précédent
+                    # Si on arrive ici, c'est que le registry a le bon nom
+
                     # Vérifier que l'image existe dans le registry
-                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
+                    REGISTRY_URL="http://localhost:5000"
 
                     echo "▶ Vérification de l'image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}..."
 
@@ -484,11 +514,15 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Rollout restart pour forcer le redémarrage des pods
-                    kubectl rollout restart deployment/rhdemo -n ${env.K8S_NAMESPACE} || true
-                    kubectl rollout restart deployment/keycloak -n ${env.K8S_NAMESPACE} || true
+                    echo "   - Redémarrage rhdemo-app..."
+                    kubectl rollout restart deployment/rhdemo-app -n ${env.K8S_NAMESPACE}
+
+                    echo "   - Redémarrage keycloak..."
+                    kubectl rollout restart deployment/keycloak -n ${env.K8S_NAMESPACE}
+
                     # Les StatefulSets PostgreSQL ne nécessitent pas de restart
 
-                    echo "✅ Pods redémarrés"
+                    echo "✅ Rollout restart déclenché - l'attente de la disponibilité se fera dans le stage suivant"
                 """
             }
         }

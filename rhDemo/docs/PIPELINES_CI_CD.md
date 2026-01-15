@@ -114,11 +114,12 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Tests sécurité OWASP ZAP
 
 #### Phase 6 : Publication
+- Vérification du nom du registry : **DOIT être `kind-registry`** (sinon échec du pipeline)
 - Tag de l'image avec la version finale :
   - **SNAPSHOT** : `<VERSION>-<BUILD_NUMBER>` (ex: `1.1.0-SNAPSHOT-95`)
   - **RELEASE** : `<VERSION>` (ex: `1.0.0-RELEASE`)
 - Tag supplémentaire : `latest` (toujours mis à jour vers la dernière image validée)
-- Push vers le registry Docker local
+- Push vers le registry Docker local (`localhost:5000` ou `kind-registry:5000`)
 
 #### Phase 7 : Archivage
 - Archivage du JAR
@@ -180,6 +181,8 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 
 #### Phase 2 : Configuration Kubernetes
 - Configuration de l'accès au cluster KinD
+- Vérification du nom du registry : **DOIT être `kind-registry`** (sinon échec du pipeline)
+- Connexion automatique du registry au réseau `kind` avec alias DNS `kind-registry`
 - Vérification de l'image dans le registry
 - Mise à jour des secrets Kubernetes
 
@@ -226,15 +229,28 @@ SKIP_HEALTH_CHECK=true
 
 ### Pré-requis
 
-1. **Cluster KinD initialisé** :
+1. **Registry Docker nommé `kind-registry`** :
+   ```bash
+   # Vérifier le nom du registry
+   docker ps --filter "publish=5000" --format '{{.Names}}'
+   # DOIT afficher: kind-registry
+
+   # Si incorrect, recréer le registry
+   cd rhDemo/infra/jenkins-docker
+   docker-compose up -d registry
+   ```
+   **Important** : Le nom `kind-registry` est obligatoire pour la résolution DNS dans KinD. Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md).
+
+2. **Cluster KinD initialisé** :
    ```bash
    cd rhDemo/infra/stagingkub/scripts
    ./init-stagingkub.sh
    ```
+   Le script connecte automatiquement le registry au réseau `kind` avec l'alias DNS.
 
-2. **Image Docker publiée** : L'image doit exister dans le registry local (port 5000).
+3. **Image Docker publiée** : L'image doit exister dans le registry local (port 5000).
 
-3. **Namespace créé** : Le namespace `rhdemo-stagingkub` doit exister avec les labels Helm.
+4. **Namespace créé** : Le namespace `rhdemo-stagingkub` doit exister avec les labels Helm.
 
 ### URLs d'accès
 
@@ -557,6 +573,24 @@ Trigger : Push events
 
 ## 🐛 Dépannage
 
+### Problème : "Registry trouvé 'XXX' mais le nom attendu est 'kind-registry'"
+
+**Cause** : Le registry Docker n'a pas le nom standardisé `kind-registry`.
+
+**Solution** :
+```bash
+# Arrêter et supprimer le registry avec le mauvais nom
+docker stop <mauvais-nom> && docker rm <mauvais-nom>
+
+# Recréer le registry avec le bon nom
+cd rhDemo/infra/jenkins-docker
+docker-compose up -d registry
+
+# Vérifier
+docker ps --filter "publish=5000" --format '{{.Names}}'
+# DOIT afficher: kind-registry
+```
+
 ### Problème : Image not found dans le registry
 
 **Cause** : Le pipeline CI n'a pas publié l'image ou le tag est incorrect.
@@ -615,15 +649,39 @@ docker network connect kind <jenkins-container-name>
 docker exec <jenkins-container-name> ping -c 3 rhdemo-control-plane
 ```
 
+### Problème : ImagePullBackOff sur les pods Kubernetes
+
+**Cause** : Le registry n'est pas connecté au réseau `kind` ou l'alias DNS `kind-registry` est manquant.
+
+**Solution** :
+```bash
+# Vérifier la connexion du registry au réseau kind
+docker network inspect kind | grep kind-registry
+
+# Vérifier l'alias DNS
+docker network inspect kind | grep -A2 kind-registry | grep Aliases
+
+# Reconnecter avec alias si nécessaire
+docker network disconnect kind kind-registry 2>/dev/null || true
+docker network connect kind kind-registry --alias kind-registry
+
+# Supprimer le pod pour forcer une nouvelle tentative
+kubectl delete pod <pod-name> -n rhdemo-stagingkub
+```
+
+Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) et [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) pour plus de détails.
+
 ---
 
 ## 📚 Documentation complémentaire
 
-- [DATABASE.md](../DATABASE.md) - Gestion de la base de données
-- [JENKINS_SETUP.md](../bin/JENKINS_SETUP.md) - Configuration Jenkins complète
-- [JENKINSFILE_REFACTORING.md](JENKINSFILE_REFACTORING.md) - Historique du refactoring (si existant)
+- [REGISTRY_SETUP.md](REGISTRY_SETUP.md) - Configuration complète du registry Docker local
+- [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) - Analyse des problèmes réseau Jenkins/KinD
+- [DATABASE.md](DATABASE.md) - Gestion de la base de données
+- [POSTGRESQL_BACKUP_CRONJOBS.md](POSTGRESQL_BACKUP_CRONJOBS.md) - Backups automatiques PostgreSQL
+- [JENKINS_SETUP.md](../infra/jenkins-docker/README.md) - Configuration Jenkins complète
 
 ---
 
-**Dernière mise à jour** : 2025-12-31
-**Auteur** : Documentation mise à jour pour refléter la stratégie de versioning avec tag `latest`
+**Dernière mise à jour** : 2026-01-15
+**Auteur** : Documentation mise à jour pour refléter la standardisation du registry `kind-registry`

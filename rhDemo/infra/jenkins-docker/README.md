@@ -72,7 +72,7 @@ docker info
 │                                    │ (accès ephemere via Jenkins multi-réseau)   │  │
 │  Services optionnels:              └────────────────────────────────────────────┘  │
 │  • jenkins-agent (agents distribués)                                              │
-│  • registry:5000 (Docker Registry local)                                          │
+│  • kind-registry:5000 (Docker Registry local - nom standardisé)                   │
 │                                                                                   │
 └───────────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -106,9 +106,11 @@ docker info
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
 | `rhdemo-sonarqube-db` | Base PostgreSQL SonarQube | ~200 MB |
-| `rhdemo-docker-registry` | Images Docker locales | Variable |
+| `kind-registry-data` | Images Docker locales | Variable |
 | `rhdemo-jenkins-zap-sessions` | Sessions ZAP (réutilisation entre builds) | ~50 MB |
 | `rhdemo-jenkins-zap-reports` | Rapports ZAP HTML/JSON | ~100 MB |
+
+**Note** : Le volume `kind-registry-data` stocke les images du registry Docker local nommé `kind-registry`. Ce nom est standardisé pour garantir la résolution DNS dans les clusters Kubernetes (KinD).
 
 ### Services inclus
 

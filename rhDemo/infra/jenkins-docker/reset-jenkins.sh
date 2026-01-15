@@ -17,7 +17,7 @@ docker volume rm rhdemo-sonarqube-data 2>/dev/null || true
 docker volume rm rhdemo-sonarqube-extensions 2>/dev/null || true
 docker volume rm rhdemo-sonarqube-logs 2>/dev/null || true
 docker volume rm rhdemo-sonarqube-db 2>/dev/null || true
-docker volume rm rhdemo-docker-registry 2>/dev/null || true
+docker volume rm kind-registry-data 2>/dev/null || true
 
 echo "🧹 Nettoyage des images Jenkins..."
 docker rmi rhdemo-jenkins:latest 2>/dev/null || true

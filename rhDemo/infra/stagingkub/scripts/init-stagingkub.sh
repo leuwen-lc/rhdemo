@@ -39,54 +39,53 @@ if ! command -v helm &> /dev/null; then
     exit 1
 fi
 
-# Créer et configurer le registry Docker local
+# ═══════════════════════════════════════════════════════════════
+# Configuration du registry Docker local
+# ═══════════════════════════════════════════════════════════════
 echo -e "${YELLOW}▶ Configuration du registry Docker local...${NC}"
-REGISTRY_NAME="kind-registry"
 REGISTRY_PORT="5000"
+REGISTRY_NAME="kind-registry"
 
-# Vérifier si un registry tourne déjà sur le port 5000
-EXISTING_REGISTRY=$(docker ps --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
+# Détecter un registry actif sur le port 5000
+ACTIVE_REGISTRY=$(docker ps --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
 
-if [ -n "$EXISTING_REGISTRY" ]; then
-    echo -e "${GREEN}✅ Un registry Docker est déjà actif sur le port ${REGISTRY_PORT} : '${EXISTING_REGISTRY}'${NC}"
-    REGISTRY_NAME="$EXISTING_REGISTRY"
+if [ -n "$ACTIVE_REGISTRY" ]; then
+    echo -e "${GREEN}✅ Registry Docker actif sur le port ${REGISTRY_PORT}: '${ACTIVE_REGISTRY}'${NC}"
+    REGISTRY_NAME="$ACTIVE_REGISTRY"
 else
-    # Vérifier si le registry 'kind-registry' existe mais est arrêté
-    if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
-        echo -e "${YELLOW}Registry '${REGISTRY_NAME}' existe mais est arrêté${NC}"
-        echo -e "${YELLOW}Démarrage du registry...${NC}"
-        docker start ${REGISTRY_NAME}
+    # Chercher un registry existant mais arrêté
+    STOPPED_REGISTRY=$(docker ps -a --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
+
+    if [ -n "$STOPPED_REGISTRY" ]; then
+        echo -e "${YELLOW}▶ Registry '${STOPPED_REGISTRY}' trouvé (arrêté), démarrage...${NC}"
+        docker start ${STOPPED_REGISTRY}
         sleep 2
-        echo -e "${GREEN}✅ Registry Docker local démarré${NC}"
+        REGISTRY_NAME="$STOPPED_REGISTRY"
+        echo -e "${GREEN}✅ Registry démarré${NC}"
     else
-        # Aucun registry n'existe, on en crée un nouveau
-        echo -e "${YELLOW}Création du registry Docker local sur le port ${REGISTRY_PORT}...${NC}"
+        echo -e "${YELLOW}▶ Aucun registry trouvé, création de 'kind-registry'...${NC}"
         if docker run -d \
-            --name ${REGISTRY_NAME} \
+            --name kind-registry \
             --restart=always \
             -p ${REGISTRY_PORT}:5000 \
             registry:2 > /dev/null; then
             sleep 2
-            echo -e "${GREEN}✅ Registry Docker local créé et actif${NC}"
+            echo -e "${GREEN}✅ Registry créé et actif${NC}"
         else
             echo -e "${RED}❌ Erreur lors de la création du registry${NC}"
-            echo -e "${YELLOW}Le port ${REGISTRY_PORT} est peut-être occupé. Vérifiez avec :${NC}"
-            echo "  docker ps -a --filter 'publish=${REGISTRY_PORT}'"
-            echo "  sudo ss -ltnp 'sport = :${REGISTRY_PORT}'"
+            echo -e "${YELLOW}💡 Le port ${REGISTRY_PORT} est peut-être occupé. Démarrez d'abord Jenkins:${NC}"
+            echo "     cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
             exit 1
         fi
     fi
 fi
 
-# Vérifier que le registry est accessible
-echo -n "Vérification de l'accessibilité du registry... "
-if curl -f http://localhost:${REGISTRY_PORT}/v2/ &> /dev/null; then
-    echo -e "${GREEN}✅ OK${NC}"
-else
-    echo -e "${RED}❌ ERREUR${NC}"
-    echo -e "${RED}Le registry n'est pas accessible sur http://localhost:${REGISTRY_PORT}${NC}"
+# Vérifier l'accessibilité
+if ! curl -sf http://localhost:${REGISTRY_PORT}/v2/ > /dev/null; then
+    echo -e "${RED}❌ Registry inaccessible sur http://localhost:${REGISTRY_PORT}${NC}"
     exit 1
 fi
+echo -e "${GREEN}✅ Registry accessible${NC}"
 
 # Vérifier que le cluster KinD 'rhdemo' existe
 echo -e "${YELLOW}▶ Vérification du cluster KinD 'rhdemo'...${NC}"
@@ -118,20 +117,25 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     kind create cluster --config "${KIND_CONFIG_FILE}"
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé avec persistance des données${NC}"
 
-    # Connecter le registry au réseau KinD
-    echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
-    docker network connect kind ${REGISTRY_NAME} 2>/dev/null || echo "Registry déjà connecté au réseau kind"
-    echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
+    # Connecter le registry au réseau KinD avec alias
+    echo -e "${YELLOW}▶ Connexion du registry au réseau KinD...${NC}"
+    docker network disconnect kind ${REGISTRY_NAME} 2>/dev/null || true
+    docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+    echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
-    # Vérifier si le registry est connecté au réseau kind
+    # Vérifier et reconnecter avec alias si nécessaire
     if ! docker network inspect kind | grep -q "${REGISTRY_NAME}"; then
-        echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
-        docker network connect kind ${REGISTRY_NAME}
-        echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
+        echo -e "${YELLOW}▶ Connexion du registry au réseau KinD...${NC}"
+        docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+        echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
     else
-        echo -e "${GREEN}✅ Registry déjà connecté au réseau KinD${NC}"
+        # Vérifier que l'alias existe
+        echo -e "${YELLOW}▶ Vérification de l'alias 'kind-registry'...${NC}"
+        docker network disconnect kind ${REGISTRY_NAME} 2>/dev/null || true
+        docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+        echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
 fi
 

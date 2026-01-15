@@ -361,6 +361,7 @@ Le dépôt contient **3 projets distincts** :
 - [infra/jenkins-docker/QUICKSTART.md](rhDemo/infra/jenkins-docker/QUICKSTART.md) - Démarrage rapide Jenkins
 - [infra/jenkins-docker/README.md](rhDemo/infra/jenkins-docker/README.md) - Configuration Jenkins
 - [**docs/POSTGRESQL_BACKUP_CRONJOBS.md**](rhDemo/docs/POSTGRESQL_BACKUP_CRONJOBS.md) - 🆕 Backups PostgreSQL automatiques avec CronJobs
+- [**docs/REGISTRY_SETUP.md**](rhDemo/docs/REGISTRY_SETUP.md) - 🆕 Configuration simplifiée du registry Docker
 
 ### Technique
 - [DATABASE.md](rhDemo/docs/DATABASE.md) - Configuration PostgreSQL

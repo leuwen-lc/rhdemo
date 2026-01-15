@@ -59,7 +59,13 @@ fi
 echo -n "Registry accessible depuis Jenkins... "
 REGISTRY_NAME=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
 if [ -n "$REGISTRY_NAME" ]; then
-    if docker exec rhdemo-jenkins curl -sf http://$REGISTRY_NAME:5000/v2/ > /dev/null; then
+    # Vérifier que le nom est 'kind-registry'
+    if [ "$REGISTRY_NAME" != "kind-registry" ]; then
+        echo -e "${RED}❌ Registry trouvé '$REGISTRY_NAME' mais devrait être 'kind-registry'${NC}"
+        echo -e "${YELLOW}   Pour corriger: docker stop $REGISTRY_NAME && docker rm $REGISTRY_NAME${NC}"
+        echo -e "${YELLOW}   Puis: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry${NC}"
+        ((ERRORS++))
+    elif docker exec rhdemo-jenkins curl -sf http://$REGISTRY_NAME:5000/v2/ > /dev/null; then
         echo -e "${GREEN}✅ OK ($REGISTRY_NAME)${NC}"
     else
         echo -e "${RED}❌ Registry détecté mais non accessible${NC}"

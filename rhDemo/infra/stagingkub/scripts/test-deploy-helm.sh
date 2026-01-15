@@ -20,7 +20,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Test déploiement Helm (CloudNativePG)${NC}"
+echo -e "${GREEN}  Test déploiement Helm${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -93,8 +93,8 @@ log "État des pods:"
 kubectl get pods -n $NAMESPACE
 
 echo ""
-log "État des clusters CloudNativePG:"
-kubectl get cluster -n $NAMESPACE
+log "État des StatefulSets PostgreSQL:"
+kubectl get statefulset -n $NAMESPACE
 
 echo ""
 success "Script terminé avec succès !"

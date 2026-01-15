@@ -103,7 +103,7 @@ spec:
             image: postgres:16-alpine
             env:
             - name: PGHOST
-              value: {{ .Values.keycloak.database.service }}
+              value: {{ .Values.keycloak.database.host }}
             - name: PGPORT
               value: {{ .Values.keycloak.database.port | quote }}
             - name: PGDATABASE

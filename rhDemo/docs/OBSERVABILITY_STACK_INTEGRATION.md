@@ -49,7 +49,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 
 **Métriques (Prometheus):**
 ✅ Métriques temps réel de tous les composants Kubernetes
-✅ Métriques CloudNativePG (bases de données PostgreSQL)
+✅ Métriques bases de données PostgreSQL
 ✅ Alerting automatisé via AlertManager
 ✅ Détection automatique des PodMonitors/ServiceMonitors
 ✅ Retention 7 jours, storage 10Gi
@@ -64,7 +64,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 **Grafana (Visualisation unifiée):**
 ✅ Interface unique pour métriques ET logs
 ✅ Corrélation métriques/logs (même timeline)
-✅ Dashboards pré-configurés (rhDemo Logs + CloudNativePG)
+✅ Dashboards pré-configurés (rhDemo Logs)
 ✅ Exploration interactive (Explore)
 
 ---
@@ -179,16 +179,8 @@ Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
 |--------|---------------------|---------------|
 | **Node Exporter** | Métriques nodes (CPU, RAM, disque, réseau) | DaemonSet automatique |
 | **Kube State Metrics** | État ressources K8s (pods, deployments, etc.) | Deployment automatique |
-| **CloudNativePG** | Métriques PostgreSQL (connexions, backups, WAL) | PodMonitor créé par l'opérateur |
+| **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes) | StatefulSet avec postgres_exporter (optionnel) |
 | **Application rhDemo** | Métriques Spring Boot Actuator | ServiceMonitor à créer (optionnel) |
-
-**Métriques CloudNativePG importantes:**
-- `cnpg_pg_up` - Statut du cluster (1=UP, 0=DOWN)
-- `cnpg_backends_total` - Connexions actives
-- `cnpg_pg_database_size_bytes` - Taille des bases
-- `cnpg_pg_backup_last_available_timestamp` - Âge dernier backup
-- `cnpg_pg_backup_duration_seconds` - Durée des backups
-- `cnpg_pg_wal_files` - Nombre de fichiers WAL
 
 ### 2.3 Flux de Données
 
@@ -330,7 +322,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 - ✅ Grafana (visualisation unifiée)
 - ✅ Datasource Prometheus auto-configurée
 - ✅ Datasource Loki auto-configurée
-- ✅ Dashboards pré-chargés (rhDemo Logs + CloudNativePG)
+- ✅ Dashboards pré-chargés (rhDemo Logs)
 
 **Autres actions:**
 - ✅ Vérification des prérequis (kubectl, helm, kind-rhdemo)
@@ -420,7 +412,7 @@ prometheus:
             requests:
               storage: 10Gi
 
-    # ⭐ Important pour CloudNativePG
+    # ⭐ Important pour découverte automatique de tous les PodMonitors
     podMonitorSelectorNilUsesHelmValues: false
     podMonitorSelector: {}  # Scrape TOUS les PodMonitors
     podMonitorNamespaceSelector: {}
@@ -747,7 +739,7 @@ kubectl get ingress -n loki-stack
 kubectl get pvc -n monitoring
 kubectl get pvc -n loki-stack
 
-# Vérifier les PodMonitors (CloudNativePG en créera automatiquement)
+# Vérifier les PodMonitors
 kubectl get podmonitor -A
 
 # Vérifier les ServiceMonitors
@@ -1067,59 +1059,7 @@ logcli query --tail '{namespace="rhdemo-stagingkub", app="rhdemo-app"}'
 
 ### 7.2 Queries PromQL (Métriques avec Prometheus)
 
-#### 7.2.1 Métriques CloudNativePG (PostgreSQL)
-
-**Status des clusters PostgreSQL:**
-```promql
-cnpg_pg_up{namespace="rhdemo-stagingkub"}
-```
-
-**Connexions actives par cluster:**
-```promql
-cnpg_backends_total{namespace="rhdemo-stagingkub"}
-```
-
-**Taille des bases de données (bytes):**
-```promql
-cnpg_pg_database_size_bytes{namespace="rhdemo-stagingkub"}
-```
-
-**Taille des bases en GB:**
-```promql
-cnpg_pg_database_size_bytes{namespace="rhdemo-stagingkub"} / 1024 / 1024 / 1024
-```
-
-**Transactions committées (rate 5min):**
-```promql
-rate(cnpg_pg_stat_database_xact_commit{namespace="rhdemo-stagingkub"}[5m])
-```
-
-**Transactions rollback (rate 5min):**
-```promql
-rate(cnpg_pg_stat_database_xact_rollback{namespace="rhdemo-stagingkub"}[5m])
-```
-
-**Âge du dernier backup (secondes):**
-```promql
-time() - cnpg_pg_backup_last_available_timestamp{namespace="rhdemo-stagingkub"}
-```
-
-**Alertes si backup > 24h:**
-```promql
-(time() - cnpg_pg_backup_last_available_timestamp{namespace="rhdemo-stagingkub"}) > 86400
-```
-
-**Durée des backups (secondes):**
-```promql
-cnpg_pg_backup_duration_seconds{namespace="rhdemo-stagingkub"}
-```
-
-**Fichiers WAL (Write-Ahead Log):**
-```promql
-cnpg_pg_wal_files{namespace="rhdemo-stagingkub"}
-```
-
-#### 7.2.2 Métriques Kubernetes (Kube State Metrics)
+#### 7.2.1 Métriques Kubernetes (Kube State Metrics)
 
 **Pods en cours d'exécution par namespace:**
 ```promql
@@ -1222,40 +1162,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
-### 8.2 Dashboard CloudNativePG - Métriques PostgreSQL (Pré-configuré)
-
-**✅ Dashboard automatiquement disponible après installation!**
-
-Le dashboard "CloudNativePG - RHDemo Stagingkub" est déployé automatiquement lors de l'installation de la stack Observabilité.
-
-**Accès:** Grafana → Dashboards → "CloudNativePG - RHDemo Stagingkub"
-
-**Datasource:** Prometheus
-
-**Contenu du dashboard (9 panneaux):**
-
-| Panel | Type | Description | Métriques |
-|-------|------|-------------|-----------|
-| **Status Keycloak DB** | Gauge | Statut cluster Keycloak (UP/DOWN) | `cnpg_pg_up{cluster="postgresql-keycloak"}` |
-| **Status RHDemo DB** | Gauge | Statut cluster RHDemo (UP/DOWN) | `cnpg_pg_up{cluster="postgresql-rhdemo"}` |
-| **Connexions actives** | Timeseries | Connexions actives par cluster | `cnpg_backends_total` |
-| **Taille des bases** | Timeseries | Taille en bytes par database | `cnpg_pg_database_size_bytes` |
-| **Transactions PostgreSQL** | Timeseries | Commits et rollbacks (rate) | `rate(cnpg_pg_stat_database_xact_commit[5m])` |
-| **Âge dernier backup Keycloak** | Gauge | Temps depuis dernier backup | `time() - cnpg_pg_backup_last_available_timestamp` |
-| **Âge dernier backup RHDemo** | Gauge | Temps depuis dernier backup | `time() - cnpg_pg_backup_last_available_timestamp` |
-| **Fichiers WAL** | Timeseries | Nombre de fichiers Write-Ahead Log | `cnpg_pg_wal_files` |
-| **Durée des backups** | Bars | Durée en secondes des backups | `cnpg_pg_backup_duration_seconds` |
-
-**Alertes configurées:**
-- ⚠️ **Jaune** si backup > 1h (3600s)
-- 🔴 **Rouge** si backup > 24h (86400s)
-
-**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-dashboard-cnpg.json`
-
-**Note importante:**
-Ce dashboard nécessite que CloudNativePG soit installé avec `monitoring.enablePodMonitor: true` pour exposer les métriques.
-
-### 8.4 Dashboard Keycloak - Logs d'Authentification (Custom)
+### 8.2 Dashboard Keycloak - Logs d'Authentification (Custom)
 
 **Query principale:**
 ```logql
@@ -1270,7 +1177,7 @@ Ce dashboard nécessite que CloudNativePG soit installé avec `monitoring.enable
 | **Failed Logins** | `sum(count_over_time({app="keycloak"} \|~ "failed.*login" [1h]))` | Total failures |
 | **Active Users** | Extraction custom via `\| regexp "user=(?P<user>\\w+)"` | Unique users |
 
-### 8.3 Dashboard PostgreSQL - Logs Database
+### 8.3 Dashboard PostgreSQL - Logs des Bases de Données
 
 **Query principale:**
 ```logql
@@ -1285,7 +1192,7 @@ Ce dashboard nécessite que CloudNativePG soit installé avec `monitoring.enable
 | **Connection Pool** | Extraction connections actives | Connections |
 | **Error Log** | `{app=~"postgresql-.*"} \|= "ERROR"` | Erreurs SQL |
 
-### 8.5 Dashboard Consolidé - Vue d'Ensemble
+### 8.4 Dashboard Consolidé - Vue d'Ensemble
 
 **Variables:**
 
@@ -1301,7 +1208,7 @@ Créer variables pour filtrer dynamiquement:
 {namespace="rhdemo-stagingkub", app=~"$app", pod=~"$pod"}
 ```
 
-### 8.6 Exporter/Importer Dashboard
+### 8.5 Exporter/Importer Dashboard
 
 **Exporter:**
 
@@ -1387,7 +1294,7 @@ tail -f /var/log/pods/rhdemo-stagingkub_rhdemo-app-*/rhdemo-app/*.log
 
 ### 9.3 Prometheus ne Scrape Pas les Métriques
 
-**Symptôme:** Métriques CloudNativePG ou autres absentes dans Grafana
+**Symptôme:** Métriques PostgreSQL ou autres absentes dans Grafana
 
 **Vérification:**
 
@@ -1421,17 +1328,17 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus-operator
 |----------|----------|
 | `podMonitorSelector` trop restrictif | Vérifier `podMonitorSelector: {}` dans prometheus-values.yaml |
 | PodMonitor dans mauvais namespace | Vérifier `podMonitorNamespaceSelector: {}` |
-| Port métrique incorrect | Vérifier que le pod expose bien le port (ex: 9187 pour CloudNativePG) |
+| Port métrique incorrect | Vérifier que le pod expose bien le port des métriques |
 | Network policy bloque scrape | Vérifier network policies entre namespaces |
 
 **Test manuel scrape:**
 
 ```bash
-# Port-forward vers pod CloudNativePG
-kubectl port-forward -n rhdemo-stagingkub postgresql-keycloak-1 9187:9187
+# Port-forward vers un pod avec métriques
+kubectl port-forward -n rhdemo-stagingkub <pod-name> <metrics-port>:<metrics-port>
 
 # Vérifier métriques exposées
-curl http://localhost:9187/metrics | grep cnpg
+curl http://localhost:<metrics-port>/metrics
 ```
 
 ### 9.4 Grafana - Datasource Loki ou Prometheus Inaccessible
@@ -1815,9 +1722,6 @@ kubectl delete namespace monitoring
 - Promtail: https://github.com/grafana/helm-charts/tree/main/charts/promtail
 - Grafana: https://github.com/grafana/helm-charts/tree/main/charts/grafana
 
-**CloudNativePG:**
-- Monitoring: https://cloudnative-pg.io/documentation/current/monitoring/
-
 ### Tutoriels
 
 **Prometheus:**
@@ -1840,8 +1744,7 @@ kubectl delete namespace monitoring
 
 ### Documentation Projet rhDemo
 
-- [CLOUDNATIVEPG_FAQ.md](./CLOUDNATIVEPG_FAQ.md) - FAQ CloudNativePG
 - [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md) - Documentation dashboard rhDemo Logs
-- [ACTION_PLAN_PERSISTENCE.md](./ACTION_PLAN_PERSISTENCE.md) - Plan migration CloudNativePG
+- [POSTGRESQL_BACKUP_CRONJOBS.md](./POSTGRESQL_BACKUP_CRONJOBS.md) - Backups PostgreSQL automatiques
 
 

@@ -360,10 +360,7 @@ Le dépôt contient **3 projets distincts** :
 - [infra/stagingkub/scripts/README-INIT-KEYCLOAK.md](rhDemo/infra/stagingkub/scripts/README-INIT-KEYCLOAK.md) - Initialisation Keycloak
 - [infra/jenkins-docker/QUICKSTART.md](rhDemo/infra/jenkins-docker/QUICKSTART.md) - Démarrage rapide Jenkins
 - [infra/jenkins-docker/README.md](rhDemo/infra/jenkins-docker/README.md) - Configuration Jenkins
-- [**docs/CLOUDNATIVEPG_MIGRATION.md**](rhDemo/docs/CLOUDNATIVEPG_MIGRATION.md) - 🆕 Migration vers CloudNativePG (backups automatiques)
-- [**docs/CLOUDNATIVEPG_FAQ.md**](rhDemo/docs/CLOUDNATIVEPG_FAQ.md) - 🆕 FAQ CloudNativePG (HA optionnelle, Grafana)
-- [**docs/PERSISTENCE_DATA_RECOVERY.md**](rhDemo/docs/PERSISTENCE_DATA_RECOVERY.md) - 🆕 Recovery après perte données
-- [**docs/ACTION_PLAN_PERSISTENCE.md**](rhDemo/docs/ACTION_PLAN_PERSISTENCE.md) - 🆕 Plan d'action persistance
+- [**docs/POSTGRESQL_BACKUP_CRONJOBS.md**](rhDemo/docs/POSTGRESQL_BACKUP_CRONJOBS.md) - 🆕 Backups PostgreSQL automatiques avec CronJobs
 
 ### Technique
 - [DATABASE.md](rhDemo/docs/DATABASE.md) - Configuration PostgreSQL
@@ -402,7 +399,7 @@ Application volontairement simpliste :
 - **Persistance des données KinD** : Configuration extraMounts pour survivre aux redémarrages machine
 - Création fichier `kind-config.yaml` persistant avec montage `/home/leno-vo/kind-data/rhdemo-stagingkub`
 - Modification `init-stagingkub.sh` pour utiliser la configuration persistante
-- Documentation migration vers CloudNativePG (voir [CLOUDNATIVEPG_MIGRATION.md](rhDemo/docs/CLOUDNATIVEPG_MIGRATION.md))
+- **Suppression complète de CloudNativePG** : Retour aux StatefulSets PostgreSQL classiques avec CronJobs de backup
 - Amélioration rapports ZAP : Suppression versions NGINX, élimination doublons HSTS, durcissement CSP
 - Suppression warnings Keycloak et Spring Boot
 
@@ -432,14 +429,7 @@ Application volontairement simpliste :
 
 ### Scalabilité
 - [ ] Redis pour sessions partagées
-- [🔄] **Migration vers CloudNativePG** (en cours)
-  - [x] Configuration extraMounts KinD pour persistance
-  - [x] Documentation complète créée
-  - [ ] Installation opérateur CloudNativePG
-  - [ ] Migration PostgreSQL Keycloak
-  - [ ] Migration PostgreSQL RHDemo
-  - [ ] Configuration backups automatiques quotidiens
-  - [ ] Tests Point-In-Time Recovery
+- [x] **Backups PostgreSQL automatisés** : CronJobs quotidiens avec rétention 7 jours
 
 ### Sécurité & Qualité
 - [ ] Génération SBOM (Syft, CycloneDX, OWASP Dependency Track)
@@ -490,15 +480,13 @@ Application volontairement simpliste :
 - Représentatif d'un vrai cluster K8s
 - **extraMounts** pour persistance des données hors du conteneur
 
-### Pourquoi CloudNativePG ?
-- Opérateur Kubernetes natif pour PostgreSQL
-- Backups automatiques avec rétention configurable
-- Point-In-Time Recovery (PITR) intégré
-- Haute disponibilité (replicas) prête à activer
-- PgBouncer intégré pour pooling de connexions
-- Monitoring Prometheus natif
-- Projet CNCF mature et activement maintenu
-- Alternative open source à des solutions propriétaires (AWS RDS, etc.)
+### Pourquoi StatefulSets + CronJobs pour PostgreSQL ?
+- **Simplicité** : Pas de dépendance à un opérateur externe
+- **Ressources limitées** : Adapté à un environnement PC (16Go RAM)
+- **Backups automatiques** : CronJobs quotidiens avec rétention configurable (7 jours)
+- **Persistance garantie** : extraMounts KinD assurent la survie aux redémarrages
+- **Contrôle total** : Configuration PostgreSQL directe sans abstraction
+- **Débogage facile** : kubectl logs/exec standards, pas de CRDs complexes
 
 ---
 

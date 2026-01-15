@@ -8,7 +8,7 @@
 #   - Prometheus (métriques) + Prometheus Operator + AlertManager
 #   - Loki (logs) + Promtail + Grafana
 #   - Configuration Grafana avec les deux datasources
-#   - Dashboards: rhDemo Logs + CloudNativePG
+#   - Dashboards: rhDemo Logs
 #
 # Utilisation:
 #   ./install-observability.sh
@@ -256,22 +256,6 @@ else
     warn "Dashboard $DASHBOARD_LOGS introuvable"
 fi
 
-# Dashboard CloudNativePG (nouveau)
-DASHBOARD_CNPG="$VALUES_DIR/grafana-dashboard-cnpg.json"
-if [ -f "$DASHBOARD_CNPG" ]; then
-    kubectl create configmap grafana-dashboard-cnpg \
-        --from-file="cnpg-dashboard.json=$DASHBOARD_CNPG" \
-        --namespace="$LOKI_NS" \
-        --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
-
-    kubectl patch configmap grafana-dashboard-cnpg -n $LOKI_NS \
-        -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
-
-    success "Dashboard CloudNativePG déployé"
-else
-    warn "Dashboard $DASHBOARD_CNPG introuvable"
-fi
-
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
@@ -313,7 +297,6 @@ echo -e "    - ${GREEN}✓${NC} Prometheus (métriques)"
 echo ""
 echo -e "  Dashboards:"
 echo -e "    - ${GREEN}✓${NC} rhDemo - Logs Application"
-echo -e "    - ${GREEN}✓${NC} CloudNativePG (métriques PostgreSQL)"
 echo ""
 
 echo -e "${YELLOW}📈 Prometheus (Métriques):${NC}"
@@ -348,7 +331,7 @@ echo -e "  ${YELLOW}# Voir les ServiceMonitors (métriques scrappées)${NC}"
 echo -e "  kubectl get servicemonitor -A"
 echo ""
 
-echo -e "  ${YELLOW}# Voir les PodMonitors (CloudNativePG créera les siens)${NC}"
+echo -e "  ${YELLOW}# Voir les PodMonitors${NC}"
 echo -e "  kubectl get podmonitor -A"
 echo ""
 
@@ -366,6 +349,6 @@ echo -e "  kubectl logs -n $MONITORING_NS -l app.kubernetes.io/name=prometheus-o
 echo ""
 
 echo -e "${GREEN}✅ La stack Observabilité est maintenant prête !${NC}"
-echo -e "${GREEN}✅ Prometheus collectera automatiquement les métriques CloudNativePG${NC}"
+echo -e "${GREEN}✅ Prometheus collecte automatiquement les métriques des composants${NC}"
 echo -e "${GREEN}✅ Loki collecte déjà les logs de tous les pods${NC}"
 echo ""

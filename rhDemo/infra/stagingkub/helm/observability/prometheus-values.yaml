@@ -63,7 +63,7 @@ prometheus:
     serviceMonitorSelector: {}
     serviceMonitorNamespaceSelector: {}
 
-    # PodMonitor selector (important pour CloudNativePG)
+    # PodMonitor selector (découverte automatique de tous les PodMonitors)
     podMonitorSelectorNilUsesHelmValues: false
     podMonitorSelector: {}
     podMonitorNamespaceSelector: {}
@@ -134,10 +134,10 @@ kubeEtcd:
   enabled: false  # Pas accessible sur KinD
 
 # ────────────────────────────────────────────────────────────────
-# Service Monitors additionnels
+# Service Monitors et PodMonitors additionnels
 # ────────────────────────────────────────────────────────────────
-# CloudNativePG créera automatiquement ses PodMonitors
-# Prometheus les détectera via podMonitorSelector: {}
+# Prometheus détectera automatiquement tous les PodMonitors/ServiceMonitors
+# via podMonitorSelector: {} et serviceMonitorSelector: {}
 
 # ────────────────────────────────────────────────────────────────
 # Configuration supplémentaire
@@ -186,16 +186,11 @@ defaultRules:
 #    - Ajouter Prometheus comme datasource dans Grafana (loki-stack)
 #    - URL: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
 #
-# 4. CloudNativePG :
-#    - CloudNativePG créera automatiquement des PodMonitors
-#    - Prometheus les détectera et commencera à scraper les métriques
-#    - Les dashboards Grafana utiliseront cette datasource
-#
-# 5. Accès à Prometheus :
+# 4. Accès à Prometheus :
 #    kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
 #    # http://localhost:9090
 #
-# 6. Accès à AlertManager :
+# 5. Accès à AlertManager :
 #    kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093
 #    # http://localhost:9093
 #

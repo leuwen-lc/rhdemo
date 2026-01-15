@@ -697,12 +697,12 @@ EOF
                     rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
                     rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
                     rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
-                """
-                echo "✅ Nettoyage terminé"
                 
-                //Déconnecter Jenkins du réseau Kind
-                docker network disconnect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter Jenkins du réseau kind"
-
+                    echo "✅ Nettoyage terminé"
+                
+                    #Déconnecter Jenkins du réseau Kind
+                    docker network disconnect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter Jenkins du réseau kind"
+                """
             }
         }
         success {

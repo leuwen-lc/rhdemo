@@ -62,7 +62,12 @@ pipeline {
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
-            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT-95, 1.0.0-RELEASE). Si vide, utilisera "latest" (dernière image validée par CI).'
+            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT-95, 1.0.0-RELEASE). Si vide, récupère automatiquement le digest du dernier build CI validé via Copy Artifact.'
+        )
+        string(
+            name: 'CI_BUILD_NUMBER',
+            defaultValue: '',
+            description: 'Numéro du build CI à utiliser (ex: 42). Si vide, utilise le dernier build stable du job RHDemo-CI.'
         )
         booleanParam(
             name: 'FORCE_RECREATE_PODS',
@@ -104,15 +109,40 @@ pipeline {
                     if (params.IMAGE_TAG) {
                         // Utiliser le tag fourni en paramètre
                         env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG
+                        env.DEPLOY_IMAGE_DIGEST = ''  // Sera récupéré plus tard si nécessaire
                         echo "▶ Tag fourni en paramètre: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "   Le digest sera récupéré depuis le registry lors de la vérification de signature"
                     } else {
-                        // Par défaut, utiliser le tag 'latest' qui pointe toujours vers la dernière image validée par CI
-                        echo "▶ Aucun tag fourni, utilisation du tag 'latest' (dernière image validée par CI)..."
-                        env.DEPLOY_IMAGE_TAG = "latest"
+                        // Récupérer le digest du dernier build CI validé via Copy Artifact
+                        echo "▶ Aucun tag fourni, récupération du digest depuis le dernier build CI validé..."
 
-                        echo "ℹ️  Le tag 'latest' est automatiquement mis à jour par le pipeline CI"
-                        echo "   Pour déployer une version spécifique, utilisez le paramètre IMAGE_TAG"
-                        echo "   Exemple: IMAGE_TAG=1.1.0-SNAPSHOT-95"
+                        def ciBuildSelector
+                        if (params.CI_BUILD_NUMBER) {
+                            echo "   Build CI spécifié: #${params.CI_BUILD_NUMBER}"
+                            ciBuildSelector = specific(params.CI_BUILD_NUMBER)
+                        } else {
+                            echo "   Utilisation du dernier build CI stable"
+                            ciBuildSelector = lastSuccessful()
+                        }
+
+                        // Récupérer les artefacts du build CI
+                        copyArtifacts(
+                            projectName: 'RHDemo-CI',
+                            selector: ciBuildSelector,
+                            filter: 'image-digest/*',
+                            target: 'ci-artifacts',
+                            fingerprintArtifacts: true
+                        )
+
+                        // Lire le tag et le digest depuis les artefacts
+                        env.DEPLOY_IMAGE_TAG = readFile('ci-artifacts/image-digest/tag.txt').trim()
+                        env.DEPLOY_IMAGE_DIGEST = readFile('ci-artifacts/image-digest/digest.txt').trim()
+                        env.DEPLOY_IMAGE_REF = readFile('ci-artifacts/image-digest/image-ref.txt').trim()
+
+                        echo "✅ Informations récupérées du build CI:"
+                        echo "   Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "   Digest: ${env.DEPLOY_IMAGE_DIGEST}"
+                        echo "   Image ref: ${env.DEPLOY_IMAGE_REF}"
                     }
 
                     echo "✅ Version de l'image à déployer: ${env.DEPLOY_IMAGE_TAG}"
@@ -369,6 +399,64 @@ EOF
             }
         }
 
+        stage('🔏 Vérification Signature Image (Cosign)') {
+            steps {
+                script {
+                    echo "▶ Vérification de la signature de l'image avec Cosign..."
+                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    if (env.DEPLOY_IMAGE_DIGEST) {
+                        echo "   Digest (depuis Copy Artifact): ${env.DEPLOY_IMAGE_DIGEST}"
+                    }
+                }
+
+                withCredentials([file(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUB_KEY')]) {
+                    sh """
+                        # Utiliser le digest fourni par Copy Artifact si disponible (plus sécurisé)
+                        # Sinon, le récupérer depuis le registry
+                        if [ -n "${env.DEPLOY_IMAGE_DIGEST ?: ''}" ]; then
+                            echo "▶ Utilisation du digest fourni par le build CI (méthode sécurisée)"
+                            DIGEST="${env.DEPLOY_IMAGE_DIGEST}"
+                        else
+                            echo "▶ Récupération du digest depuis le registry..."
+                            DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                                http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.DEPLOY_IMAGE_TAG} \
+                                | grep -i "Docker-Content-Digest" \
+                                | awk '{print \$2}' \
+                                | tr -d '\r')
+                        fi
+
+                        if [ -z "\$DIGEST" ]; then
+                            echo "❌ Impossible de récupérer le digest de l'image"
+                            exit 1
+                        fi
+
+                        IMAGE_REF="localhost:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST"
+                        echo "   Digest: \$DIGEST"
+                        echo "   Image ref: \$IMAGE_REF"
+
+                        # Vérifier la signature avec Cosign
+                        echo "▶ Vérification de la signature..."
+                        if cosign verify --key "\${COSIGN_PUB_KEY}" \
+                            --insecure-ignore-tlog=true \
+                            "\$IMAGE_REF" 2>&1; then
+                            echo "✅ Signature valide - l'image a été signée par le pipeline CI"
+                        else
+                            echo "❌ ERREUR: Signature invalide ou absente !"
+                            echo ""
+                            echo "   L'image n'a pas été signée par le pipeline CI ou la signature est corrompue."
+                            echo "   Cela peut indiquer:"
+                            echo "   - L'image a été poussée manuellement sans signature"
+                            echo "   - L'image a été modifiée après signature"
+                            echo "   - Les clés Cosign ne correspondent pas"
+                            echo ""
+                            echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
+                            exit 1
+                        fi
+                    """
+                }
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 3 : MISE À JOUR DES SECRETS KUBERNETES
         // ════════════════════════════════════════════════════════════════
@@ -441,12 +529,12 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Déterminer la politique de pull d'image
-                    # Pour 'latest' ou SNAPSHOT : Always (force le pull à chaque déploiement)
+                    # Pour SNAPSHOT : Always (force le pull à chaque déploiement)
                     # Pour les releases : IfNotPresent (utilise le cache si disponible)
                     PULL_POLICY="IfNotPresent"
-                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -qE "(SNAPSHOT|latest)"; then
+                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -qE "SNAPSHOT"; then
                         PULL_POLICY="Always"
-                        echo "⚠️  Tag dynamique détecté (${env.DEPLOY_IMAGE_TAG}) : imagePullPolicy=Always"
+                        echo "⚠️  Tag SNAPSHOT détecté (${env.DEPLOY_IMAGE_TAG}) : imagePullPolicy=Always"
                         echo "   L'image sera toujours récupérée du registry pour garantir la dernière version"
                     else
                         echo "ℹ️  Version RELEASE fixe : imagePullPolicy=IfNotPresent"

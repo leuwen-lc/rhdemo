@@ -500,30 +500,35 @@ YMLEOF
             }
         }
 
-        stage('🔍 Analyse OWASP Dependency-Check') {
-            steps {
-                script {
-                    echo "▶ Analyse des vulnérabilités des dépendances..."
-                }
+            stage('🔍 Analyse OWASP Dependency-Check') {
+                steps {
+                    script {
+                        echo "▶ Analyse des vulnérabilités des dépendances..."
+                    }
 
-                dir('rhDemo') {
-                    sh './mvnw org.owasp:dependency-check-maven:check'
+                    dir('rhDemo') {
+                        withCredentials([
+                            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                            usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                        ]) {
+                            sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}'
+                        }
+                    }
+                }
+                post {
+                    always {
+                        // Archiver le rapport OWASP
+                        publishHTML([
+                            allowMissing: false,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: 'rhDemo/target',
+                            reportFiles: 'dependency-check-report.html',
+                            reportName: 'OWASP Dependency-Check Report'
+                        ])
+                    }
                 }
             }
-            post {
-                always {
-                    // Archiver le rapport OWASP
-                    publishHTML([
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'rhDemo/target',
-                        reportFiles: 'dependency-check-report.html',
-                        reportName: 'OWASP Dependency-Check Report'
-                    ])
-                }
-            }
-        }
 
         stage('📦 Build Maven') {
             steps {
@@ -616,7 +621,6 @@ YMLEOF
                 dir('rhDemo') {
                     sh """
                         DOCKER_BUILDKIT=0 docker build -t ${env.RHDEMO_IMAGE} \
-                                     -t rhdemo-api:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
                                      --build-arg VERSION=${env.APP_VERSION} \
@@ -1423,15 +1427,78 @@ YMLEOF
                     echo "▶ Push vers le registry..."
                     docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
-                    # Tag latest
-                    echo "▶ Tag latest..."
-                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
-                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
+                    # Récupérer le digest de l'image publiée
+                    echo "▶ Récupération du digest de l'image..."
+                    DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                        http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.FINAL_IMAGE_TAG} \
+                        | grep -i "Docker-Content-Digest" \
+                        | awk '{print \$2}' \
+                        | tr -d '\r')
+
+                    if [ -z "\$DIGEST" ]; then
+                        echo "❌ Impossible de récupérer le digest de l'image"
+                        exit 1
+                    fi
+
+                    echo "   Digest: \$DIGEST"
+
+                    # Sauvegarder le digest dans un fichier pour archivage
+                    mkdir -p image-digest
+                    echo "\$DIGEST" > image-digest/digest.txt
+                    echo "${env.FINAL_IMAGE_TAG}" > image-digest/tag.txt
+                    echo "localhost:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST" > image-digest/image-ref.txt
 
                     echo "✅ Image publiée sur le registry:"
                     echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
-                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:latest"
+                    echo "   - Digest: \$DIGEST"
                 """
+
+                // Archiver le digest comme artefact pour le pipeline CD
+                archiveArtifacts artifacts: 'image-digest/*', fingerprint: true
+            }
+        }
+
+        stage('🔏 Signature Image (Cosign)') {
+            when {
+                expression { params.PUBLISH_IMAGE == true }
+            }
+            steps {
+                script {
+                    echo "▶ Signature de l'image Docker avec Cosign..."
+                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                }
+
+                withCredentials([
+                    file(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY'),
+                    string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
+                ]) {
+                    sh '''
+                        # Récupérer le digest de l'image pour une signature immuable
+                        echo "▶ Récupération du digest de l'image..."
+                        IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:5000/${DOCKER_IMAGE_NAME}:${FINAL_IMAGE_TAG} 2>/dev/null || true)
+
+                        # Si pas de digest dans RepoDigests, le récupérer depuis le registry
+                        if [ -z "$IMAGE_DIGEST" ]; then
+                            echo "   Récupération du digest depuis le registry..."
+                            DIGEST=$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                                http://localhost:5000/v2/${DOCKER_IMAGE_NAME}/manifests/${FINAL_IMAGE_TAG} \
+                                | grep -i "Docker-Content-Digest" \
+                                | awk '{print $2}' \
+                                | tr -d '\r')
+                            IMAGE_DIGEST="localhost:5000/${DOCKER_IMAGE_NAME}@${DIGEST}"
+                        fi
+
+                        echo "   Digest: ${IMAGE_DIGEST}"
+
+                        # Signer l'image avec Cosign
+                        echo "▶ Signature de l'image..."
+                        COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
+                            --tlog-upload=false \
+                            "${IMAGE_DIGEST}"
+
+                        echo "✅ Image signée avec succès"
+                    '''
+                }
             }
         }
 

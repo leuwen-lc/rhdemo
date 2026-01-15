@@ -1497,9 +1497,11 @@ YMLEOF
                         echo "   Digest: ${IMAGE_DIGEST}"
 
                         # Signer l'image avec Cosign
+                        # Note: --tlog-upload=false est déprécié dans les versions récentes de Cosign
+                        # Utiliser --insecure-ignore-tlog à la place pour les registries locaux
                         echo "▶ Signature de l'image..."
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
-                            --tlog-upload=false \
+                            --insecure-ignore-tlog \
                             "${IMAGE_DIGEST}"
 
                         echo "✅ Image signée avec succès"

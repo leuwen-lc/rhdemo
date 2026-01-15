@@ -1501,7 +1501,7 @@ YMLEOF
                         # Utiliser --insecure-ignore-tlog à la place pour les registries locaux
                         echo "▶ Signature de l'image..."
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
-                            --insecure-ignore-tlog \
+                            --allow-insecure-registry=true \
                             "${IMAGE_DIGEST}"
 
                         echo "✅ Image signée avec succès"

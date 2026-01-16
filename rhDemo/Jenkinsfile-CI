@@ -1571,7 +1571,7 @@ YMLEOF
                                 \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
 
                             if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
-                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \${DIGEST:0:20}...)"
+                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \$(echo \$DIGEST | cut -c1-20)...)"
                             else
                                 echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$HTTP_CODE)"
                             fi

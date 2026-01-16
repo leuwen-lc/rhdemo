@@ -1358,7 +1358,9 @@ YMLEOF
         // ════════════════════════════════════════════════════════════════
         // PHASE 6 : PUBLICATION DE L'IMAGE
         // ════════════════════════════════════════════════════════════════
-
+        // NB: Jenkins utilise le socket DinD pour accéder à docker sur l'hote
+        // cf docker compose de jenkins
+        
         stage('🏷️ Tag et Publication Image') {
             when {
                 expression { params.PUBLISH_IMAGE == true }
@@ -1433,15 +1435,6 @@ YMLEOF
                     DIGEST=\$(echo "\$PUSH_OUTPUT" | grep -oE 'sha256:[a-f0-9]{64}' | head -1)
 
                     if [ -z "\$DIGEST" ]; then
-                        echo "⚠️  Digest non trouvé dans la sortie du push, tentative via API registry..."
-                        # Fallback: récupérer via l'API du registry avec GET au lieu de HEAD
-                        DIGEST=\$(curl -s -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                            http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.FINAL_IMAGE_TAG} \
-                            | grep -oE '"digest"[[:space:]]*:[[:space:]]*"sha256:[a-f0-9]{64}"' \
-                            | grep -oE 'sha256:[a-f0-9]{64}' | head -1)
-                    fi
-
-                    if [ -z "\$DIGEST" ]; then
                         echo "❌ Impossible de récupérer le digest de l'image"
                         exit 1
                     fi
@@ -1480,29 +1473,25 @@ YMLEOF
                 ]) {
                     sh '''
                         # Récupérer le digest de l'image pour une signature immuable
+                        # Note: docker inspect utilise localhost:5000 (via Docker daemon sur l'hôte)
+                        # mais cosign doit utiliser kind-registry:5000 (appels HTTP directs depuis le conteneur Jenkins)
                         echo "▶ Récupération du digest de l'image..."
-                        IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:5000/${DOCKER_IMAGE_NAME}:${FINAL_IMAGE_TAG} 2>/dev/null || true)
+                        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:5000/${DOCKER_IMAGE_NAME}:${FINAL_IMAGE_TAG} 2>/dev/null | sed 's|localhost:5000|kind-registry:5000|')
 
-                        # Si pas de digest dans RepoDigests, le récupérer depuis le registry
-                        if [ -z "$IMAGE_DIGEST" ]; then
-                            echo "   Récupération du digest depuis le registry..."
-                            DIGEST=$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                                http://localhost:5000/v2/${DOCKER_IMAGE_NAME}/manifests/${FINAL_IMAGE_TAG} \
-                                | grep -i "Docker-Content-Digest" \
-                                | awk '{print $2}' \
-                                | tr -d '\r')
-                            IMAGE_DIGEST="localhost:5000/${DOCKER_IMAGE_NAME}@${DIGEST}"
+                        if [ -z "$DIGEST" ] || [ "$DIGEST" = "kind-registry:5000/" ]; then
+                            echo "❌ Impossible de récupérer le digest via docker inspect"
+                            exit 1
                         fi
 
-                        echo "   Digest: ${IMAGE_DIGEST}"
+                        echo "   Digest pour cosign: ${DIGEST}"
 
                         # Signer l'image avec Cosign
-                        # Note: --tlog-upload=false est déprécié dans les versions récentes de Cosign
-                        # Utiliser --insecure-ignore-tlog à la place pour les registries locaux
+                        # Cosign fait des appels HTTP directs, donc il faut utiliser kind-registry:5000
+                        # (accessible depuis le réseau Docker de Jenkins)
                         echo "▶ Signature de l'image..."
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
                             --allow-insecure-registry=true \
-                            "${IMAGE_DIGEST}"
+                            "${DIGEST}"
 
                         echo "✅ Image signée avec succès"
                     '''

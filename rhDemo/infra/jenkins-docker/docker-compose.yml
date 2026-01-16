@@ -26,21 +26,24 @@ services:
     volumes:
       # Persistance des données Jenkins
       - jenkins_home:/var/jenkins_home
-      
+
       # Configuration as Code (JCasC)
       - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
-      
+
       # Socket Docker pour Docker-in-Docker (DinD)
       - /var/run/docker.sock:/var/run/docker.sock
-      
+
       # Binaire Docker CLI
       - /usr/bin/docker:/usr/bin/docker
-      
+
       # Maven local repository (cache) - utilisateur jenkins
       - maven_repository:/var/jenkins_home/.m2
-      
+
       # Répertoire de travail partagé (optionnel)
       - ./workspace:/workspace
+
+      # Certificat du registry pour cosign et curl (HTTPS)
+      - ./certs/registry/registry.crt:/etc/ssl/certs/registry.crt:ro
     
     environment:
       # Désactiver le setup wizard
@@ -171,7 +174,10 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════════════════════════════
-  # DOCKER REGISTRY LOCAL (optionnel - pour stocker les images)
+  # DOCKER REGISTRY LOCAL (HTTPS - pour stocker les images)
+  # ═══════════════════════════════════════════════════════════════════
+  # Prérequis: Générer les certificats avec ./init-registry-certs.sh
+  # puis configurer Docker daemon (voir instructions dans le script)
   # ═══════════════════════════════════════════════════════════════════
   registry:
     image: registry:2
@@ -183,12 +189,24 @@ services:
 
     volumes:
       - registry_data:/var/lib/registry
+      # Certificats TLS pour HTTPS
+      - ./certs/registry:/certs:ro
 
     environment:
       - REGISTRY_STORAGE_DELETE_ENABLED=true
+      # Configuration TLS
+      - REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt
+      - REGISTRY_HTTP_TLS_KEY=/certs/registry.key
 
     networks:
       - jenkins-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://localhost:5000/v2/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 
 # ═══════════════════════════════════════════════════════════════════

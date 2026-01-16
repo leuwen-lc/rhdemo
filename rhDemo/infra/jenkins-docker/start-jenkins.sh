@@ -51,6 +51,80 @@ fi
 
 echo "✅ docker compose est installé"
 
+# Vérifier que les certificats du registry existent
+# Les certificats peuvent être soit dans ./certs/registry/ soit déjà copiés dans /etc/docker/certs.d/
+CERTS_LOCAL="./certs/registry/registry.crt"
+CERTS_DOCKER="/etc/docker/certs.d/localhost:5000/ca.crt"
+
+if [ -f "$CERTS_LOCAL" ] && [ -f "./certs/registry/registry.key" ]; then
+    echo "✅ Certificats du registry présents (locaux)"
+
+    # Proposer de copier vers Docker daemon si pas encore fait
+    if [ ! -f "$CERTS_DOCKER" ]; then
+        echo ""
+        echo "⚠️  Le Docker daemon n'est pas configuré pour faire confiance au registry."
+        echo ""
+        echo "   Exécutez les commandes suivantes (avec sudo):"
+        echo ""
+        echo "   sudo mkdir -p /etc/docker/certs.d/localhost:5000"
+        echo "   sudo cp $(pwd)/certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt"
+        echo "   sudo systemctl restart docker"
+        echo ""
+        read -p "Voulez-vous exécuter ces commandes maintenant ? (Y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            sudo mkdir -p /etc/docker/certs.d/localhost:5000
+            sudo cp "$(pwd)/certs/registry/registry.crt" /etc/docker/certs.d/localhost:5000/ca.crt
+            echo "✅ Certificat copié. Redémarrage de Docker..."
+            sudo systemctl restart docker
+            echo "✅ Docker redémarré"
+        else
+            echo "⚠️  Le push vers le registry pourrait échouer sans cette configuration."
+        fi
+    fi
+elif [ -f "$CERTS_DOCKER" ]; then
+    # Les certificats sont déjà dans /etc/docker/certs.d/ mais pas en local
+    # On peut les copier depuis là pour que le registry et Jenkins les utilisent
+    echo "✅ Certificats du registry détectés dans Docker daemon"
+
+    if [ ! -f "$CERTS_LOCAL" ]; then
+        echo ""
+        echo "ℹ️  Les certificats ne sont pas dans ./certs/registry/"
+        echo "   Le registry et Jenkins en ont besoin pour démarrer."
+        echo ""
+        read -p "Voulez-vous copier le certificat depuis /etc/docker/certs.d/ ? (Y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            mkdir -p ./certs/registry
+            sudo cp "$CERTS_DOCKER" "$CERTS_LOCAL"
+            # Générer aussi la clé si elle n'existe pas (nécessaire pour le registry)
+            if [ ! -f "./certs/registry/registry.key" ]; then
+                echo "⚠️  La clé privée n'existe pas. Régénération des certificats..."
+                ./init-registry-certs.sh
+            else
+                echo "✅ Certificat copié dans ./certs/registry/"
+            fi
+        else
+            echo "⚠️  Le registry ne démarrera pas sans certificats dans ./certs/registry/"
+            echo "   Vous pouvez les générer avec: ./init-registry-certs.sh"
+        fi
+    fi
+else
+    # Aucun certificat trouvé
+    echo ""
+    echo "⚠️  Certificats du registry manquants."
+    echo "   Exécutez d'abord: ./init-registry-certs.sh"
+    echo ""
+    read -p "Voulez-vous générer les certificats maintenant ? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        ./init-registry-certs.sh
+    else
+        echo "⚠️  Le registry ne démarrera pas sans certificats."
+        echo "   Vous pourrez les générer plus tard avec: ./init-registry-certs.sh"
+    fi
+fi
+
 # ────────────────────────────────────────────────────────────────
 # CONFIGURATION
 # ────────────────────────────────────────────────────────────────
@@ -219,7 +293,7 @@ echo ""
 echo "🌐 Services disponibles:"
 echo "   • Jenkins:              http://localhost:8080"
 echo "   • SonarQube:            http://localhost:9020"
-echo "   • Docker Registry:      http://localhost:5000"
+echo "   • Docker Registry:      https://localhost:5000"
 echo ""
 echo "📖 Documentation:"
 echo "   • README.md dans ce répertoire"

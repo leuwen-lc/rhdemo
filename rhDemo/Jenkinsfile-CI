@@ -1474,7 +1474,7 @@ YMLEOF
                     sh '''
                         # Récupérer le digest de l'image pour une signature immuable
                         # Note: docker inspect utilise localhost:5000 (via Docker daemon sur l'hôte)
-                        # mais cosign doit utiliser kind-registry:5000 (appels HTTP directs depuis le conteneur Jenkins)
+                        # mais cosign doit utiliser kind-registry:5000 (appels HTTPS directs depuis le conteneur Jenkins)
                         echo "▶ Récupération du digest de l'image..."
                         DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:5000/${DOCKER_IMAGE_NAME}:${FINAL_IMAGE_TAG} 2>/dev/null | sed 's|localhost:5000|kind-registry:5000|')
 
@@ -1486,11 +1486,11 @@ YMLEOF
                         echo "   Digest pour cosign: ${DIGEST}"
 
                         # Signer l'image avec Cosign
-                        # Cosign fait des appels HTTP directs, donc il faut utiliser kind-registry:5000
-                        # (accessible depuis le réseau Docker de Jenkins)
+                        # Cosign fait des appels HTTPS directs, utiliser kind-registry:5000
+                        # avec le certificat CA monté dans le conteneur Jenkins
                         echo "▶ Signature de l'image..."
+                        SSL_CERT_FILE=/etc/ssl/certs/registry.crt \
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
-                            --allow-insecure-registry=true \
                             "${DIGEST}"
 
                         echo "✅ Image signée avec succès"
@@ -1513,14 +1513,17 @@ YMLEOF
                 }
 
                 sh """
-                    REGISTRY_URL="http://localhost:5000"
+                    # Configuration du registry HTTPS
+                    # Note: kind-registry est accessible depuis le conteneur Jenkins via le réseau Docker
+                    REGISTRY_URL="https://kind-registry:5000"
+                    REGISTRY_CERT="/etc/ssl/certs/registry.crt"
                     IMAGE_NAME="${env.DOCKER_IMAGE_NAME}"
                     RETENTION_COUNT=3
 
                     echo "▶ Récupération de la liste des tags SNAPSHOT..."
 
-                    # Récupérer tous les tags de l'image
-                    ALL_TAGS=\$(curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
+                    # Récupérer tous les tags de l'image (avec certificat CA pour HTTPS)
+                    ALL_TAGS=\$(curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
 
                     if [ -z "\$ALL_TAGS" ]; then
                         echo "ℹ️  Aucun tag trouvé dans le registry"
@@ -1556,7 +1559,7 @@ YMLEOF
                         echo "  ➤ Suppression de \${IMAGE_NAME}:\${TAG}..."
 
                         # Récupérer le manifest avec le bon Accept header pour obtenir le digest
-                        DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
+                        DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
                             \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${TAG} \\
                             | grep -i "Docker-Content-Digest" \\
                             | awk '{print \$2}' \\
@@ -1564,7 +1567,7 @@ YMLEOF
 
                         if [ -n "\$DIGEST" ]; then
                             # Supprimer le manifest (cela marque l'image pour suppression)
-                            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \\
+                            HTTP_CODE=\$(curl -s --cacert \$REGISTRY_CERT -o /dev/null -w "%{http_code}" -X DELETE \\
                                 \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
 
                             if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
@@ -1580,7 +1583,7 @@ YMLEOF
                     echo ""
                     echo "✅ Nettoyage des tags terminé"
                     echo "📋 Images SNAPSHOT restantes:"
-                    curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
+                    curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
 
                     echo ""
                     echo "▶ Exécution du garbage collection du registry pour libérer l'espace disque..."

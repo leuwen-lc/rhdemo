@@ -121,7 +121,7 @@ docker info
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
 | `jenkins-agent` | Agent Jenkins (optionnel - builds distribués) | - | docker-compose.yml |
-| `registry` | Docker Registry local | 5000 | docker-compose.yml |
+| `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
 
 ### 🤖 Agent Jenkins (désactivé par défaut)
 
@@ -148,16 +148,34 @@ Il faudrait créer une image personnalisée basée sur [Dockerfile.jenkins](Dock
 
 ## ⚡ Installation rapide
 
+### 0. Prérequis : Certificats TLS pour le registry Docker
+
+Le registry Docker fonctionne en **HTTPS** avec un certificat auto-signé.
+
+```bash
+cd rhDemo/infra/jenkins-docker
+
+# Générer les certificats (une seule fois)
+./init-registry-certs.sh
+
+# Configurer Docker daemon pour faire confiance au certificat
+sudo mkdir -p /etc/docker/certs.d/localhost:5000
+sudo cp certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt
+sudo systemctl restart docker
+```
+
+> **Note** : Le script `start-jenkins.sh` vérifie automatiquement ces prérequis et vous guide si nécessaire.
 
 ### 1. Démarrage en une commande
 
 ```bash
-cd infra
+cd rhDemo/infra/jenkins-docker
 ./start-jenkins.sh
 ```
 
 Le script va :
 - ✅ Vérifier les prérequis
+- ✅ Vérifier/générer les certificats TLS du registry
 - ✅ Créer le fichier `.env` depuis `.env.example`
 - ✅ Builder l'image Jenkins personnalisée
 - ✅ Démarrer tous les services
@@ -178,7 +196,7 @@ Ouvrez votre navigateur : **http://localhost:8080**
 ### Fichiers de configuration
 
 ```
-infra/
+jenkins-docker/
 ├── docker-compose.yml          # Configuration des services
 ├── Dockerfile.jenkins          # Image Jenkins personnalisée
 ├── plugins.txt                 # Liste des plugins à installer
@@ -186,6 +204,10 @@ infra/
 ├── .env.example               # Template des variables d'environnement
 ├── .env                       # Vos variables (à créer, non commité)
 ├── start-jenkins.sh           # Script de démarrage
+├── init-registry-certs.sh     # Génération certificats TLS registry
+└── certs/registry/            # Certificats TLS (non commités, à générer)
+    ├── registry.crt           # Certificat public
+    └── registry.key           # Clé privée
 ```
 
 ### Configuration des secrets
@@ -381,6 +403,54 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 - `rhdemo-sonarqube-data` : Données SonarQube
 - `rhdemo-sonarqube-extensions` : Plugins SonarQube
 - `rhdemo-sonarqube-logs` : Logs SonarQube
+
+### Docker Registry local (HTTPS)
+
+Le registry Docker local (`kind-registry`) stocke les images Docker construites par le pipeline CI. Il est configuré en **HTTPS** avec un certificat auto-signé pour sécuriser les communications.
+
+**Configuration initiale :**
+
+```bash
+cd rhDemo/infra/jenkins-docker
+
+# 1. Générer les certificats TLS (une seule fois)
+./init-registry-certs.sh
+
+# 2. Configurer Docker daemon pour faire confiance au certificat
+sudo mkdir -p /etc/docker/certs.d/localhost:5000
+sudo cp certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt
+sudo systemctl restart docker
+```
+
+**Fichiers générés :**
+- `certs/registry/registry.crt` : Certificat public (valide 10 ans)
+- `certs/registry/registry.key` : Clé privée (ne pas commiter !)
+
+**SANs (Subject Alternative Names) :**
+- `localhost` : accès depuis l'hôte
+- `kind-registry` : accès depuis les conteneurs Docker
+- `127.0.0.1` : accès IP
+
+**Utilisation :**
+```bash
+# Depuis l'hôte (via Docker daemon)
+docker push localhost:5000/mon-image:tag
+
+# Depuis un conteneur (appels HTTP directs)
+curl --cacert /etc/ssl/certs/registry.crt https://kind-registry:5000/v2/_catalog
+```
+
+**Volume persistant :**
+- `kind-registry-data` : Images Docker stockées
+
+**Dépannage :**
+```bash
+# Vérifier que le registry répond en HTTPS
+curl -k https://localhost:5000/v2/
+
+# Vérifier le certificat
+openssl s_client -connect localhost:5000 -servername localhost < /dev/null 2>/dev/null | openssl x509 -noout -dates
+```
 
 ## 🐳 Docker-in-Docker (DinD)
 

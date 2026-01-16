@@ -379,18 +379,19 @@ EOF
 
                     echo "✅ Registry détecté: \$REGISTRY_NAME"
 
-                    # Vérifier que l'image existe dans le registry
-                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
+                    # Vérifier que l'image existe dans le registry (HTTPS avec certificat CA)
+                    REGISTRY_URL="https://\$REGISTRY_NAME:5000"
+                    REGISTRY_CERT="/etc/ssl/certs/registry.crt"
 
                     echo "▶ Vérification de l'image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}..."
 
-                    if curl -sf \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep -q "${env.DEPLOY_IMAGE_TAG}"; then
+                    if curl -sf --cacert \$REGISTRY_CERT \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep -q "${env.DEPLOY_IMAGE_TAG}"; then
                         echo "✅ Image trouvée dans le registry"
                     else
                         echo "❌ Image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG} introuvable dans le registry"
                         echo ""
                         echo "   Tags disponibles pour ${env.DOCKER_IMAGE_NAME}:"
-                        curl -s \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list || echo "   Aucun tag trouvé"
+                        curl -s --cacert \$REGISTRY_CERT \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list || echo "   Aucun tag trouvé"
                         echo ""
                         echo "   Exécutez d'abord le pipeline CI pour construire et publier l'image"
                         exit 1
@@ -403,7 +404,7 @@ EOF
             steps {
                 script {
                     echo "▶ Vérification de la signature de l'image avec Cosign..."
-                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    echo "   Image: kind-registry:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
                     if (env.DEPLOY_IMAGE_DIGEST) {
                         echo "   Digest (depuis Copy Artifact): ${env.DEPLOY_IMAGE_DIGEST}"
                     }
@@ -411,15 +412,18 @@ EOF
 
                 withCredentials([file(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUB_KEY')]) {
                     sh """
+                        # Configuration du certificat CA pour HTTPS
+                        REGISTRY_CERT="/etc/ssl/certs/registry.crt"
+
                         # Utiliser le digest fourni par Copy Artifact si disponible (plus sécurisé)
                         # Sinon, le récupérer depuis le registry
                         if [ -n "${env.DEPLOY_IMAGE_DIGEST ?: ''}" ]; then
                             echo "▶ Utilisation du digest fourni par le build CI (méthode sécurisée)"
                             DIGEST="${env.DEPLOY_IMAGE_DIGEST}"
                         else
-                            echo "▶ Récupération du digest depuis le registry..."
-                            DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
-                                http://localhost:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.DEPLOY_IMAGE_TAG} \
+                            echo "▶ Récupération du digest depuis le registry (HTTPS)..."
+                            DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                                https://kind-registry:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.DEPLOY_IMAGE_TAG} \
                                 | grep -i "Docker-Content-Digest" \
                                 | awk '{print \$2}' \
                                 | tr -d '\r')
@@ -430,13 +434,14 @@ EOF
                             exit 1
                         fi
 
-                        IMAGE_REF="localhost:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST"
+                        # Cosign utilise kind-registry:5000 (HTTPS direct depuis le conteneur Jenkins)
+                        IMAGE_REF="kind-registry:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST"
                         echo "   Digest: \$DIGEST"
                         echo "   Image ref: \$IMAGE_REF"
 
-                        # Vérifier la signature avec Cosign
+                        # Vérifier la signature avec Cosign (avec certificat CA)
                         echo "▶ Vérification de la signature..."
-                        if cosign verify --key "\${COSIGN_PUB_KEY}" \
+                        if SSL_CERT_FILE=\$REGISTRY_CERT cosign verify --key "\${COSIGN_PUB_KEY}" \
                             --insecure-ignore-tlog=true \
                             "\$IMAGE_REF" 2>&1; then
                             echo "✅ Signature valide - l'image a été signée par le pipeline CI"

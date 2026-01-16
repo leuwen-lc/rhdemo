@@ -8,6 +8,9 @@ workspace/
 nginx/ssl/*.key
 nginx/ssl/*.crt
 
+# Certificats du registry Docker (générés par init-registry-certs.sh)
+certs/
+
 # Logs
 *.log
 

@@ -170,12 +170,7 @@ if docker exec rhdemo-control-plane grep -q "http://kind-registry:5000" /etc/con
     echo -e "${GREEN}✅ Containerd configuré pour HTTPS${NC}"
 else
     echo -e "${GREEN}✅ Containerd déjà configuré pour HTTPS${NC}"
-firhdemo-stagingkub    keycloak-55d95f4446-6smgf                                1/1     Running            0               6m39s
-rhdemo-stagingkub    postgresql-keycloak-0                                    1/1     Running            1 (3h37m ago)   2d
-rhdemo-stagingkub    postgresql-rhdemo-0                                      1/1     Running            1 (3h37m ago)   2d
-rhdemo-stagingkub    rhdemo-app-56bd96bc49-qdwvg                              0/1     ImagePullBackOff   0               33h
-rhdemo-stagingkub    rhdemo-app-64d7dfc44c-k558c                              0/1     ImagePullBackOff   0               6m39s
-
+fi
 
 # Définir le contexte kubectl
 kubectl config use-context kind-rhdemo

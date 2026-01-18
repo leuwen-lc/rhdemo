@@ -128,19 +128,23 @@ Les backups sont stockés **hors du conteneur KinD** via `extraMounts` pour surv
 nodes:
 - role: control-plane
   extraMounts:
-  # Backups RHDemo
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups/rhdemo
-    containerPath: /mnt/data/backups/rhdemo
-  # Backups Keycloak
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups/keycloak
-    containerPath: /mnt/data/backups/keycloak
+  # Montage pour les backups PostgreSQL (survit aux redémarrages du cluster)
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups
+    containerPath: /mnt/backups
 ```
+
+**Chemins des backups** :
+
+- **Sur l'hôte** : `/home/leno-vo/kind-data/rhdemo-stagingkub/backups/rhdemo/` et `.../backups/keycloak/`
+- **Dans KinD** : `/mnt/backups/rhdemo/` et `/mnt/backups/keycloak/`
 
 **Avantages** :
 - ✅ Survie aux redémarrages machine
 - ✅ Survie à la recréation du cluster KinD
 - ✅ Accès direct depuis l'hôte pour restauration
 - ✅ Pas de PersistentVolume Kubernetes requis
+
+> **Note** : Si le cluster KinD a été créé sans l'extraMount `/mnt/backups`, il faudra recréer le cluster avec `./scripts/init-stagingkub.sh` pour que les backups soient accessibles sur l'hôte.
 
 ---
 

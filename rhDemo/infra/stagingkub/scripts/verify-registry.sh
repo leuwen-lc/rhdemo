@@ -32,9 +32,22 @@ fi
 
 echo -e "${GREEN}✅ Registry actif: ${REGISTRY}${NC}"
 
-# 2. Vérifier le nom du registry
+# 2. Vérifier le certificat du registry
 echo ""
-echo -e "${YELLOW}2. Vérification du nom du registry...${NC}"
+echo -e "${YELLOW}2. Vérification du certificat HTTPS...${NC}"
+REGISTRY_CERT="/etc/docker/certs.d/localhost:5000/ca.crt"
+if [ -f "$REGISTRY_CERT" ]; then
+    echo -e "${GREEN}✅ Certificat trouvé: ${REGISTRY_CERT}${NC}"
+else
+    echo -e "${RED}❌ Certificat manquant: ${REGISTRY_CERT}${NC}"
+    echo -e "${YELLOW}💡 Générez les certificats avec:${NC}"
+    echo "   cd rhDemo/infra/jenkins-docker && ./init-registry-certs.sh"
+    exit 1
+fi
+
+# 3. Vérifier le nom du registry
+echo ""
+echo -e "${YELLOW}3. Vérification du nom du registry...${NC}"
 if [ "$REGISTRY" = "kind-registry" ]; then
     echo -e "${GREEN}✅ Nom correct: kind-registry${NC}"
 else
@@ -45,18 +58,18 @@ else
     echo "   cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
 fi
 
-# 3. Vérifier l'accessibilité HTTP
+# 4. Vérifier l'accessibilité HTTPS
 echo ""
-echo -e "${YELLOW}3. Test d'accessibilité HTTP...${NC}"
-if curl -sf http://localhost:5000/v2/_catalog > /dev/null; then
-    echo -e "${GREEN}✅ Registry accessible sur http://localhost:5000${NC}"
+echo -e "${YELLOW}4. Test d'accessibilité HTTPS...${NC}"
+if curl -sf --cacert "$REGISTRY_CERT" https://localhost:5000/v2/_catalog > /dev/null; then
+    echo -e "${GREEN}✅ Registry accessible sur https://localhost:5000${NC}"
 
     # Afficher les images
-    IMAGES=$(curl -s http://localhost:5000/v2/_catalog | jq -r '.repositories[]' 2>/dev/null || echo "")
+    IMAGES=$(curl -s --cacert "$REGISTRY_CERT" https://localhost:5000/v2/_catalog | jq -r '.repositories[]' 2>/dev/null || echo "")
     if [ -n "$IMAGES" ]; then
         echo -e "${BLUE}   Images disponibles:${NC}"
         echo "$IMAGES" | while read img; do
-            TAGS=$(curl -s http://localhost:5000/v2/$img/tags/list | jq -r '.tags[]' 2>/dev/null | head -3)
+            TAGS=$(curl -s --cacert "$REGISTRY_CERT" https://localhost:5000/v2/$img/tags/list | jq -r '.tags[]' 2>/dev/null | head -3)
             echo -e "     • $img"
             echo "$TAGS" | while read tag; do
                 echo -e "       - $tag"
@@ -70,9 +83,9 @@ else
     exit 1
 fi
 
-# 4. Vérifier la connexion au réseau kind
+# 5. Vérifier la connexion au réseau kind
 echo ""
-echo -e "${YELLOW}4. Vérification de la connexion au réseau 'kind'...${NC}"
+echo -e "${YELLOW}5. Vérification de la connexion au réseau 'kind'...${NC}"
 if docker network inspect kind 2>/dev/null | grep -q "\"$REGISTRY\""; then
     echo -e "${GREEN}✅ Registry connecté au réseau 'kind'${NC}"
 
@@ -88,9 +101,9 @@ else
     exit 1
 fi
 
-# 5. Vérifier l'alias DNS 'kind-registry'
+# 6. Vérifier l'alias DNS 'kind-registry'
 echo ""
-echo -e "${YELLOW}5. Vérification de l'alias DNS 'kind-registry'...${NC}"
+echo -e "${YELLOW}6. Vérification de l'alias DNS 'kind-registry'...${NC}"
 if docker network inspect kind | grep -q "\"kind-registry\""; then
     echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
 else
@@ -101,9 +114,9 @@ else
     exit 1
 fi
 
-# 6. Vérifier la résolution DNS depuis Kind
+# 7. Vérifier la résolution DNS depuis Kind
 echo ""
-echo -e "${YELLOW}6. Test de résolution DNS depuis Kind...${NC}"
+echo -e "${YELLOW}7. Test de résolution DNS depuis Kind...${NC}"
 if kind get clusters | grep -q "^rhdemo$"; then
     if docker exec rhdemo-control-plane getent hosts kind-registry &> /dev/null; then
         KIND_RESOLVED=$(docker exec rhdemo-control-plane getent hosts kind-registry | awk '{print $1}')
@@ -113,46 +126,47 @@ if kind get clusters | grep -q "^rhdemo$"; then
         exit 1
     fi
 
-    # Test HTTP depuis Kind
+    # Test HTTPS depuis Kind
     echo ""
-    echo -e "${YELLOW}   Test HTTP depuis Kind...${NC}"
-    if docker exec rhdemo-control-plane curl -sf http://kind-registry:5000/v2/_catalog > /dev/null; then
-        echo -e "${GREEN}✅ Registry accessible depuis Kind via HTTP${NC}"
+    echo -e "${YELLOW}   Test HTTPS depuis Kind...${NC}"
+    if docker exec rhdemo-control-plane curl -sf https://kind-registry:5000/v2/_catalog > /dev/null; then
+        echo -e "${GREEN}✅ Registry accessible depuis Kind via HTTPS${NC}"
     else
-        echo -e "${RED}❌ Registry inaccessible depuis Kind${NC}"
+        echo -e "${RED}❌ Registry inaccessible depuis Kind via HTTPS${NC}"
+        echo -e "${YELLOW}💡 Vérifiez que le certificat est installé dans le nœud Kind${NC}"
         exit 1
     fi
 else
     echo -e "${YELLOW}⚠️  Cluster Kind 'rhdemo' non trouvé, test ignoré${NC}"
 fi
 
-# 7. Vérifier la configuration containerd
+# 8. Vérifier la configuration containerd
 echo ""
-echo -e "${YELLOW}7. Vérification de la configuration containerd dans Kind...${NC}"
+echo -e "${YELLOW}8. Vérification de la configuration containerd dans Kind...${NC}"
 if kind get clusters | grep -q "^rhdemo$"; then
     if docker exec rhdemo-control-plane cat /etc/containerd/config.toml 2>/dev/null | \
-       grep -A1 "localhost:5000" | grep -q "kind-registry:5000"; then
-        echo -e "${GREEN}✅ Containerd configuré pour rediriger localhost:5000 → kind-registry:5000${NC}"
+       grep -A1 "localhost:5000" | grep -q "https://kind-registry:5000"; then
+        echo -e "${GREEN}✅ Containerd configuré pour rediriger localhost:5000 → https://kind-registry:5000${NC}"
     else
         echo -e "${RED}❌ Configuration containerd incorrecte ou manquante${NC}"
         echo -e "${YELLOW}💡 Vérifiez kind-config.yaml:${NC}"
         echo "   containerdConfigPatches:"
         echo "   - |"
         echo "     [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"localhost:5000\"]"
-        echo "       endpoint = [\"http://kind-registry:5000\"]"
+        echo "       endpoint = [\"https://kind-registry:5000\"]"
         exit 1
     fi
 else
     echo -e "${YELLOW}⚠️  Cluster Kind 'rhdemo' non trouvé, test ignoré${NC}"
 fi
 
-# 8. Test de pull d'image depuis Kubernetes (optionnel)
+# 9. Test de pull d'image depuis Kubernetes (optionnel)
 echo ""
-echo -e "${YELLOW}8. Test de pull d'image depuis Kubernetes...${NC}"
+echo -e "${YELLOW}9. Test de pull d'image depuis Kubernetes...${NC}"
 if kind get clusters | grep -q "^rhdemo$" && [ -n "$IMAGES" ]; then
     TEST_IMAGE=$(echo "$IMAGES" | head -1)
     if [ -n "$TEST_IMAGE" ]; then
-        TEST_TAG=$(curl -s http://localhost:5000/v2/$TEST_IMAGE/tags/list | jq -r '.tags[0]' 2>/dev/null)
+        TEST_TAG=$(curl -s --cacert "$REGISTRY_CERT" https://localhost:5000/v2/$TEST_IMAGE/tags/list | jq -r '.tags[0]' 2>/dev/null)
 
         if [ -n "$TEST_TAG" ] && [ "$TEST_TAG" != "null" ]; then
             echo -e "${BLUE}   Test avec: localhost:5000/${TEST_IMAGE}:${TEST_TAG}${NC}"
@@ -196,8 +210,9 @@ echo ""
 echo -e "${BLUE}Configuration du registry:${NC}"
 echo -e "  • Nom:        ${REGISTRY}"
 echo -e "  • Port:       5000"
+echo -e "  • Protocole:  HTTPS"
 echo -e "  • Réseau:     kind (avec alias 'kind-registry')"
-echo -e "  • URL Host:   http://localhost:5000"
-echo -e "  • URL Kind:   http://kind-registry:5000"
-echo -e "  • Redirect:   localhost:5000 → kind-registry:5000 (via containerd)"
+echo -e "  • URL Host:   https://localhost:5000"
+echo -e "  • URL Kind:   https://kind-registry:5000"
+echo -e "  • Redirect:   localhost:5000 → https://kind-registry:5000 (via containerd)"
 echo ""

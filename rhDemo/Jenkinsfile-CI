@@ -83,6 +83,7 @@ pipeline {
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'PUBLISH_IMAGE', defaultValue: true, description: 'Publier l\'image sur le registry après validation')
+        booleanParam(name: 'SIGN_IMAGE', defaultValue: true, description: 'Signer l\'image Docker avec Cosign après publication')
         booleanParam(name: 'KEEP_EPHEMERE_ENV', defaultValue: false, description: 'Garder l\'environnement ephemere pour debug (ne pas nettoyer à la fin)')
         string(name: 'IMAGE_TAG_SUFFIX', defaultValue: '', description: 'Suffixe optionnel pour le tag (ex: -rc1, -hotfix)')
     }
@@ -1075,6 +1076,56 @@ YMLEOF
             }
         }
 
+        stage('📦 Génération SBOM CycloneDX') {
+            steps {
+                script {
+                    echo "▶ Génération du SBOM CycloneDX pour l'image applicative..."
+                    echo "   Image: ${env.RHDEMO_IMAGE}"
+                }
+
+                sh """
+                    WORKSPACE_DIR=\$(pwd)
+                    mkdir -p "\${WORKSPACE_DIR}/sbom-reports"
+
+                    # Utiliser le cache partagé Trivy (déjà préparé par le stage précédent)
+                    TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-shared"
+                    export TRIVY_CACHE_DIR
+
+                    echo "▶ Génération SBOM au format CycloneDX JSON..."
+
+                    # Génération du SBOM avec Trivy
+                    timeout 5m trivy image \\
+                        --skip-db-update \\
+                        --skip-java-db-update \\
+                        --no-progress \\
+                        --format cyclonedx \\
+                        --output "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" \\
+                        "${env.RHDEMO_IMAGE}" 2>&1 | grep -E "(Analyzing|Total)" || true
+
+                    # Vérifier que le fichier a été créé et afficher les stats
+                    if [ -f "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" ]; then
+                        COMPONENT_COUNT=\$(jq '.components | length' "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" 2>/dev/null || echo "0")
+                        SBOM_VERSION=\$(jq -r '.specVersion' "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" 2>/dev/null || echo "N/A")
+                        echo ""
+                        echo "✅ SBOM CycloneDX généré avec succès"
+                        echo "   Fichier: sbom-reports/rhdemo-app-sbom.json"
+                        echo "   Version CycloneDX: \${SBOM_VERSION}"
+                        echo "   Nombre de composants: \${COMPONENT_COUNT}"
+                    else
+                        echo "⚠️  Échec de génération du SBOM"
+                        # Créer un SBOM vide minimal pour éviter les erreurs d'archivage
+                        echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json"
+                    fi
+                """
+            }
+            post {
+                always {
+                    // Archiver le SBOM CycloneDX
+                    archiveArtifacts artifacts: 'sbom-reports/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS SELENIUM ET OWASP ZAP
         // ════════════════════════════════════════════════════════════════
@@ -1459,7 +1510,10 @@ YMLEOF
 
         stage('🔏 Signature Image (Cosign)') {
             when {
-                expression { params.PUBLISH_IMAGE == true }
+                allOf {
+                    expression { params.PUBLISH_IMAGE == true }
+                    expression { params.SIGN_IMAGE == true }
+                }
             }
             steps {
                 script {

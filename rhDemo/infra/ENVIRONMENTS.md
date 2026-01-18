@@ -11,8 +11,6 @@ Ce document décrit les différents environnements disponibles pour le déploiem
 | **none** | - | Build + tests uniquement | CI rapide sans déploiement |
 | **ephemere** | Docker Compose | Environnement ephemere avec Docker Compose | Tests fonctionnels rapides, debugging |
 | **stagingkub** | Kubernetes (KinD) | Environnement de staging Kubernetes local | Tests Kubernetes, validation pre-prod |
-| **production** | Docker Compose | Production (à migrer vers Kubernetes) | Déploiement production |
-
 ---
 
 ## 🔧 Configuration Jenkins

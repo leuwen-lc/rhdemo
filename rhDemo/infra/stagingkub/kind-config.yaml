@@ -1,7 +1,15 @@
 # Configuration KinD pour le cluster rhdemo
 # Permet la persistance des données PostgreSQL via extraMounts
+# Configure l'accès HTTPS au registry Docker local
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+
+# Configuration de containerd pour le registry HTTPS
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+    endpoint = ["https://kind-registry:5000"]
+
 nodes:
 - role: control-plane
   extraMounts:

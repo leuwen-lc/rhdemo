@@ -70,6 +70,11 @@ pipeline {
             description: 'Numéro du build CI à utiliser (ex: 42). Si vide, utilise le dernier build stable du job RHDemo-CI.'
         )
         booleanParam(
+            name: 'VERIFY_SIGNATURE',
+            defaultValue: true,
+            description: 'Vérifier la signature Cosign de l\'image avant déploiement'
+        )
+        booleanParam(
             name: 'FORCE_RECREATE_PODS',
             defaultValue: false,
             description: 'Forcer la recréation des pods (rollout restart)'
@@ -401,6 +406,9 @@ EOF
         }
 
         stage('🔏 Vérification Signature Image (Cosign)') {
+            when {
+                expression { params.VERIFY_SIGNATURE == true }
+            }
             steps {
                 script {
                     echo "▶ Vérification de la signature de l'image avec Cosign..."

@@ -80,12 +80,20 @@ else
     fi
 fi
 
-# Vérifier l'accessibilité
-if ! curl -sf http://localhost:${REGISTRY_PORT}/v2/ > /dev/null; then
-    echo -e "${RED}❌ Registry inaccessible sur http://localhost:${REGISTRY_PORT}${NC}"
+# Vérifier l'accessibilité (HTTPS avec certificat auto-signé)
+REGISTRY_CERT="/etc/docker/certs.d/localhost:${REGISTRY_PORT}/ca.crt"
+if [ ! -f "$REGISTRY_CERT" ]; then
+    echo -e "${RED}❌ Certificat du registry non trouvé : ${REGISTRY_CERT}${NC}"
+    echo -e "${YELLOW}   Générez les certificats avec :${NC}"
+    echo -e "${YELLOW}   cd rhDemo/infra/jenkins-docker && ./init-registry-certs.sh${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Registry accessible${NC}"
+
+if ! curl -sf --cacert "$REGISTRY_CERT" https://localhost:${REGISTRY_PORT}/v2/ > /dev/null; then
+    echo -e "${RED}❌ Registry inaccessible sur https://localhost:${REGISTRY_PORT}${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Registry accessible (HTTPS)${NC}"
 
 # Vérifier que le cluster KinD 'rhdemo' existe
 echo -e "${YELLOW}▶ Vérification du cluster KinD 'rhdemo'...${NC}"
@@ -122,6 +130,8 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     docker network disconnect kind ${REGISTRY_NAME} 2>/dev/null || true
     docker network connect kind ${REGISTRY_NAME} --alias kind-registry
     echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
+
+    CLUSTER_CREATED=true
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
@@ -137,7 +147,35 @@ else
         docker network connect kind ${REGISTRY_NAME} --alias kind-registry
         echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
+
+    CLUSTER_CREATED=false
 fi
+
+# ═══════════════════════════════════════════════════════════════
+# Configuration HTTPS du registry dans le nœud KinD
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration du certificat HTTPS dans le nœud KinD...${NC}"
+
+# Copier le certificat CA dans le nœud KinD
+docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
+
+# Mettre à jour les CA du nœud
+docker exec rhdemo-control-plane update-ca-certificates > /dev/null 2>&1
+
+# Vérifier si containerd utilise encore HTTP
+if docker exec rhdemo-control-plane grep -q "http://kind-registry:5000" /etc/containerd/config.toml 2>/dev/null; then
+    echo -e "${YELLOW}  - Mise à jour de containerd pour HTTPS...${NC}"
+    docker exec rhdemo-control-plane sed -i 's|http://kind-registry:5000|https://kind-registry:5000|g' /etc/containerd/config.toml
+    docker exec rhdemo-control-plane systemctl restart containerd
+    echo -e "${GREEN}✅ Containerd configuré pour HTTPS${NC}"
+else
+    echo -e "${GREEN}✅ Containerd déjà configuré pour HTTPS${NC}"
+firhdemo-stagingkub    keycloak-55d95f4446-6smgf                                1/1     Running            0               6m39s
+rhdemo-stagingkub    postgresql-keycloak-0                                    1/1     Running            1 (3h37m ago)   2d
+rhdemo-stagingkub    postgresql-rhdemo-0                                      1/1     Running            1 (3h37m ago)   2d
+rhdemo-stagingkub    rhdemo-app-56bd96bc49-qdwvg                              0/1     ImagePullBackOff   0               33h
+rhdemo-stagingkub    rhdemo-app-64d7dfc44c-k558c                              0/1     ImagePullBackOff   0               6m39s
+
 
 # Définir le contexte kubectl
 kubectl config use-context kind-rhdemo

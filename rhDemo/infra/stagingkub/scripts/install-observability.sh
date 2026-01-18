@@ -235,10 +235,10 @@ echo ""
 # 6. Déploiement des dashboards Grafana
 # ═══════════════════════════════════════════════════════════════
 
-log "Déploiement des dashboards Grafana..."
+log "Deploiement des dashboards Grafana..."
 
-# Dashboard rhDemo Logs (existant)
-DASHBOARD_LOGS="../grafana-dashboard-rhdemo.json"
+# Dashboard rhDemo Logs (Loki)
+DASHBOARD_LOGS="../grafana-dashboard-rhdemo-logs.json"
 if [ -f "$DASHBOARD_LOGS" ]; then
     cat "$DASHBOARD_LOGS" | jq '.dashboard' > /tmp/rhdemo-logs.json 2>/dev/null || cp "$DASHBOARD_LOGS" /tmp/rhdemo-logs.json
 
@@ -251,9 +251,28 @@ if [ -f "$DASHBOARD_LOGS" ]; then
         -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
 
     rm -f /tmp/rhdemo-logs.json
-    success "Dashboard rhDemo Logs déployé"
+    success "Dashboard rhDemo Logs deploye"
 else
     warn "Dashboard $DASHBOARD_LOGS introuvable"
+fi
+
+# Dashboard rhDemo Metriques (Prometheus)
+DASHBOARD_METRICS="../grafana-dashboard-rhdemo-metrics.json"
+if [ -f "$DASHBOARD_METRICS" ]; then
+    cat "$DASHBOARD_METRICS" | jq '.dashboard' > /tmp/rhdemo-metrics.json 2>/dev/null || cp "$DASHBOARD_METRICS" /tmp/rhdemo-metrics.json
+
+    kubectl create configmap grafana-dashboard-rhdemo-metrics \
+        --from-file="rhdemo-metrics.json=/tmp/rhdemo-metrics.json" \
+        --namespace="$LOKI_NS" \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+
+    kubectl patch configmap grafana-dashboard-rhdemo-metrics -n $LOKI_NS \
+        -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
+
+    rm -f /tmp/rhdemo-metrics.json
+    success "Dashboard rhDemo Metriques deploye"
+else
+    warn "Dashboard $DASHBOARD_METRICS introuvable"
 fi
 
 echo ""
@@ -296,7 +315,8 @@ echo -e "    - ${GREEN}✓${NC} Loki (logs)"
 echo -e "    - ${GREEN}✓${NC} Prometheus (métriques)"
 echo ""
 echo -e "  Dashboards:"
-echo -e "    - ${GREEN}✓${NC} rhDemo - Logs Application"
+echo -e "    - ${GREEN}✓${NC} rhDemo - Logs Application (Loki)"
+echo -e "    - ${GREEN}✓${NC} rhDemo - Metriques Pods (Prometheus)"
 echo ""
 
 echo -e "${YELLOW}📈 Prometheus (Métriques):${NC}"

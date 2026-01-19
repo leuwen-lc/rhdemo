@@ -146,6 +146,50 @@ nodes:
 
 > **Note** : Si le cluster KinD a été créé sans l'extraMount `/mnt/backups`, il faudra recréer le cluster avec `./scripts/init-stagingkub.sh` pour que les backups soient accessibles sur l'hôte.
 
+### Persistance des Données PostgreSQL (PV Statiques)
+
+En plus des backups, les **données PostgreSQL** elles-mêmes sont persistées via des **PersistentVolumes statiques** utilisant `hostPath` :
+
+**Fichier Helm** : [`infra/stagingkub/helm/rhdemo/templates/postgresql-persistentvolumes.yaml`](../infra/stagingkub/helm/rhdemo/templates/postgresql-persistentvolumes.yaml)
+
+```yaml
+# PV statique pour PostgreSQL RHDemo
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgresql-rhdemo-pv
+spec:
+  storageClassName: manual-postgresql
+  capacity:
+    storage: 2Gi
+  hostPath:
+    path: /mnt/data/postgresql-rhdemo
+
+# PV statique pour PostgreSQL Keycloak
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgresql-keycloak-pv
+spec:
+  storageClassName: manual-postgresql
+  capacity:
+    storage: 2Gi
+  hostPath:
+    path: /mnt/data/postgresql-keycloak
+```
+
+**Chemins des données** :
+
+- **Sur l'hôte** : `/home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo/` et `.../postgresql-keycloak/`
+- **Dans KinD** : `/mnt/data/postgresql-rhdemo/` et `/mnt/data/postgresql-keycloak/`
+
+**Avantages des PV statiques** :
+
+- ✅ Données PostgreSQL survivent à la recréation du cluster KinD
+- ✅ Realm Keycloak préservé entre les redémarrages
+- ✅ Pas de perte de données lors des mises à jour Helm
+- ✅ `persistentVolumeReclaimPolicy: Retain` empêche la suppression accidentelle
+
 ---
 
 ## 🛠️ Commandes Utiles

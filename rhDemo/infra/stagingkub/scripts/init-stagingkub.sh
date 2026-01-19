@@ -122,7 +122,7 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${BLUE}  - Registry Docker : ${REGISTRY_NAME}:${REGISTRY_PORT}${NC}"
     echo -e "${BLUE}  - Ports mappés : 80 → 31792, 443 → 32616${NC}"
 
-    kind create cluster --config "${KIND_CONFIG_FILE}"
+    kind create cluster --name rhdemo --config "${KIND_CONFIG_FILE}"
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé avec persistance des données${NC}"
 
     # Connecter le registry au réseau KinD avec alias

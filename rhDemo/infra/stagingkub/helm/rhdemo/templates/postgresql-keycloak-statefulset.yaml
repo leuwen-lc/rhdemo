@@ -72,9 +72,7 @@ spec:
     spec:
       accessModes:
       - {{ (index .Values "postgresql-keycloak").persistence.accessMode }}
-      {{- if (index .Values "postgresql-keycloak").persistence.storageClass }}
-      storageClassName: {{ (index .Values "postgresql-keycloak").persistence.storageClass }}
-      {{- end }}
+      storageClassName: manual-postgresql
       resources:
         requests:
           storage: {{ (index .Values "postgresql-keycloak").persistence.size }}

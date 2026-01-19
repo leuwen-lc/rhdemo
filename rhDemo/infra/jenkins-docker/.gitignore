@@ -5,8 +5,7 @@
 workspace/
 
 # Certificats SSL
-nginx/ssl/*.key
-nginx/ssl/*.crt
+certs/
 
 # Logs
 *.log

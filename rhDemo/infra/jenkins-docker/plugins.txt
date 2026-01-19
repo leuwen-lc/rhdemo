@@ -1,136 +1,82 @@
 # ═══════════════════════════════════════════════════════════════════
-# PLUGINS JENKINS - Liste complète pour le Jenkinsfile RHDemo
+# PLUGINS JENKINS - Liste optimisée pour RHDemo CI/CD
 # ═══════════════════════════════════════════════════════════════════
+#
+# Cette liste contient UNIQUEMENT les plugins réellement utilisés
+# par les pipelines Jenkinsfile-CI et Jenkinsfile-CD.
+#
+# Plugins supprimés (non utilisés) :
+#   - ssh-credentials, ssh-agent, publish-over-ssh (pas de SSH)
+#   - github, github-branch-source, gitlab-plugin, bitbucket (pas de webhooks)
+#   - kubernetes, kubernetes-cli (kubectl installé directement)
+#   - docker-plugin, docker-commons (pas d'agents Docker dynamiques)
+#   - email-ext (mailer simple suffit)
+#   - ansible (non utilisé)
+#   - blueocean (lourd, ~40 plugins)
+#   - artifactory, nexus-artifact-uploader, artifact-manager-s3 (registry local)
+#   - ldap, active-directory, github-oauth, saml (auth locale)
+#   - prometheus, metrics (non configurés)
+#   - testng-plugin, performance, warnings-ng (non utilisés)
+#
+# ════════════════════════════════════════════════════════════════════
 
 # ────────────────────────────────────────────────────────────────
-# PLUGINS ESSENTIELS
+# PLUGINS ESSENTIELS (Pipeline déclaratif)
 # ────────────────────────────────────────────────────────────────
-git:latest
-workflow-aggregator:latest
-pipeline-stage-view:latest
-credentials:latest
-credentials-binding:latest
-ssh-credentials:latest
-
-# ────────────────────────────────────────────────────────────────
-# GESTION DU CODE SOURCE
-# ────────────────────────────────────────────────────────────────
-github:latest
-github-branch-source:latest
-gitlab-plugin:latest
-bitbucket:latest
-scm-api:latest
+git:latest                          # checkout scm
+workflow-aggregator:latest          # pipeline {}, stages, steps
+pipeline-stage-view:latest          # Visualisation des stages
+credentials:latest                  # Gestion des credentials
+credentials-binding:latest          # withCredentials([file(...)])
 
 # ────────────────────────────────────────────────────────────────
 # BUILD & OUTILS JAVA
 # ────────────────────────────────────────────────────────────────
-maven-plugin:latest
-config-file-provider:latest
-pipeline-maven:latest
-jdk-tool:latest
-cloudbees-disk-usage-simple:latest
+maven-plugin:latest                 # tools { maven 'Maven3' }
+jdk-tool:latest                     # tools { jdk 'JDK21' }
 
 # ────────────────────────────────────────────────────────────────
 # QUALITÉ DU CODE
 # ────────────────────────────────────────────────────────────────
-sonar:latest
-jacoco:latest
-warnings-ng:latest
+sonar:latest                        # withSonarQubeEnv, waitForQualityGate
+jacoco:latest                       # jacoco(execPattern: ...)
 
 # ────────────────────────────────────────────────────────────────
-# TESTS
+# TESTS & RAPPORTS
 # ────────────────────────────────────────────────────────────────
-junit:latest
-testng-plugin:latest
-htmlpublisher:latest
-performance:latest
+junit:latest                        # junit 'target/surefire-reports/*.xml'
+htmlpublisher:latest                # publishHTML([...]) pour Trivy, ZAP, OWASP
 
 # ────────────────────────────────────────────────────────────────
 # SÉCURITÉ
 # ────────────────────────────────────────────────────────────────
-dependency-check-jenkins-plugin:latest
+dependency-check-jenkins-plugin:latest  # OWASP Dependency-Check tool config
 
 # ────────────────────────────────────────────────────────────────
-# DOCKER & KUBERNETES
+# DOCKER
 # ────────────────────────────────────────────────────────────────
-docker-workflow:latest
-docker-plugin:latest
-docker-commons:latest
-kubernetes:latest
-kubernetes-cli:latest
+docker-workflow:latest              # Commandes Docker dans pipeline
 
 # ────────────────────────────────────────────────────────────────
 # NOTIFICATIONS
 # ────────────────────────────────────────────────────────────────
-email-ext:latest
-mailer:latest
+mailer:latest                       # Configuration email JCasC
 
 # ────────────────────────────────────────────────────────────────
-# DÉPLOIEMENT
+# PIPELINE OPTIONS
 # ────────────────────────────────────────────────────────────────
-ssh-agent:latest
-publish-over-ssh:latest
-ansible:latest
-
-# ────────────────────────────────────────────────────────────────
-# UI & REPORTING
-# ────────────────────────────────────────────────────────────────
-dashboard-view:latest
-build-monitor-plugin:latest
-blueocean:latest
-pipeline-graph-view:latest
-timestamper:latest
-ansicolor:latest
-jobConfigHistory:latest
-
-# ────────────────────────────────────────────────────────────────
-# PARAMÈTRES & INPUT
-# ────────────────────────────────────────────────────────────────
-build-timeout:latest
-parameterized-trigger:latest
-conditional-buildstep:latest
-
-# ────────────────────────────────────────────────────────────────
-# GESTION DES ARTIFACTS
-# ────────────────────────────────────────────────────────────────
-artifactory:latest
-nexus-artifact-uploader:latest
-artifact-manager-s3:latest
-
-# ────────────────────────────────────────────────────────────────
-# WORKSPACE & NETTOYAGE
-# ────────────────────────────────────────────────────────────────
-ws-cleanup:latest
-build-discarder:latest
-
-# ────────────────────────────────────────────────────────────────
-# SÉCURITÉ & AUTHENTIFICATION
-# ────────────────────────────────────────────────────────────────
-matrix-auth:latest
-role-strategy:latest
-ldap:latest
-active-directory:latest
-github-oauth:latest
-saml:latest
-
-# ────────────────────────────────────────────────────────────────
-# MONITORING & MÉTRIQUES
-# ────────────────────────────────────────────────────────────────
-prometheus:latest
-metrics:latest
+timestamper:latest                  # options { timestamps() }
+build-timeout:latest                # timeout(time: 2, unit: 'HOURS')
+ws-cleanup:latest                   # Nettoyage workspace
 
 # ────────────────────────────────────────────────────────────────
 # CONFIGURATION AS CODE
 # ────────────────────────────────────────────────────────────────
-configuration-as-code:latest
-job-dsl:latest
+configuration-as-code:latest        # jenkins-casc.yaml
+job-dsl:latest                      # Définition des jobs RHDemo-CI/CD
 
 # ────────────────────────────────────────────────────────────────
 # UTILITAIRES
 # ────────────────────────────────────────────────────────────────
-locale:latest
-greenballs:latest
-rebuild:latest
-embeddable-build-status:latest
-pipeline-utility-steps:latest
-http_request:latest
+pipeline-utility-steps:latest       # readJSON, readYaml, etc.
+copyartifact:latest                 # copyArtifacts() - Récupération digest du build CI

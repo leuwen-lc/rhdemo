@@ -1,28 +1,40 @@
 # 🚀 Guide de Démarrage Rapide - Jenkins CI/CD pour RHDemo
 
-## ⚡ Démarrage en 3 minutes
+## ⚡ Démarrage en 5 minutes
 
 ```bash
-# 1. Aller dans le répertoire infra
-cd rhDemo/infra
+# 1. Aller dans le répertoire jenkins-docker
+cd rhDemo/infra/jenkins-docker
 
-# 2. Configurer les secrets
+# 2. Générer les certificats TLS pour le registry Docker (HTTPS)
+./init-registry-certs.sh
+
+# 3. Configurer Docker daemon pour faire confiance au certificat
+sudo mkdir -p /etc/docker/certs.d/localhost:5000
+sudo cp certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt
+sudo systemctl restart docker
+
+# 4. Configurer les secrets
 cp .env.example .env
 nano .env  # Éditer avec vos valeurs
 
-# 3. Builder et Démarrer Jenkins
+# 5. Builder et Démarrer Jenkins
 ./start-jenkins.sh
 
-# 4. Accéder à Jenkins
+# 6. Accéder à Jenkins
 # Ouvrir http://localhost:8080
 # Login: admin / admin123 (défini dans .env)
 ```
+
+> **Note** : Les étapes 2-3 (certificats) ne sont nécessaires qu'une seule fois.
+> Le script `start-jenkins.sh` vous guidera si les certificats sont manquants.
 
 ## 📋 Fichiers de configuration
 
 | Fichier | Description | Action requise |
 |---------|-------------|----------------|
 | `.env` | Secrets et variables | ✏️ **À configurer** |
+| `certs/registry/` | Certificats TLS registry | ✏️ **À générer** (`./init-registry-certs.sh`) |
 | `docker-compose.yml` | Services Docker | ✅ Prêt |
 | `Dockerfile.jenkins` | Image personnalisée | ✅ Prêt |
 | `plugins.txt` | Plugins auto-installés | ✅ Prêt |

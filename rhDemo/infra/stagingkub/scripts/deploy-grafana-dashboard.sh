@@ -1,16 +1,24 @@
 #!/bin/bash
 
-# Script pour déployer ou mettre à jour le dashboard Grafana rhDemo
-# Usage: ./deploy-grafana-dashboard.sh
+# Script pour deployer ou mettre a jour les dashboards Grafana rhDemo
+# Usage: ./deploy-grafana-dashboard.sh [logs|metrics|all]
 #
-# Ce script peut être exécuté indépendamment pour mettre à jour le dashboard
-# sans réinstaller toute la stack Loki
+# Ce script peut etre execute independamment pour mettre a jour les dashboards
+# sans reinstaller toute la stack Loki/Prometheus
+#
+# Arguments:
+#   logs    - Deploie uniquement le dashboard des logs (Loki)
+#   metrics - Deploie uniquement le dashboard des metriques (Prometheus)
+#   all     - Deploie les deux dashboards (defaut)
 
 set -e
 
 NAMESPACE="loki-stack"
-DASHBOARD_FILE="../grafana-dashboard-rhdemo.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Fichiers des dashboards (relatifs au dossier parent du script)
+DASHBOARD_LOGS="../grafana-dashboard-rhdemo-logs.json"
+DASHBOARD_METRICS="../grafana-dashboard-rhdemo-metrics.json"
 
 # Couleurs
 GREEN='\033[0;32m'
@@ -24,52 +32,106 @@ success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
-echo ""
-echo -e "${GREEN}═══════════════════════════════════${NC}"
-echo -e "${GREEN}  Déploiement Dashboard Grafana    ${NC}"
-echo -e "${GREEN}═══════════════════════════════════${NC}"
-echo ""
+# Fonction pour deployer un dashboard
+deploy_dashboard() {
+    local dashboard_file="$1"
+    local configmap_name="$2"
+    local json_filename="$3"
+    local dashboard_title="$4"
 
-# Vérifier que le fichier JSON existe
-if [ ! -f "${SCRIPT_DIR}/${DASHBOARD_FILE}" ]; then
-    error "Fichier dashboard non trouvé: ${SCRIPT_DIR}/${DASHBOARD_FILE}"
-fi
+    if [ ! -f "${SCRIPT_DIR}/${dashboard_file}" ]; then
+        warn "Fichier dashboard non trouve: ${SCRIPT_DIR}/${dashboard_file}"
+        return 1
+    fi
 
-# 1. Créer ou mettre à jour le ConfigMap avec le dashboard
-log "Création du ConfigMap pour le dashboard..."
+    log "Deploiement du dashboard: ${dashboard_title}"
 
-# Extraire le contenu du dashboard (sans le wrapper API)
-cat "${SCRIPT_DIR}/${DASHBOARD_FILE}" | jq '.dashboard' > /tmp/rhdemo-logs.json 2>/dev/null || {
-    warn "jq non disponible, utilisation du fichier tel quel"
-    cp "${SCRIPT_DIR}/${DASHBOARD_FILE}" /tmp/rhdemo-logs.json
+    # Extraire le contenu du dashboard (sans le wrapper API)
+    if command -v jq >/dev/null 2>&1; then
+        cat "${SCRIPT_DIR}/${dashboard_file}" | jq '.dashboard' > "/tmp/${json_filename}" 2>/dev/null
+    else
+        warn "jq non disponible, utilisation du fichier tel quel"
+        cp "${SCRIPT_DIR}/${dashboard_file}" "/tmp/${json_filename}"
+    fi
+
+    # Creer ou mettre a jour le ConfigMap
+    kubectl create configmap "${configmap_name}" \
+      --from-file="${json_filename}=/tmp/${json_filename}" \
+      --namespace="${NAMESPACE}" \
+      --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+
+    # Ajouter les labels pour que Grafana le detecte
+    kubectl patch configmap "${configmap_name}" -n "${NAMESPACE}" \
+      -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
+
+    rm -f "/tmp/${json_filename}"
+    success "Dashboard deploye: ${dashboard_title}"
 }
 
-kubectl create configmap grafana-dashboard-rhdemo \
-  --from-file="rhdemo-logs.json=/tmp/rhdemo-logs.json" \
-  --namespace="${NAMESPACE}" \
-  --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
-success "ConfigMap créé/mis à jour"
-
-# 2. Ajouter les labels nécessaires pour que Grafana le détecte
-log "Ajout des labels au ConfigMap..."
-kubectl patch configmap grafana-dashboard-rhdemo -n ${NAMESPACE} \
-  -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
-
-rm -f /tmp/rhdemo-logs.json
-success "Labels ajoutés"
-
-# 3. Attendre que le sidecar détecte le changement
-log "Attente de la détection par le sidecar..."
-sleep 3
-success "Dashboard rechargé automatiquement"
+# Argument par defaut
+ACTION="${1:-all}"
 
 echo ""
-echo -e "${GREEN}═══════════════════════════════════${NC}"
-echo -e "${GREEN}   Dashboard Déployé avec Succès!  ${NC}"
-echo -e "${GREEN}═══════════════════════════════════${NC}"
+echo -e "${GREEN}=================================================${NC}"
+echo -e "${GREEN}    Deploiement Dashboards Grafana rhDemo        ${NC}"
+echo -e "${GREEN}=================================================${NC}"
 echo ""
-echo -e "${BLUE}Dashboard:${NC} rhDemo - Logs Application"
-echo -e "${BLUE}URL:${NC} https://grafana.stagingkub.local"
+
+# Verifier la connexion au cluster
+kubectl cluster-info >/dev/null 2>&1 || error "Cluster Kubernetes inaccessible"
+
+# Verifier que le namespace existe
+if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+    error "Namespace ${NAMESPACE} non trouve. Installer d'abord la stack observabilite."
+fi
+
+DEPLOYED_COUNT=0
+
+case "${ACTION}" in
+    logs)
+        log "Mode: Deploiement du dashboard Logs uniquement"
+        echo ""
+        deploy_dashboard "${DASHBOARD_LOGS}" "grafana-dashboard-rhdemo" "rhdemo-logs.json" "rhDemo - Logs Application" && ((DEPLOYED_COUNT++)) || true
+        ;;
+    metrics)
+        log "Mode: Deploiement du dashboard Metriques uniquement"
+        echo ""
+        deploy_dashboard "${DASHBOARD_METRICS}" "grafana-dashboard-rhdemo-metrics" "rhdemo-metrics.json" "rhDemo - Metriques Pods" && ((DEPLOYED_COUNT++)) || true
+        ;;
+    all)
+        log "Mode: Deploiement de tous les dashboards"
+        echo ""
+        deploy_dashboard "${DASHBOARD_LOGS}" "grafana-dashboard-rhdemo" "rhdemo-logs.json" "rhDemo - Logs Application" && ((DEPLOYED_COUNT++)) || true
+        deploy_dashboard "${DASHBOARD_METRICS}" "grafana-dashboard-rhdemo-metrics" "rhdemo-metrics.json" "rhDemo - Metriques Pods" && ((DEPLOYED_COUNT++)) || true
+        ;;
+    *)
+        error "Action inconnue: ${ACTION}. Utiliser: logs, metrics ou all"
+        ;;
+esac
+
+# Attendre que le sidecar detecte les changements
+if [ ${DEPLOYED_COUNT} -gt 0 ]; then
+    echo ""
+    log "Attente de la detection par le sidecar Grafana..."
+    sleep 3
+    success "Dashboards recharges automatiquement"
+fi
+
 echo ""
-echo -e "${YELLOW}Note:${NC} Le dashboard sera automatiquement chargé dans Grafana"
+echo -e "${GREEN}=================================================${NC}"
+echo -e "${GREEN}   ${DEPLOYED_COUNT} Dashboard(s) Deploye(s) avec Succes!      ${NC}"
+echo -e "${GREEN}=================================================${NC}"
+echo ""
+echo -e "${BLUE}Dashboards disponibles:${NC}"
+if [ "${ACTION}" = "logs" ] || [ "${ACTION}" = "all" ]; then
+    echo -e "  - rhDemo - Logs Application (Loki)"
+fi
+if [ "${ACTION}" = "metrics" ] || [ "${ACTION}" = "all" ]; then
+    echo -e "  - rhDemo - Metriques Pods (Prometheus)"
+fi
+echo ""
+echo -e "${BLUE}URL Grafana:${NC} https://grafana.stagingkub.local"
+echo ""
+echo -e "${YELLOW}Note:${NC} Les dashboards sont automatiquement charges dans Grafana"
+echo -e "${YELLOW}Usage:${NC} $0 [logs|metrics|all]"
 echo ""

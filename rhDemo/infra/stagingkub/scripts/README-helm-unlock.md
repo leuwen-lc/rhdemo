@@ -1,13 +1,5 @@
-# 🔓 Scripts de déblocage Helm
 
-Ces scripts permettent de résoudre l'erreur courante :
-```
-Error: UPGRADE FAILED: another operation (install/upgrade/rollback) is in progress
-```
-
-## 📋 Scripts disponibles
-
-### 1. `helm-unlock.sh` - Version complète avec confirmation
+###  `helm-unlock.sh` 
 
 Script interactif qui affiche l'état de tous les secrets Helm et demande confirmation avant suppression.
 
@@ -30,20 +22,7 @@ Script interactif qui affiche l'état de tous les secrets Helm et demande confir
 - ✅ Suppression automatique en mode non-interactif
 - ✅ Affiche des statistiques détaillées
 
-### 2. `helm-unlock-quick.sh` - Version rapide sans confirmation
 
-Script one-liner qui supprime immédiatement tous les verrous pending sans demander confirmation.
-
-**Usage :**
-```bash
-# Avec valeurs par défaut
-./helm-unlock-quick.sh
-
-# Avec paramètres personnalisés
-./helm-unlock-quick.sh <NAMESPACE> <RELEASE_NAME>
-```
-
-**⚠️ Attention :** Ce script supprime les verrous sans confirmation. À utiliser uniquement si vous êtes sûr.
 
 ## 🔍 États Helm bloquants
 
@@ -163,4 +142,4 @@ helm install rhdemo ./chart -n rhdemo-stagingkub
 
 ---
 
-**Dernière mise à jour** : 2025-12-18
+**Dernière mise à jour** : 2026-01-19

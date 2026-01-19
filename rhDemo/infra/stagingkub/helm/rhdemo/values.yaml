@@ -7,6 +7,19 @@ global:
   domain: stagingkub.local
 
 # ═══════════════════════════════════════════════════════════════
+# Backups PostgreSQL (CronJobs)
+# ═══════════════════════════════════════════════════════════════
+postgresqlBackup:
+  enabled: true
+  retentionDays: 7  # Garder les backups pendant 7 jours
+
+  rhdemo:
+    schedule: "0 2 * * *"  # 2h du matin tous les jours
+
+  keycloak:
+    schedule: "0 3 * * *"  # 3h du matin tous les jours
+
+# ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour RHDemo
 # ═══════════════════════════════════════════════════════════════
 postgresql-rhdemo:
@@ -20,6 +33,7 @@ postgresql-rhdemo:
     name: rhdemo
     user: rhdemo
     # Le mot de passe sera fourni via secret externe ou --set
+    password: ""  # À fournir via --set ou secret
     passwordSecret:
       name: rhdemo-db-secret
       key: password
@@ -39,6 +53,7 @@ postgresql-rhdemo:
       cpu: "500m"
 
   service:
+    name: postgresql-rhdemo
     type: ClusterIP
     port: 5432
 
@@ -55,6 +70,7 @@ postgresql-keycloak:
   database:
     name: keycloak
     user: keycloak
+    password: ""  # À fournir via --set ou secret
     passwordSecret:
       name: keycloak-db-secret
       key: password
@@ -74,6 +90,7 @@ postgresql-keycloak:
       cpu: "500m"
 
   service:
+    name: postgresql-keycloak
     type: ClusterIP
     port: 5432
 
@@ -105,9 +122,8 @@ keycloak:
       name: keycloak-db-secret
       key: password
 
-  hostname:
-    url: https://keycloak.stagingkub.local
-    adminUrl: https://keycloak.stagingkub.local
+  # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
+  hostname: keycloak.stagingkub.local
 
   proxyHeaders: xforwarded
   httpEnabled: true
@@ -267,6 +283,10 @@ nginx-ingress:
       nodePorts:
         http: 30080
         https: 30443
+
+    # Configuration pour masquer la version nginx (protection Trivy/ZAP)
+    config:
+      server-tokens: "false"
 
     resources:
       requests:

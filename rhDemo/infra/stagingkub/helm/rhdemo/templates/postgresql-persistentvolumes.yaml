@@ -1,0 +1,51 @@
+{{- if (index .Values "postgresql-rhdemo").enabled }}
+---
+# PersistentVolume statique pour PostgreSQL RHDemo
+# Utilise hostPath pointant vers extraMounts KinD pour survivre aux recréations de cluster
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgresql-rhdemo-pv
+  labels:
+    app: postgresql-rhdemo
+    type: local
+spec:
+  storageClassName: manual-postgresql
+  capacity:
+    storage: {{ (index .Values "postgresql-rhdemo").persistence.size }}
+  accessModes:
+    - {{ (index .Values "postgresql-rhdemo").persistence.accessMode }}
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /mnt/data/postgresql-rhdemo
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: {{ .Values.global.namespace }}
+    name: postgresql-data-postgresql-rhdemo-0
+{{- end }}
+
+{{- if (index .Values "postgresql-keycloak").enabled }}
+---
+# PersistentVolume statique pour PostgreSQL Keycloak
+# Utilise hostPath pointant vers extraMounts KinD pour survivre aux recréations de cluster
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgresql-keycloak-pv
+  labels:
+    app: postgresql-keycloak
+    type: local
+spec:
+  storageClassName: manual-postgresql
+  capacity:
+    storage: {{ (index .Values "postgresql-keycloak").persistence.size }}
+  accessModes:
+    - {{ (index .Values "postgresql-keycloak").persistence.accessMode }}
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /mnt/data/postgresql-keycloak
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: {{ .Values.global.namespace }}
+    name: postgresql-data-postgresql-keycloak-0
+{{- end }}

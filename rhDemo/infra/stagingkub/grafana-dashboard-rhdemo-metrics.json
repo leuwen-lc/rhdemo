@@ -1,0 +1,1227 @@
+{
+  "dashboard": {
+    "uid": "rhdemo-metrics",
+    "title": "rhDemo - Metriques Pods",
+    "description": "Dashboard Prometheus pour les metriques CPU, memoire et reseau des pods rhDemo stagingkub",
+    "tags": ["prometheus", "rhdemo", "metrics", "kubernetes"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Vue d'ensemble - Statut des Pods",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{namespace=\"rhdemo-stagingkub\", phase=\"Running\"})",
+            "refId": "A",
+            "legendFormat": "Pods Running"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 1, "color": "yellow" },
+                { "value": 4, "color": "green" }
+              ]
+            },
+            "unit": "short",
+            "mappings": []
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 2,
+        "title": "CPU Total Utilise (namespace)",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 6,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "CPU %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 50, "color": "yellow" },
+                { "value": 80, "color": "red" }
+              ]
+            },
+            "unit": "percent",
+            "decimals": 1
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Memoire Totale Utilisee (namespace)",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", container!=\"\", container!=\"POD\"}) / 1024 / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Memory"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 2, "color": "yellow" },
+                { "value": 4, "color": "red" }
+              ]
+            },
+            "unit": "decgbytes",
+            "decimals": 2
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Restarts Totaux (1h)",
+        "type": "stat",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 18,
+          "y": 0,
+          "w": 6,
+          "h": 4
+        },
+        "targets": [
+          {
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"rhdemo-stagingkub\"}[1h]))",
+            "refId": "A",
+            "legendFormat": "Restarts"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 1, "color": "yellow" },
+                { "value": 5, "color": "red" }
+              ]
+            },
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 10,
+        "title": "CPU par Pod",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "CPU %",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "tooltip": false,
+                "viz": false,
+                "legend": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "unit": "percent",
+            "decimals": 1
+          }
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "right",
+            "calcs": ["mean", "max"]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Memoire par Pod",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 4,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", container!=\"\", container!=\"POD\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "{{pod}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory (MB)",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "tooltip": false,
+                "viz": false,
+                "legend": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "unit": "decmbytes",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "right",
+            "calcs": ["mean", "max"]
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        }
+      },
+      {
+        "id": 20,
+        "title": "rhdemo-app",
+        "type": "row",
+        "gridPos": {
+          "x": 0,
+          "y": 12,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "id": 21,
+        "title": "rhdemo-app - CPU",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 13,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", resource=\"cpu\"}) * 100",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", resource=\"cpu\"}) * 100",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 22,
+        "title": "rhdemo-app - Memoire",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 13,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", container!=\"\", container!=\"POD\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 23,
+        "title": "rhdemo-app - Reseau",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 13,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "RX (recu)"
+          },
+          {
+            "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"rhdemo-app-.*\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "TX (emis)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "Bps"
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 30,
+        "title": "keycloak",
+        "type": "row",
+        "gridPos": {
+          "x": 0,
+          "y": 19,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "id": 31,
+        "title": "keycloak - CPU",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 20,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", resource=\"cpu\"}) * 100",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", resource=\"cpu\"}) * 100",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 32,
+        "title": "keycloak - Memoire",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 20,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", container!=\"\", container!=\"POD\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 33,
+        "title": "keycloak - Reseau",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 20,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "RX (recu)"
+          },
+          {
+            "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"keycloak-.*\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "TX (emis)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "Bps"
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 40,
+        "title": "postgresql-rhdemo",
+        "type": "row",
+        "gridPos": {
+          "x": 0,
+          "y": 26,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "id": 41,
+        "title": "postgresql-rhdemo - CPU",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 27,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", resource=\"cpu\"}) * 100",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", resource=\"cpu\"}) * 100",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 42,
+        "title": "postgresql-rhdemo - Memoire",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 27,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", container!=\"\", container!=\"POD\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 43,
+        "title": "postgresql-rhdemo - Reseau",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 27,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "RX (recu)"
+          },
+          {
+            "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-rhdemo-.*\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "TX (emis)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "Bps"
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 50,
+        "title": "postgresql-keycloak",
+        "type": "row",
+        "gridPos": {
+          "x": 0,
+          "y": 33,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "id": 51,
+        "title": "postgresql-keycloak - CPU",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 34,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", container!=\"\", container!=\"POD\"}[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", resource=\"cpu\"}) * 100",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", resource=\"cpu\"}) * 100",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "percent"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 52,
+        "title": "postgresql-keycloak - Memoire",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 34,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", container!=\"\", container!=\"POD\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Usage"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_limits{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Limit"
+          },
+          {
+            "expr": "sum(kube_pod_container_resource_requests{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\", resource=\"memory\"}) / 1024 / 1024",
+            "refId": "C",
+            "legendFormat": "Request"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes"
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Limit" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Request" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+      {
+        "id": 53,
+        "title": "postgresql-keycloak - Reseau",
+        "type": "timeseries",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 34,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(container_network_receive_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "RX (recu)"
+          },
+          {
+            "expr": "sum(rate(container_network_transmit_bytes_total{namespace=\"rhdemo-stagingkub\", pod=~\"postgresql-keycloak-.*\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "TX (emis)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "Bps"
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    }
+  },
+  "folderId": 0,
+  "overwrite": true
+}

@@ -12,17 +12,20 @@
 **Cause** :
 - Jenkins tourne dans un container Docker
 - `localhost:5000` dans le contexte de Jenkins fait référence au container Jenkins lui-même, pas à l'hôte
-- Le registry `rhdemo-docker-registry` est sur un réseau Docker différent
+- Le registry `kind-registry` est sur un réseau Docker différent
 
-**Solution appliquée** : [Jenkinsfile:902-918](../../../Jenkinsfile#L902-L918)
+**Note importante** : Le registry doit s'appeler **exactement** `kind-registry` pour garantir la résolution DNS dans le cluster KinD. Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour plus de détails.
+
+**Solution appliquée** :
 - Détection dynamique du nom du registry : `docker ps --filter "publish=5000"`
-- Utilisation du nom DNS du container : `http://$REGISTRY_NAME:5000`
-- Fallback sur `localhost:5000` si l'accès par nom échoue
+- Vérification que le nom est exactement `kind-registry` (sinon échec du pipeline)
+- Utilisation du nom DNS du container : `http://localhost:5000` ou `http://kind-registry:5000`
 - Variable `$REGISTRY_URL` utilisée pour toutes les vérifications HTTP
 
 **Résultat** :
 ```bash
-✅ Registry détecté: rhdemo-docker-registry
+✅ Registry détecté: kind-registry
+✅ Nom validé: kind-registry
 ✅ Registry accessible via le réseau Docker
 ```
 
@@ -47,24 +50,39 @@ Unable to connect to the server: dial tcp 127.0.0.1:33309: connect: connection r
 docker network connect kind rhdemo-jenkins
 ```
 
-#### b) Configuration kubectl dynamique : [Jenkinsfile:862-919](../../../Jenkinsfile#L862-L919)
+#### b) Configuration kubectl dynamique : [Jenkinsfile-CD:233-305](../Jenkinsfile-CD#L233-L305)
 
-Nouvelle étape ajoutée au pipeline : `☸️ Configure Kubernetes Access`
+Étape dans le pipeline : `☸️ Configure Kubernetes Access`
 
 Cette étape :
 1. ✅ Vérifie que le cluster KinD existe
 2. ✅ Connecte Jenkins au réseau `kind` automatiquement
-3. ✅ Génère une kubeconfig adaptée avec `https://rhdemo-control-plane:6443`
-4. ✅ Installe la kubeconfig dans `$HOME/.kube/config`
-5. ✅ Vérifie l'accès avec `kubectl cluster-info`
-6. ✅ Active le contexte `kind-rhdemo`
+3. ✅ **Vérifie que le registry s'appelle `kind-registry`** (échoue sinon)
+4. ✅ **Connecte le registry au réseau `kind` automatiquement avec alias DNS `kind-registry`**
+5. ✅ Génère une kubeconfig adaptée avec `https://rhdemo-control-plane:6443`
+6. ✅ Installe la kubeconfig dans `$HOME/.kube/config`
+7. ✅ Vérifie l'accès avec `kubectl cluster-info`
+8. ✅ Active le contexte `kind-rhdemo`
 
 **Code clé** :
 ```bash
-# Connexion automatique au réseau kind
+# Connexion automatique de Jenkins au réseau kind
 JENKINS_CONTAINER=$(hostname)
 if ! docker network inspect kind 2>/dev/null | grep -q "$JENKINS_CONTAINER"; then
     docker network connect kind $JENKINS_CONTAINER
+fi
+
+# Vérification du nom du registry (DOIT être 'kind-registry')
+REGISTRY_CONTAINER=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+if [ "$REGISTRY_CONTAINER" != "kind-registry" ]; then
+    echo "❌ ERREUR: Registry trouvé '$REGISTRY_CONTAINER' mais le nom attendu est 'kind-registry'"
+    exit 1
+fi
+
+# Connexion automatique du registry au réseau kind avec alias DNS
+if ! docker network inspect kind 2>/dev/null | grep -q "$REGISTRY_CONTAINER"; then
+    docker network disconnect kind $REGISTRY_CONTAINER 2>/dev/null || true
+    docker network connect kind $REGISTRY_CONTAINER --alias kind-registry
 fi
 
 # Génération kubeconfig avec nom DNS interne
@@ -76,6 +94,8 @@ kind get kubeconfig --name rhdemo | \
 **Résultat** :
 ```bash
 ✅ Jenkins déjà connecté au réseau kind
+✅ Registry 'kind-registry' validé
+✅ Registry déjà connecté au réseau kind avec alias 'kind-registry' (IP: 172.21.0.4)
 ✅ Configuration kubectl installée
 ✅ Accès au cluster KinD confirmé
 ✅ Contexte 'kind-rhdemo' activé
@@ -83,7 +103,105 @@ kind get kubeconfig --name rhdemo | \
 
 ---
 
-### 3. ✅ VÉRIFICATION : Commandes kubectl et helm
+### 3. ❌ PROBLÈME : ImagePullBackOff sur les pods Kubernetes (ajouté 2026-01-09)
+
+**Symptôme** :
+```bash
+rhdemo-app-56bd96bc49-7tbvd   0/1     ImagePullBackOff   0   46h
+```
+
+```
+Events:
+  Type     Reason   Age                 From     Message
+  ----     ------   ----                ----     -------
+  Normal   Pulling  31m (x58 over 5h)   kubelet  Pulling image "localhost:5000/rhdemo-api:latest"
+  Warning  Failed   4m (x1317 over 5h)  kubelet  Error: ImagePullBackOff
+```
+
+**Cause** :
+- Le registry Docker `kind-registry` n'était **pas connecté au réseau `kind`** avec l'alias DNS approprié
+- Les pods Kubernetes dans le cluster KinD essaient de pull l'image via `localhost:5000`
+- Containerd dans KinD redirige `localhost:5000` vers `kind-registry:5000` (via mirror config)
+- Sans l'alias DNS `kind-registry`, la résolution échoue
+- Le cluster KinD ne peut accéder au registry que s'il est sur le même réseau Docker avec le bon alias
+
+**Diagnostic** :
+```bash
+# Vérifier que le registry existe
+docker ps | grep registry
+# ✅ kind-registry existe et écoute sur 0.0.0.0:5000
+
+# Vérifier que l'image existe dans le registry
+curl http://localhost:5000/v2/rhdemo-api/tags/list
+# ✅ {"name":"rhdemo-api","tags":["latest",...]}
+
+# Vérifier la connexion réseau du registry
+docker network inspect kind | grep kind-registry
+# ❌ Pas de résultat - registry NON connecté au réseau kind
+```
+
+**Solution appliquée** : [Jenkinsfile-CD:260-300](../Jenkinsfile-CD#L260-L300)
+
+Ajout dans le stage `☸️ Configure Kubernetes Access` :
+```bash
+# Vérifier que le registry s'appelle 'kind-registry' (OBLIGATOIRE)
+REGISTRY_CONTAINER=$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+if [ "$REGISTRY_CONTAINER" != "kind-registry" ]; then
+    echo "❌ ERREUR: Registry trouvé '$REGISTRY_CONTAINER' mais le nom attendu est 'kind-registry'"
+    exit 1
+fi
+
+# Connecter le registry au réseau kind avec alias DNS
+if ! docker network inspect kind 2>/dev/null | grep -q "$REGISTRY_CONTAINER"; then
+    docker network disconnect kind $REGISTRY_CONTAINER 2>/dev/null || true
+    docker network connect kind $REGISTRY_CONTAINER --alias kind-registry
+else
+    # Vérifier l'alias
+    if ! docker network inspect kind 2>/dev/null | grep -q '"kind-registry"'; then
+        docker network disconnect kind $REGISTRY_CONTAINER 2>/dev/null || true
+        docker network connect kind $REGISTRY_CONTAINER --alias kind-registry
+    fi
+fi
+```
+
+**Résolution manuelle (si nécessaire)** :
+```bash
+# Vérifier le nom du registry
+docker ps --filter "publish=5000" --format '{{.Names}}'
+# DOIT afficher: kind-registry
+
+# Si le nom est incorrect, recréer le registry
+docker stop <mauvais-nom> && docker rm <mauvais-nom>
+cd rhDemo/infra/jenkins-docker && docker-compose up -d registry
+
+# Connecter le registry au réseau kind avec alias
+docker network disconnect kind kind-registry 2>/dev/null || true
+docker network connect kind kind-registry --alias kind-registry
+
+# Supprimer le pod en erreur pour forcer une nouvelle tentative de pull
+kubectl delete pod rhdemo-app-56bd96bc49-7tbvd -n rhdemo-stagingkub
+
+# Vérifier que le nouveau pod démarre correctement
+kubectl get pods -n rhdemo-stagingkub -w
+```
+
+**Résultat** :
+```bash
+✅ Registry 'kind-registry' validé
+✅ Registry connecté au réseau kind avec alias 'kind-registry' (IP: 172.21.0.4)
+✅ Pod rhdemo-app passe de ImagePullBackOff à Running
+✅ Application accessible via https://rhdemo.stagingkub.local
+```
+
+**Prévention** :
+- Le pipeline Jenkinsfile-CD vérifie le nom du registry et échoue si incorrect
+- Le pipeline connecte automatiquement le registry avec l'alias à chaque déploiement
+- Le script `init-stagingkub.sh` connecte le registry avec l'alias lors de l'initialisation du cluster
+- Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour la documentation complète
+
+---
+
+### 4. ✅ VÉRIFICATION : Commandes kubectl et helm
 
 Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenkins :
 
@@ -108,11 +226,12 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 │                     Réseau: kind                             │
 │                                                              │
 │  ┌──────────────────┐  ┌─────────────────┐  ┌────────────┐ │
-│  │ rhdemo-jenkins   │  │ rhdemo-registry │  │ rhdemo-    │ │
-│  │                  │  │                 │  │ control-   │ │
+│  │ rhdemo-jenkins   │  │ kind-registry   │  │ rhdemo-    │ │
+│  │                  │  │ (container)     │  │ control-   │ │
 │  │ IP: 172.21.0.x   │  │ IP: 172.21.0.3  │  │ plane      │ │
 │  │                  │  │                 │  │            │ │
-│  │                  │  │ Alias: registry │  │ :6443 API  │ │
+│  │                  │  │ Alias DNS:      │  │ :6443 API  │ │
+│  │                  │  │ kind-registry   │  │            │ │
 │  └──────────────────┘  └─────────────────┘  └────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 
@@ -120,7 +239,7 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 │              Réseau: rhdemo-jenkins-network                  │
 │                                                              │
 │  ┌──────────────────┐  ┌─────────────────┐                 │
-│  │ rhdemo-jenkins   │  │ rhdemo-registry │                 │
+│  │ rhdemo-jenkins   │  │ kind-registry   │                 │
 │  │                  │  │                 │                 │
 │  │ IP: 172.18.0.6   │  │ IP: 172.18.0.3  │                 │
 │  │                  │  │                 │                 │
@@ -129,11 +248,13 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Note importante** : Le registry doit avoir le nom exact `kind-registry` et l'alias DNS `kind-registry` sur le réseau `kind` pour que containerd dans KinD puisse résoudre `kind-registry:5000`.
+
 ### Accès depuis Jenkins
 
 | Cible | Depuis Jenkins (container) | Protocole | Port |
 |-------|----------------------------|-----------|------|
-| Registry Docker | `http://rhdemo-docker-registry:5000` | HTTP | 5000 |
+| Registry Docker | `http://localhost:5000` ou `http://kind-registry:5000` | HTTP | 5000 |
 | KinD API Server | `https://rhdemo-control-plane:6443` | HTTPS | 6443 |
 | KinD Ingress (HTTP) | Via hôte `http://localhost:80` | HTTP | 80 |
 | KinD Ingress (HTTPS) | Via hôte `https://localhost:443` | HTTPS | 443 |
@@ -165,10 +286,17 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 Avant de lancer un build Jenkins avec `DEPLOY_ENV=stagingkub` :
 
 - [ ] Cluster KinD créé : `kind get clusters | grep rhdemo`
-- [ ] Registry actif : `docker ps | grep registry`
+- [ ] **Registry nommé `kind-registry`** : `docker ps --filter "publish=5000" --format '{{.Names}}'` ⚠️ **DOIT afficher exactement `kind-registry`**
+- [ ] Registry actif : `docker ps | grep kind-registry`
 - [ ] Jenkins démarré : `docker ps | grep rhdemo-jenkins`
 - [ ] Jenkins connecté au réseau kind : `docker network inspect kind | grep rhdemo-jenkins`
+- [ ] **Registry connecté au réseau kind avec alias** : `docker network inspect kind | grep -A2 kind-registry | grep Aliases` ⚠️ **Critique pour éviter ImagePullBackOff**
 - [ ] Secrets SOPS disponibles : `ls rhDemo/secrets/env-vars.sh`
+
+**Note** :
+- Le nom `kind-registry` est **obligatoire** et vérifié par les pipelines CI/CD
+- Les connexions Jenkins et Registry au réseau kind sont vérifiées et établies automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
+- Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour la configuration complète du registry
 
 **Commande d'initialisation** :
 ```bash
@@ -189,14 +317,29 @@ cd rhDemo/infra/stagingkub
 ### Erreur : "Registry non accessible"
 ```bash
 # Vérifier que le registry tourne
-docker ps | grep registry
+docker ps | grep kind-registry
+
+# Vérifier le nom exact
+docker ps --filter "publish=5000" --format '{{.Names}}'
+# DOIT afficher: kind-registry
+
+# Si le nom est incorrect, recréer le registry
+docker stop <mauvais-nom> && docker rm <mauvais-nom>
+cd rhDemo/infra/jenkins-docker && docker-compose up -d registry
 
 # Vérifier la connectivité réseau
-docker network inspect kind | grep registry
-docker network inspect rhdemo-jenkins-network | grep registry
+docker network inspect kind | grep kind-registry
+docker network inspect rhdemo-jenkins-network | grep kind-registry
+
+# Vérifier l'alias DNS sur le réseau kind
+docker network inspect kind | grep -A2 kind-registry | grep Aliases
+
+# Reconnecter avec alias si nécessaire
+docker network disconnect kind kind-registry 2>/dev/null || true
+docker network connect kind kind-registry --alias kind-registry
 
 # Redémarrer le registry si nécessaire
-docker restart rhdemo-docker-registry
+docker restart kind-registry
 ```
 
 ### Erreur : "Unable to connect to Kubernetes cluster"
@@ -245,6 +388,19 @@ kind get kubeconfig --name rhdemo | \
 
 ---
 
+## 📝 Historique des modifications
+
+| Date | Modification | Auteur |
+|------|-------------|--------|
+| 2025-12-11 | Création initiale - Connexion Jenkins au réseau kind | Claude Code |
+| 2026-01-09 | Ajout connexion automatique du registry au réseau kind | Claude Code |
+| 2026-01-15 | Standardisation nom registry → `kind-registry` + vérification obligatoire + alias DNS | Claude Code |
+
+---
+
 **Date de création** : 2025-12-11
-**Dernière mise à jour** : 2025-12-11
+**Dernière mise à jour** : 2026-01-15
 **Auteur** : Configuration automatisée via Claude Code
+
+**Voir aussi** :
+- [REGISTRY_SETUP.md](REGISTRY_SETUP.md) - Configuration complète du registry Docker local

@@ -83,6 +83,7 @@ pipeline {
         booleanParam(name: 'RUN_SELENIUM_TESTS', defaultValue: true, description: 'Exécuter les tests Selenium')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Exécuter l\'analyse SonarQube')
         booleanParam(name: 'PUBLISH_IMAGE', defaultValue: true, description: 'Publier l\'image sur le registry après validation')
+        booleanParam(name: 'SIGN_IMAGE', defaultValue: true, description: 'Signer l\'image Docker avec Cosign après publication')
         booleanParam(name: 'KEEP_EPHEMERE_ENV', defaultValue: false, description: 'Garder l\'environnement ephemere pour debug (ne pas nettoyer à la fin)')
         string(name: 'IMAGE_TAG_SUFFIX', defaultValue: '', description: 'Suffixe optionnel pour le tag (ex: -rc1, -hotfix)')
     }
@@ -500,30 +501,35 @@ YMLEOF
             }
         }
 
-        stage('🔍 Analyse OWASP Dependency-Check') {
-            steps {
-                script {
-                    echo "▶ Analyse des vulnérabilités des dépendances..."
-                }
+            stage('🔍 Analyse OWASP Dependency-Check') {
+                steps {
+                    script {
+                        echo "▶ Analyse des vulnérabilités des dépendances..."
+                    }
 
-                dir('rhDemo') {
-                    sh './mvnw org.owasp:dependency-check-maven:check'
+                    dir('rhDemo') {
+                        withCredentials([
+                            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                            usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                        ]) {
+                            sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}'
+                        }
+                    }
+                }
+                post {
+                    always {
+                        // Archiver le rapport OWASP
+                        publishHTML([
+                            allowMissing: false,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: 'rhDemo/target',
+                            reportFiles: 'dependency-check-report.html',
+                            reportName: 'OWASP Dependency-Check Report'
+                        ])
+                    }
                 }
             }
-            post {
-                always {
-                    // Archiver le rapport OWASP
-                    publishHTML([
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'rhDemo/target',
-                        reportFiles: 'dependency-check-report.html',
-                        reportName: 'OWASP Dependency-Check Report'
-                    ])
-                }
-            }
-        }
 
         stage('📦 Build Maven') {
             steps {
@@ -616,7 +622,6 @@ YMLEOF
                 dir('rhDemo') {
                     sh """
                         DOCKER_BUILDKIT=0 docker build -t ${env.RHDEMO_IMAGE} \
-                                     -t rhdemo-api:latest \
                                      --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
                                      --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
                                      --build-arg VERSION=${env.APP_VERSION} \
@@ -1071,6 +1076,56 @@ YMLEOF
             }
         }
 
+        stage('📦 Génération SBOM CycloneDX') {
+            steps {
+                script {
+                    echo "▶ Génération du SBOM CycloneDX pour l'image applicative..."
+                    echo "   Image: ${env.RHDEMO_IMAGE}"
+                }
+
+                sh """
+                    WORKSPACE_DIR=\$(pwd)
+                    mkdir -p "\${WORKSPACE_DIR}/sbom-reports"
+
+                    # Utiliser le cache partagé Trivy (déjà préparé par le stage précédent)
+                    TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-shared"
+                    export TRIVY_CACHE_DIR
+
+                    echo "▶ Génération SBOM au format CycloneDX JSON..."
+
+                    # Génération du SBOM avec Trivy
+                    timeout 5m trivy image \\
+                        --skip-db-update \\
+                        --skip-java-db-update \\
+                        --no-progress \\
+                        --format cyclonedx \\
+                        --output "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" \\
+                        "${env.RHDEMO_IMAGE}" 2>&1 | grep -E "(Analyzing|Total)" || true
+
+                    # Vérifier que le fichier a été créé et afficher les stats
+                    if [ -f "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" ]; then
+                        COMPONENT_COUNT=\$(jq '.components | length' "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" 2>/dev/null || echo "0")
+                        SBOM_VERSION=\$(jq -r '.specVersion' "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json" 2>/dev/null || echo "N/A")
+                        echo ""
+                        echo "✅ SBOM CycloneDX généré avec succès"
+                        echo "   Fichier: sbom-reports/rhdemo-app-sbom.json"
+                        echo "   Version CycloneDX: \${SBOM_VERSION}"
+                        echo "   Nombre de composants: \${COMPONENT_COUNT}"
+                    else
+                        echo "⚠️  Échec de génération du SBOM"
+                        # Créer un SBOM vide minimal pour éviter les erreurs d'archivage
+                        echo '{"bomFormat":"CycloneDX","specVersion":"1.4","components":[]}' > "\${WORKSPACE_DIR}/sbom-reports/rhdemo-app-sbom.json"
+                    fi
+                """
+            }
+            post {
+                always {
+                    // Archiver le SBOM CycloneDX
+                    archiveArtifacts artifacts: 'sbom-reports/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+
         // ════════════════════════════════════════════════════════════════
         // PHASE 5 : TESTS SELENIUM ET OWASP ZAP
         // ════════════════════════════════════════════════════════════════
@@ -1354,7 +1409,9 @@ YMLEOF
         // ════════════════════════════════════════════════════════════════
         // PHASE 6 : PUBLICATION DE L'IMAGE
         // ════════════════════════════════════════════════════════════════
-
+        // NB: Jenkins utilise le socket DinD pour accéder à docker sur l'hote
+        // cf docker compose de jenkins
+        
         stage('🏷️ Tag et Publication Image') {
             when {
                 expression { params.PUBLISH_IMAGE == true }
@@ -1390,10 +1447,26 @@ YMLEOF
 
                     if [ -z "\$REGISTRY_NAME" ]; then
                         echo "❌ Erreur: Aucun registry Docker trouvé sur le port 5000"
+                        echo "   Créez d'abord un registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                         exit 1
                     fi
 
                     echo "▶ Registry détecté: \$REGISTRY_NAME"
+
+                    # Vérifier que le registry s'appelle bien 'kind-registry'
+                    if [ "\$REGISTRY_NAME" != "kind-registry" ]; then
+                        echo "❌ ERREUR: Le registry s'appelle '\$REGISTRY_NAME' mais devrait s'appeler 'kind-registry'"
+                        echo ""
+                        echo "   Cela indique une mauvaise manipulation ou une configuration incorrecte."
+                        echo "   Le nom du registry doit être standardisé."
+                        echo ""
+                        echo "   Pour corriger:"
+                        echo "   1. docker stop \$REGISTRY_NAME && docker rm \$REGISTRY_NAME"
+                        echo "   2. cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
+                        echo ""
+                        echo "   Voir la documentation: rhDemo/docs/REGISTRY_SETUP.md"
+                        exit 1
+                    fi
 
                     # Tag de l'image avec la version finale
                     echo "▶ Tag de l'image: ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
@@ -1403,19 +1476,80 @@ YMLEOF
                     echo "▶ Tag pour le registry: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                     docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
 
-                    # Push vers le registry
+                    # Push vers le registry et capturer la sortie pour extraire le digest
                     echo "▶ Push vers le registry..."
-                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}
+                    PUSH_OUTPUT=\$(docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG} 2>&1)
+                    echo "\$PUSH_OUTPUT"
 
-                    # Tag latest
-                    echo "▶ Tag latest..."
-                    docker tag ${env.RHDEMO_IMAGE} localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
-                    docker push localhost:5000/${env.DOCKER_IMAGE_NAME}:latest
+                    # Récupérer le digest depuis la sortie du push (format: "tag: digest: sha256:xxx size: yyy")
+                    echo "▶ Récupération du digest de l'image..."
+                    DIGEST=\$(echo "\$PUSH_OUTPUT" | grep -oE 'sha256:[a-f0-9]{64}' | head -1)
+
+                    if [ -z "\$DIGEST" ]; then
+                        echo "❌ Impossible de récupérer le digest de l'image"
+                        exit 1
+                    fi
+
+                    echo "   Digest: \$DIGEST"
+
+                    # Sauvegarder le digest dans un fichier pour archivage
+                    mkdir -p image-digest
+                    echo "\$DIGEST" > image-digest/digest.txt
+                    echo "${env.FINAL_IMAGE_TAG}" > image-digest/tag.txt
+                    echo "localhost:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST" > image-digest/image-ref.txt
 
                     echo "✅ Image publiée sur le registry:"
                     echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
-                    echo "   - localhost:5000/${env.DOCKER_IMAGE_NAME}:latest"
+                    echo "   - Digest: \$DIGEST"
                 """
+
+                // Archiver le digest comme artefact pour le pipeline CD
+                archiveArtifacts artifacts: 'image-digest/*', fingerprint: true
+            }
+        }
+
+        stage('🔏 Signature Image (Cosign)') {
+            when {
+                allOf {
+                    expression { params.PUBLISH_IMAGE == true }
+                    expression { params.SIGN_IMAGE == true }
+                }
+            }
+            steps {
+                script {
+                    echo "▶ Signature de l'image Docker avec Cosign..."
+                    echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
+                }
+
+                withCredentials([
+                    file(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY'),
+                    string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
+                ]) {
+                    sh '''
+                        # Récupérer le digest de l'image pour une signature immuable
+                        # Note: docker inspect utilise localhost:5000 (via Docker daemon sur l'hôte)
+                        # mais cosign doit utiliser kind-registry:5000 (appels HTTPS directs depuis le conteneur Jenkins)
+                        echo "▶ Récupération du digest de l'image..."
+                        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' localhost:5000/${DOCKER_IMAGE_NAME}:${FINAL_IMAGE_TAG} 2>/dev/null | sed 's|localhost:5000|kind-registry:5000|')
+
+                        if [ -z "$DIGEST" ] || [ "$DIGEST" = "kind-registry:5000/" ]; then
+                            echo "❌ Impossible de récupérer le digest via docker inspect"
+                            exit 1
+                        fi
+
+                        echo "   Digest pour cosign: ${DIGEST}"
+
+                        # Signer l'image avec Cosign
+                        # Cosign fait des appels HTTPS directs, utiliser kind-registry:5000
+                        # avec le certificat CA monté dans le conteneur Jenkins
+                        echo "▶ Signature de l'image..."
+                        SSL_CERT_FILE=/etc/ssl/certs/registry.crt \
+                        COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
+                            "${DIGEST}"
+
+                        echo "✅ Image signée avec succès"
+                    '''
+                }
             }
         }
 
@@ -1433,14 +1567,17 @@ YMLEOF
                 }
 
                 sh """
-                    REGISTRY_URL="http://localhost:5000"
+                    # Configuration du registry HTTPS
+                    # Note: kind-registry est accessible depuis le conteneur Jenkins via le réseau Docker
+                    REGISTRY_URL="https://kind-registry:5000"
+                    REGISTRY_CERT="/etc/ssl/certs/registry.crt"
                     IMAGE_NAME="${env.DOCKER_IMAGE_NAME}"
                     RETENTION_COUNT=3
 
                     echo "▶ Récupération de la liste des tags SNAPSHOT..."
 
-                    # Récupérer tous les tags de l'image
-                    ALL_TAGS=\$(curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
+                    # Récupérer tous les tags de l'image (avec certificat CA pour HTTPS)
+                    ALL_TAGS=\$(curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
 
                     if [ -z "\$ALL_TAGS" ]; then
                         echo "ℹ️  Aucun tag trouvé dans le registry"
@@ -1476,7 +1613,7 @@ YMLEOF
                         echo "  ➤ Suppression de \${IMAGE_NAME}:\${TAG}..."
 
                         # Récupérer le manifest avec le bon Accept header pour obtenir le digest
-                        DIGEST=\$(curl -sI -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
+                        DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
                             \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${TAG} \\
                             | grep -i "Docker-Content-Digest" \\
                             | awk '{print \$2}' \\
@@ -1484,11 +1621,11 @@ YMLEOF
 
                         if [ -n "\$DIGEST" ]; then
                             # Supprimer le manifest (cela marque l'image pour suppression)
-                            HTTP_CODE=\$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \\
+                            HTTP_CODE=\$(curl -s --cacert \$REGISTRY_CERT -o /dev/null -w "%{http_code}" -X DELETE \\
                                 \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
 
                             if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
-                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \${DIGEST:0:20}...)"
+                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \$(echo \$DIGEST | cut -c1-20)...)"
                             else
                                 echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$HTTP_CODE)"
                             fi
@@ -1500,12 +1637,13 @@ YMLEOF
                     echo ""
                     echo "✅ Nettoyage des tags terminé"
                     echo "📋 Images SNAPSHOT restantes:"
-                    curl -s \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
+                    curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
 
                     echo ""
                     echo "▶ Exécution du garbage collection du registry pour libérer l'espace disque..."
 
                     # Trouver le container du registry
+                    # Note: Le nom 'kind-registry' a déjà été vérifié dans le stage de publication
                     REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1)
 
                     if [ -z "\$REGISTRY_CONTAINER" ]; then

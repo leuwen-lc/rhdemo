@@ -1,7 +1,18 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════
 # SCRIPT DE DÉMARRAGE JENKINS
-# Usage: ./start-jenkins.sh
+# Usage: ./start-jenkins.sh [OPTIONS]
+#
+# Options:
+#   --rebuild        Force la reconstruction de l'image même si à jour
+#   --clean-plugins  Supprime les plugins du volume avant rebuild
+#                    (utile après modification de plugins.txt)
+#
+# Exemples:
+#   ./start-jenkins.sh                      # Démarrage normal
+#   ./start-jenkins.sh --rebuild            # Force rebuild image
+#   ./start-jenkins.sh --clean-plugins      # Nettoie plugins + rebuild
+#   ./start-jenkins.sh --rebuild --clean-plugins  # Les deux
 # ═══════════════════════════════════════════════════════════════════
 
 set -e
@@ -40,6 +51,80 @@ fi
 
 echo "✅ docker compose est installé"
 
+# Vérifier que les certificats du registry existent
+# Les certificats peuvent être soit dans ./certs/registry/ soit déjà copiés dans /etc/docker/certs.d/
+CERTS_LOCAL="./certs/registry/registry.crt"
+CERTS_DOCKER="/etc/docker/certs.d/localhost:5000/ca.crt"
+
+if [ -f "$CERTS_LOCAL" ] && [ -f "./certs/registry/registry.key" ]; then
+    echo "✅ Certificats du registry présents (locaux)"
+
+    # Proposer de copier vers Docker daemon si pas encore fait
+    if [ ! -f "$CERTS_DOCKER" ]; then
+        echo ""
+        echo "⚠️  Le Docker daemon n'est pas configuré pour faire confiance au registry."
+        echo ""
+        echo "   Exécutez les commandes suivantes (avec sudo):"
+        echo ""
+        echo "   sudo mkdir -p /etc/docker/certs.d/localhost:5000"
+        echo "   sudo cp $(pwd)/certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt"
+        echo "   sudo systemctl restart docker"
+        echo ""
+        read -p "Voulez-vous exécuter ces commandes maintenant ? (Y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            sudo mkdir -p /etc/docker/certs.d/localhost:5000
+            sudo cp "$(pwd)/certs/registry/registry.crt" /etc/docker/certs.d/localhost:5000/ca.crt
+            echo "✅ Certificat copié. Redémarrage de Docker..."
+            sudo systemctl restart docker
+            echo "✅ Docker redémarré"
+        else
+            echo "⚠️  Le push vers le registry pourrait échouer sans cette configuration."
+        fi
+    fi
+elif [ -f "$CERTS_DOCKER" ]; then
+    # Les certificats sont déjà dans /etc/docker/certs.d/ mais pas en local
+    # On peut les copier depuis là pour que le registry et Jenkins les utilisent
+    echo "✅ Certificats du registry détectés dans Docker daemon"
+
+    if [ ! -f "$CERTS_LOCAL" ]; then
+        echo ""
+        echo "ℹ️  Les certificats ne sont pas dans ./certs/registry/"
+        echo "   Le registry et Jenkins en ont besoin pour démarrer."
+        echo ""
+        read -p "Voulez-vous copier le certificat depuis /etc/docker/certs.d/ ? (Y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            mkdir -p ./certs/registry
+            sudo cp "$CERTS_DOCKER" "$CERTS_LOCAL"
+            # Générer aussi la clé si elle n'existe pas (nécessaire pour le registry)
+            if [ ! -f "./certs/registry/registry.key" ]; then
+                echo "⚠️  La clé privée n'existe pas. Régénération des certificats..."
+                ./init-registry-certs.sh
+            else
+                echo "✅ Certificat copié dans ./certs/registry/"
+            fi
+        else
+            echo "⚠️  Le registry ne démarrera pas sans certificats dans ./certs/registry/"
+            echo "   Vous pouvez les générer avec: ./init-registry-certs.sh"
+        fi
+    fi
+else
+    # Aucun certificat trouvé
+    echo ""
+    echo "⚠️  Certificats du registry manquants."
+    echo "   Exécutez d'abord: ./init-registry-certs.sh"
+    echo ""
+    read -p "Voulez-vous générer les certificats maintenant ? (Y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        ./init-registry-certs.sh
+    else
+        echo "⚠️  Le registry ne démarrera pas sans certificats."
+        echo "   Vous pourrez les générer plus tard avec: ./init-registry-certs.sh"
+    fi
+fi
+
 # ────────────────────────────────────────────────────────────────
 # CONFIGURATION
 # ────────────────────────────────────────────────────────────────
@@ -67,26 +152,58 @@ fi
 echo ""
 echo "🔨 Build de l'image Jenkins personnalisée..."
 
+# Gestion de l'option --rebuild-plugins
+FORCE_REBUILD=false
+CLEAN_PLUGINS=false
+for arg in "$@"; do
+    case $arg in
+        --rebuild)
+            FORCE_REBUILD=true
+            ;;
+        --clean-plugins)
+            CLEAN_PLUGINS=true
+            ;;
+    esac
+done
+
 if [ -f Dockerfile.jenkins ]; then
+    # Calculer le hash combiné du Dockerfile ET de plugins.txt
+    DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
+    PLUGINS_HASH=$(md5sum plugins.txt 2>/dev/null | cut -d' ' -f1 || echo "")
+    COMBINED_HASH="${DOCKERFILE_HASH}-${PLUGINS_HASH}"
+
     # Vérifier si l'image existe déjà
     if docker image inspect rhdemo-jenkins:latest &> /dev/null; then
         echo "ℹ️  Image Jenkins existante trouvée"
 
-        # Vérifier si le Dockerfile a changé depuis le dernier build
-        DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
-        IMAGE_HASH=$(docker image inspect rhdemo-jenkins:latest --format '{{.Config.Labels.dockerfile_hash}}' 2>/dev/null || echo "")
+        # Vérifier si le Dockerfile OU plugins.txt a changé depuis le dernier build
+        IMAGE_HASH=$(docker image inspect rhdemo-jenkins:latest --format '{{.Config.Labels.config_hash}}' 2>/dev/null || echo "")
 
-        if [ "$DOCKERFILE_HASH" != "$IMAGE_HASH" ]; then
-            echo "🔄 Dockerfile modifié, rebuild nécessaire..."
-            docker build -f Dockerfile.jenkins --build-arg DOCKERFILE_HASH=$DOCKERFILE_HASH --label dockerfile_hash=$DOCKERFILE_HASH -t rhdemo-jenkins:latest .
-            echo "✅ Image Jenkins reconstruite avec succès"
+        if [ "$FORCE_REBUILD" = true ]; then
+            echo "🔄 Rebuild forcé demandé (--rebuild)..."
+            NEED_REBUILD=true
+        elif [ "$COMBINED_HASH" != "$IMAGE_HASH" ]; then
+            echo "🔄 Configuration modifiée (Dockerfile ou plugins.txt), rebuild nécessaire..."
+            NEED_REBUILD=true
         else
             echo "✅ Image Jenkins à jour, pas de rebuild nécessaire"
+            NEED_REBUILD=false
+        fi
+
+        if [ "$NEED_REBUILD" = true ]; then
+            # Nettoyer les plugins si demandé ou si plugins.txt a changé
+            if [ "$CLEAN_PLUGINS" = true ]; then
+                echo "🧹 Nettoyage du répertoire plugins Jenkins (--clean-plugins)..."
+                docker run --rm -v rhdemo-jenkins-home:/var/jenkins_home alpine sh -c "rm -rf /var/jenkins_home/plugins/* 2>/dev/null || true"
+                echo "✅ Répertoire plugins nettoyé"
+            fi
+
+            docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
+            echo "✅ Image Jenkins reconstruite avec succès"
         fi
     else
         echo "📦 Première construction de l'image..."
-        DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
-        docker build -f Dockerfile.jenkins --build-arg DOCKERFILE_HASH=$DOCKERFILE_HASH --label dockerfile_hash=$DOCKERFILE_HASH -t rhdemo-jenkins:latest .
+        docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
         echo "✅ Image Jenkins construite avec succès"
     fi
 
@@ -169,10 +286,14 @@ echo "   • Redémarrer Jenkins:   docker compose restart jenkins"
 echo "   • Arrêter tout:         docker compose down"
 echo "   • Tout supprimer:       docker compose down -v"
 echo ""
+echo "🔧 Options de rebuild:"
+echo "   • ./start-jenkins.sh --rebuild            # Force rebuild de l'image"
+echo "   • ./start-jenkins.sh --clean-plugins      # Nettoie plugins + rebuild"
+echo ""
 echo "🌐 Services disponibles:"
 echo "   • Jenkins:              http://localhost:8080"
 echo "   • SonarQube:            http://localhost:9020"
-echo "   • Docker Registry:      http://localhost:5000"
+echo "   • Docker Registry:      https://localhost:5000"
 echo ""
 echo "📖 Documentation:"
 echo "   • README.md dans ce répertoire"

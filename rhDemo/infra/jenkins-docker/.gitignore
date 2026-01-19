@@ -7,6 +7,9 @@ workspace/
 # Certificats SSL
 certs/
 
+# Certificats du registry Docker (générés par init-registry-certs.sh)
+certs/
+
 # Logs
 *.log
 

@@ -72,7 +72,7 @@ docker info
 │                                    │ (accès ephemere via Jenkins multi-réseau)   │  │
 │  Services optionnels:              └────────────────────────────────────────────┘  │
 │  • jenkins-agent (agents distribués)                                              │
-│  • registry:5000 (Docker Registry local)                                          │
+│  • kind-registry:5000 (Docker Registry local - nom standardisé)                   │
 │                                                                                   │
 └───────────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -106,9 +106,11 @@ docker info
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
 | `rhdemo-sonarqube-db` | Base PostgreSQL SonarQube | ~200 MB |
-| `rhdemo-docker-registry` | Images Docker locales | Variable |
+| `kind-registry-data` | Images Docker locales | Variable |
 | `rhdemo-jenkins-zap-sessions` | Sessions ZAP (réutilisation entre builds) | ~50 MB |
 | `rhdemo-jenkins-zap-reports` | Rapports ZAP HTML/JSON | ~100 MB |
+
+**Note** : Le volume `kind-registry-data` stocke les images du registry Docker local nommé `kind-registry`. Ce nom est standardisé pour garantir la résolution DNS dans les clusters Kubernetes (KinD).
 
 ### Services inclus
 
@@ -118,21 +120,62 @@ docker info
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
-| `jenkins-agent` | Agent Jenkins (optionnel) | - | docker-compose.yml |
-| `registry` | Docker Registry local | 5000 | docker-compose.yml |
+| `jenkins-agent` | Agent Jenkins (optionnel - builds distribués) | - | docker-compose.yml |
+| `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
+
+### 🤖 Agent Jenkins (désactivé par défaut)
+
+⚠️ **L'agent Jenkins est désactivé** car l'image standard `jenkins/inbound-agent` ne contient pas les outils nécessaires pour exécuter les pipelines RHDemo.
+
+**Outils manquants dans l'agent standard :**
+- Maven 3.9.6 (build Java)
+- Docker Compose (environnement ephemere)
+- Firefox ESR (tests Selenium)
+- SOPS (déchiffrement secrets)
+- Node.js/npm (build frontend)
+- kubectl, Helm, kind (déploiement Kubernetes)
+- Trivy, yq (sécurité et parsing)
+
+**Configuration actuelle :**
+- ✅ Le master Jenkins exécute tous les jobs
+- ✅ Le master a tous les outils nécessaires (voir [Dockerfile.jenkins](Dockerfile.jenkins))
+- ✅ `numExecutors: 2` permet d'exécuter 2 jobs en parallèle
+- ✅ `mode: NORMAL` permet au master d'exécuter n'importe quel job
+
+**Pour activer un agent distribué :**
+
+Il faudrait créer une image personnalisée basée sur [Dockerfile.jenkins](Dockerfile.jenkins) avec tous les outils. Voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) pour plus de détails.
 
 ## ⚡ Installation rapide
 
+### 0. Prérequis : Certificats TLS pour le registry Docker
+
+Le registry Docker fonctionne en **HTTPS** avec un certificat auto-signé.
+
+```bash
+cd rhDemo/infra/jenkins-docker
+
+# Générer les certificats (une seule fois)
+./init-registry-certs.sh
+
+# Configurer Docker daemon pour faire confiance au certificat
+sudo mkdir -p /etc/docker/certs.d/localhost:5000
+sudo cp certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt
+sudo systemctl restart docker
+```
+
+> **Note** : Le script `start-jenkins.sh` vérifie automatiquement ces prérequis et vous guide si nécessaire.
 
 ### 1. Démarrage en une commande
 
 ```bash
-cd infra
+cd rhDemo/infra/jenkins-docker
 ./start-jenkins.sh
 ```
 
 Le script va :
 - ✅ Vérifier les prérequis
+- ✅ Vérifier/générer les certificats TLS du registry
 - ✅ Créer le fichier `.env` depuis `.env.example`
 - ✅ Builder l'image Jenkins personnalisée
 - ✅ Démarrer tous les services
@@ -153,7 +196,7 @@ Ouvrez votre navigateur : **http://localhost:8080**
 ### Fichiers de configuration
 
 ```
-infra/
+jenkins-docker/
 ├── docker-compose.yml          # Configuration des services
 ├── Dockerfile.jenkins          # Image Jenkins personnalisée
 ├── plugins.txt                 # Liste des plugins à installer
@@ -161,6 +204,10 @@ infra/
 ├── .env.example               # Template des variables d'environnement
 ├── .env                       # Vos variables (à créer, non commité)
 ├── start-jenkins.sh           # Script de démarrage
+├── init-registry-certs.sh     # Génération certificats TLS registry
+└── certs/registry/            # Certificats TLS (non commités, à générer)
+    ├── registry.crt           # Certificat public
+    └── registry.key           # Clé privée
 ```
 
 ### Configuration des secrets
@@ -356,6 +403,54 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 - `rhdemo-sonarqube-data` : Données SonarQube
 - `rhdemo-sonarqube-extensions` : Plugins SonarQube
 - `rhdemo-sonarqube-logs` : Logs SonarQube
+
+### Docker Registry local (HTTPS)
+
+Le registry Docker local (`kind-registry`) stocke les images Docker construites par le pipeline CI. Il est configuré en **HTTPS** avec un certificat auto-signé pour sécuriser les communications.
+
+**Configuration initiale :**
+
+```bash
+cd rhDemo/infra/jenkins-docker
+
+# 1. Générer les certificats TLS (une seule fois)
+./init-registry-certs.sh
+
+# 2. Configurer Docker daemon pour faire confiance au certificat
+sudo mkdir -p /etc/docker/certs.d/localhost:5000
+sudo cp certs/registry/registry.crt /etc/docker/certs.d/localhost:5000/ca.crt
+sudo systemctl restart docker
+```
+
+**Fichiers générés :**
+- `certs/registry/registry.crt` : Certificat public (valide 10 ans)
+- `certs/registry/registry.key` : Clé privée (ne pas commiter !)
+
+**SANs (Subject Alternative Names) :**
+- `localhost` : accès depuis l'hôte
+- `kind-registry` : accès depuis les conteneurs Docker
+- `127.0.0.1` : accès IP
+
+**Utilisation :**
+```bash
+# Depuis l'hôte (via Docker daemon)
+docker push localhost:5000/mon-image:tag
+
+# Depuis un conteneur (appels HTTP directs)
+curl --cacert /etc/ssl/certs/registry.crt https://kind-registry:5000/v2/_catalog
+```
+
+**Volume persistant :**
+- `kind-registry-data` : Images Docker stockées
+
+**Dépannage :**
+```bash
+# Vérifier que le registry répond en HTTPS
+curl -k https://localhost:5000/v2/
+
+# Vérifier le certificat
+openssl s_client -connect localhost:5000 -servername localhost < /dev/null 2>/dev/null | openssl x509 -noout -dates
+```
 
 ## 🐳 Docker-in-Docker (DinD)
 
@@ -612,6 +707,20 @@ docker volume rm rhdemo-maven-repository
 # Redémarrer
 ./start-jenkins.sh
 ```
+
+### L'agent Jenkins se relance en boucle
+
+**Symptôme :** Logs montrant "Secret is required for inbound agents"
+
+**Solution :**
+
+L'agent Jenkins est désactivé par défaut car il ne contient pas les outils nécessaires (Maven, Docker Compose, Firefox, SOPS, etc.).
+
+Si vous avez décommenté le service jenkins-agent dans docker-compose.yml :
+1. Re-commentez le service dans docker-compose.yml
+2. Redémarrez : `docker compose up -d`
+
+Pour activer un agent fonctionnel, voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) (nécessite la création d'une image personnalisée).
 
 ## 📈 Monitoring
 

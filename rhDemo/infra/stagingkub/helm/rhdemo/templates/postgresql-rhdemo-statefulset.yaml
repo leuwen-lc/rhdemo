@@ -78,9 +78,7 @@ spec:
     spec:
       accessModes:
       - {{ (index .Values "postgresql-rhdemo").persistence.accessMode }}
-      {{- if (index .Values "postgresql-rhdemo").persistence.storageClass }}
-      storageClassName: {{ (index .Values "postgresql-rhdemo").persistence.storageClass }}
-      {{- end }}
+      storageClassName: manual-postgresql
       resources:
         requests:
           storage: {{ (index .Values "postgresql-rhdemo").persistence.size }}

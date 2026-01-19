@@ -114,6 +114,16 @@ RUN wget -q https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-amd64 -O /us
     chmod +x /usr/local/bin/kind && \
     kind --version
 
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION COSIGN (signature d'images de conteneur)
+# ═══════════════════════════════════════════════════════════════
+
+ENV COSIGN_VERSION=3.0.4
+
+RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64 -O /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign && \
+    cosign version
+
 # ═══════════════════════════════════════════════════════════════════
 # INSTALLATION JAVA 21 (déjà inclus dans l'image de base)
 # ═══════════════════════════════════════════════════════════════════

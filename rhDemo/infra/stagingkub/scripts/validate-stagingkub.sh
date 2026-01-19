@@ -79,8 +79,19 @@ else
     fi
 fi
 
-echo -n "Vérification de l'accessibilité du registry... "
-if curl -f http://localhost:5000/v2/ &> /dev/null; then
+# Vérifier le certificat du registry
+REGISTRY_CERT="/etc/docker/certs.d/localhost:5000/ca.crt"
+echo -n "Vérification du certificat du registry... "
+if [ -f "$REGISTRY_CERT" ]; then
+    echo -e "${GREEN}✅ OK${NC}"
+else
+    echo -e "${RED}❌ MANQUANT${NC}"
+    echo -e "${YELLOW}Générez les certificats: cd rhDemo/infra/jenkins-docker && ./init-registry-certs.sh${NC}"
+    ((ERRORS++))
+fi
+
+echo -n "Vérification de l'accessibilité du registry (HTTPS)... "
+if [ -f "$REGISTRY_CERT" ] && curl -sf --cacert "$REGISTRY_CERT" https://localhost:5000/v2/ &> /dev/null; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ Non accessible${NC}"

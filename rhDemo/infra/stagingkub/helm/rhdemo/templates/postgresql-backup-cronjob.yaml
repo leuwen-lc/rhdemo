@@ -1,0 +1,205 @@
+{{- if .Values.postgresqlBackup.enabled }}
+---
+# CronJob pour backup PostgreSQL RHDemo
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-rhdemo-backup
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql-rhdemo-backup
+spec:
+  schedule: {{ .Values.postgresqlBackup.rhdemo.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgresql-rhdemo-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:16-alpine
+            env:
+            - name: PGHOST
+              value: {{ (index .Values "postgresql-rhdemo").service.name }}
+            - name: PGPORT
+              value: {{ (index .Values "postgresql-rhdemo").service.port | quote }}
+            - name: PGDATABASE
+              value: {{ (index .Values "postgresql-rhdemo").database.name }}
+            - name: PGUSER
+              value: {{ (index .Values "postgresql-rhdemo").database.user }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.name }}
+                  key: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.key }}
+            - name: BACKUP_RETENTION_DAYS
+              value: {{ .Values.postgresqlBackup.retentionDays | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              BACKUP_DIR="/backups"
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="${BACKUP_DIR}/rhdemo_${TIMESTAMP}.sql.gz"
+              TEMP_FILE="${BACKUP_DIR}/rhdemo_${TIMESTAMP}.dump"
+
+              echo "🔄 Démarrage backup PostgreSQL RHDemo..."
+              echo "   Database: ${PGDATABASE}"
+              echo "   Host: ${PGHOST}:${PGPORT}"
+              echo "   File: ${BACKUP_FILE}"
+
+              # Test de connexion à PostgreSQL (authentification incluse)
+              echo "🔍 Test de connexion avec authentification..."
+              if ! psql -c "SELECT 1;" > /dev/null 2>&1; then
+                echo "❌ ERREUR: Impossible de se connecter à PostgreSQL (vérifier les credentials)"
+                psql -c "SELECT 1;" 2>&1 || true
+                exit 1
+              fi
+              echo "✅ Connexion PostgreSQL OK"
+
+              # Créer le backup (en 2 étapes pour capturer les erreurs)
+              echo "📦 Création du dump..."
+              if ! pg_dump -Fc -f "${TEMP_FILE}"; then
+                echo "❌ ERREUR: pg_dump a échoué"
+                rm -f "${TEMP_FILE}"
+                exit 1
+              fi
+
+              # Compresser
+              gzip -c "${TEMP_FILE}" > "${BACKUP_FILE}"
+              rm -f "${TEMP_FILE}"
+
+              # Vérifier la taille (minimum 100 bytes pour un backup valide)
+              SIZE_BYTES=$(stat -c%s "${BACKUP_FILE}")
+              SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+              if [ "${SIZE_BYTES}" -lt 100 ]; then
+                echo "❌ ERREUR: Backup trop petit (${SIZE_BYTES} bytes), probablement corrompu"
+                rm -f "${BACKUP_FILE}"
+                exit 1
+              fi
+              echo "✅ Backup créé avec succès (taille: ${SIZE})"
+
+              # Nettoyer les anciens backups (garder derniers N jours)
+              echo "🗑️  Suppression des backups de plus de ${BACKUP_RETENTION_DAYS} jours..."
+              find "${BACKUP_DIR}" -name "rhdemo_*.sql.gz" -type f -mtime +${BACKUP_RETENTION_DAYS} -delete
+
+              echo "✅ Backup terminé"
+              ls -lh "${BACKUP_DIR}" | tail -10
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /mnt/backups/rhdemo
+              type: DirectoryOrCreate
+
+---
+# CronJob pour backup PostgreSQL Keycloak
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-keycloak-backup
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql-keycloak-backup
+spec:
+  schedule: {{ .Values.postgresqlBackup.keycloak.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: postgresql-keycloak-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: postgres:16-alpine
+            env:
+            - name: PGHOST
+              value: {{ .Values.keycloak.database.host }}
+            - name: PGPORT
+              value: {{ .Values.keycloak.database.port | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.keycloak.database.name }}
+            - name: PGUSER
+              value: {{ .Values.keycloak.database.user }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.passwordSecret.name }}
+                  key: {{ .Values.keycloak.database.passwordSecret.key }}
+            - name: BACKUP_RETENTION_DAYS
+              value: {{ .Values.postgresqlBackup.retentionDays | quote }}
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              BACKUP_DIR="/backups"
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="${BACKUP_DIR}/keycloak_${TIMESTAMP}.sql.gz"
+              TEMP_FILE="${BACKUP_DIR}/keycloak_${TIMESTAMP}.dump"
+
+              echo "🔄 Démarrage backup PostgreSQL Keycloak..."
+              echo "   Database: ${PGDATABASE}"
+              echo "   Host: ${PGHOST}:${PGPORT}"
+              echo "   File: ${BACKUP_FILE}"
+
+              # Test de connexion à PostgreSQL (authentification incluse)
+              echo "🔍 Test de connexion avec authentification..."
+              if ! psql -c "SELECT 1;" > /dev/null 2>&1; then
+                echo "❌ ERREUR: Impossible de se connecter à PostgreSQL (vérifier les credentials)"
+                psql -c "SELECT 1;" 2>&1 || true
+                exit 1
+              fi
+              echo "✅ Connexion PostgreSQL OK"
+
+              # Créer le backup (en 2 étapes pour capturer les erreurs)
+              echo "📦 Création du dump..."
+              if ! pg_dump -Fc -f "${TEMP_FILE}"; then
+                echo "❌ ERREUR: pg_dump a échoué"
+                rm -f "${TEMP_FILE}"
+                exit 1
+              fi
+
+              # Compresser
+              gzip -c "${TEMP_FILE}" > "${BACKUP_FILE}"
+              rm -f "${TEMP_FILE}"
+
+              # Vérifier la taille (minimum 100 bytes pour un backup valide)
+              SIZE_BYTES=$(stat -c%s "${BACKUP_FILE}")
+              SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+              if [ "${SIZE_BYTES}" -lt 100 ]; then
+                echo "❌ ERREUR: Backup trop petit (${SIZE_BYTES} bytes), probablement corrompu"
+                rm -f "${BACKUP_FILE}"
+                exit 1
+              fi
+              echo "✅ Backup créé avec succès (taille: ${SIZE})"
+
+              # Nettoyer les anciens backups (garder derniers N jours)
+              echo "🗑️  Suppression des backups de plus de ${BACKUP_RETENTION_DAYS} jours..."
+              find "${BACKUP_DIR}" -name "keycloak_*.sql.gz" -type f -mtime +${BACKUP_RETENTION_DAYS} -delete
+
+              echo "✅ Backup terminé"
+              ls -lh "${BACKUP_DIR}" | tail -10
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+          volumes:
+          - name: backup-storage
+            hostPath:
+              path: /mnt/backups/keycloak
+              type: DirectoryOrCreate
+{{- end }}

@@ -116,14 +116,16 @@ class SecurityConfigCspDynamicTest {
             .contains("default-src 'self'")
             .contains("script-src 'self'")
             .contains("style-src 'self'")
-            .contains("img-src 'self' data: https:")
+            .contains("img-src 'self' data:")
             .contains("font-src 'self' data:")
             .contains("connect-src 'self'")
-            .contains("frame-src 'self'")
-            .contains("frame-ancestors 'self'")
+            .contains("frame-ancestors 'none'")
             .contains("form-action 'self'")
             .contains("object-src 'none'")
-            .contains("base-uri 'self'");
+            .contains("base-uri 'self'")
+            .contains("media-src 'self'")
+            .contains("manifest-src 'self'")
+            .contains("worker-src 'self'");
     }
 
     @Test

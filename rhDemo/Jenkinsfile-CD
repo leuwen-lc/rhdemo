@@ -62,7 +62,17 @@ pipeline {
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
-            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT-95, 1.0.0-RELEASE). Si vide, utilisera "latest" (dernière image validée par CI).'
+            description: 'Tag de l\'image à déployer (ex: 1.1.0-SNAPSHOT-95, 1.0.0-RELEASE). Si vide, récupère automatiquement le digest du dernier build CI validé via Copy Artifact.'
+        )
+        string(
+            name: 'CI_BUILD_NUMBER',
+            defaultValue: '',
+            description: 'Numéro du build CI à utiliser (ex: 42). Si vide, utilise le dernier build stable du job RHDemo-CI.'
+        )
+        booleanParam(
+            name: 'VERIFY_SIGNATURE',
+            defaultValue: true,
+            description: 'Vérifier la signature Cosign de l\'image avant déploiement'
         )
         booleanParam(
             name: 'FORCE_RECREATE_PODS',
@@ -104,15 +114,40 @@ pipeline {
                     if (params.IMAGE_TAG) {
                         // Utiliser le tag fourni en paramètre
                         env.DEPLOY_IMAGE_TAG = params.IMAGE_TAG
+                        env.DEPLOY_IMAGE_DIGEST = ''  // Sera récupéré plus tard si nécessaire
                         echo "▶ Tag fourni en paramètre: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "   Le digest sera récupéré depuis le registry lors de la vérification de signature"
                     } else {
-                        // Par défaut, utiliser le tag 'latest' qui pointe toujours vers la dernière image validée par CI
-                        echo "▶ Aucun tag fourni, utilisation du tag 'latest' (dernière image validée par CI)..."
-                        env.DEPLOY_IMAGE_TAG = "latest"
+                        // Récupérer le digest du dernier build CI validé via Copy Artifact
+                        echo "▶ Aucun tag fourni, récupération du digest depuis le dernier build CI validé..."
 
-                        echo "ℹ️  Le tag 'latest' est automatiquement mis à jour par le pipeline CI"
-                        echo "   Pour déployer une version spécifique, utilisez le paramètre IMAGE_TAG"
-                        echo "   Exemple: IMAGE_TAG=1.1.0-SNAPSHOT-95"
+                        def ciBuildSelector
+                        if (params.CI_BUILD_NUMBER) {
+                            echo "   Build CI spécifié: #${params.CI_BUILD_NUMBER}"
+                            ciBuildSelector = specific(params.CI_BUILD_NUMBER)
+                        } else {
+                            echo "   Utilisation du dernier build CI stable"
+                            ciBuildSelector = lastSuccessful()
+                        }
+
+                        // Récupérer les artefacts du build CI
+                        copyArtifacts(
+                            projectName: 'RHDemo-CI',
+                            selector: ciBuildSelector,
+                            filter: 'image-digest/*',
+                            target: 'ci-artifacts',
+                            fingerprintArtifacts: true
+                        )
+
+                        // Lire le tag et le digest depuis les artefacts
+                        env.DEPLOY_IMAGE_TAG = readFile('ci-artifacts/image-digest/tag.txt').trim()
+                        env.DEPLOY_IMAGE_DIGEST = readFile('ci-artifacts/image-digest/digest.txt').trim()
+                        env.DEPLOY_IMAGE_REF = readFile('ci-artifacts/image-digest/image-ref.txt').trim()
+
+                        echo "✅ Informations récupérées du build CI:"
+                        echo "   Tag: ${env.DEPLOY_IMAGE_TAG}"
+                        echo "   Digest: ${env.DEPLOY_IMAGE_DIGEST}"
+                        echo "   Image ref: ${env.DEPLOY_IMAGE_REF}"
                     }
 
                     echo "✅ Version de l'image à déployer: ${env.DEPLOY_IMAGE_TAG}"
@@ -257,6 +292,53 @@ EOF
                         echo "✅ Jenkins déjà connecté au réseau kind"
                     fi
 
+                    # Connecter le registry au réseau kind si nécessaire
+                    echo "▶ Vérification de la connexion du registry au réseau kind..."
+                    REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format '{{.Names}}' | head -n 1)
+                    if [ -n "\$REGISTRY_CONTAINER" ]; then
+                        # Vérifier que le registry s'appelle bien 'kind-registry'
+                        if [ "\$REGISTRY_CONTAINER" != "kind-registry" ]; then
+                            echo "❌ ERREUR: Registry trouvé '\$REGISTRY_CONTAINER' mais le nom attendu est 'kind-registry'"
+                            echo ""
+                            echo "   Cela indique une mauvaise manipulation ou une configuration incorrecte."
+                            echo ""
+                            echo "   Pour corriger:"
+                            echo "   1. docker stop \$REGISTRY_CONTAINER && docker rm \$REGISTRY_CONTAINER"
+                            echo "   2. cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
+                            echo ""
+                            echo "   Voir la documentation: rhDemo/docs/REGISTRY_SETUP.md"
+                            exit 1
+                        fi
+
+                        # Vérifier la connexion au réseau kind et l'alias
+                        if ! docker network inspect kind 2>/dev/null | grep -q "\$REGISTRY_CONTAINER"; then
+                            echo "▶ Connexion du registry au réseau kind avec alias..."
+                            docker network disconnect kind \$REGISTRY_CONTAINER 2>/dev/null || true
+                            if docker network connect kind \$REGISTRY_CONTAINER --alias kind-registry 2>&1; then
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry connecté au réseau kind avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
+                            else
+                                echo "⚠️  Impossible de connecter le registry au réseau kind"
+                            fi
+                        else
+                            # Vérifier l'alias
+                            if ! docker network inspect kind 2>/dev/null | grep -q '"kind-registry"'; then
+                                echo "⚠️  Registry connecté mais alias 'kind-registry' manquant"
+                                echo "▶ Reconnexion avec alias..."
+                                docker network disconnect kind \$REGISTRY_CONTAINER 2>/dev/null || true
+                                docker network connect kind \$REGISTRY_CONTAINER --alias kind-registry
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry reconnecté avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
+                            else
+                                REGISTRY_IP=\$(docker inspect \$REGISTRY_CONTAINER | jq -r '.[0].NetworkSettings.Networks.kind.IPAddress' 2>/dev/null || echo "N/A")
+                                echo "✅ Registry '\$REGISTRY_CONTAINER' déjà connecté au réseau kind avec alias 'kind-registry' (IP: \$REGISTRY_IP)"
+                            fi
+                        fi
+                    else
+                        echo "⚠️  Aucun registry trouvé sur le port 5000"
+                        echo "   Démarrez le registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
+                    fi
+
                     # Générer une kubeconfig adaptée pour Jenkins
                     # Remplace l'adresse localhost par le nom DNS du container control-plane
                     echo "▶ Génération de la configuration kubectl..."
@@ -297,42 +379,94 @@ EOF
 
                     if [ -z "\$REGISTRY_NAME" ]; then
                         echo "❌ Aucun registry actif sur le port 5000"
-
-                        # Chercher un registry existant (même arrêté)
-                        EXISTING_REGISTRY=\$(docker ps -a --filter "publish=5000" --format '{{.Names}}' | head -n 1)
-
-                        if [ -n "\$EXISTING_REGISTRY" ]; then
-                            echo "▶ Registry trouvé mais arrêté: \$EXISTING_REGISTRY"
-                            echo "  Démarrage du registry..."
-                            docker start \$EXISTING_REGISTRY
-                            REGISTRY_NAME="\$EXISTING_REGISTRY"
-                            sleep 2
-                        else
-                            echo "❌ Aucun registry Docker trouvé"
-                            echo "   Créez d'abord un registry ou exécutez le pipeline CI"
-                            exit 1
-                        fi
+                        exit 1
                     fi
 
                     echo "✅ Registry détecté: \$REGISTRY_NAME"
 
-                    # Vérifier que l'image existe dans le registry
-                    REGISTRY_URL="http://\$REGISTRY_NAME:5000"
+                    # Vérifier que l'image existe dans le registry (HTTPS avec certificat CA)
+                    REGISTRY_URL="https://\$REGISTRY_NAME:5000"
+                    REGISTRY_CERT="/etc/ssl/certs/registry.crt"
 
                     echo "▶ Vérification de l'image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}..."
 
-                    if curl -sf \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep -q "${env.DEPLOY_IMAGE_TAG}"; then
+                    if curl -sf --cacert \$REGISTRY_CERT \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list | grep -q "${env.DEPLOY_IMAGE_TAG}"; then
                         echo "✅ Image trouvée dans le registry"
                     else
                         echo "❌ Image ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG} introuvable dans le registry"
                         echo ""
                         echo "   Tags disponibles pour ${env.DOCKER_IMAGE_NAME}:"
-                        curl -s \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list || echo "   Aucun tag trouvé"
+                        curl -s --cacert \$REGISTRY_CERT \$REGISTRY_URL/v2/${env.DOCKER_IMAGE_NAME}/tags/list || echo "   Aucun tag trouvé"
                         echo ""
                         echo "   Exécutez d'abord le pipeline CI pour construire et publier l'image"
                         exit 1
                     fi
                 """
+            }
+        }
+
+        stage('🔏 Vérification Signature Image (Cosign)') {
+            when {
+                expression { params.VERIFY_SIGNATURE == true }
+            }
+            steps {
+                script {
+                    echo "▶ Vérification de la signature de l'image avec Cosign..."
+                    echo "   Image: kind-registry:5000/${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}"
+                    if (env.DEPLOY_IMAGE_DIGEST) {
+                        echo "   Digest (depuis Copy Artifact): ${env.DEPLOY_IMAGE_DIGEST}"
+                    }
+                }
+
+                withCredentials([file(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUB_KEY')]) {
+                    sh """
+                        # Configuration du certificat CA pour HTTPS
+                        REGISTRY_CERT="/etc/ssl/certs/registry.crt"
+
+                        # Utiliser le digest fourni par Copy Artifact si disponible (plus sécurisé)
+                        # Sinon, le récupérer depuis le registry
+                        if [ -n "${env.DEPLOY_IMAGE_DIGEST ?: ''}" ]; then
+                            echo "▶ Utilisation du digest fourni par le build CI (méthode sécurisée)"
+                            DIGEST="${env.DEPLOY_IMAGE_DIGEST}"
+                        else
+                            echo "▶ Récupération du digest depuis le registry (HTTPS)..."
+                            DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                                https://kind-registry:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.DEPLOY_IMAGE_TAG} \
+                                | grep -i "Docker-Content-Digest" \
+                                | awk '{print \$2}' \
+                                | tr -d '\r')
+                        fi
+
+                        if [ -z "\$DIGEST" ]; then
+                            echo "❌ Impossible de récupérer le digest de l'image"
+                            exit 1
+                        fi
+
+                        # Cosign utilise kind-registry:5000 (HTTPS direct depuis le conteneur Jenkins)
+                        IMAGE_REF="kind-registry:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST"
+                        echo "   Digest: \$DIGEST"
+                        echo "   Image ref: \$IMAGE_REF"
+
+                        # Vérifier la signature avec Cosign (avec certificat CA)
+                        echo "▶ Vérification de la signature..."
+                        if SSL_CERT_FILE=\$REGISTRY_CERT cosign verify --key "\${COSIGN_PUB_KEY}" \
+                            --insecure-ignore-tlog=true \
+                            "\$IMAGE_REF" 2>&1; then
+                            echo "✅ Signature valide - l'image a été signée par le pipeline CI"
+                        else
+                            echo "❌ ERREUR: Signature invalide ou absente !"
+                            echo ""
+                            echo "   L'image n'a pas été signée par le pipeline CI ou la signature est corrompue."
+                            echo "   Cela peut indiquer:"
+                            echo "   - L'image a été poussée manuellement sans signature"
+                            echo "   - L'image a été modifiée après signature"
+                            echo "   - Les clés Cosign ne correspondent pas"
+                            echo ""
+                            echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
+                            exit 1
+                        fi
+                    """
+                }
             }
         }
 
@@ -408,12 +542,12 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Déterminer la politique de pull d'image
-                    # Pour 'latest' ou SNAPSHOT : Always (force le pull à chaque déploiement)
+                    # Pour SNAPSHOT : Always (force le pull à chaque déploiement)
                     # Pour les releases : IfNotPresent (utilise le cache si disponible)
                     PULL_POLICY="IfNotPresent"
-                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -qE "(SNAPSHOT|latest)"; then
+                    if echo "${env.DEPLOY_IMAGE_TAG}" | grep -qE "SNAPSHOT"; then
                         PULL_POLICY="Always"
-                        echo "⚠️  Tag dynamique détecté (${env.DEPLOY_IMAGE_TAG}) : imagePullPolicy=Always"
+                        echo "⚠️  Tag SNAPSHOT détecté (${env.DEPLOY_IMAGE_TAG}) : imagePullPolicy=Always"
                         echo "   L'image sera toujours récupérée du registry pour garantir la dernière version"
                     else
                         echo "ℹ️  Version RELEASE fixe : imagePullPolicy=IfNotPresent"
@@ -421,17 +555,17 @@ EOF
 
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
-                    # Note: Le namespace doit déjà exister (créé par init-stagingkub.sh)
+                    # Note: --create-namespace crée automatiquement le namespace s'il n'existe pas
                     echo "▶ Lancement du déploiement Helm..."
                     helm upgrade --install rhdemo rhDemo/infra/stagingkub/helm/rhdemo \\
                       --namespace ${env.K8S_NAMESPACE} \\
+                      --create-namespace \\
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
                       --set rhdemo.image.pullPolicy=\${PULL_POLICY} \\
                       --wait \\
-                      --timeout 10m \\
-                      --debug \\
-                      --atomic
+                      --timeout 15m \\
+                      --debug
 
                     echo ""
                     echo "✅ Déploiement Helm réussi"
@@ -463,12 +597,15 @@ EOF
                     kubectl config use-context ${env.K8S_CONTEXT}
 
                     # Rollout restart pour forcer le redémarrage des pods
-                    kubectl rollout restart deployment/rhdemo -n ${env.K8S_NAMESPACE} || true
-                    kubectl rollout restart statefulset/postgresql-rhdemo -n ${env.K8S_NAMESPACE} || true
-                    kubectl rollout restart statefulset/postgresql-keycloak -n ${env.K8S_NAMESPACE} || true
-                    kubectl rollout restart deployment/keycloak -n ${env.K8S_NAMESPACE} || true
+                    echo "   - Redémarrage rhdemo-app..."
+                    kubectl rollout restart deployment/rhdemo-app -n ${env.K8S_NAMESPACE}
 
-                    echo "✅ Pods redémarrés"
+                    echo "   - Redémarrage keycloak..."
+                    kubectl rollout restart deployment/keycloak -n ${env.K8S_NAMESPACE}
+
+                    # Les StatefulSets PostgreSQL ne nécessitent pas de restart
+
+                    echo "✅ Rollout restart déclenché - l'attente de la disponibilité se fera dans le stage suivant"
                 """
             }
         }
@@ -510,17 +647,19 @@ EOF
                         exit 1
                     }
 
-                    # Attendre les statefulsets
+                    # Attendre les StatefulSets PostgreSQL
                     echo "   - StatefulSet postgresql-rhdemo..."
-                    kubectl rollout status statefulset/postgresql-rhdemo -n ${env.K8S_NAMESPACE} --timeout=5m || {
+                    kubectl wait --for=condition=Ready pod -l app=postgresql-rhdemo -n ${env.K8S_NAMESPACE} --timeout=5m || {
                         echo "❌ StatefulSet postgresql-rhdemo non prêt"
+                        kubectl get statefulset postgresql-rhdemo -n ${env.K8S_NAMESPACE}
                         kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-rhdemo
                         exit 1
                     }
 
                     echo "   - StatefulSet postgresql-keycloak..."
-                    kubectl rollout status statefulset/postgresql-keycloak -n ${env.K8S_NAMESPACE} --timeout=5m || {
+                    kubectl wait --for=condition=Ready pod -l app=postgresql-keycloak -n ${env.K8S_NAMESPACE} --timeout=5m || {
                         echo "❌ StatefulSet postgresql-keycloak non prêt"
+                        kubectl get statefulset postgresql-keycloak -n ${env.K8S_NAMESPACE}
                         kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-keycloak
                         exit 1
                     }
@@ -584,11 +723,11 @@ EOF
                     fi
 
                     echo ""
-                    echo "▶ Vérification de PostgreSQL RHDemo..."
+                    echo "▶ Vérification de PostgreSQL RHDemo (StatefulSet)..."
                     PG_RHDEMO_POD=\$(kubectl get pods -n ${env.K8S_NAMESPACE} -l app=postgresql-rhdemo -o jsonpath='{.items[0].metadata.name}')
 
                     if [ -z "\$PG_RHDEMO_POD" ]; then
-                        echo "⚠️  Aucun pod PostgreSQL RHDemo trouvé"
+                        echo "⚠️  Aucun pod PostgreSQL RHDemo (primary) trouvé"
                     else
                         echo "   Pod: \$PG_RHDEMO_POD"
 
@@ -659,9 +798,12 @@ EOF
                     rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
                     rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
                     rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
+                
+                    echo "✅ Nettoyage terminé"
+                
+                    #Déconnecter Jenkins du réseau Kind
+                    docker network disconnect kind \$JENKINS_CONTAINER 2>/dev/null && echo "✅ Jenkins déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter Jenkins du réseau kind"
                 """
-
-                echo "✅ Nettoyage terminé"
             }
         }
         success {

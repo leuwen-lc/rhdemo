@@ -9,6 +9,7 @@ services:
     image: rhdemo-jenkins:latest
     container_name: rhdemo-jenkins
     restart: unless-stopped
+    stop_grace_period: 60s  # Temps d'arrêt gracieux
     
     # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
     # L'accès Docker se fait via le groupe docker (GID 984 de l'hôte)
@@ -25,21 +26,24 @@ services:
     volumes:
       # Persistance des données Jenkins
       - jenkins_home:/var/jenkins_home
-      
+
       # Configuration as Code (JCasC)
       - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
-      
+
       # Socket Docker pour Docker-in-Docker (DinD)
       - /var/run/docker.sock:/var/run/docker.sock
-      
+
       # Binaire Docker CLI
       - /usr/bin/docker:/usr/bin/docker
-      
+
       # Maven local repository (cache) - utilisateur jenkins
       - maven_repository:/var/jenkins_home/.m2
-      
+
       # Répertoire de travail partagé (optionnel)
       - ./workspace:/workspace
+
+      # Certificat du registry pour cosign et curl (HTTPS)
+      - ./certs/registry/registry.crt:/etc/ssl/certs/registry.crt:ro
     
     environment:
       # Désactiver le setup wizard
@@ -48,14 +52,9 @@ services:
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
       
-      # Credentials depuis .env
+      # Credentials depuis .env (tokens gérés dans l'interface Jenkins)
       - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
-      # KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
-      # H2_DB_PASSWORD=${H2_DB_PASSWORD}
-      # POSTGRES_DB_PASSWORD=${POSTGRES_DB_PASSWORD}
-      - SONAR_TOKEN=${SONAR_TOKEN}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
       
       # Timezone
       - TZ=${TZ:-Europe/Paris}
@@ -76,28 +75,34 @@ services:
   # ═══════════════════════════════════════════════════════════════════
   # JENKINS AGENT (optionnel - pour builds distribués)
   # ═══════════════════════════════════════════════════════════════════
-  jenkins-agent:
-    image: jenkins/inbound-agent:latest-jdk21
-    container_name: rhdemo-jenkins-agent
-    restart: unless-stopped
-    
-    environment:
-      - JENKINS_URL=http://jenkins:8080
-      - JENKINS_AGENT_NAME=docker-agent
-      - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
-      # À configurer après le premier lancement de Jenkins
-      # - JENKINS_SECRET=<secret-from-jenkins>
-    
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /usr/bin/docker:/usr/bin/docker
-      - jenkins_agent_workspace:/home/jenkins/agent
-    
-    networks:
-      - jenkins-network
-    
-    depends_on:
-      - jenkins
+  # ⚠️ DÉSACTIVÉ : L'image jenkins/inbound-agent ne contient pas les outils
+  #    nécessaires pour exécuter les pipelines RHDemo (Maven, Docker Compose,
+  #    Firefox, SOPS, kubectl, Helm, etc.)
+  #
+  # Pour activer un agent, il faudrait créer une image personnalisée basée
+  # sur Dockerfile.jenkins avec tous les outils requis.
+  #
+  # jenkins-agent:
+  #   image: jenkins/inbound-agent:latest-jdk21
+  #   container_name: rhdemo-jenkins-agent
+  #   restart: unless-stopped
+  #
+  #   environment:
+  #     - JENKINS_URL=http://jenkins:8080
+  #     - JENKINS_AGENT_NAME=docker-agent
+  #     - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
+  #     - JENKINS_SECRET=${JENKINS_SECRET}
+  #
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #     - /usr/bin/docker:/usr/bin/docker
+  #     - jenkins_agent_workspace:/home/jenkins/agent
+  #
+  #   networks:
+  #     - jenkins-network
+  #
+  #   depends_on:
+  #     - jenkins
 
   # ═══════════════════════════════════════════════════════════════════
   # SONARQUBE - Analyse qualité du code
@@ -106,6 +111,7 @@ services:
     image: sonarqube:25.11.0.114957-community
     container_name: rhdemo-sonarqube
     restart: unless-stopped
+    stop_grace_period: 30s  # Temps d'arrêt gracieux
 
     ports:
       - "9020:9000"
@@ -120,6 +126,13 @@ services:
       - SONAR_JDBC_USERNAME=sonar
       - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
       - SONAR_WEB_PORT=9000
+    
+      # Limiter Elasticsearch (Search)
+      - SONAR_SEARCH_JAVAOPTS=-Xms512m -Xmx512m
+      # Limiter le Web
+      # SONAR_WEB_JAVAOPTS=-Xms512m -Xmx512m
+      # Limiter le Compute Engine
+      # SONAR_CE_JAVAOPTS=-Xms512m -Xmx512m
 
     networks:
       - jenkins-network
@@ -161,11 +174,14 @@ services:
       retries: 5
 
   # ═══════════════════════════════════════════════════════════════════
-  # DOCKER REGISTRY LOCAL (optionnel - pour stocker les images)
+  # DOCKER REGISTRY LOCAL (HTTPS - pour stocker les images)
+  # ═══════════════════════════════════════════════════════════════════
+  # Prérequis: Générer les certificats avec ./init-registry-certs.sh
+  # puis configurer Docker daemon (voir instructions dans le script)
   # ═══════════════════════════════════════════════════════════════════
   registry:
     image: registry:2
-    container_name: rhdemo-docker-registry
+    container_name: kind-registry
     restart: unless-stopped
 
     ports:
@@ -173,12 +189,24 @@ services:
 
     volumes:
       - registry_data:/var/lib/registry
+      # Certificats TLS pour HTTPS
+      - ./certs/registry:/certs:ro
 
     environment:
       - REGISTRY_STORAGE_DELETE_ENABLED=true
+      # Configuration TLS
+      - REGISTRY_HTTP_TLS_CERTIFICATE=/certs/registry.crt
+      - REGISTRY_HTTP_TLS_KEY=/certs/registry.key
 
     networks:
       - jenkins-network
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --no-check-certificate https://localhost:5000/v2/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -214,7 +242,7 @@ volumes:
     driver: local
 
   registry_data:
-    name: rhdemo-docker-registry
+    name: kind-registry-data
     driver: local
 
 # ═══════════════════════════════════════════════════════════════════

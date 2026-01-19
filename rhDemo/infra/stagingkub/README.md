@@ -8,6 +8,7 @@
 - [Installation initiale](#installation-initiale)
 - [Déploiement](#déploiement)
 - [Configuration](#configuration)
+- [Persistance des données](#-persistance-des-données)
 - [Opérations courantes](#opérations-courantes)
 - [Troubleshooting](#troubleshooting)
 - [Comparaison ephemere vs stagingkub](#comparaison-ephemere-vs-stagingkub)
@@ -148,9 +149,15 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
   - `keycloak-admin-secret` (mot de passe admin Keycloak)
   - `rhdemo-app-secrets` (secrets-rhdemo.yml)
   - `rhdemo-tls-cert` (certificats SSL)
+- **2 PersistentVolumes statiques** (hostPath) :
+  - `postgresql-rhdemo-pv` → `/mnt/data/postgresql-rhdemo`
+  - `postgresql-keycloak-pv` → `/mnt/data/postgresql-keycloak`
 - **2 PersistentVolumeClaims** :
-  - `postgresql-data` (pour postgresql-rhdemo)
-  - `postgresql-data` (pour postgresql-keycloak)
+  - `postgresql-data-postgresql-rhdemo-0`
+  - `postgresql-data-postgresql-keycloak-0`
+- **2 CronJobs** (backups PostgreSQL) :
+  - `postgresql-rhdemo-backup` (2h du matin)
+  - `postgresql-keycloak-backup` (3h du matin)
 - **1 ConfigMap** :
   - `postgresql-rhdemo-init` (scripts d'initialisation DB)
 
@@ -166,8 +173,10 @@ cd rhDemo/infra/stagingkub
 ```
 
 Ce script :
-- ✅ Crée le cluster KinD `rhdemo` (si non existant)
-- ✅ Configure les port mappings (80:30080, 443:30443)
+
+- ✅ Crée le cluster KinD `rhdemo` avec configuration `kind-config.yaml`
+- ✅ Configure les port mappings (80, 443)
+- ✅ Configure les extraMounts pour persistance des données sur l'hôte
 - ✅ Installe Nginx Ingress Controller
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)
@@ -297,6 +306,70 @@ kubectl create secret generic rhdemo-app-secrets \
 # Redémarrer le pod pour charger les nouveaux secrets
 kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 ```
+
+---
+
+## 💾 Persistance des données
+
+### Architecture de persistance
+
+Les données PostgreSQL sont persistées sur l'hôte via des **extraMounts KinD** et des **PersistentVolumes statiques** :
+
+```text
+Hôte Linux                              KinD Container                    Pod PostgreSQL
+─────────────                           ──────────────                    ──────────────
+/home/leno-vo/kind-data/               /mnt/data/                        /var/lib/postgresql/data/
+  └─ rhdemo-stagingkub/                  ├─ postgresql-rhdemo/ ◄──────── PV hostPath
+       ├─ postgresql-rhdemo/             └─ postgresql-keycloak/ ◄────── PV hostPath
+       ├─ postgresql-keycloak/
+       └─ backups/                     /mnt/backups/
+            ├─ rhdemo/                   ├─ rhdemo/ ◄──────────────────── CronJob backup
+            └─ keycloak/                 └─ keycloak/ ◄─────────────────── CronJob backup
+```
+
+### Configuration KinD (kind-config.yaml)
+
+```yaml
+extraMounts:
+  # Données PostgreSQL RHDemo
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo
+    containerPath: /mnt/data/postgresql-rhdemo
+  # Données PostgreSQL Keycloak
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-keycloak
+    containerPath: /mnt/data/postgresql-keycloak
+  # Backups PostgreSQL
+  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups
+    containerPath: /mnt/backups
+```
+
+### Avantages
+
+- ✅ **Survie aux recréations de cluster** : Les données restent sur l'hôte
+- ✅ **Realm Keycloak préservé** : Pas besoin de reconfigurer après redémarrage
+- ✅ **Backups accessibles** : Fichiers `.sql.gz` directement sur l'hôte
+- ✅ **PV statiques avec Retain** : Protection contre la suppression accidentelle
+
+### Backups automatiques (CronJobs)
+
+Deux CronJobs effectuent des sauvegardes quotidiennes :
+
+| CronJob                      | Schedule     | Rétention | Chemin backup              |
+|------------------------------|--------------|-----------|----------------------------|
+| `postgresql-rhdemo-backup`   | 2h du matin  | 7 jours   | `/mnt/backups/rhdemo/`     |
+| `postgresql-keycloak-backup` | 3h du matin  | 7 jours   | `/mnt/backups/keycloak/`   |
+
+```bash
+# Vérifier les CronJobs
+kubectl get cronjob -n rhdemo-stagingkub
+
+# Déclencher un backup manuel
+kubectl create job --from=cronjob/postgresql-rhdemo-backup manual-backup-$(date +%s) -n rhdemo-stagingkub
+
+# Voir les backups sur l'hôte
+ls -lh /home/leno-vo/kind-data/rhdemo-stagingkub/backups/rhdemo/
+```
+
+> 📖 Documentation complète : [POSTGRESQL_BACKUP_CRONJOBS.md](../../docs/POSTGRESQL_BACKUP_CRONJOBS.md)
 
 ---
 

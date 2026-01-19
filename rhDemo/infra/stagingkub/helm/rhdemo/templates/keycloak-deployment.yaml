@@ -52,10 +52,8 @@ spec:
             secretKeyRef:
               name: {{ .Values.keycloak.database.passwordSecret.name }}
               key: {{ .Values.keycloak.database.passwordSecret.key }}
-        - name: KC_HOSTNAME_URL
-          value: {{ .Values.keycloak.hostname.url }}
-        - name: KC_HOSTNAME_ADMIN_URL
-          value: {{ .Values.keycloak.hostname.adminUrl }}
+        - name: KC_HOSTNAME
+          value: {{ .Values.keycloak.hostname }}
         - name: KC_LOG_LEVEL
           value: {{ .Values.keycloak.logLevel }}
         livenessProbe:

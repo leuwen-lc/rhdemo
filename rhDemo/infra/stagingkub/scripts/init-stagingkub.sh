@@ -39,54 +39,61 @@ if ! command -v helm &> /dev/null; then
     exit 1
 fi
 
-# Créer et configurer le registry Docker local
+# ═══════════════════════════════════════════════════════════════
+# Configuration du registry Docker local
+# ═══════════════════════════════════════════════════════════════
 echo -e "${YELLOW}▶ Configuration du registry Docker local...${NC}"
-REGISTRY_NAME="kind-registry"
 REGISTRY_PORT="5000"
+REGISTRY_NAME="kind-registry"
 
-# Vérifier si un registry tourne déjà sur le port 5000
-EXISTING_REGISTRY=$(docker ps --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
+# Détecter un registry actif sur le port 5000
+ACTIVE_REGISTRY=$(docker ps --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
 
-if [ -n "$EXISTING_REGISTRY" ]; then
-    echo -e "${GREEN}✅ Un registry Docker est déjà actif sur le port ${REGISTRY_PORT} : '${EXISTING_REGISTRY}'${NC}"
-    REGISTRY_NAME="$EXISTING_REGISTRY"
+if [ -n "$ACTIVE_REGISTRY" ]; then
+    echo -e "${GREEN}✅ Registry Docker actif sur le port ${REGISTRY_PORT}: '${ACTIVE_REGISTRY}'${NC}"
+    REGISTRY_NAME="$ACTIVE_REGISTRY"
 else
-    # Vérifier si le registry 'kind-registry' existe mais est arrêté
-    if docker ps -a --format '{{.Names}}' | grep -q "^${REGISTRY_NAME}$"; then
-        echo -e "${YELLOW}Registry '${REGISTRY_NAME}' existe mais est arrêté${NC}"
-        echo -e "${YELLOW}Démarrage du registry...${NC}"
-        docker start ${REGISTRY_NAME}
+    # Chercher un registry existant mais arrêté
+    STOPPED_REGISTRY=$(docker ps -a --filter "publish=${REGISTRY_PORT}" --format '{{.Names}}' | head -n 1)
+
+    if [ -n "$STOPPED_REGISTRY" ]; then
+        echo -e "${YELLOW}▶ Registry '${STOPPED_REGISTRY}' trouvé (arrêté), démarrage...${NC}"
+        docker start ${STOPPED_REGISTRY}
         sleep 2
-        echo -e "${GREEN}✅ Registry Docker local démarré${NC}"
+        REGISTRY_NAME="$STOPPED_REGISTRY"
+        echo -e "${GREEN}✅ Registry démarré${NC}"
     else
-        # Aucun registry n'existe, on en crée un nouveau
-        echo -e "${YELLOW}Création du registry Docker local sur le port ${REGISTRY_PORT}...${NC}"
+        echo -e "${YELLOW}▶ Aucun registry trouvé, création de 'kind-registry'...${NC}"
         if docker run -d \
-            --name ${REGISTRY_NAME} \
+            --name kind-registry \
             --restart=always \
             -p ${REGISTRY_PORT}:5000 \
             registry:2 > /dev/null; then
             sleep 2
-            echo -e "${GREEN}✅ Registry Docker local créé et actif${NC}"
+            echo -e "${GREEN}✅ Registry créé et actif${NC}"
         else
             echo -e "${RED}❌ Erreur lors de la création du registry${NC}"
-            echo -e "${YELLOW}Le port ${REGISTRY_PORT} est peut-être occupé. Vérifiez avec :${NC}"
-            echo "  docker ps -a --filter 'publish=${REGISTRY_PORT}'"
-            echo "  sudo ss -ltnp 'sport = :${REGISTRY_PORT}'"
+            echo -e "${YELLOW}💡 Le port ${REGISTRY_PORT} est peut-être occupé. Démarrez d'abord Jenkins:${NC}"
+            echo "     cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
             exit 1
         fi
     fi
 fi
 
-# Vérifier que le registry est accessible
-echo -n "Vérification de l'accessibilité du registry... "
-if curl -f http://localhost:${REGISTRY_PORT}/v2/ &> /dev/null; then
-    echo -e "${GREEN}✅ OK${NC}"
-else
-    echo -e "${RED}❌ ERREUR${NC}"
-    echo -e "${RED}Le registry n'est pas accessible sur http://localhost:${REGISTRY_PORT}${NC}"
+# Vérifier l'accessibilité (HTTPS avec certificat auto-signé)
+REGISTRY_CERT="/etc/docker/certs.d/localhost:${REGISTRY_PORT}/ca.crt"
+if [ ! -f "$REGISTRY_CERT" ]; then
+    echo -e "${RED}❌ Certificat du registry non trouvé : ${REGISTRY_CERT}${NC}"
+    echo -e "${YELLOW}   Générez les certificats avec :${NC}"
+    echo -e "${YELLOW}   cd rhDemo/infra/jenkins-docker && ./init-registry-certs.sh${NC}"
     exit 1
 fi
+
+if ! curl -sf --cacert "$REGISTRY_CERT" https://localhost:${REGISTRY_PORT}/v2/ > /dev/null; then
+    echo -e "${RED}❌ Registry inaccessible sur https://localhost:${REGISTRY_PORT}${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Registry accessible (HTTPS)${NC}"
 
 # Vérifier que le cluster KinD 'rhdemo' existe
 echo -e "${YELLOW}▶ Vérification du cluster KinD 'rhdemo'...${NC}"
@@ -94,47 +101,75 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${RED}❌ Le cluster KinD 'rhdemo' n'existe pas.${NC}"
     echo -e "${YELLOW}Création du cluster KinD 'rhdemo'...${NC}"
 
-    # Créer un fichier de configuration KinD avec support du registry local
-    # Note: Les ports 80/443 (host) sont mappés vers les NodePorts de l'Ingress Controller
-    # Ces NodePorts (31792/32616) sont assignés automatiquement par le manifeste Ingress Nginx
-    cat <<EOF > /tmp/kind-config.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: rhdemo
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${REGISTRY_PORT}"]
-    endpoint = ["http://${REGISTRY_NAME}:5000"]
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 31792
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 32616
-    hostPort: 443
-    protocol: TCP
-EOF
+    # Créer le répertoire de persistance sur l'hôte
+    PERSISTENCE_DIR="/home/leno-vo/kind-data/rhdemo-stagingkub"
+    echo -e "${YELLOW}Création du répertoire de persistance : ${PERSISTENCE_DIR}${NC}"
+    mkdir -p "${PERSISTENCE_DIR}"
+    chmod 755 "${PERSISTENCE_DIR}"
+    echo -e "${GREEN}✅ Répertoire de persistance créé${NC}"
 
-    kind create cluster --config /tmp/kind-config.yaml
-    rm /tmp/kind-config.yaml
-    echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé${NC}"
+    # Utiliser le fichier kind-config.yaml du répertoire stagingkub
+    KIND_CONFIG_FILE="${STAGINGKUB_DIR}/kind-config.yaml"
 
-    # Connecter le registry au réseau KinD
-    echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
-    docker network connect kind ${REGISTRY_NAME} 2>/dev/null || echo "Registry déjà connecté au réseau kind"
-    echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
+    if [ ! -f "${KIND_CONFIG_FILE}" ]; then
+        echo -e "${RED}❌ Fichier kind-config.yaml non trouvé : ${KIND_CONFIG_FILE}${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Utilisation de la configuration : ${KIND_CONFIG_FILE}${NC}"
+    echo -e "${BLUE}Configuration :${NC}"
+    echo -e "${BLUE}  - Persistance des données : ${PERSISTENCE_DIR}${NC}"
+    echo -e "${BLUE}  - Registry Docker : ${REGISTRY_NAME}:${REGISTRY_PORT}${NC}"
+    echo -e "${BLUE}  - Ports mappés : 80 → 31792, 443 → 32616${NC}"
+
+    kind create cluster --name rhdemo --config "${KIND_CONFIG_FILE}"
+    echo -e "${GREEN}✅ Cluster KinD 'rhdemo' créé avec persistance des données${NC}"
+
+    # Connecter le registry au réseau KinD avec alias
+    echo -e "${YELLOW}▶ Connexion du registry au réseau KinD...${NC}"
+    docker network disconnect kind ${REGISTRY_NAME} 2>/dev/null || true
+    docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+    echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
+
+    CLUSTER_CREATED=true
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
-    # Vérifier si le registry est connecté au réseau kind
+    # Vérifier et reconnecter avec alias si nécessaire
     if ! docker network inspect kind | grep -q "${REGISTRY_NAME}"; then
-        echo -e "${YELLOW}Connexion du registry au réseau KinD...${NC}"
-        docker network connect kind ${REGISTRY_NAME}
-        echo -e "${GREEN}✅ Registry connecté au cluster KinD${NC}"
+        echo -e "${YELLOW}▶ Connexion du registry au réseau KinD...${NC}"
+        docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+        echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
     else
-        echo -e "${GREEN}✅ Registry déjà connecté au réseau KinD${NC}"
+        # Vérifier que l'alias existe
+        echo -e "${YELLOW}▶ Vérification de l'alias 'kind-registry'...${NC}"
+        docker network disconnect kind ${REGISTRY_NAME} 2>/dev/null || true
+        docker network connect kind ${REGISTRY_NAME} --alias kind-registry
+        echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
+
+    CLUSTER_CREATED=false
+fi
+
+# ═══════════════════════════════════════════════════════════════
+# Configuration HTTPS du registry dans le nœud KinD
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration du certificat HTTPS dans le nœud KinD...${NC}"
+
+# Copier le certificat CA dans le nœud KinD
+docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
+
+# Mettre à jour les CA du nœud
+docker exec rhdemo-control-plane update-ca-certificates > /dev/null 2>&1
+
+# Vérifier si containerd utilise encore HTTP
+if docker exec rhdemo-control-plane grep -q "http://kind-registry:5000" /etc/containerd/config.toml 2>/dev/null; then
+    echo -e "${YELLOW}  - Mise à jour de containerd pour HTTPS...${NC}"
+    docker exec rhdemo-control-plane sed -i 's|http://kind-registry:5000|https://kind-registry:5000|g' /etc/containerd/config.toml
+    docker exec rhdemo-control-plane systemctl restart containerd
+    echo -e "${GREEN}✅ Containerd configuré pour HTTPS${NC}"
+else
+    echo -e "${GREEN}✅ Containerd déjà configuré pour HTTPS${NC}"
 fi
 
 # Définir le contexte kubectl
@@ -260,10 +295,10 @@ if [ -f "$SECRETS_FILE" ]; then
         echo -e "${YELLOW}Déchiffrement des secrets avec SOPS...${NC}"
         sops -d "$SECRETS_FILE" > "$SECRETS_DECRYPTED"
 
-        # Extraire les mots de passe depuis le fichier déchiffré
-        RHDEMO_DB_PASSWORD=$(grep 'rhdemo-db-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
-        KEYCLOAK_DB_PASSWORD=$(grep 'keycloak-db-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
-        KEYCLOAK_ADMIN_PASSWORD=$(grep 'keycloak-admin-password:' "$SECRETS_DECRYPTED" | awk '{print $2}')
+        # Extraire les mots de passe depuis le fichier déchiffré avec yq (version apt)
+        RHDEMO_DB_PASSWORD=$(yq -r '.rhdemo.datasource.password.pg' "$SECRETS_DECRYPTED")
+        KEYCLOAK_DB_PASSWORD=$(yq -r '.keycloak.db.password' "$SECRETS_DECRYPTED")
+        KEYCLOAK_ADMIN_PASSWORD=$(yq -r '.keycloak.admin.password // "admin"' "$SECRETS_DECRYPTED")
 
         rm "$SECRETS_DECRYPTED"
         echo -e "${GREEN}✅ Secrets déchiffrés${NC}"

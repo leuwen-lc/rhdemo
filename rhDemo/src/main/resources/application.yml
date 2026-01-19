@@ -21,10 +21,10 @@ spring:
     hikari:
       # Temps max qu'une connexion peut rester dans le pool (30 min)
       # Doit être < au timeout de PostgreSQL (souvent 60 min par défaut)
-      max-lifetime: 1800000  # 30 minutes en millisecondes
+      max-lifetime: 600000  # 30 minutes en millisecondes
 
       # Temps max qu'une connexion peut rester inactive avant d'être fermée (10 min)
-      idle-timeout: 600000   # 10 minutes
+      idle-timeout: 300000   # 10 minutes
 
       # Taille du pool
       maximum-pool-size: 10
@@ -40,7 +40,7 @@ spring:
       connection-timeout: 30000
 
       # Keepalive pour détecter les connexions mortes
-      keepalive-time: 300000  # 5 minutes
+      keepalive-time: 120000
   
   # Evite l'ecrasement du schema data.sql par JPA
   jpa:

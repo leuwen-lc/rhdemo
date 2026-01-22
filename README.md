@@ -23,37 +23,17 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Montrer le déploiement sur un cluster Kubernetes léger (KinD)
 - Mettre en place un début d'observabilité avec Loki/Grafana (au moins pour les logs aidant au debug sur l'environnement KinD)
 
-## Fonctionnalités
-
-- Application basique CRUD (Create / Read / Update / Delete) sur une base simplifiée d'employés.
-- ... Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
-- Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit et les réponses aux requètes deviennent trop lourdes sans pagination.
-
-## Architecture applicative
-
-- Back‑end : Spring Boot, Spring Security
-  - Architecture logicielle classique en 3 couches (évolutive en cas de besoin vers DTO ou Architecture hexagonale).
-   Pattern Backend For Front-end (BFF) :
-  - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
-  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
-- Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
-- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
-- Deux chaines CI/CD séparées :
-  - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
-  - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
-
-## Tests
-
-- Tests d'intégration au sens Spring Boot avec base en mémoire H2 pour le back‑end. Tests intégrés dans la chaine de build (Maven).
-- Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse. Tests dans un projet indépendant, activés dans la chaine CI.
-- Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
-
 ## Accent mis sur le DevSecOps
+
+(C'est à dire mettre en place les sécurisations de responsabilité dev dès le début du projet)
 
 - Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
-- Utilisation de Spring Security : Inteface Keycloak OIDC (custom pour récupérer les roles des utilisateurs dans l'idtoken), activation de l'anti-CSRF (via cookie spécialisé) sur le module principal lié à l'utilisation du pattern BFF. Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes (Spring actuator, documentation Open API/swagger, etc...)
-- Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisaiton d'un outil centralisé de type Hashicorp Vault demande une expertise plus spécialisée mais reste possible sans modifier l'applicatif (TODO).
+- Utilisation de Spring Security : 
+  - Inteface Keycloak OIDC custom pour récupérer les roles des utilisateurs dans l'idtoken, 
+  - activation de l'anti-CSRF via cookie dédié sur le module principal lié à l'utilisation du pattern BFF. 
+  - Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes 
+- Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisation d'un outil centralisé de type Hashicorp Vault demandera une expertise plus spécialisée mais reste possible sans modifier l'applicatif.
 - Entêtes CSP réglées au plus strict possible sur l'applicatif : interdiction notamment du javascript inline, puissant moteur d'injections XSS.
 - CI
   - Dépendances : Scan par OWASP Dependency‑Check, échec de la chaine si CVSS >=7.
@@ -67,8 +47,33 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - Utilisation des secrets kubernetes (chargement des secrets après décodage SOPS)
   - Déploiement basé sur la lecture du digest du container constuit lors du dernier build CI réussi (pas de tag dangereux "Latest)
   - Vérification de signature Cosign
-- TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (certificats auto-signés pour l'instant évolutif vers certificats let's encrypt validés avec DNS0 sur le domaine leuwen-lc.fr).
-- Logging / monitoring basique avec Loki/Grafana : succès/échecs d'authentification, erreurs applicatives.
+- TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé). Certificat autosignés individuellement pour l'instant.
+- Logging / monitoring activé sur stagingkub avec Prometheus/Loki/Grafana : succès/échecs d'authentification, erreurs applicatives.
+
+## Fonctionnalités
+
+- Application basique CRUD (Create / Read / Update / Delete) sur une base simplifiée d'employés.
+- ... Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
+- Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit et les réponses aux requètes deviennent trop lourdes sans pagination.
+
+## Architecture applicative
+
+- Back‑end : Spring Boot, Spring Security
+  - Architecture logicielle classique en 3 couches (évolutive en cas de besoin vers DTO ou clean architecture).
+   Pattern Backend For Front-end (BFF) :
+  - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
+  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
+- Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
+- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
+- Deux chaines CI/CD séparées :
+  - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
+  - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
+
+## Tests
+
+- Tests unitaires et tests d'intégration au sens Spring Boot avec base en mémoire H2 pour le back‑end. Tests intégrés dans la chaine de build (Maven).
+- Tests de bout en bout : Selenium (projet séparé) avec marqueurs CSS `data-testid` pour améliorer la robustesse. Tests dans un projet indépendant, activés dans la chaine CI.
+- Outils Utilisés : Spring Boot, JUnit, Selenium Java (E2E).
 
 ## Installation
 
@@ -87,14 +92,13 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Le fait de déployer via CI/CD dans un premier environnement ephemere puis sur un mini-cluster kubernetes permet de démontrer la portabilité de l'application
 
 - Par contre par nature ce projet n'est pas pret pour la production.
-  - Il y aurait bien sur un travail spécifique de conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
-  - Il reste un travail de configuration sur certains composants applicatifs en cible production :
+  - Il faut bien sur faire le travail spécifique de conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
+  - Mais il reste aussi un travail de configuration sur certains composants applicatifs en cible production :
     - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) qui serait fait probablement dans le cadre d'un projet IAM séparé.
-    - mettre en place des dashboards de collecte de logs et métriques applicatives plus complets en spécifiques en lien avec les ops
     - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins : ajout de slaves dédié et utilisation d'un deuxième master dédié production.
     - permettre la mise en place les mécanismes de scalabilité (Redis, etc...)
-    - (TODO) revoir l'accès aux métriques actuator (sécurisation/dashboard Grafana spécifque)
     - (TODO) Revoir le mécanisme de logout avec Keycloak
+    - (TODO) mettre en place des dashboards de collecte de logs et métriques applicatives plus complets en spécifiques en lien avec les ops 
 
 - Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :
   - manque énormément d'informations sur les employes,
@@ -173,6 +177,7 @@ Sécurité applicative
   
 ## Feuille de route
 
+- Ajouter des collectes et des dashboard Grafana sur la partie applicative (Spring actuator, postgresql)
 - Ajouter un champ de recherche dans chaque colonne de la liste des employes
 - Evaluer d'aures outils dans la chaine CI :
   - Snyk (sécurité des dépendances coté front-end)

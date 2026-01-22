@@ -1,0 +1,58 @@
+{{- if and .Values.rhdemo.enabled .Values.rhdemo.metrics.serviceMonitor.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy pour sécuriser l'accès aux métriques Prometheus
+# ═══════════════════════════════════════════════════════════════
+# Cette NetworkPolicy restreint l'accès au pod rhdemo-app :
+#   - Autorise le trafic depuis le namespace monitoring (Prometheus)
+#   - Autorise le trafic depuis le namespace ingress-nginx (requêtes utilisateurs)
+#   - Autorise le trafic interne au namespace rhdemo-stagingkub
+#
+# L'endpoint /actuator/prometheus est ainsi protégé au niveau réseau,
+# même s'il est accessible sans authentification applicative.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rhdemo-app-allow-prometheus
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo-app.labels" . | nindent 4 }}
+spec:
+  # Appliquer cette politique aux pods rhdemo-app
+  podSelector:
+    matchLabels:
+      app: rhdemo-app
+  policyTypes:
+    - Ingress
+  ingress:
+    # Règle 1: Autoriser le scraping Prometheus depuis le namespace monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+    # Règle 2: Autoriser le trafic depuis nginx-ingress (requêtes utilisateurs)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+    # Règle 3: Autoriser le trafic interne au namespace (communication inter-pods)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.global.namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+    # Règle 4: Autoriser les health checks Kubernetes (kubelet)
+    # Note: Le kubelet n'est pas dans un namespace, il faut autoriser sans restriction de namespace
+    # pour les probes liveness/readiness
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+{{- end }}

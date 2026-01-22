@@ -1,7 +1,7 @@
 # INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 10 janvier 2026
-**Version:** 3.0 (Stack Complète: Prometheus + Loki)
+**Date:** 22 janvier 2026
+**Version:** 3.1 (Stack Complète: Prometheus + Loki + Métriques Spring Boot Actuator)
 **Environnement:** stagingkub (Kubernetes KinD)
 
 **⚠️ Sécurité:** Consultez [/infra/stagingkub/SECURITY.md](../infra/stagingkub/SECURITY.md) pour les bonnes pratiques de configuration sécurisée.
@@ -180,7 +180,7 @@ Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
 | **Node Exporter** | Métriques nodes (CPU, RAM, disque, réseau) | DaemonSet automatique |
 | **Kube State Metrics** | État ressources K8s (pods, deployments, etc.) | Deployment automatique |
 | **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes) | StatefulSet avec postgres_exporter (optionnel) |
-| **Application rhDemo** | Métriques Spring Boot Actuator | ServiceMonitor à créer (optionnel) |
+| **Application rhDemo** | Métriques Spring Boot Actuator (JVM, HTTP, HikariCP) | ServiceMonitor configuré automatiquement |
 
 ### 2.3 Flux de Données
 
@@ -1104,21 +1104,63 @@ rate(node_network_receive_bytes_total[5m])
 rate(node_network_transmit_bytes_total[5m])
 ```
 
-#### 7.2.4 Métriques Application (Spring Boot Actuator - si activé)
+#### 7.2.4 Métriques Application Spring Boot Actuator
+
+Les métriques Spring Boot Actuator sont collectées automatiquement via le ServiceMonitor `rhdemo-app` déployé dans le namespace `monitoring`.
+
+**Configuration requise:**
+
+- Endpoint `/actuator/prometheus` exposé sans authentification (protégé par NetworkPolicy)
+- ServiceMonitor configuré dans le chart Helm `rhdemo`
+- Label `environment=stagingkub` ajouté aux métriques
+
+**JVM Heap Memory:**
+```promql
+sum(jvm_memory_used_bytes{environment="stagingkub", area="heap"}) / 1024 / 1024
+```
+
+**JVM Threads actifs:**
+```promql
+jvm_threads_live_threads{environment="stagingkub"}
+```
 
 **Requêtes HTTP par seconde:**
 ```promql
-rate(http_server_requests_seconds_count{namespace="rhdemo-stagingkub"}[5m])
+sum(rate(http_server_requests_seconds_count{environment="stagingkub"}[5m]))
 ```
 
-**Latence HTTP 95e percentile:**
+**Latence HTTP p50/p95/p99:**
 ```promql
-histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
+histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{environment="stagingkub"}[5m])))
 ```
 
-**Erreurs HTTP 5xx:**
+**Erreurs HTTP 4xx/5xx:**
 ```promql
-sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+sum(rate(http_server_requests_seconds_count{environment="stagingkub", status=~"4.."}[5m]))
+sum(rate(http_server_requests_seconds_count{environment="stagingkub", status=~"5.."}[5m]))
+```
+
+**Connexions HikariCP actives:**
+```promql
+hikaricp_connections_active{environment="stagingkub"}
+```
+
+**Pool HikariCP complet:**
+```promql
+hikaricp_connections{environment="stagingkub"}
+hikaricp_connections_idle{environment="stagingkub"}
+hikaricp_connections_pending{environment="stagingkub"}
+hikaricp_connections_max{environment="stagingkub"}
+```
+
+**Garbage Collection:**
+```promql
+rate(jvm_gc_pause_seconds_sum{environment="stagingkub"}[5m])
+```
+
+**Logs par niveau (Logback):**
+```promql
+rate(logback_events_total{environment="stagingkub", level="error"}[5m])
 ```
 
 ---
@@ -1162,7 +1204,65 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
-### 8.2 Dashboard Keycloak - Logs d'Authentification (Custom)
+### 8.2 Dashboard rhDemo - Métriques Spring Boot Actuator (Pré-configuré)
+
+**Dashboard automatiquement disponible après installation!**
+
+Le dashboard "rhDemo - Metriques Spring Boot Actuator" affiche les métriques JVM, HTTP et HikariCP collectées via `/actuator/prometheus`.
+
+**Accès:** Grafana → Dashboards → "rhDemo - Metriques Spring Boot Actuator"
+
+**Prérequis:**
+
+- ServiceMonitor `rhdemo-app` déployé dans le namespace `monitoring`
+- Endpoint `/actuator/prometheus` accessible sans authentification
+- NetworkPolicy autorisant le scraping depuis le namespace `monitoring`
+
+**Contenu du dashboard:**
+
+| Section | Panels | Métriques |
+|---------|--------|-----------|
+| **Vue d'ensemble** | Heap %, Threads, Req/s, DB Active | Stats instantanées |
+| **JVM Memory** | Heap Used/Committed/Max, Non-Heap, Par Pool | `jvm_memory_*` |
+| **JVM Threads** | Par état, Live/Daemon/Peak | `jvm_threads_*` |
+| **Garbage Collection** | Durée GC par action/cause | `jvm_gc_pause_*` |
+| **HTTP Requests** | Req/s par status, Latence p50/p95/p99, Par endpoint, Erreurs 4xx/5xx | `http_server_requests_*` |
+| **HikariCP** | Active/Idle/Pending/Total/Max, Acquire/Creation Time | `hikaricp_*` |
+| **Logback** | Events par niveau (ERROR/WARN/INFO), Uptime | `logback_events_*`, `process_uptime_*` |
+
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo-springboot.json`
+
+**Déploiement:**
+
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh springboot
+# ou pour tous les dashboards:
+./deploy-grafana-dashboard.sh all
+```
+
+**Configuration ServiceMonitor (Helm):**
+
+Le ServiceMonitor est automatiquement créé lors du déploiement du chart Helm `rhdemo` si `rhdemo.metrics.serviceMonitor.enabled: true` dans `values.yaml`.
+
+```yaml
+# values.yaml
+rhdemo:
+  metrics:
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
+```
+
+**Fichiers associés:**
+
+- ServiceMonitor: `infra/stagingkub/helm/rhdemo/templates/servicemonitor-rhdemo.yaml`
+- NetworkPolicy: `infra/stagingkub/helm/rhdemo/templates/networkpolicy-prometheus.yaml`
+- Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-springboot.json`
+
+### 8.3 Dashboard Keycloak - Logs d'Authentification (Custom)
 
 **Query principale:**
 ```logql

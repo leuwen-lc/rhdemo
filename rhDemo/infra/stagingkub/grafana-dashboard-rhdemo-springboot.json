@@ -1,0 +1,911 @@
+{
+  "dashboard": {
+    "uid": "rhdemo-springboot",
+    "title": "rhDemo - Metriques Spring Boot Actuator",
+    "description": "Dashboard des metriques JVM, HTTP et HikariCP exposees par Spring Boot Actuator via /actuator/prometheus",
+    "tags": ["prometheus", "rhdemo", "spring-boot", "actuator", "jvm", "hikaricp"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Vue d'ensemble JVM",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 2,
+        "title": "JVM Heap Usage",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sum(jvm_memory_used_bytes{environment=\"stagingkub\", area=\"heap\"}) / sum(jvm_memory_max_bytes{environment=\"stagingkub\", area=\"heap\"}) * 100",
+            "refId": "A",
+            "legendFormat": "Heap %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 70, "color": "yellow" },
+                { "value": 85, "color": "red" }
+              ]
+            },
+            "unit": "percent",
+            "decimals": 1
+          }
+        },
+        "options": {
+          "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "title": "JVM Threads",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "jvm_threads_live_threads{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "Live Threads"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 100, "color": "yellow" },
+                { "value": 200, "color": "red" }
+              ]
+            },
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 4,
+        "title": "HTTP Requests/sec",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "sum(rate(http_server_requests_seconds_count{environment=\"stagingkub\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "req/s"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "blue" },
+                { "value": 10, "color": "green" },
+                { "value": 100, "color": "yellow" }
+              ]
+            },
+            "unit": "reqps",
+            "decimals": 2
+          }
+        },
+        "options": {
+          "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 5,
+        "title": "DB Connections Active",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
+        "targets": [
+          {
+            "expr": "hikaricp_connections_active{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "Active"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "green" },
+                { "value": 5, "color": "yellow" },
+                { "value": 8, "color": "red" }
+              ]
+            },
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      },
+      {
+        "id": 10,
+        "title": "JVM Memory",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 11,
+        "title": "JVM Heap Memory",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(jvm_memory_used_bytes{environment=\"stagingkub\", area=\"heap\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Used"
+          },
+          {
+            "expr": "sum(jvm_memory_committed_bytes{environment=\"stagingkub\", area=\"heap\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Committed"
+          },
+          {
+            "expr": "sum(jvm_memory_max_bytes{environment=\"stagingkub\", area=\"heap\"}) / 1024 / 1024",
+            "refId": "C",
+            "legendFormat": "Max"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory (MB)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes",
+            "decimals": 0
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Max" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Committed" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [5, 5] } },
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 12,
+        "title": "JVM Non-Heap Memory",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(jvm_memory_used_bytes{environment=\"stagingkub\", area=\"nonheap\"}) / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "Used"
+          },
+          {
+            "expr": "sum(jvm_memory_committed_bytes{environment=\"stagingkub\", area=\"nonheap\"}) / 1024 / 1024",
+            "refId": "B",
+            "legendFormat": "Committed"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory (MB)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 13,
+        "title": "JVM Heap par Pool",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{environment=\"stagingkub\", area=\"heap\"} / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "{{id}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Memory (MB)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineInterpolation": "smooth",
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "normal" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "decmbytes",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Garbage Collection",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(jvm_gc_pause_seconds_sum{environment=\"stagingkub\"}[5m])",
+            "refId": "A",
+            "legendFormat": "{{action}} - {{cause}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "GC Time (s/s)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "s",
+            "decimals": 4
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 20,
+        "title": "JVM Threads",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 21,
+        "title": "Threads par Etat",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "jvm_threads_states_threads{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "{{state}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Threads",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "lineInterpolation": "smooth",
+              "lineWidth": 1,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "normal" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 22,
+        "title": "Threads Total",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 23, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "jvm_threads_live_threads{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "Live"
+          },
+          {
+            "expr": "jvm_threads_daemon_threads{environment=\"stagingkub\"}",
+            "refId": "B",
+            "legendFormat": "Daemon"
+          },
+          {
+            "expr": "jvm_threads_peak_threads{environment=\"stagingkub\"}",
+            "refId": "C",
+            "legendFormat": "Peak"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Threads",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "short",
+            "decimals": 0
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Peak" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 30,
+        "title": "HTTP Requests",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 31,
+        "title": "Requetes HTTP/sec par Status",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (status) (rate(http_server_requests_seconds_count{environment=\"stagingkub\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "HTTP {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Requests/sec",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "reqps",
+            "decimals": 2
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 32,
+        "title": "Latence HTTP (p50, p95, p99)",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(http_server_requests_seconds_bucket{environment=\"stagingkub\"}[5m])))",
+            "refId": "A",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{environment=\"stagingkub\"}[5m])))",
+            "refId": "B",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{environment=\"stagingkub\"}[5m])))",
+            "refId": "C",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Latency (s)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "s",
+            "decimals": 3
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 33,
+        "title": "Requetes HTTP/sec par Endpoint",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 40, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (uri) (rate(http_server_requests_seconds_count{environment=\"stagingkub\", uri!~\"/actuator.*\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "{{uri}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Requests/sec",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "reqps",
+            "decimals": 2
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 34,
+        "title": "Erreurs HTTP (4xx, 5xx)",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 40, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(http_server_requests_seconds_count{environment=\"stagingkub\", status=~\"4..\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "4xx Errors"
+          },
+          {
+            "expr": "sum(rate(http_server_requests_seconds_count{environment=\"stagingkub\", status=~\"5..\"}[5m]))",
+            "refId": "B",
+            "legendFormat": "5xx Errors"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Errors/sec",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "reqps",
+            "decimals": 2
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "4xx Errors" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "5xx Errors" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 40,
+        "title": "HikariCP Connection Pool",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 48, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 41,
+        "title": "Connexions HikariCP",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 49, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "hikaricp_connections_active{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "Active"
+          },
+          {
+            "expr": "hikaricp_connections_idle{environment=\"stagingkub\"}",
+            "refId": "B",
+            "legendFormat": "Idle"
+          },
+          {
+            "expr": "hikaricp_connections_pending{environment=\"stagingkub\"}",
+            "refId": "C",
+            "legendFormat": "Pending"
+          },
+          {
+            "expr": "hikaricp_connections{environment=\"stagingkub\"}",
+            "refId": "D",
+            "legendFormat": "Total"
+          },
+          {
+            "expr": "hikaricp_connections_max{environment=\"stagingkub\"}",
+            "refId": "E",
+            "legendFormat": "Max"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Connections",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "short",
+            "decimals": 0
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Max" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Pending" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 42,
+        "title": "HikariCP Acquisition/Creation Time",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 49, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(hikaricp_connections_acquire_seconds_sum{environment=\"stagingkub\"}[5m]) / rate(hikaricp_connections_acquire_seconds_count{environment=\"stagingkub\"}[5m])",
+            "refId": "A",
+            "legendFormat": "Acquire Time"
+          },
+          {
+            "expr": "rate(hikaricp_connections_creation_seconds_sum{environment=\"stagingkub\"}[5m]) / rate(hikaricp_connections_creation_seconds_count{environment=\"stagingkub\"}[5m])",
+            "refId": "B",
+            "legendFormat": "Creation Time"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Time (ms)",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "s",
+            "decimals": 4
+          }
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 50,
+        "title": "Logback Events",
+        "type": "row",
+        "gridPos": { "x": 0, "y": 57, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+      {
+        "id": 51,
+        "title": "Log Events par Niveau",
+        "type": "timeseries",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 0, "y": 58, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(logback_events_total{environment=\"stagingkub\", level=\"error\"}[5m])",
+            "refId": "A",
+            "legendFormat": "ERROR"
+          },
+          {
+            "expr": "rate(logback_events_total{environment=\"stagingkub\", level=\"warn\"}[5m])",
+            "refId": "B",
+            "legendFormat": "WARN"
+          },
+          {
+            "expr": "rate(logback_events_total{environment=\"stagingkub\", level=\"info\"}[5m])",
+            "refId": "C",
+            "legendFormat": "INFO"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "Events/sec",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "unit": "short",
+            "decimals": 2
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "ERROR" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "WARN" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "INFO" },
+              "properties": [
+                { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "showLegend": true, "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+      {
+        "id": 52,
+        "title": "Application Uptime",
+        "type": "stat",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "gridPos": { "x": 12, "y": 58, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "process_uptime_seconds{environment=\"stagingkub\"}",
+            "refId": "A",
+            "legendFormat": "Uptime"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "yellow" },
+                { "value": 3600, "color": "green" }
+              ]
+            },
+            "unit": "s",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "reduceOptions": { "values": false, "calcs": ["lastNotNull"] },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    }
+  },
+  "folderId": 0,
+  "overwrite": true
+}

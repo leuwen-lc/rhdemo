@@ -194,6 +194,14 @@ rhdemo:
     health:
       showDetails: when_authorized
 
+  # Configuration des métriques Prometheus
+  metrics:
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring  # Namespace où Prometheus Operator est installé
+      interval: 30s
+      scrapeTimeout: 10s
+
   # Configuration des niveaux de logs
   logging:
     level:

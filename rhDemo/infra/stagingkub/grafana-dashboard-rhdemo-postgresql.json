@@ -1,0 +1,677 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "rhdemo-postgresql",
+    "title": "rhDemo - Métriques PostgreSQL",
+    "description": "Dashboard PostgreSQL pour rhDemo - Métriques pg_stat_statements, connexions, verrous et performances",
+    "tags": ["rhdemo", "postgresql", "database", "stagingkub"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "datasource",
+          "type": "datasource",
+          "query": "prometheus",
+          "current": {
+            "selected": true,
+            "text": "Prometheus",
+            "value": "prometheus"
+          },
+          "hide": 0
+        }
+      ]
+    },
+    "annotations": {
+      "list": []
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Vue d'ensemble PostgreSQL",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+        "collapsed": false
+      },
+      {
+        "id": 2,
+        "title": "Taille Base de Données",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 500000000 },
+                { "color": "red", "value": 1000000000 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "reduceOptions": {
+            "calcs": ["lastNotNull"],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "expr": "pg_database_size_bytes{environment=\"stagingkub\", database=\"rhdemo\"}",
+            "legendFormat": "Size"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Connexions Actives",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 50 },
+                { "color": "red", "value": 100 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "targets": [
+          {
+            "expr": "sum(pg_stat_activity_connections{environment=\"stagingkub\", state=\"active\"})",
+            "legendFormat": "Active"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Connexions Idle",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 20 },
+                { "color": "red", "value": 50 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "targets": [
+          {
+            "expr": "sum(pg_stat_activity_connections{environment=\"stagingkub\", state=\"idle\"})",
+            "legendFormat": "Idle"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Verrous Actifs",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "red", "value": 50 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "targets": [
+          {
+            "expr": "sum(pg_locks_count{environment=\"stagingkub\"})",
+            "legendFormat": "Locks"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Dead Tuples",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1000 },
+                { "color": "red", "value": 10000 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "targets": [
+          {
+            "expr": "sum(pg_stat_user_tables_dead_tuples{environment=\"stagingkub\"})",
+            "legendFormat": "Dead Tuples"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Requêtes Longues (>5s)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 1 },
+                { "color": "red", "value": 5 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "targets": [
+          {
+            "expr": "count(pg_stat_activity_long_running_duration_seconds{environment=\"stagingkub\"} > 5) or vector(0)",
+            "legendFormat": "Long Running"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Top 10 Requêtes les Plus Lentes (Temps Total)",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+        "collapsed": false
+      },
+      {
+        "id": 11,
+        "title": "Top 10 - Temps Total d'Exécution",
+        "type": "table",
+        "gridPos": { "h": 10, "w": 24, "x": 0, "y": 6 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "auto"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "total_time_seconds" },
+              "properties": [
+                { "id": "unit", "value": "s" },
+                { "id": "displayName", "value": "Temps Total" }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "mean_time_seconds" },
+              "properties": [
+                { "id": "unit", "value": "s" },
+                { "id": "displayName", "value": "Temps Moyen" }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "max_time_seconds" },
+              "properties": [
+                { "id": "unit", "value": "s" },
+                { "id": "displayName", "value": "Temps Max" }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "calls" },
+              "properties": [
+                { "id": "displayName", "value": "Appels" }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "query_sample" },
+              "properties": [
+                { "id": "displayName", "value": "Requête (100 chars)" },
+                { "id": "custom.width", "value": 400 }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "rows" },
+              "properties": [
+                { "id": "displayName", "value": "Lignes" }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            { "desc": true, "displayName": "Temps Total" }
+          ]
+        },
+        "transformations": [
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                { "field": "Value #A", "desc": true }
+              ]
+            }
+          },
+          {
+            "id": "limit",
+            "options": { "limitField": 10 }
+          }
+        ],
+        "targets": [
+          {
+            "expr": "topk(10, pg_stat_statements_total_time_seconds{environment=\"stagingkub\"})",
+            "format": "table",
+            "instant": true,
+            "legendFormat": ""
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "title": "Statistiques des Requêtes",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+        "collapsed": false
+      },
+      {
+        "id": 21,
+        "title": "Temps Moyen par Requête (Top 10)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["mean", "max"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "topk(10, pg_stat_statements_mean_time_seconds{environment=\"stagingkub\"})",
+            "legendFormat": "{{query_sample}}"
+          }
+        ]
+      },
+      {
+        "id": 22,
+        "title": "Nombre d'Appels par Requête (Top 10)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "topk(10, rate(pg_stat_statements_calls{environment=\"stagingkub\"}[5m]))",
+            "legendFormat": "{{query_sample}}"
+          }
+        ]
+      },
+      {
+        "id": 30,
+        "title": "Connexions & Activité",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+        "collapsed": false
+      },
+      {
+        "id": 31,
+        "title": "Connexions par État",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 20,
+              "stacking": { "mode": "normal" }
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "pg_stat_activity_connections{environment=\"stagingkub\"}",
+            "legendFormat": "{{state}}"
+          }
+        ]
+      },
+      {
+        "id": 32,
+        "title": "Verrous par Mode",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "stacking": { "mode": "normal" }
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "pg_locks_count{environment=\"stagingkub\"}",
+            "legendFormat": "{{mode}}"
+          }
+        ]
+      },
+      {
+        "id": 40,
+        "title": "Statistiques Tables",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+        "collapsed": false
+      },
+      {
+        "id": 41,
+        "title": "Opérations par Table",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["mean"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(pg_stat_user_tables_inserts{environment=\"stagingkub\"}[5m])",
+            "legendFormat": "{{table}} - INSERT"
+          },
+          {
+            "expr": "rate(pg_stat_user_tables_updates{environment=\"stagingkub\"}[5m])",
+            "legendFormat": "{{table}} - UPDATE"
+          },
+          {
+            "expr": "rate(pg_stat_user_tables_deletes{environment=\"stagingkub\"}[5m])",
+            "legendFormat": "{{table}} - DELETE"
+          }
+        ]
+      },
+      {
+        "id": 42,
+        "title": "Scans: Sequential vs Index",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["mean"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(pg_stat_user_tables_seq_scan{environment=\"stagingkub\"}[5m])",
+            "legendFormat": "{{table}} - Seq Scan"
+          },
+          {
+            "expr": "rate(pg_stat_user_tables_idx_scan{environment=\"stagingkub\"}[5m])",
+            "legendFormat": "{{table}} - Index Scan"
+          }
+        ]
+      },
+      {
+        "id": 43,
+        "title": "Live vs Dead Tuples",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "pg_stat_user_tables_live_tuples{environment=\"stagingkub\"}",
+            "legendFormat": "{{table}} - Live"
+          },
+          {
+            "expr": "pg_stat_user_tables_dead_tuples{environment=\"stagingkub\"}",
+            "legendFormat": "{{table}} - Dead"
+          }
+        ]
+      },
+      {
+        "id": 44,
+        "title": "Taille Base de Données",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 20,
+              "gradientMode": "scheme"
+            },
+            "color": { "mode": "palette-classic" }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "pg_database_size_bytes{environment=\"stagingkub\"}",
+            "legendFormat": "{{database}}"
+          }
+        ]
+      },
+      {
+        "id": 50,
+        "title": "Cache & I/O",
+        "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 },
+        "collapsed": false
+      },
+      {
+        "id": 51,
+        "title": "Cache Hit Ratio",
+        "type": "gauge",
+        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 52 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 0.9 },
+                { "color": "green", "value": 0.95 }
+              ]
+            }
+          }
+        },
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "targets": [
+          {
+            "expr": "sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"}) / (sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"}) + sum(pg_stat_statements_shared_blks_read{environment=\"stagingkub\"}) + 1)",
+            "legendFormat": "Cache Hit Ratio"
+          }
+        ]
+      },
+      {
+        "id": 52,
+        "title": "Shared Blocks Hit vs Read",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 16, "x": 8, "y": 52 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 20
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "right",
+            "calcs": ["mean", "last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "rate(sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"})[5m])",
+            "legendFormat": "Cache Hits"
+          },
+          {
+            "expr": "rate(sum(pg_stat_statements_shared_blks_read{environment=\"stagingkub\"})[5m])",
+            "legendFormat": "Disk Reads"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}

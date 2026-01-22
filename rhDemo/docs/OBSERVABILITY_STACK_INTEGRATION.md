@@ -1262,7 +1262,96 @@ rhdemo:
 - NetworkPolicy: `infra/stagingkub/helm/rhdemo/templates/networkpolicy-prometheus.yaml`
 - Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-springboot.json`
 
-### 8.3 Dashboard Keycloak - Logs d'Authentification (Custom)
+### 8.3 Dashboard rhDemo - Métriques PostgreSQL (Pré-configuré)
+
+**Dashboard automatiquement disponible après installation!**
+
+Le dashboard "rhDemo - Métriques PostgreSQL" affiche les métriques de performance de la base de données collectées via `postgres_exporter` et `pg_stat_statements`.
+
+**Accès:** Grafana → Dashboards → "rhDemo - Metriques PostgreSQL"
+
+**Prérequis:**
+
+- Sidecar `postgres_exporter` déployé avec le StatefulSet PostgreSQL
+- Extension `pg_stat_statements` activée dans PostgreSQL
+- ServiceMonitor `postgresql-rhdemo` déployé dans le namespace `monitoring`
+
+**Contenu du dashboard:**
+
+| Section | Panels | Métriques |
+|---------|--------|-----------|
+| **Vue d'ensemble** | Taille DB, Connexions, Verrous, Dead Tuples, Requêtes Longues | Stats instantanées |
+| **Top 10 Requêtes Lentes** | Table avec temps total, temps moyen, appels, lignes | `pg_stat_statements_*` |
+| **Statistiques Requêtes** | Temps moyen par requête, Appels par requête | `pg_stat_statements_*` |
+| **Connexions & Activité** | Par état (active/idle), Verrous par mode | `pg_stat_activity_*`, `pg_locks_*` |
+| **Statistiques Tables** | Opérations CRUD, Scans seq vs index, Live/Dead tuples | `pg_stat_user_tables_*` |
+| **Cache & I/O** | Cache Hit Ratio, Shared Blocks Hit vs Read | `pg_stat_statements_shared_blks_*` |
+
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
+
+**Déploiement:**
+
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh postgresql
+# ou pour tous les dashboards:
+./deploy-grafana-dashboard.sh all
+```
+
+**Configuration postgres_exporter (Helm):**
+
+Le sidecar postgres_exporter est automatiquement déployé si `postgresql-rhdemo.metrics.enabled: true` dans `values.yaml`.
+
+```yaml
+# values.yaml
+postgresql-rhdemo:
+  metrics:
+    enabled: true
+    exporter:
+      image:
+        repository: quay.io/prometheuscommunity/postgres-exporter
+        tag: "v0.15.0"
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
+```
+
+**Fichiers associés:**
+
+- StatefulSet avec sidecar: `infra/stagingkub/helm/rhdemo/templates/postgresql-rhdemo-statefulset.yaml`
+- Requêtes personnalisées: `infra/stagingkub/helm/rhdemo/templates/postgres-exporter-queries-configmap.yaml`
+- ServiceMonitor: `infra/stagingkub/helm/rhdemo/templates/servicemonitor-postgresql.yaml`
+- Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
+
+**Requêtes PromQL utiles:**
+
+Top 10 requêtes les plus lentes (temps total):
+
+```promql
+topk(10, pg_stat_statements_total_time_seconds{environment="stagingkub"})
+```
+
+Temps moyen par requête:
+
+```promql
+pg_stat_statements_mean_time_seconds{environment="stagingkub"}
+```
+
+Connexions par état:
+
+```promql
+pg_stat_activity_connections{environment="stagingkub"}
+```
+
+Cache Hit Ratio:
+
+```promql
+sum(pg_stat_statements_shared_blks_hit) / (sum(pg_stat_statements_shared_blks_hit) + sum(pg_stat_statements_shared_blks_read) + 1)
+```
+
+### 8.4 Dashboard Keycloak - Logs d'Authentification (Custom)
 
 **Query principale:**
 ```logql
@@ -1277,7 +1366,7 @@ rhdemo:
 | **Failed Logins** | `sum(count_over_time({app="keycloak"} \|~ "failed.*login" [1h]))` | Total failures |
 | **Active Users** | Extraction custom via `\| regexp "user=(?P<user>\\w+)"` | Unique users |
 
-### 8.3 Dashboard PostgreSQL - Logs des Bases de Données
+### 8.5 Dashboard PostgreSQL - Logs des Bases de Données (Loki)
 
 **Query principale:**
 ```logql

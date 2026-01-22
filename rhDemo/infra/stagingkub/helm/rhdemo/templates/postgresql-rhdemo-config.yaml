@@ -1,0 +1,67 @@
+{{- if index .Values "postgresql-rhdemo" "enabled" }}
+{{- if (index .Values "postgresql-rhdemo").logging }}
+{{- if (index .Values "postgresql-rhdemo").logging.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# ConfigMap pour la configuration PostgreSQL personnalisée
+# ═══════════════════════════════════════════════════════════════
+# Configure les logs de requêtes lentes pour l'observabilité.
+# Les logs sont collectés par Promtail et visualisables dans Grafana/Loki.
+#
+# Paramètres clés:
+#   - log_min_duration_statement: Seuil en ms pour logger une requête
+#   - log_statement: Type de requêtes à logger (none/ddl/mod/all)
+#   - log_line_prefix: Format du préfixe des logs
+# ═══════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-rhdemo-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app: postgresql-rhdemo
+data:
+  # Configuration PostgreSQL pour les logs de requêtes lentes
+  postgresql-logging.conf: |
+    # ═══════════════════════════════════════════════════════════════
+    # Configuration des logs PostgreSQL pour l'observabilité
+    # ═══════════════════════════════════════════════════════════════
+
+    # Log des requêtes lentes (seuil configurable via values.yaml)
+    # Valeur en millisecondes (-1 = désactivé, 0 = tout logger)
+    log_min_duration_statement = {{ (index .Values "postgresql-rhdemo").logging.minDurationMs }}
+
+    # Type de requêtes à logger (none, ddl, mod, all)
+    # - none: Ne log que les requêtes lentes (via log_min_duration_statement)
+    # - ddl: Log les commandes DDL (CREATE, ALTER, DROP)
+    # - mod: Log DDL + modifications (INSERT, UPDATE, DELETE)
+    # - all: Log toutes les requêtes (attention: très verbeux!)
+    log_statement = '{{ (index .Values "postgresql-rhdemo").logging.statement }}'
+
+    # Format du préfixe des logs pour faciliter le parsing dans Loki
+    # %t = timestamp, %u = user, %d = database, %p = PID, %l = log line number
+    log_line_prefix = '%t [%p] user=%u,db=%d '
+
+    # Logger la durée des requêtes terminées
+    log_duration = {{ if (index .Values "postgresql-rhdemo").logging.duration }}on{{ else }}off{{ end }}
+
+    # Logger les checkpoints
+    log_checkpoints = on
+
+    # Logger les connexions/déconnexions
+    log_connections = {{ if (index .Values "postgresql-rhdemo").logging.connections }}on{{ else }}off{{ end }}
+    log_disconnections = {{ if (index .Values "postgresql-rhdemo").logging.connections }}on{{ else }}off{{ end }}
+
+    # Logger les deadlocks
+    log_lock_waits = on
+    deadlock_timeout = 1s
+
+    # Niveau de log minimum
+    log_min_messages = {{ (index .Values "postgresql-rhdemo").logging.minLevel }}
+
+    # Logger vers stderr (capturé par Kubernetes/Promtail)
+    log_destination = 'stderr'
+    logging_collector = off
+{{- end }}
+{{- end }}
+{{- end }}

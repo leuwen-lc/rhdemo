@@ -1,0 +1,46 @@
+{{- if index .Values "postgresql-rhdemo" "enabled" }}
+{{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+{{- if (index .Values "postgresql-rhdemo").metrics.serviceMonitor.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# ServiceMonitor pour postgres_exporter
+# ═══════════════════════════════════════════════════════════════
+# Permet à Prometheus Operator de découvrir automatiquement
+# le sidecar postgres_exporter et de scraper ses métriques.
+#
+# Les métriques incluent pg_stat_statements pour le suivi
+# des requêtes les plus lentes.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgresql-rhdemo
+  namespace: {{ (index .Values "postgresql-rhdemo").metrics.serviceMonitor.namespace | default "monitoring" }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app: postgresql-rhdemo
+    release: prometheus  # Label requis par Prometheus Operator
+spec:
+  jobLabel: postgresql-rhdemo
+  selector:
+    matchLabels:
+      app: postgresql-rhdemo
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.global.namespace }}
+  endpoints:
+    - port: metrics
+      interval: {{ (index .Values "postgresql-rhdemo").metrics.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ (index .Values "postgresql-rhdemo").metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      path: /metrics
+      relabelings:
+        # Ajouter le label environment pour filtrer dans Grafana
+        - sourceLabels: []
+          targetLabel: environment
+          replacement: {{ .Values.global.environment }}
+        # Ajouter le label database
+        - sourceLabels: []
+          targetLabel: database
+          replacement: {{ (index .Values "postgresql-rhdemo").database.name }}
+{{- end }}
+{{- end }}
+{{- end }}

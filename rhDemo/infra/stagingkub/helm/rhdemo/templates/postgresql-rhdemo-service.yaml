@@ -14,6 +14,12 @@ spec:
     port: {{ (index .Values "postgresql-rhdemo").service.port }}
     targetPort: postgresql
     protocol: TCP
+  {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+  - name: metrics
+    port: 9187
+    targetPort: metrics
+    protocol: TCP
+  {{- end }}
   selector:
     app: postgresql-rhdemo
   clusterIP: None  # Headless service for StatefulSet

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Script pour deployer ou mettre a jour les dashboards Grafana rhDemo
-# Usage: ./deploy-grafana-dashboard.sh [logs|metrics|springboot|all]
+# Usage: ./deploy-grafana-dashboard.sh [logs|metrics|springboot|postgresql|all]
 #
 # Ce script peut etre execute independamment pour mettre a jour les dashboards
 # sans reinstaller toute la stack Loki/Prometheus
@@ -10,6 +10,7 @@
 #   logs       - Deploie uniquement le dashboard des logs (Loki)
 #   metrics    - Deploie uniquement le dashboard des metriques Kubernetes (Prometheus)
 #   springboot - Deploie uniquement le dashboard Spring Boot Actuator (Prometheus)
+#   postgresql - Deploie uniquement le dashboard PostgreSQL (Prometheus - pg_stat_statements)
 #   all        - Deploie tous les dashboards (defaut)
 
 set -e
@@ -21,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DASHBOARD_LOGS="../grafana-dashboard-rhdemo-logs.json"
 DASHBOARD_METRICS="../grafana-dashboard-rhdemo-metrics.json"
 DASHBOARD_SPRINGBOOT="../grafana-dashboard-rhdemo-springboot.json"
+DASHBOARD_POSTGRESQL="../grafana-dashboard-rhdemo-postgresql.json"
 
 # Couleurs
 GREEN='\033[0;32m'
@@ -105,15 +107,21 @@ case "${ACTION}" in
         echo ""
         deploy_dashboard "${DASHBOARD_SPRINGBOOT}" "grafana-dashboard-rhdemo-springboot" "rhdemo-springboot.json" "rhDemo - Metriques Spring Boot Actuator" && ((DEPLOYED_COUNT++)) || true
         ;;
+    postgresql)
+        log "Mode: Deploiement du dashboard PostgreSQL uniquement"
+        echo ""
+        deploy_dashboard "${DASHBOARD_POSTGRESQL}" "grafana-dashboard-rhdemo-postgresql" "rhdemo-postgresql.json" "rhDemo - Metriques PostgreSQL" && ((DEPLOYED_COUNT++)) || true
+        ;;
     all)
         log "Mode: Deploiement de tous les dashboards"
         echo ""
         deploy_dashboard "${DASHBOARD_LOGS}" "grafana-dashboard-rhdemo" "rhdemo-logs.json" "rhDemo - Logs Application" && ((DEPLOYED_COUNT++)) || true
         deploy_dashboard "${DASHBOARD_METRICS}" "grafana-dashboard-rhdemo-metrics" "rhdemo-metrics.json" "rhDemo - Metriques Pods" && ((DEPLOYED_COUNT++)) || true
         deploy_dashboard "${DASHBOARD_SPRINGBOOT}" "grafana-dashboard-rhdemo-springboot" "rhdemo-springboot.json" "rhDemo - Metriques Spring Boot Actuator" && ((DEPLOYED_COUNT++)) || true
+        deploy_dashboard "${DASHBOARD_POSTGRESQL}" "grafana-dashboard-rhdemo-postgresql" "rhdemo-postgresql.json" "rhDemo - Metriques PostgreSQL" && ((DEPLOYED_COUNT++)) || true
         ;;
     *)
-        error "Action inconnue: ${ACTION}. Utiliser: logs, metrics, springboot ou all"
+        error "Action inconnue: ${ACTION}. Utiliser: logs, metrics, springboot, postgresql ou all"
         ;;
 esac
 
@@ -140,9 +148,12 @@ fi
 if [ "${ACTION}" = "springboot" ] || [ "${ACTION}" = "all" ]; then
     echo -e "  - rhDemo - Metriques Spring Boot Actuator (Prometheus - JVM/HTTP/HikariCP)"
 fi
+if [ "${ACTION}" = "postgresql" ] || [ "${ACTION}" = "all" ]; then
+    echo -e "  - rhDemo - Metriques PostgreSQL (Prometheus - pg_stat_statements/connexions/verrous)"
+fi
 echo ""
 echo -e "${BLUE}URL Grafana:${NC} https://grafana.stagingkub.local"
 echo ""
 echo -e "${YELLOW}Note:${NC} Les dashboards sont automatiquement charges dans Grafana"
-echo -e "${YELLOW}Usage:${NC} $0 [logs|metrics|springboot|all]"
+echo -e "${YELLOW}Usage:${NC} $0 [logs|metrics|springboot|postgresql|all]"
 echo ""

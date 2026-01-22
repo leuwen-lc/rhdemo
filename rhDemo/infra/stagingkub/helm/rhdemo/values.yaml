@@ -57,6 +57,21 @@ postgresql-rhdemo:
     type: ClusterIP
     port: 5432
 
+  # Configuration des métriques PostgreSQL via postgres_exporter
+  # Expose les métriques pg_stat_statements pour identifier les requêtes lentes
+  metrics:
+    enabled: true
+    exporter:
+      image:
+        repository: quay.io/prometheuscommunity/postgres-exporter
+        tag: "v0.15.0"
+        pullPolicy: IfNotPresent
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
+
 # ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour Keycloak
 # ═══════════════════════════════════════════════════════════════

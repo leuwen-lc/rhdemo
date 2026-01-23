@@ -108,7 +108,13 @@ management:
   endpoint:
     env:
       show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS
-
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
+        
 # SpringDoc / Swagger
 springdoc:
   api-docs:

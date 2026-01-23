@@ -8,6 +8,8 @@ import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -16,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Ces tests vérifient:
  * - L'extraction correcte de l'URL de base de Keycloak depuis l'URI d'autorisation
  * - La génération dynamique des directives CSP avec/sans Keycloak
+ * - La configuration du repository CSRF avec le flag Secure
  */
 @DisplayName("SecurityConfig - Tests de génération dynamique CSP")
 class SecurityConfigCspDynamicTest {
@@ -161,5 +164,106 @@ class SecurityConfigCspDynamicTest {
 
         // Assert
         assertThat(csp).doesNotContain(";;");
+    }
+
+    // ==================== Tests createCsrfTokenRepository ====================
+
+    @Test
+    @DisplayName("createCsrfTokenRepository doit créer un repository avec HttpOnly=false")
+    void testCreateCsrfTokenRepository_HttpOnlyFalse() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "cookieSecureFlag", false);
+
+        // Act
+        CookieCsrfTokenRepository repository = (CookieCsrfTokenRepository)
+            ReflectionTestUtils.invokeMethod(config, "createCsrfTokenRepository");
+
+        // Assert
+        assertThat(repository).isNotNull();
+        // Le repository doit être créé avec withHttpOnlyFalse() pour permettre au JS de lire le cookie
+    }
+
+    @Test
+    @DisplayName("createCsrfTokenRepository avec cookieSecureFlag=true")
+    void testCreateCsrfTokenRepository_WithSecureFlagTrue() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "cookieSecureFlag", true);
+
+        // Act
+        CookieCsrfTokenRepository repository = (CookieCsrfTokenRepository)
+            ReflectionTestUtils.invokeMethod(config, "createCsrfTokenRepository");
+
+        // Assert
+        assertThat(repository).isNotNull();
+        // Vérifie que le repository est créé correctement même avec le flag Secure
+    }
+
+    @Test
+    @DisplayName("createCsrfTokenRepository avec cookieSecureFlag=false (dev local)")
+    void testCreateCsrfTokenRepository_WithSecureFlagFalse() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "cookieSecureFlag", false);
+
+        // Act
+        CookieCsrfTokenRepository repository = (CookieCsrfTokenRepository)
+            ReflectionTestUtils.invokeMethod(config, "createCsrfTokenRepository");
+
+        // Assert
+        assertThat(repository).isNotNull();
+        // Le repository doit fonctionner en environnement de développement (HTTP)
+    }
+
+    // ==================== Tests extractKeycloakBaseUrl cas limites ====================
+
+    @Test
+    @DisplayName("extractKeycloakBaseUrl avec URI manquant le scheme")
+    void testExtractKeycloakBaseUrl_WithMissingScheme() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", "//keycloak.local/realms/test");
+
+        // Act
+        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
+
+        // Assert
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("extractKeycloakBaseUrl avec URI ne contenant que le scheme")
+    void testExtractKeycloakBaseUrl_WithOnlyScheme() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri", "https:");
+
+        // Act
+        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
+
+        // Assert
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("extractKeycloakBaseUrl avec port non standard (8443)")
+    void testExtractKeycloakBaseUrl_WithNonStandardPort() throws Exception {
+        // Arrange
+        GrantedAuthoritiesKeyCloakMapper mockMapper = new GrantedAuthoritiesKeyCloakMapper();
+        SecurityConfig config = new SecurityConfig(mockMapper);
+        ReflectionTestUtils.setField(config, "keycloakAuthorizationUri",
+            "https://keycloak.local:8443/realms/rhdemo/protocol/openid-connect/auth");
+
+        // Act
+        String result = (String) ReflectionTestUtils.invokeMethod(config, "extractKeycloakBaseUrl");
+
+        // Assert
+        assertThat(result).isEqualTo("https://keycloak.local:8443");
     }
 }

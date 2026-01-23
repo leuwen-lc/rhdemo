@@ -3,11 +3,11 @@
     "id": null,
     "uid": "rhdemo-postgresql",
     "title": "rhDemo - Métriques PostgreSQL",
-    "description": "Dashboard PostgreSQL pour rhDemo - Métriques pg_stat_statements, connexions, verrous et performances",
+    "description": "Dashboard PostgreSQL pour rhDemo - Métriques collecteurs intégrés postgres_exporter (connexions, verrous, tables, cache)",
     "tags": ["rhdemo", "postgresql", "database", "stagingkub"],
     "timezone": "browser",
     "schemaVersion": 39,
-    "version": 1,
+    "version": 2,
     "refresh": "30s",
     "time": {
       "from": "now-1h",
@@ -70,7 +70,7 @@
         },
         "targets": [
           {
-            "expr": "pg_database_size_bytes{environment=\"stagingkub\", database=\"rhdemo\"}",
+            "expr": "pg_database_size_bytes{datname=\"rhdemo\"}",
             "legendFormat": "Size"
           }
         ]
@@ -100,7 +100,7 @@
         },
         "targets": [
           {
-            "expr": "sum(pg_stat_activity_connections{environment=\"stagingkub\", state=\"active\"})",
+            "expr": "sum(pg_stat_activity_count{datname=\"rhdemo\", state=\"active\"})",
             "legendFormat": "Active"
           }
         ]
@@ -130,7 +130,7 @@
         },
         "targets": [
           {
-            "expr": "sum(pg_stat_activity_connections{environment=\"stagingkub\", state=\"idle\"})",
+            "expr": "sum(pg_stat_activity_count{datname=\"rhdemo\", state=\"idle\"})",
             "legendFormat": "Idle"
           }
         ]
@@ -160,7 +160,7 @@
         },
         "targets": [
           {
-            "expr": "sum(pg_locks_count{environment=\"stagingkub\"})",
+            "expr": "sum(pg_locks_count{datname=\"rhdemo\"})",
             "legendFormat": "Locks"
           }
         ]
@@ -190,14 +190,14 @@
         },
         "targets": [
           {
-            "expr": "sum(pg_stat_user_tables_dead_tuples{environment=\"stagingkub\"})",
+            "expr": "sum(pg_stat_user_tables_n_dead_tup{datname=\"rhdemo\"})",
             "legendFormat": "Dead Tuples"
           }
         ]
       },
       {
         "id": 7,
-        "title": "Requêtes Longues (>5s)",
+        "title": "Transactions Longues",
         "type": "stat",
         "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
@@ -220,14 +220,14 @@
         },
         "targets": [
           {
-            "expr": "count(pg_stat_activity_long_running_duration_seconds{environment=\"stagingkub\"} > 5) or vector(0)",
+            "expr": "pg_long_running_transactions or vector(0)",
             "legendFormat": "Long Running"
           }
         ]
       },
       {
         "id": 10,
-        "title": "Top 10 Requêtes les Plus Lentes (Temps Total)",
+        "title": "Statistiques des Requêtes (pg_stat_statements)",
         "type": "row",
         "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
         "collapsed": false
@@ -235,86 +235,30 @@
       {
         "id": 11,
         "title": "Top 10 - Temps Total d'Exécution",
-        "type": "table",
-        "gridPos": { "h": 10, "w": 24, "x": 0, "y": 6 },
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
+            "unit": "s",
             "custom": {
-              "align": "auto",
-              "displayMode": "auto"
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
             }
-          },
-          "overrides": [
-            {
-              "matcher": { "id": "byName", "options": "total_time_seconds" },
-              "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "displayName", "value": "Temps Total" }
-              ]
-            },
-            {
-              "matcher": { "id": "byName", "options": "mean_time_seconds" },
-              "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "displayName", "value": "Temps Moyen" }
-              ]
-            },
-            {
-              "matcher": { "id": "byName", "options": "max_time_seconds" },
-              "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "displayName", "value": "Temps Max" }
-              ]
-            },
-            {
-              "matcher": { "id": "byName", "options": "calls" },
-              "properties": [
-                { "id": "displayName", "value": "Appels" }
-              ]
-            },
-            {
-              "matcher": { "id": "byName", "options": "query_sample" },
-              "properties": [
-                { "id": "displayName", "value": "Requête (100 chars)" },
-                { "id": "custom.width", "value": 400 }
-              ]
-            },
-            {
-              "matcher": { "id": "byName", "options": "rows" },
-              "properties": [
-                { "id": "displayName", "value": "Lignes" }
-              ]
-            }
-          ]
+          }
         },
         "options": {
-          "showHeader": true,
-          "sortBy": [
-            { "desc": true, "displayName": "Temps Total" }
-          ]
-        },
-        "transformations": [
-          {
-            "id": "sortBy",
-            "options": {
-              "fields": {},
-              "sort": [
-                { "field": "Value #A", "desc": true }
-              ]
-            }
-          },
-          {
-            "id": "limit",
-            "options": { "limitField": 10 }
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last", "max"]
           }
-        ],
+        },
         "targets": [
           {
-            "expr": "topk(10, pg_stat_statements_total_time_seconds{environment=\"stagingkub\"})",
-            "format": "table",
-            "instant": true,
-            "legendFormat": ""
+            "expr": "topk(10, pg_stat_statements_seconds_total{datname=\"rhdemo\"})",
+            "legendFormat": "queryid={{queryid}}"
           }
         ]
       },
@@ -322,14 +266,14 @@
         "id": 20,
         "title": "Statistiques des Requêtes",
         "type": "row",
-        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
         "collapsed": false
       },
       {
         "id": 21,
         "title": "Temps Moyen par Requête (Top 10)",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -350,8 +294,8 @@
         },
         "targets": [
           {
-            "expr": "topk(10, pg_stat_statements_mean_time_seconds{environment=\"stagingkub\"})",
-            "legendFormat": "{{query_sample}}"
+            "expr": "topk(10, pg_stat_statements_seconds_total{datname=\"rhdemo\"} / pg_stat_statements_calls_total{datname=\"rhdemo\"} > 0)",
+            "legendFormat": "queryid={{queryid}}"
           }
         ]
       },
@@ -359,7 +303,7 @@
         "id": 22,
         "title": "Nombre d'Appels par Requête (Top 10)",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -380,8 +324,38 @@
         },
         "targets": [
           {
-            "expr": "topk(10, rate(pg_stat_statements_calls{environment=\"stagingkub\"}[5m]))",
-            "legendFormat": "{{query_sample}}"
+            "expr": "topk(10, rate(pg_stat_statements_calls_total{datname=\"rhdemo\"}[5m]))",
+            "legendFormat": "queryid={{queryid}}"
+          }
+        ]
+      },
+      {
+        "id": 23,
+        "title": "Lignes Retournées par Requête (Top 10)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "calcs": ["last"]
+          }
+        },
+        "targets": [
+          {
+            "expr": "topk(10, rate(pg_stat_statements_rows_total{datname=\"rhdemo\"}[5m]))",
+            "legendFormat": "queryid={{queryid}}"
           }
         ]
       },
@@ -389,14 +363,14 @@
         "id": 30,
         "title": "Connexions & Activité",
         "type": "row",
-        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
         "collapsed": false
       },
       {
         "id": 31,
         "title": "Connexions par État",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -418,7 +392,7 @@
         },
         "targets": [
           {
-            "expr": "pg_stat_activity_connections{environment=\"stagingkub\"}",
+            "expr": "pg_stat_activity_count{datname=\"rhdemo\"}",
             "legendFormat": "{{state}}"
           }
         ]
@@ -427,7 +401,7 @@
         "id": 32,
         "title": "Verrous par Mode",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -448,7 +422,7 @@
         },
         "targets": [
           {
-            "expr": "pg_locks_count{environment=\"stagingkub\"}",
+            "expr": "pg_locks_count{datname=\"rhdemo\"}",
             "legendFormat": "{{mode}}"
           }
         ]
@@ -457,14 +431,14 @@
         "id": 40,
         "title": "Statistiques Tables",
         "type": "row",
-        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
         "collapsed": false
       },
       {
         "id": 41,
         "title": "Opérations par Table",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -485,16 +459,16 @@
         },
         "targets": [
           {
-            "expr": "rate(pg_stat_user_tables_inserts{environment=\"stagingkub\"}[5m])",
-            "legendFormat": "{{table}} - INSERT"
+            "expr": "rate(pg_stat_user_tables_n_tup_ins{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "{{relname}} - INSERT"
           },
           {
-            "expr": "rate(pg_stat_user_tables_updates{environment=\"stagingkub\"}[5m])",
-            "legendFormat": "{{table}} - UPDATE"
+            "expr": "rate(pg_stat_user_tables_n_tup_upd{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "{{relname}} - UPDATE"
           },
           {
-            "expr": "rate(pg_stat_user_tables_deletes{environment=\"stagingkub\"}[5m])",
-            "legendFormat": "{{table}} - DELETE"
+            "expr": "rate(pg_stat_user_tables_n_tup_del{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "{{relname}} - DELETE"
           }
         ]
       },
@@ -502,7 +476,7 @@
         "id": 42,
         "title": "Scans: Sequential vs Index",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -523,12 +497,12 @@
         },
         "targets": [
           {
-            "expr": "rate(pg_stat_user_tables_seq_scan{environment=\"stagingkub\"}[5m])",
-            "legendFormat": "{{table}} - Seq Scan"
+            "expr": "rate(pg_stat_user_tables_seq_scan{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "{{relname}} - Seq Scan"
           },
           {
-            "expr": "rate(pg_stat_user_tables_idx_scan{environment=\"stagingkub\"}[5m])",
-            "legendFormat": "{{table}} - Index Scan"
+            "expr": "rate(pg_stat_user_tables_idx_scan{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "{{relname}} - Index Scan"
           }
         ]
       },
@@ -536,7 +510,7 @@
         "id": 43,
         "title": "Live vs Dead Tuples",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 43 },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -557,20 +531,20 @@
         },
         "targets": [
           {
-            "expr": "pg_stat_user_tables_live_tuples{environment=\"stagingkub\"}",
-            "legendFormat": "{{table}} - Live"
+            "expr": "pg_stat_user_tables_n_live_tup{datname=\"rhdemo\"}",
+            "legendFormat": "{{relname}} - Live"
           },
           {
-            "expr": "pg_stat_user_tables_dead_tuples{environment=\"stagingkub\"}",
-            "legendFormat": "{{table}} - Dead"
+            "expr": "pg_stat_user_tables_n_dead_tup{datname=\"rhdemo\"}",
+            "legendFormat": "{{relname}} - Dead"
           }
         ]
       },
       {
         "id": 44,
-        "title": "Taille Base de Données",
+        "title": "Taille Bases de Données",
         "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 43 },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -593,8 +567,8 @@
         },
         "targets": [
           {
-            "expr": "pg_database_size_bytes{environment=\"stagingkub\"}",
-            "legendFormat": "{{database}}"
+            "expr": "pg_database_size_bytes{datname=~\"rhdemo|postgres\"}",
+            "legendFormat": "{{datname}}"
           }
         ]
       },
@@ -602,14 +576,14 @@
         "id": 50,
         "title": "Cache & I/O",
         "type": "row",
-        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 },
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 57 },
         "collapsed": false
       },
       {
         "id": 51,
         "title": "Cache Hit Ratio",
         "type": "gauge",
-        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 52 },
+        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 58 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -632,16 +606,16 @@
         },
         "targets": [
           {
-            "expr": "sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"}) / (sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"}) + sum(pg_stat_statements_shared_blks_read{environment=\"stagingkub\"}) + 1)",
+            "expr": "pg_stat_database_blks_hit{datname=\"rhdemo\"} / (pg_stat_database_blks_hit{datname=\"rhdemo\"} + pg_stat_database_blks_read{datname=\"rhdemo\"} + 1)",
             "legendFormat": "Cache Hit Ratio"
           }
         ]
       },
       {
         "id": 52,
-        "title": "Shared Blocks Hit vs Read",
+        "title": "Blocks Hit vs Read",
         "type": "timeseries",
-        "gridPos": { "h": 6, "w": 16, "x": 8, "y": 52 },
+        "gridPos": { "h": 6, "w": 16, "x": 8, "y": 58 },
         "datasource": { "type": "prometheus", "uid": "${datasource}" },
         "fieldConfig": {
           "defaults": {
@@ -662,12 +636,12 @@
         },
         "targets": [
           {
-            "expr": "rate(sum(pg_stat_statements_shared_blks_hit{environment=\"stagingkub\"})[5m])",
-            "legendFormat": "Cache Hits"
+            "expr": "rate(pg_stat_database_blks_hit{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "Cache Hits/s"
           },
           {
-            "expr": "rate(sum(pg_stat_statements_shared_blks_read{environment=\"stagingkub\"})[5m])",
-            "legendFormat": "Disk Reads"
+            "expr": "rate(pg_stat_database_blks_read{datname=\"rhdemo\"}[5m])",
+            "legendFormat": "Disk Reads/s"
           }
         ]
       }

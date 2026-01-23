@@ -179,7 +179,7 @@ Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
 |--------|---------------------|---------------|
 | **Node Exporter** | Métriques nodes (CPU, RAM, disque, réseau) | DaemonSet automatique |
 | **Kube State Metrics** | État ressources K8s (pods, deployments, etc.) | Deployment automatique |
-| **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes) | StatefulSet avec postgres_exporter (optionnel) |
+| **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes, tables, cache) | Sidecar postgres_exporter avec collecteurs intégrés (`stat_statements`, `long_running_transactions`, `process_idle`) |
 | **Application rhDemo** | Métriques Spring Boot Actuator (JVM, HTTP, HikariCP) | ServiceMonitor configuré automatiquement |
 
 ### 2.3 Flux de Données
@@ -515,11 +515,16 @@ backend:
 # Configuration Promtail
 # Chart: grafana/promtail v6.x
 config:
+  # URL de Loki (FQDN pour résolution DNS cross-namespace)
   clients:
-    - url: http://loki-gateway/loki/api/v1/push
+    - url: http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push
       tenant_id: ""
+
+  # Position des logs - utiliser le volume monté en écriture
   positions:
-    filename: /tmp/positions.yaml
+    filename: /run/promtail/positions.yaml
+
+  # Scrape configs
   snippets:
     scrapeConfigs: |
       - job_name: kubernetes-pods
@@ -531,17 +536,35 @@ config:
         pipeline_stages:
           - cri: {}
         relabel_configs:
+          # Garder seulement les pods avec label app
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: keep
             regex: .+
+          # Namespace
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
+          # Pod name
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+          # Container name
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          # App label
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: app
+          # Component label
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            target_label: component
+          # Job: namespace/app
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_label_app]
+            separator: /
+            target_label: job
+          # Path to logs - Format: /var/log/pods/<namespace>_<podname>_<uid>/<container>/*.log
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name, __meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: ;
+            regex: (.+);(.+);(.+);(.+)
+            replacement: /var/log/pods/${1}_${2}_${3}/${4}/*.log
 
 resources:
   requests:
@@ -1266,7 +1289,7 @@ rhdemo:
 
 **Dashboard automatiquement disponible après installation!**
 
-Le dashboard "rhDemo - Métriques PostgreSQL" affiche les métriques de performance de la base de données collectées via `postgres_exporter` et `pg_stat_statements`.
+Le dashboard "rhDemo - Métriques PostgreSQL" affiche les métriques de performance de la base de données collectées via les collecteurs intégrés de `postgres_exporter` v0.15.0 (sans requêtes personnalisées dépréciées).
 
 **Accès:** Grafana → Dashboards → "rhDemo - Metriques PostgreSQL"
 
@@ -1278,14 +1301,14 @@ Le dashboard "rhDemo - Métriques PostgreSQL" affiche les métriques de performa
 
 **Contenu du dashboard:**
 
-| Section | Panels | Métriques |
+| Section | Panels | Métriques (collecteurs intégrés) |
 |---------|--------|-----------|
-| **Vue d'ensemble** | Taille DB, Connexions, Verrous, Dead Tuples, Requêtes Longues | Stats instantanées |
-| **Top 10 Requêtes Lentes** | Table avec temps total, temps moyen, appels, lignes | `pg_stat_statements_*` |
-| **Statistiques Requêtes** | Temps moyen par requête, Appels par requête | `pg_stat_statements_*` |
-| **Connexions & Activité** | Par état (active/idle), Verrous par mode | `pg_stat_activity_*`, `pg_locks_*` |
-| **Statistiques Tables** | Opérations CRUD, Scans seq vs index, Live/Dead tuples | `pg_stat_user_tables_*` |
-| **Cache & I/O** | Cache Hit Ratio, Shared Blocks Hit vs Read | `pg_stat_statements_shared_blks_*` |
+| **Vue d'ensemble** | Taille DB, Connexions, Verrous, Dead Tuples, Requêtes Longues | `pg_database_size_bytes`, `pg_stat_activity_count`, `pg_locks_count`, `pg_stat_user_tables_n_dead_tup`, `pg_long_running_transactions` |
+| **Top 10 Requêtes Lentes** | Table avec temps total, temps moyen, appels, lignes | `pg_stat_statements_seconds_total`, `pg_stat_statements_calls_total`, `pg_stat_statements_rows_total` |
+| **Statistiques Requêtes** | Temps moyen par requête, Appels par requête, Lignes retournées | `pg_stat_statements_seconds_total / pg_stat_statements_calls_total`, `pg_stat_statements_rows_total` |
+| **Connexions & Activité** | Par état (active/idle), Verrous par mode | `pg_stat_activity_count{state=...}`, `pg_locks_count{mode=...}` |
+| **Statistiques Tables** | Opérations CRUD, Scans seq vs index, Live/Dead tuples | `pg_stat_user_tables_n_tup_ins/upd/del`, `pg_stat_user_tables_seq_scan/idx_scan`, `pg_stat_user_tables_n_live_tup/n_dead_tup` |
+| **Cache & I/O** | Cache Hit Ratio, Blocks Hit vs Read | `pg_stat_database_blks_hit`, `pg_stat_database_blks_read` |
 
 **Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
 
@@ -1301,6 +1324,14 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 **Configuration postgres_exporter (Helm):**
 
 Le sidecar postgres_exporter est automatiquement déployé si `postgresql-rhdemo.metrics.enabled: true` dans `values.yaml`.
+
+**Approche:** Utilisation exclusive des collecteurs intégrés de postgres_exporter v0.15.0 (pas de `--extend.query-path` déprécié). Les collecteurs suivants sont activés explicitement (désactivés par défaut) :
+
+- `--collector.stat_statements` : Statistiques des requêtes SQL (temps, appels, lignes)
+- `--collector.long_running_transactions` : Détection des transactions longues
+- `--collector.process_idle` : Processus PostgreSQL idle
+
+Les collecteurs activés par défaut (`stat_user_tables`, `locks`, `database`, etc.) fournissent les métriques de tables, verrous et taille de base.
 
 ```yaml
 # values.yaml
@@ -1321,34 +1352,47 @@ postgresql-rhdemo:
 **Fichiers associés:**
 
 - StatefulSet avec sidecar: `infra/stagingkub/helm/rhdemo/templates/postgresql-rhdemo-statefulset.yaml`
-- Requêtes personnalisées: `infra/stagingkub/helm/rhdemo/templates/postgres-exporter-queries-configmap.yaml`
 - ServiceMonitor: `infra/stagingkub/helm/rhdemo/templates/servicemonitor-postgresql.yaml`
 - Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
 
-**Requêtes PromQL utiles:**
+**Requêtes PromQL utiles (collecteurs intégrés):**
 
 Top 10 requêtes les plus lentes (temps total):
 
 ```promql
-topk(10, pg_stat_statements_total_time_seconds{environment="stagingkub"})
+topk(10, pg_stat_statements_seconds_total{datname="rhdemo"})
 ```
 
 Temps moyen par requête:
 
 ```promql
-pg_stat_statements_mean_time_seconds{environment="stagingkub"}
+pg_stat_statements_seconds_total{datname="rhdemo"} / pg_stat_statements_calls_total{datname="rhdemo"} > 0
 ```
 
 Connexions par état:
 
 ```promql
-pg_stat_activity_connections{environment="stagingkub"}
+pg_stat_activity_count{datname="rhdemo"}
 ```
 
 Cache Hit Ratio:
 
 ```promql
-sum(pg_stat_statements_shared_blks_hit) / (sum(pg_stat_statements_shared_blks_hit) + sum(pg_stat_statements_shared_blks_read) + 1)
+sum(pg_stat_database_blks_hit{datname="rhdemo"}) / (sum(pg_stat_database_blks_hit{datname="rhdemo"}) + sum(pg_stat_database_blks_read{datname="rhdemo"}) + 1)
+```
+
+Transactions longues en cours:
+
+```promql
+pg_long_running_transactions or vector(0)
+```
+
+Opérations sur les tables (insertions/mises à jour/suppressions):
+
+```promql
+rate(pg_stat_user_tables_n_tup_ins{datname="rhdemo"}[5m])
+rate(pg_stat_user_tables_n_tup_upd{datname="rhdemo"}[5m])
+rate(pg_stat_user_tables_n_tup_del{datname="rhdemo"}[5m])
 ```
 
 ### 8.4 Dashboard Keycloak - Logs d'Authentification (Custom)

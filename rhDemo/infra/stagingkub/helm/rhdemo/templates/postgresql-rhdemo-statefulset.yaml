@@ -79,9 +79,15 @@ spec:
           {{- toYaml (index .Values "postgresql-rhdemo").resources | nindent 10 }}
       {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
       # Sidecar postgres_exporter pour métriques Prometheus
+      # Utilise uniquement les collecteurs intégrés (pas de extend-query-path déprécié)
       - name: postgres-exporter
         image: "{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.repository }}:{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.tag }}"
         imagePullPolicy: {{ (index .Values "postgresql-rhdemo").metrics.exporter.image.pullPolicy | default "IfNotPresent" }}
+        args:
+        # Activer les collecteurs désactivés par défaut mais utiles pour notre monitoring
+        - "--collector.stat_statements"
+        - "--collector.long_running_transactions"
+        - "--collector.process_idle"
         ports:
         - name: metrics
           containerPort: 9187
@@ -96,12 +102,6 @@ spec:
               key: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.key }}
         - name: DATA_SOURCE_URI
           value: "localhost:{{ (index .Values "postgresql-rhdemo").service.port }}/{{ (index .Values "postgresql-rhdemo").database.name }}?sslmode=disable"
-        - name: PG_EXPORTER_EXTEND_QUERY_PATH
-          value: /etc/postgres_exporter/queries.yaml
-        volumeMounts:
-        - name: postgres-exporter-queries
-          mountPath: /etc/postgres_exporter
-          readOnly: true
         resources:
           requests:
             memory: "32Mi"
@@ -126,11 +126,6 @@ spec:
       - name: init-scripts
         configMap:
           name: postgresql-rhdemo-init
-      {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
-      - name: postgres-exporter-queries
-        configMap:
-          name: postgres-exporter-queries
-      {{- end }}
   volumeClaimTemplates:
   - metadata:
       name: postgresql-data

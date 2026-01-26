@@ -274,15 +274,6 @@ EOF
                     echo "▶ Configuration de kubectl pour le cluster KinD..."
                 }
                 sh """
-                    # Vérifier que le cluster KinD existe
-                    if ! kind get clusters | grep -q "^${env.CLUSTER_NAME}\$"; then
-                        echo "❌ Cluster KinD '${env.CLUSTER_NAME}' non trouvé"
-                        echo "   Exécutez d'abord: rhDemo/infra/stagingkub/scripts/init-stagingkub.sh"
-                        exit 1
-                    fi
-
-                    echo "✅ Cluster KinD '${env.CLUSTER_NAME}' trouvé"
-
                     # Connecter Jenkins au réseau kind si nécessaire
                     JENKINS_CONTAINER=\$(hostname)
                     if ! docker network inspect kind 2>/dev/null | grep -q "\$JENKINS_CONTAINER"; then

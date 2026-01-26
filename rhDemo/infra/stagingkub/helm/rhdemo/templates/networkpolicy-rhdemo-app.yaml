@@ -1,0 +1,100 @@
+{{- if and .Values.rhdemo.enabled .Values.networkPolicies.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: rhdemo-app
+# ═══════════════════════════════════════════════════════════════
+# Règles réseau pour l'application Spring Boot rhdemo-app
+#
+# INGRESS autorisé depuis:
+#   - ingress-nginx (trafic utilisateur)
+#   - monitoring (Prometheus scraping)
+#   - rhdemo-stagingkub (communication interne)
+#   - kubelet (health checks)
+#
+# EGRESS autorisé vers:
+#   - postgresql-rhdemo:5432 (base de données)
+#   - keycloak:8080 (OAuth2/OIDC)
+#   - kube-dns:53 (résolution DNS)
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rhdemo-app-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: rhdemo-app
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Règle 1: Trafic utilisateur via nginx-ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+
+    # Règle 2: Scraping Prometheus depuis namespace monitoring
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+
+    # Règle 3: Communication interne au namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.global.namespace }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+
+    # Règle 4: Health checks kubelet (liveness/readiness probes)
+    # Note: Le kubelet n'est pas dans un namespace, règle sans from
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.rhdemo.serverPort }}
+
+  egress:
+    # Règle 1: Accès à PostgreSQL rhdemo
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql-rhdemo
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-rhdemo").service.port }}
+
+    # Règle 2: Accès à Keycloak (OAuth2)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: {{ .Values.keycloak.service.port }}
+
+    # Règle 3: DNS (kube-dns)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

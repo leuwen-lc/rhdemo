@@ -318,3 +318,33 @@ nginx-ingress:
       limits:
         memory: "256Mi"
         cpu: "200m"
+
+# ═══════════════════════════════════════════════════════════════
+# Network Policies - Sécurité réseau
+# ═══════════════════════════════════════════════════════════════
+# Active les NetworkPolicies pour isoler les pods et contrôler
+# les flux réseau selon le principe du moindre privilège.
+#
+# Stratégie: Zero Trust / Default Deny
+#   1. Tout trafic est bloqué par défaut (ingress + egress)
+#   2. Chaque flux légitime est explicitement autorisé
+#   3. L'accès Internet est bloqué (sauf DNS)
+#
+# Voir: docs/NETWORK_SECURITY_POLICY.md pour les détails des flux
+# ═══════════════════════════════════════════════════════════════
+networkPolicies:
+  # Activer/désactiver toutes les NetworkPolicies
+  # ATTENTION: Désactiver = pas d'isolation réseau
+  enabled: true
+
+  # Configuration spécifique Keycloak (accès externes optionnels)
+  keycloak:
+    # Autoriser l'envoi d'emails via SMTP
+    # Nécessite de spécifier le CIDR du serveur SMTP
+    allowSmtp: false
+    smtpCidr: "0.0.0.0/32"  # À remplacer par l'IP du serveur SMTP
+
+    # Autoriser la connexion LDAP/Active Directory
+    # Nécessite de spécifier le CIDR du serveur LDAP
+    allowLdap: false
+    ldapCidr: "0.0.0.0/32"  # À remplacer par l'IP du serveur LDAP

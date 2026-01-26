@@ -451,13 +451,13 @@ clusters:
       server: $API_SERVER
 
 contexts:
-  - name: jenkins-rhdemo-stagingkub
+  - name: kind-rhdemo
     context:
       cluster: kind-rhdemo
       namespace: rhdemo-stagingkub
       user: jenkins-deployer
 
-current-context: jenkins-rhdemo-stagingkub
+current-context: kind-rhdemo
 
 users:
   - name: jenkins-deployer

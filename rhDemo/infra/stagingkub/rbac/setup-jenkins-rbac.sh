@@ -24,7 +24,7 @@ SERVICE_ACCOUNT="jenkins-deployer"
 SECRET_NAME="jenkins-deployer-token"
 KUBECONFIG_OUTPUT="${SCRIPT_DIR}/jenkins-kubeconfig.yaml"
 CLUSTER_NAME="kind-rhdemo"
-CONTEXT_NAME="jenkins-rhdemo-stagingkub"
+CONTEXT_NAME="kind-rhdemo"
 
 # Couleurs pour l'affichage
 RED='\033[0;31m'

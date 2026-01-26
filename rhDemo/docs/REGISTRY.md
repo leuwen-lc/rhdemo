@@ -64,7 +64,7 @@ KinD (Kubernetes in Docker) tourne dans un container Docker. Les images Docker c
 
 ### 1. Création du registry
 
-Le script `init-stagingkub.sh` crée le registry :
+Le script `init-stagingkub.sh` crée le registry avec accès TLS via certificat autosigné:
 
 ```bash
 docker run -d \
@@ -154,7 +154,7 @@ localhost:5000/rhdemo-api:1.1.0-SNAPSHOT
 
 containerd, grâce à la configuration, va chercher l'image à :
 ```
-http://kind-registry:5000/rhdemo-api:1.1.0-SNAPSHOT
+https://kind-registry:5000/rhdemo-api:1.1.0-SNAPSHOT
 ```
 
 ---
@@ -171,26 +171,26 @@ docker ps | grep kind-registry
 docker logs -f kind-registry
 
 # Santé du registry
-curl http://localhost:5000/v2/
+curl -k https://localhost:5000/v2/
 ```
 
 ### Inspecter les images
 
 ```bash
 # Lister toutes les repositories
-curl http://localhost:5000/v2/_catalog
+curl -k https://localhost:5000/v2/_catalog
 
 # Exemple de réponse :
 # {"repositories":["rhdemo-api"]}
 
 # Lister les tags d'une image
-curl http://localhost:5000/v2/rhdemo-api/tags/list
+curl -k https://localhost:5000/v2/rhdemo-api/tags/list
 
 # Exemple de réponse :
 # {"name":"rhdemo-api","tags":["1.1.0-SNAPSHOT","1.0.0-RELEASE"]}
 
 # Obtenir le manifest d'une image
-curl http://localhost:5000/v2/rhdemo-api/manifests/1.1.0-SNAPSHOT
+curl -k https://localhost:5000/v2/rhdemo-api/manifests/1.1.0-SNAPSHOT
 ```
 
 ### Gérer le registry
@@ -246,7 +246,7 @@ docker ps | grep kind-registry
 netstat -tuln | grep 5000
 
 # Tester la connexion
-curl http://localhost:5000/v2/
+curl -k https://localhost:5000/v2/
 
 # Redémarrer si nécessaire
 docker restart kind-registry
@@ -269,7 +269,7 @@ docker exec rhdemo-control-plane curl http://kind-registry:5000/v2/
 
 ```bash
 # Vérifier que l'image est bien dans le registry
-curl http://localhost:5000/v2/rhdemo-api/tags/list
+curl -k https://localhost:5000/v2/rhdemo-api/tags/list
 
 # Vérifier les événements Kubernetes
 kubectl get events -n rhdemo-stagingkub --sort-by='.lastTimestamp'
@@ -280,21 +280,6 @@ kubectl describe pod <pod-name> -n rhdemo-stagingkub
 # Vérifier la configuration containerd dans KinD
 docker exec rhdemo-control-plane cat /etc/containerd/config.toml | grep registry
 ```
-
-### Problème : Push échoue avec "server gave HTTP response to HTTPS client"
-
-Le registry est en HTTP, pas HTTPS. C'est normal pour un registry local. Docker doit être configuré pour accepter les registries insecure.
-
-Sur Linux, vérifier `/etc/docker/daemon.json` :
-```json
-{
-  "insecure-registries": ["localhost:5000"]
-}
-```
-
-⚠️ **Note** : Pour KinD, ce n'est généralement pas nécessaire car tout est en réseau Docker interne.
-
----
 
 ## 📊 Performances
 
@@ -325,7 +310,7 @@ Le registry stocke les layers Docker séparément. Si vous poussez plusieurs ver
 
 - ✅ Registry local uniquement (localhost:5000)
 - ✅ Pas d'exposition externe
-- ✅ HTTP uniquement (pas de TLS)
+- ✅ HTTPS avec certificat autosigné
 - ✅ Pas d'authentification
 
 ### Pour la production

@@ -374,6 +374,131 @@ else
     rm /tmp/secrets-rhdemo.yml
 fi
 
+# ═══════════════════════════════════════════════════════════════
+# CONFIGURATION RBAC POUR JENKINS (accès limité au namespace)
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration RBAC pour Jenkins...${NC}"
+
+RBAC_DIR="$STAGINGKUB_DIR/rbac"
+JENKINS_KUBECONFIG_DIR="$STAGINGKUB_DIR/jenkins-kubeconfig"
+mkdir -p "$JENKINS_KUBECONFIG_DIR"
+
+if [ -d "$RBAC_DIR" ]; then
+    # Créer le namespace monitoring si nécessaire (pour les ServiceMonitors)
+    if ! kubectl get namespace monitoring > /dev/null 2>&1; then
+        echo -e "${YELLOW}  - Création du namespace 'monitoring'...${NC}"
+        kubectl create namespace monitoring
+    fi
+
+    # Appliquer les ressources RBAC
+    echo -e "${YELLOW}  - Application des ressources RBAC...${NC}"
+
+    # ServiceAccount et Secret
+    kubectl apply -f "$RBAC_DIR/jenkins-serviceaccount.yaml"
+
+    # Role et RoleBinding dans rhdemo-stagingkub
+    kubectl apply -f "$RBAC_DIR/jenkins-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-rolebinding.yaml"
+
+    # ClusterRole et ClusterRoleBinding (pour PersistentVolumes)
+    kubectl apply -f "$RBAC_DIR/jenkins-clusterrole.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-clusterrolebinding.yaml"
+
+    # Role et RoleBinding dans monitoring (pour ServiceMonitors)
+    kubectl apply -f "$RBAC_DIR/jenkins-monitoring-role.yaml"
+
+    echo -e "${GREEN}✅ Ressources RBAC appliquées${NC}"
+
+    # Attendre que le token du ServiceAccount soit créé
+    echo -e "${YELLOW}  - Attente du token du ServiceAccount...${NC}"
+    for i in {1..30}; do
+        SA_TOKEN=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
+        if [ -n "$SA_TOKEN" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -z "$SA_TOKEN" ]; then
+        echo -e "${RED}❌ Impossible de récupérer le token du ServiceAccount après 30 secondes${NC}"
+        exit 1
+    fi
+
+    # Récupérer le certificat CA
+    CA_CERT=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.ca\.crt}')
+
+    # Récupérer l'URL du serveur API
+    API_SERVER="https://rhdemo-control-plane:6443"
+
+    # Générer le kubeconfig RBAC pour Jenkins
+    JENKINS_KUBECONFIG="$JENKINS_KUBECONFIG_DIR/kubeconfig-jenkins-rbac.yaml"
+    cat > "$JENKINS_KUBECONFIG" <<KUBECONFIG_EOF
+# Kubeconfig RBAC pour Jenkins
+# Ce fichier contient un token avec des permissions limitées au namespace rhdemo-stagingkub
+# Généré automatiquement par init-stagingkub.sh
+#
+# IMPORTANT: Ce fichier doit être ajouté comme credential Jenkins
+# de type "Secret file" avec l'ID: kubeconfig-stagingkub
+#
+apiVersion: v1
+kind: Config
+preferences: {}
+
+clusters:
+  - name: kind-rhdemo
+    cluster:
+      certificate-authority-data: $CA_CERT
+      server: $API_SERVER
+
+contexts:
+  - name: jenkins-rhdemo-stagingkub
+    context:
+      cluster: kind-rhdemo
+      namespace: rhdemo-stagingkub
+      user: jenkins-deployer
+
+current-context: jenkins-rhdemo-stagingkub
+
+users:
+  - name: jenkins-deployer
+    user:
+      token: $SA_TOKEN
+KUBECONFIG_EOF
+
+    chmod 600 "$JENKINS_KUBECONFIG"
+    echo -e "${GREEN}✅ Kubeconfig RBAC généré : $JENKINS_KUBECONFIG${NC}"
+
+    # Vérifier les permissions du ServiceAccount
+    echo -e "${YELLOW}  - Vérification des permissions RBAC...${NC}"
+    if kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Accès aux pods${NC}"
+    else
+        echo -e "${RED}    ✗ Accès aux pods refusé${NC}"
+    fi
+
+    if kubectl auth can-i create secrets -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des secrets${NC}"
+    else
+        echo -e "${RED}    ✗ Création des secrets refusée${NC}"
+    fi
+
+    if kubectl auth can-i create persistentvolumes --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des PersistentVolumes${NC}"
+    else
+        echo -e "${RED}    ✗ Création des PersistentVolumes refusée${NC}"
+    fi
+
+    # Vérifier le NON-accès aux autres namespaces
+    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès à kube-system (sécurité OK)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Accès à kube-system détecté${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Dossier RBAC non trouvé : $RBAC_DIR${NC}"
+    echo -e "${YELLOW}   Les ressources RBAC ne seront pas créées${NC}"
+fi
+
 # Générer les certificats SSL
 echo -e "${YELLOW}▶ Génération des certificats SSL...${NC}"
 CERTS_DIR="$STAGINGKUB_DIR/certs"
@@ -428,4 +553,15 @@ echo ""
 echo -e "${YELLOW}💡 Commandes utiles du registry :${NC}"
 echo -e "  • Voir les images : ${BLUE}curl http://localhost:5000/v2/_catalog${NC}"
 echo -e "  • Voir les tags : ${BLUE}curl http://localhost:5000/v2/rhdemo-api/tags/list${NC}"
+echo ""
+echo -e "${YELLOW}🔐 Configuration Jenkins (RBAC) :${NC}"
+echo -e "  Le kubeconfig RBAC a été généré avec des permissions limitées."
+echo -e "  Pour configurer Jenkins :"
+echo -e ""
+echo -e "  1. ${BLUE}Accédez à Jenkins > Manage Jenkins > Credentials${NC}"
+echo -e "  2. ${BLUE}Ajoutez un credential de type 'Secret file'${NC}"
+echo -e "  3. ${BLUE}ID: kubeconfig-stagingkub${NC}"
+echo -e "  4. ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml${NC}"
+echo ""
+echo -e "  Documentation: ${BLUE}$RBAC_DIR/README.md${NC}"
 echo ""

@@ -1,0 +1,112 @@
+# Role pour Jenkins - permissions limitées au namespace rhdemo-stagingkub
+# Ce Role accorde les droits nécessaires pour :
+# - Déployer via Helm (Deployments, StatefulSets, Services, ConfigMaps, etc.)
+# - Gérer les Secrets applicatifs
+# - Vérifier les rollouts et health checks
+# - Exécuter des commandes dans les pods (kubectl exec)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-deployer-role
+  namespace: rhdemo-stagingkub
+  labels:
+    app.kubernetes.io/name: jenkins-deployer
+    app.kubernetes.io/component: ci-cd
+rules:
+  # === Ressources Core (v1) ===
+
+  # Pods : lecture, watch, exec pour health checks
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+
+  # Pods/exec : permet kubectl exec pour les health checks
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Pods/log : permet de lire les logs pour debug
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+
+  # Services : Helm crée/modifie les services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # ConfigMaps : Helm crée/modifie les ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Secrets : création et mise à jour des secrets applicatifs
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # PersistentVolumeClaims : Helm gère les PVC via StatefulSets
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Events : lecture pour debug et monitoring des déploiements
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+  # Endpoints : lecture pour vérification des services
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+
+  # === Apps API (apps/v1) ===
+
+  # Deployments : Helm crée/modifie, kubectl rollout restart/status
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Deployments/scale : permet de scaler les déploiements
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update", "patch"]
+
+  # StatefulSets : Helm crée/modifie les StatefulSets PostgreSQL
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # StatefulSets/scale : permet de scaler les StatefulSets
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+
+  # ReplicaSets : kubectl rollout status a besoin d'accès aux ReplicaSets
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+
+  # === Batch API (batch/v1) ===
+
+  # CronJobs : Helm crée les CronJobs de backup PostgreSQL
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Jobs : créés par les CronJobs, besoin de lecture
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "delete"]
+
+  # === Networking API (networking.k8s.io/v1) ===
+
+  # Ingress : Helm crée/modifie l'Ingress
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # NetworkPolicies : Helm crée les NetworkPolicies
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

@@ -339,32 +339,58 @@ EOF
                         echo "   Démarrez le registry avec: cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                     fi
 
-                    # Générer une kubeconfig adaptée pour Jenkins
-                    # Remplace l'adresse localhost par le nom DNS du container control-plane
-                    echo "▶ Génération de la configuration kubectl..."
-                    kind get kubeconfig --name ${env.CLUSTER_NAME} | sed 's|https://127.0.0.1:[0-9]*|https://rhdemo-control-plane:6443|g' > /tmp/kubeconfig-kind
-
-                    # Installer la kubeconfig
-                    mkdir -p \$HOME/.kube
-                    cp /tmp/kubeconfig-kind \$HOME/.kube/config
-                    chmod 600 \$HOME/.kube/config
-                    rm /tmp/kubeconfig-kind
-
-                    echo "✅ Configuration kubectl installée"
-
-                    # Vérifier l'accès au cluster
-                    echo "▶ Vérification de l'accès au cluster..."
-                    if kubectl cluster-info 2>&1 | grep -q "is running"; then
-                        echo "✅ Accès au cluster KinD confirmé"
-                        kubectl config use-context ${env.K8S_CONTEXT}
-                        echo "✅ Contexte '${env.K8S_CONTEXT}' activé"
-                    else
-                        echo "❌ Impossible d'accéder au cluster KinD"
-                        echo "   Logs de débogage:"
-                        kubectl cluster-info || true
-                        exit 1
-                    fi
+                    echo "✅ Réseau Docker configuré"
                 """
+
+                // Installer le kubeconfig RBAC depuis le credential Jenkins
+                script {
+                    echo "▶ Installation du kubeconfig RBAC..."
+                    echo "   Le kubeconfig utilise le ServiceAccount 'jenkins-deployer'"
+                    echo "   avec des permissions limitées au namespace ${env.K8S_NAMESPACE}"
+                }
+
+                withCredentials([file(credentialsId: 'kubeconfig-stagingkub', variable: 'KUBECONFIG_FILE')]) {
+                    sh """
+                        # Créer le répertoire .kube
+                        mkdir -p \$HOME/.kube
+
+                        # Copier le kubeconfig RBAC
+                        cp "\$KUBECONFIG_FILE" \$HOME/.kube/config
+                        chmod 600 \$HOME/.kube/config
+
+                        echo "✅ Kubeconfig RBAC installé"
+
+                        # Vérifier l'accès au cluster
+                        echo "▶ Vérification de l'accès au cluster..."
+                        if kubectl cluster-info 2>&1 | grep -q "is running"; then
+                            echo "✅ Accès au cluster KinD confirmé"
+
+                            # Afficher le contexte actuel
+                            CURRENT_CONTEXT=\$(kubectl config current-context)
+                            echo "✅ Contexte actif: \$CURRENT_CONTEXT"
+
+                            # Vérifier l'accès au namespace
+                            if kubectl get namespace ${env.K8S_NAMESPACE} > /dev/null 2>&1; then
+                                echo "✅ Accès au namespace '${env.K8S_NAMESPACE}' confirmé"
+                            else
+                                echo "⚠️  Namespace '${env.K8S_NAMESPACE}' non trouvé (sera créé par Helm)"
+                            fi
+
+                            # Vérifier que ce n'est PAS un accès admin (sécurité)
+                            if kubectl auth can-i get pods -n kube-system > /dev/null 2>&1; then
+                                echo "⚠️  ATTENTION: Accès admin détecté - vérifiez la configuration RBAC"
+                            else
+                                echo "✅ Vérification sécurité: pas d'accès aux namespaces système"
+                            fi
+                        else
+                            echo "❌ Impossible d'accéder au cluster KinD"
+                            echo "   Vérifiez que le credential 'kubeconfig-stagingkub' est configuré"
+                            echo "   et que le cluster KinD 'rhdemo' est démarré"
+                            kubectl cluster-info || true
+                            exit 1
+                        fi
+                    """
+                }
             }
         }
 

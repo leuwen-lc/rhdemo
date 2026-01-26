@@ -1,0 +1,92 @@
+{{- if and .Values.postgresqlBackup.enabled .Values.networkPolicies.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: Backup CronJobs
+# ═══════════════════════════════════════════════════════════════
+# Règles réseau pour les CronJobs de backup PostgreSQL
+#
+# Ces jobs ont besoin d'accéder aux bases de données pour pg_dump.
+# L'egress est limité à:
+#   - PostgreSQL correspondant (5432)
+#   - DNS (53)
+# ═══════════════════════════════════════════════════════════════
+
+# NetworkPolicy pour le backup de postgresql-rhdemo
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backup-rhdemo-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql-rhdemo-backup
+  policyTypes:
+    - Egress
+
+  egress:
+    # Accès à PostgreSQL rhdemo
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql-rhdemo
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-rhdemo").service.port }}
+
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# NetworkPolicy pour le backup de postgresql-keycloak
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backup-keycloak-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql-keycloak-backup
+  policyTypes:
+    - Egress
+
+  egress:
+    # Accès à PostgreSQL keycloak
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql-keycloak
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-keycloak").service.port }}
+
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

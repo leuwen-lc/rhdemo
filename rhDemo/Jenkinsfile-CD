@@ -351,33 +351,75 @@ EOF
 
                         echo "✅ Kubeconfig RBAC installé"
 
-                        # Vérifier l'accès au cluster
+                        # Vérifier l'accès au cluster via les permissions RBAC
+                        # Note: kubectl cluster-info nécessite un accès à kube-system
+                        # que le ServiceAccount limité n'a pas (par design de sécurité)
                         echo "▶ Vérification de l'accès au cluster..."
-                        if kubectl cluster-info 2>&1 | grep -q "is running"; then
-                            echo "✅ Accès au cluster KinD confirmé"
 
-                            # Afficher le contexte actuel
-                            CURRENT_CONTEXT=\$(kubectl config current-context)
-                            echo "✅ Contexte actif: \$CURRENT_CONTEXT"
+                        # Afficher le contexte actuel
+                        CURRENT_CONTEXT=\$(kubectl config current-context)
+                        echo "   Contexte: \$CURRENT_CONTEXT"
+
+                        # Tester les permissions sur le namespace cible
+                        if kubectl auth can-i list pods --namespace ${env.K8S_NAMESPACE} > /dev/null 2>&1; then
+                            echo "✅ Accès au cluster confirmé (ServiceAccount RBAC)"
 
                             # Vérifier l'accès au namespace
                             if kubectl get namespace ${env.K8S_NAMESPACE} > /dev/null 2>&1; then
-                                echo "✅ Accès au namespace '${env.K8S_NAMESPACE}' confirmé"
+                                echo "✅ Namespace '${env.K8S_NAMESPACE}' accessible"
                             else
                                 echo "⚠️  Namespace '${env.K8S_NAMESPACE}' non trouvé (sera créé par Helm)"
+                            fi
+
+                            # Vérifier les permissions clés pour le déploiement
+                            echo "▶ Vérification des permissions RBAC..."
+                            PERMS_OK=true
+
+                            if kubectl auth can-i create deployments --namespace ${env.K8S_NAMESPACE} > /dev/null 2>&1; then
+                                echo "   ✓ Création de deployments"
+                            else
+                                echo "   ✗ Création de deployments"
+                                PERMS_OK=false
+                            fi
+
+                            if kubectl auth can-i create secrets --namespace ${env.K8S_NAMESPACE} > /dev/null 2>&1; then
+                                echo "   ✓ Création de secrets"
+                            else
+                                echo "   ✗ Création de secrets"
+                                PERMS_OK=false
+                            fi
+
+                            if kubectl auth can-i create persistentvolumes > /dev/null 2>&1; then
+                                echo "   ✓ Création de PersistentVolumes"
+                            else
+                                echo "   ✗ Création de PersistentVolumes"
+                                PERMS_OK=false
                             fi
 
                             # Vérifier que ce n'est PAS un accès admin (sécurité)
                             if kubectl auth can-i get pods -n kube-system > /dev/null 2>&1; then
                                 echo "⚠️  ATTENTION: Accès admin détecté - vérifiez la configuration RBAC"
                             else
-                                echo "✅ Vérification sécurité: pas d'accès aux namespaces système"
+                                echo "✅ Isolation sécurité: pas d'accès aux namespaces système"
+                            fi
+
+                            if [ "\$PERMS_OK" = "false" ]; then
+                                echo "❌ Permissions RBAC insuffisantes pour le déploiement"
+                                exit 1
                             fi
                         else
                             echo "❌ Impossible d'accéder au cluster KinD"
-                            echo "   Vérifiez que le credential 'kubeconfig-stagingkub' est configuré"
-                            echo "   et que le cluster KinD 'rhdemo' est démarré"
-                            kubectl cluster-info || true
+                            echo ""
+                            echo "   Causes possibles:"
+                            echo "   1. Le cluster KinD 'rhdemo' n'est pas démarré"
+                            echo "   2. Le credential 'kubeconfig-stagingkub' est invalide ou expiré"
+                            echo "   3. Le ServiceAccount jenkins-deployer n'existe pas"
+                            echo ""
+                            echo "   Pour régénérer le kubeconfig:"
+                            echo "   cd rhDemo/infra/stagingkub/scripts && ./init-stagingkub.sh"
+                            echo ""
+                            echo "   Détails de l'erreur:"
+                            kubectl auth can-i list pods --namespace ${env.K8S_NAMESPACE} 2>&1 || true
                             exit 1
                         fi
                     """

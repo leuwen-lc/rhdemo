@@ -1,0 +1,157 @@
+{{- if .Values.networkPolicies.enabled }}
+{{- if index .Values "postgresql-rhdemo" "enabled" }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: postgresql-rhdemo
+# ═══════════════════════════════════════════════════════════════
+# Règles réseau pour PostgreSQL de l'application RHDemo
+#
+# INGRESS autorisé depuis:
+#   - rhdemo-app:5432 (connexions applicatives)
+#   - monitoring:9187 (scraping Prometheus postgres_exporter)
+#   - backup CronJob (pg_dump)
+#   - kubelet (health checks)
+#
+# EGRESS autorisé vers:
+#   - kube-dns:53 uniquement (pas d'Internet)
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgresql-rhdemo-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql-rhdemo
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Règle 1: Connexions depuis rhdemo-app
+    - from:
+        - podSelector:
+            matchLabels:
+              app: rhdemo-app
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-rhdemo").service.port }}
+
+    # Règle 2: Scraping Prometheus (postgres_exporter sur port 9187)
+    {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9187
+    {{- end }}
+
+    # Règle 3: Backup CronJob (même namespace)
+    - from:
+        - podSelector:
+            matchLabels:
+              app: postgresql-rhdemo-backup
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-rhdemo").service.port }}
+
+    # Règle 4: Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-rhdemo").service.port }}
+        {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+        - protocol: TCP
+          port: 9187
+        {{- end }}
+
+  egress:
+    # PostgreSQL n'a besoin que de DNS (pas d'accès Internet)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+---
+{{- if index .Values "postgresql-keycloak" "enabled" }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: postgresql-keycloak
+# ═══════════════════════════════════════════════════════════════
+# Règles réseau pour PostgreSQL de Keycloak
+#
+# INGRESS autorisé depuis:
+#   - keycloak:5432 (connexions Keycloak)
+#   - backup CronJob (pg_dump)
+#   - kubelet (health checks)
+#
+# EGRESS autorisé vers:
+#   - kube-dns:53 uniquement (pas d'Internet)
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgresql-keycloak-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "postgresql-keycloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql-keycloak
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Règle 1: Connexions depuis keycloak
+    - from:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-keycloak").service.port }}
+
+    # Règle 2: Backup CronJob
+    - from:
+        - podSelector:
+            matchLabels:
+              app: postgresql-keycloak-backup
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-keycloak").service.port }}
+
+    # Règle 3: Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-keycloak").service.port }}
+
+  egress:
+    # PostgreSQL n'a besoin que de DNS (pas d'accès Internet)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- end }}

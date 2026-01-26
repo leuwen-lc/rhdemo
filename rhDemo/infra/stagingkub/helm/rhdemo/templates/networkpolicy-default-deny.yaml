@@ -1,0 +1,61 @@
+{{- if .Values.networkPolicies.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: Default Deny All
+# ═══════════════════════════════════════════════════════════════
+# Cette politique bloque TOUT le trafic (ingress et egress) par défaut.
+# Chaque flux légitime doit être explicitement autorisé via d'autres
+# NetworkPolicies.
+#
+# Stratégie: Zero Trust / Least Privilege
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  # Appliquer à TOUS les pods du namespace
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Aucune règle = tout est bloqué
+  ingress: []
+  egress: []
+---
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: Allow DNS
+# ═══════════════════════════════════════════════════════════════
+# Autorise tous les pods à résoudre les noms DNS via kube-dns.
+# Sans cette règle, aucune résolution DNS ne fonctionne.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Autoriser DNS vers kube-dns uniquement
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

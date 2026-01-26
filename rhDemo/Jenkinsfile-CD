@@ -545,8 +545,7 @@ EOF
                     # Charger les secrets depuis SOPS
                     . rhDemo/secrets/env-vars.sh
 
-                    # Utiliser le contexte KinD
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     # Mettre à jour les secrets Kubernetes
                     kubectl create secret generic rhdemo-db-secret \\
@@ -597,8 +596,7 @@ EOF
                     echo "   Namespace: ${env.K8S_NAMESPACE}"
                 }
                 sh """
-                    # Utiliser le contexte KinD
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     # Déterminer la politique de pull d'image
                     # Pour SNAPSHOT : Always (force le pull à chaque déploiement)
@@ -653,7 +651,7 @@ EOF
                     echo "▶ Redémarrage forcé des pods..."
                 }
                 sh """
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     # Rollout restart pour forcer le redémarrage des pods
                     echo "   - Redémarrage rhdemo-app..."
@@ -682,7 +680,7 @@ EOF
                     echo "▶ Attente de la disponibilité des services..."
                 }
                 sh """
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     # Attendre que tous les pods principaux soient prêts
                     # Note: On attend les deployments/statefulsets plutôt que tous les pods
@@ -740,7 +738,7 @@ EOF
                     echo "▶ Vérification de la santé des services..."
                 }
                 sh """
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     echo "▶ Vérification de l'application RHDemo..."
                     # Récupérer le nom du pod rhdemo (label app=rhdemo-app)
@@ -811,7 +809,7 @@ EOF
                     echo "═══════════════════════════════════════════════════════"
                 }
                 sh """
-                    kubectl config use-context ${env.K8S_CONTEXT}
+                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
                     echo "📊 Statut des pods:"
                     kubectl get pods -n ${env.K8S_NAMESPACE} -o wide

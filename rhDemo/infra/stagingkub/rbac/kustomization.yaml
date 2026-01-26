@@ -1,0 +1,16 @@
+# Kustomization pour appliquer toutes les ressources RBAC
+# Usage: kubectl apply -k rhDemo/infra/stagingkub/rbac/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - jenkins-serviceaccount.yaml
+  - jenkins-role.yaml
+  - jenkins-rolebinding.yaml
+  - jenkins-clusterrole.yaml
+  - jenkins-clusterrolebinding.yaml
+  - jenkins-monitoring-role.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: rhdemo
+  app.kubernetes.io/managed-by: kustomize

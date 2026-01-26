@@ -1,0 +1,36 @@
+# ClusterRole pour Jenkins - permissions sur ressources cluster-wide
+# Ce ClusterRole accorde les droits nécessaires pour :
+# - Gérer les PersistentVolumes (créés par Helm pour PostgreSQL)
+# - Accéder aux informations du cluster (version, nodes)
+#
+# IMPORTANT: Ce ClusterRole est limité au strict minimum nécessaire.
+# Les PersistentVolumes sont des ressources cluster-scoped, donc un
+# ClusterRole est requis pour les créer/modifier.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-deployer-cluster-role
+  labels:
+    app.kubernetes.io/name: jenkins-deployer
+    app.kubernetes.io/component: ci-cd
+rules:
+  # PersistentVolumes : Helm crée les PV pour PostgreSQL
+  # Les PV sont des ressources cluster-wide (non-namespaced)
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # StorageClasses : lecture seule pour vérifier la classe de stockage
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # Namespaces : Helm a besoin de créer le namespace si --create-namespace
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # Nodes : lecture seule pour kubectl cluster-info et debug
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]

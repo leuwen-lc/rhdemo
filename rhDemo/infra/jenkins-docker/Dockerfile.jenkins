@@ -105,14 +105,15 @@ RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
     helm version
 
 # ═══════════════════════════════════════════════════════════════
-# INSTALLATION KIND (Kubernetes in Docker - CLI uniquement)
+# KIND NON INSTALLÉ - SÉCURITÉ RBAC
 # ═══════════════════════════════════════════════════════════════
-
-ENV KIND_VERSION=0.20.0
-
-RUN wget -q https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-amd64 -O /usr/local/bin/kind && \
-    chmod +x /usr/local/bin/kind && \
-    kind --version
+# NOTE: kind n'est PAS installé volontairement pour des raisons de sécurité.
+# Jenkins utilise un kubeconfig RBAC pré-provisionné avec des permissions
+# limitées au namespace rhdemo-stagingkub.
+#
+# Pour gérer le cluster KinD, utilisez la machine hôte (pas Jenkins).
+# Voir: rhDemo/infra/stagingkub/rbac/README.md
+# ═══════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════
 # INSTALLATION COSIGN (signature d'images de conteneur)

@@ -152,7 +152,7 @@ if [ "${ACTION}" = "postgresql" ] || [ "${ACTION}" = "all" ]; then
     echo -e "  - rhDemo - Metriques PostgreSQL (Prometheus - pg_stat_statements/connexions/verrous)"
 fi
 echo ""
-echo -e "${BLUE}URL Grafana:${NC} https://grafana.stagingkub.local"
+echo -e "${BLUE}URL Grafana:${NC} https://grafana.stagingkub.intra.leuwen-lc.fr"
 echo ""
 echo -e "${YELLOW}Note:${NC} Les dashboards sont automatiquement charges dans Grafana"
 echo -e "${YELLOW}Usage:${NC} $0 [logs|metrics|springboot|postgresql|all]"

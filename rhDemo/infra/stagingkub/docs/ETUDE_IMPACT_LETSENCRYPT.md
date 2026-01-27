@@ -28,9 +28,9 @@
 ## 📊 Résumé exécutif
 
 ### Situation actuelle
-- **Certificats auto-signés** générés par OpenSSL (CN=*.stagingkub.local)
+- **Certificats auto-signés** générés par OpenSSL (CN=*.stagingkub.intra.leuwen-lc.fr)
 - **Validité**: 365 jours (expire Dec 18 2026)
-- **Domaines locaux**: rhdemo.stagingkub.local, keycloak.stagingkub.local
+- **Domaines locaux**: rhdemo.stagingkub.intra.leuwen-lc.fr, keycloak.stagingkub.intra.leuwen-lc.fr
 - **Stockage**: Fichiers locaux dans `infra/stagingkub/certs/`
 - **Gestion**: Manuelle via `init-stagingkub.sh`
 
@@ -61,8 +61,8 @@ Migrer vers **Let's Encrypt** pour obtenir des certificats signés par une AC re
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout "$CERTS_DIR/tls.key" \
   -out "$CERTS_DIR/tls.crt" \
-  -subj "/CN=*.stagingkub.local/O=RHDemo" \
-  -addext "subjectAltName=DNS:rhdemo.stagingkub.local,DNS:keycloak.stagingkub.local"
+  -subj "/CN=*.stagingkub.intra.leuwen-lc.fr/O=RHDemo" \
+  -addext "subjectAltName=DNS:rhdemo.stagingkub.intra.leuwen-lc.fr,DNS:keycloak.stagingkub.intra.leuwen-lc.fr"
 ```
 
 #### Stockage
@@ -177,8 +177,8 @@ Let's Encrypt nécessite de **prouver que vous contrôlez le domaine** via l'un 
 │   └────────────────────────────────┘    │
 │                                          │
 │   /etc/hosts:                            │
-│   127.0.0.1 rhdemo.stagingkub.local     │
-│   127.0.0.1 keycloak.stagingkub.local   │
+│   127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr     │
+│   127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr   │
 └─────────────────────────────────────────┘
 ```
 
@@ -372,7 +372,7 @@ Continuer à utiliser les certificats auto-signés pour l'environnement stagingk
 | Fichier | Modifications requises | Impact |
 |---------|------------------------|--------|
 | `scripts/init-stagingkub.sh` | Remplacer génération OpenSSL par copie certificats Let's Encrypt | Moyen |
-| `helm/rhdemo/values.yaml` | Changer `domain: stagingkub.local` → `stagingkub.leuwen.fr` | Faible |
+| `helm/rhdemo/values.yaml` | Changer `domain: stagingkub.intra.leuwen-lc.fr` → `stagingkub.leuwen.fr` | Faible |
 | `Jenkinsfile-CD` | Ajout étape renouvellement certificats (optionnel) | Faible |
 | `scripts/validate.sh` | Ajout validation expiration certificats Let's Encrypt | Faible |
 | `.gitignore` | S'assurer que `certs/*.pem` est ignoré | Faible |
@@ -397,8 +397,8 @@ Continuer à utiliser les certificats auto-signés pour l'environnement stagingk
 **Avant (local)**:
 ```
 /etc/hosts:
-127.0.0.1 rhdemo.stagingkub.local
-127.0.0.1 keycloak.stagingkub.local
+127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr
+127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr
 ```
 
 **Après (public DNS)**:
@@ -701,12 +701,12 @@ Si vous prévoyez de déployer en production sur une infrastructure publique (VP
 ### Accepter les certificats auto-signés dans les navigateurs (Staging)
 
 #### Chrome/Edge
-1. Accéder à `https://rhdemo.stagingkub.local`
+1. Accéder à `https://rhdemo.stagingkub.intra.leuwen-lc.fr`
 2. Cliquer sur "Avancé" → "Continuer vers le site (non sécurisé)"
 3. Ajouter une exception permanente
 
 #### Firefox
-1. Accéder à `https://rhdemo.stagingkub.local`
+1. Accéder à `https://rhdemo.stagingkub.intra.leuwen-lc.fr`
 2. Cliquer sur "Avancé" → "Accepter le risque et continuer"
 3. Ajouter une exception permanente
 

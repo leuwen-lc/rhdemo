@@ -167,8 +167,8 @@ Le dépôt contient **3 projets distincts** :
   - 5 Services, 4 Secrets, 2 PVC
 - **Port HTTPS** : 443 (NodePort 30443)
 - **URLs** :
-  - App : https://rhdemo.stagingkub.local
-  - Keycloak : https://keycloak.stagingkub.local
+  - App : https://rhdemo.stagingkub.intra.leuwen-lc.fr
+  - Keycloak : https://keycloak.stagingkub.intra.leuwen-lc.fr
 - **Observabilité** : Promtail → Loki → Grafana (logs centralisés)
 - **Persistance des données** :
   - extraMounts KinD : `/home/leno-vo/kind-data/rhdemo-stagingkub`
@@ -372,6 +372,7 @@ Le dépôt contient **3 projets distincts** :
 ### Sécurité
 
 - [SECURITE_WEB_CSP.md](rhDemo/docs/SECURITE_WEB_CSP.md) - Content Security Policy
+- [CERTIFICATS-WEB.md](rhDemo/docs/CERTIFICATS-WEB.md) - Certificats TLS (auto-signés vs Let's Encrypt)
 - [CSRF_GUIDE.md](rhDemo/docs/CSRF_GUIDE.md) - Protection CSRF
 - [SOPS_SETUP.md](rhDemo/docs/SOPS_SETUP.md) - Gestion secrets
 - [OWASP_DEPENDENCY_CHECK.md](rhDemo/docs/OWASP_DEPENDENCY_CHECK.md) - Scan dépendances

@@ -215,21 +215,21 @@ echo ""
 
 # 8. Vérification de /etc/hosts
 echo -e "${YELLOW}▶ Vérification de /etc/hosts${NC}"
-echo -n "Vérification de rhdemo.stagingkub.local... "
-if grep -q "rhdemo.stagingkub.local" /etc/hosts; then
+echo -n "Vérification de rhdemo.stagingkub.intra.leuwen-lc.fr... "
+if grep -q "rhdemo.stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ MANQUANT${NC}"
-    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 rhdemo.stagingkub.local' | sudo tee -a /etc/hosts${NC}"
+    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr' | sudo tee -a /etc/hosts${NC}"
     ((ERRORS++))
 fi
 
-echo -n "Vérification de keycloak.stagingkub.local... "
-if grep -q "keycloak.stagingkub.local" /etc/hosts; then
+echo -n "Vérification de keycloak.stagingkub.intra.leuwen-lc.fr... "
+if grep -q "keycloak.stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
     echo -e "${GREEN}✅ OK${NC}"
 else
     echo -e "${RED}❌ MANQUANT${NC}"
-    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 keycloak.stagingkub.local' | sudo tee -a /etc/hosts${NC}"
+    echo -e "${YELLOW}Ajoutez: echo '127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr' | sudo tee -a /etc/hosts${NC}"
     ((ERRORS++))
 fi
 echo ""

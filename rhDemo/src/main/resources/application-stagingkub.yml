@@ -20,7 +20,7 @@ spring:
         provider:
           keycloak:
             # URL publique HTTPS pour le navigateur (redirection login)
-            authorization-uri: https://keycloak.stagingkub.local/realms/RHDemo/protocol/openid-connect/auth
+            authorization-uri: https://keycloak.stagingkub.intra.leuwen-lc.fr/realms/RHDemo/protocol/openid-connect/auth
 
             # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
             # (échange code→token, récupération JWKS)
@@ -28,8 +28,9 @@ spring:
             token-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/token
             jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
 
-            # NE PAS configurer issuer-uri ici car Spring essaierait de télécharger
-            # /.well-known/openid-configuration en HTTPS (échec SSL certificat auto-signé)
+            # issuer-uri n'est PAS configuré car :
+            # - Avec certificat auto-signé : Spring ne peut pas télécharger /.well-known/openid-configuration
+            # - Avec Let's Encrypt : fonctionne, mais on garde la config manuelle pour compatibilité
             # L'issuer sera validé automatiquement depuis le token JWT reçu
 
             user-name-attribute: preferred_username

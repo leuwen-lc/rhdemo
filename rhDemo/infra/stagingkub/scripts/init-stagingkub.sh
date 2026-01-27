@@ -505,13 +505,15 @@ CERTS_DIR="$STAGINGKUB_DIR/certs"
 mkdir -p "$CERTS_DIR"
 
 if [ ! -f "$CERTS_DIR/tls.crt" ]; then
-    # Générer un certificat self-signed
+    # Générer un certificat self-signed pour le domaine intra.leuwen-lc.fr
+    # Note: Ce certificat auto-signé est utilisé quand Let's Encrypt n'est pas disponible
+    # Avec Let's Encrypt (cert-manager), le secret intra-wildcard-tls est utilisé à la place
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout "$CERTS_DIR/tls.key" \
       -out "$CERTS_DIR/tls.crt" \
-      -subj "/CN=*.stagingkub.local/O=RHDemo" \
-      -addext "subjectAltName=DNS:rhdemo.stagingkub.local,DNS:keycloak.stagingkub.local"
-    echo -e "${GREEN}✅ Certificats SSL générés${NC}"
+      -subj "/CN=*.stagingkub.intra.leuwen-lc.fr/O=RHDemo" \
+      -addext "subjectAltName=DNS:rhdemo.stagingkub.intra.leuwen-lc.fr,DNS:keycloak.stagingkub.intra.leuwen-lc.fr"
+    echo -e "${GREEN}✅ Certificats SSL auto-signés générés${NC}"
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
 fi
@@ -526,10 +528,10 @@ echo -e "${GREEN}✅ Secret TLS créé${NC}"
 
 # Mettre à jour /etc/hosts si nécessaire
 echo -e "${YELLOW}▶ Vérification de /etc/hosts...${NC}"
-if ! grep -q "rhdemo.stagingkub.local" /etc/hosts; then
+if ! grep -q "rhdemo.stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
     echo -e "${YELLOW}Ajout des entrées DNS dans /etc/hosts (nécessite sudo)...${NC}"
-    echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
-    echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
     echo -e "${GREEN}✅ Entrées DNS ajoutées${NC}"
 else
     echo -e "${GREEN}✅ Entrées DNS déjà présentes${NC}"

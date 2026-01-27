@@ -123,7 +123,7 @@ Ce fichier contient **TOUTES** les valeurs configurables :
 global:                           # Variables globales
   namespace: rhdemo-stagingkub       # Namespace Kubernetes
   environment: stagingkub            # Environnement (staging/prod)
-  domain: stagingkub.local           # Domaine DNS
+  domain: stagingkub.intra.leuwen-lc.fr           # Domaine DNS
 
 postgresql-rhdemo:                # Config PostgreSQL RHDemo
   enabled: true                   # Activer ce composant ?
@@ -152,7 +152,7 @@ keycloak:                         # Config Keycloak
   admin:
     user: admin
   hostname:
-    url: https://keycloak.stagingkub.local
+    url: https://keycloak.stagingkub.intra.leuwen-lc.fr
   resources:                      # Plus de ressources que les DB
     requests:
       memory: "512Mi"
@@ -175,8 +175,8 @@ ingress:                          # Config Ingress (exposition HTTPS)
   enabled: true
   className: nginx
   hosts:
-    - host: rhdemo.stagingkub.local
-    - host: keycloak.stagingkub.local
+    - host: rhdemo.stagingkub.intra.leuwen-lc.fr
+    - host: keycloak.stagingkub.intra.leuwen-lc.fr
   tls:
     enabled: true
 ```
@@ -494,7 +494,7 @@ spec:
               key: password
         - name: KC_HOSTNAME_URL
           value: {{ .Values.keycloak.hostname.url }}
-          # → https://keycloak.stagingkub.local
+          # → https://keycloak.stagingkub.intra.leuwen-lc.fr
         livenessProbe:
           httpGet:
             path: /health/live
@@ -700,12 +700,12 @@ spec:
   ingressClassName: nginx       # Utilise Nginx Ingress Controller
   tls:
   - hosts:
-    - rhdemo.stagingkub.local
-    - keycloak.stagingkub.local
+    - rhdemo.stagingkub.intra.leuwen-lc.fr
+    - keycloak.stagingkub.intra.leuwen-lc.fr
     secretName: rhdemo-tls-cert # Secret contenant les certificats SSL
   rules:
-  # Règle 1 : rhdemo.stagingkub.local → rhdemo-app:9000
-  - host: rhdemo.stagingkub.local
+  # Règle 1 : rhdemo.stagingkub.intra.leuwen-lc.fr → rhdemo-app:9000
+  - host: rhdemo.stagingkub.intra.leuwen-lc.fr
     http:
       paths:
       - path: /
@@ -716,8 +716,8 @@ spec:
             port:
               number: 9000
 
-  # Règle 2 : keycloak.stagingkub.local → keycloak:8080
-  - host: keycloak.stagingkub.local
+  # Règle 2 : keycloak.stagingkub.intra.leuwen-lc.fr → keycloak:8080
+  - host: keycloak.stagingkub.intra.leuwen-lc.fr
     http:
       paths:
       - path: /
@@ -732,14 +732,14 @@ spec:
 **Qu'est-ce qu'un Ingress ?**
 - Point d'entrée unique pour exposer plusieurs services HTTP/HTTPS
 - Routing basé sur :
-  - **Hostname** : rhdemo.stagingkub.local → app, keycloak.stagingkub.local → keycloak
+  - **Hostname** : rhdemo.stagingkub.intra.leuwen-lc.fr → app, keycloak.stagingkub.intra.leuwen-lc.fr → keycloak
   - **Path** : /api → service1, /admin → service2
 - Nécessite un **Ingress Controller** (Nginx, Traefik, HAProxy)
 
 **Flux de requête** :
 ```
 Client (navigateur)
-  ↓ https://rhdemo.stagingkub.local
+  ↓ https://rhdemo.stagingkub.intra.leuwen-lc.fr
 Ingress (port 443)
   ↓ détermine le backend via rules.host
 Service rhdemo-app (port 9000)
@@ -757,7 +757,7 @@ kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
 
 # Tester depuis un pod
 kubectl run -it --rm debug --image=curlimages/curl -n rhdemo-stagingkub -- \
-  curl -H "Host: rhdemo.stagingkub.local" http://rhdemo-app:9000/actuator/health
+  curl -H "Host: rhdemo.stagingkub.intra.leuwen-lc.fr" http://rhdemo-app:9000/actuator/health
 ```
 
 ---
@@ -822,8 +822,8 @@ metadata:
 📂 Namespace: rhdemo-stagingkub
 
 🌐 URLS D'ACCÈS
-  Application RHDemo: https://rhdemo.stagingkub.local
-  Keycloak Admin Console: https://keycloak.stagingkub.local
+  Application RHDemo: https://rhdemo.stagingkub.intra.leuwen-lc.fr
+  Keycloak Admin Console: https://keycloak.stagingkub.intra.leuwen-lc.fr
 
 📊 VÉRIFIER LE STATUT
   kubectl get pods -n rhdemo-stagingkub

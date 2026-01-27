@@ -9,7 +9,7 @@ adminUser: admin
 # ⚠️ SÉCURITÉ: Définir un mot de passe fort avant installation
 # adminPassword doit être défini avec un mot de passe sécurisé
 # Exemple: openssl rand -base64 32
-adminPassword: ""  # TODO: Renseigner un mot de passe fort
+adminPassword: "admin123"  # TODO: Renseigner un mot de passe fort
 
 ###########################################
 # Resources
@@ -35,14 +35,14 @@ ingress:
   enabled: true
   ingressClassName: nginx
   hosts:
-    - grafana.stagingkub.intra.leuwen-lc.fr
+    - grafana-stagingkub.intra.leuwen-lc.fr
   tls:
     # Secret contenant le certificat TLS :
     # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
     # - Auto-signé : grafana-tls-cert (généré manuellement)
     - secretName: intra-wildcard-tls
       hosts:
-        - grafana.stagingkub.intra.leuwen-lc.fr
+        - grafana-stagingkub.intra.leuwen-lc.fr
 
 ###########################################
 # Datasources
@@ -94,8 +94,8 @@ dashboards: {}
 ###########################################
 grafana.ini:
   server:
-    domain: grafana.stagingkub.intra.leuwen-lc.fr
-    root_url: https://grafana.stagingkub.intra.leuwen-lc.fr
+    domain: grafana-stagingkub.intra.leuwen-lc.fr
+    root_url: https://grafana-stagingkub.intra.leuwen-lc.fr
   analytics:
     reporting_enabled: false
     check_for_updates: false

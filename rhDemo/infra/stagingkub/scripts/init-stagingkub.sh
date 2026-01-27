@@ -512,7 +512,7 @@ if [ ! -f "$CERTS_DIR/tls.crt" ]; then
       -keyout "$CERTS_DIR/tls.key" \
       -out "$CERTS_DIR/tls.crt" \
       -subj "/CN=*.stagingkub.intra.leuwen-lc.fr/O=RHDemo" \
-      -addext "subjectAltName=DNS:rhdemo.stagingkub.intra.leuwen-lc.fr,DNS:keycloak.stagingkub.intra.leuwen-lc.fr"
+      -addext "subjectAltName=DNS:rhdemo-stagingkub.intra.leuwen-lc.fr,DNS:keycloak-stagingkub.intra.leuwen-lc.fr,DNS:grafana-stagingkub.intra.leuwen-lc.fr"
     echo -e "${GREEN}✅ Certificats SSL auto-signés générés${NC}"
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
@@ -528,10 +528,10 @@ echo -e "${GREEN}✅ Secret TLS créé${NC}"
 
 # Mettre à jour /etc/hosts si nécessaire
 echo -e "${YELLOW}▶ Vérification de /etc/hosts...${NC}"
-if ! grep -q "rhdemo.stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
+if ! grep -q "rhdemo-stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
     echo -e "${YELLOW}Ajout des entrées DNS dans /etc/hosts (nécessite sudo)...${NC}"
-    echo "127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
-    echo "127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 rhdemo-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 keycloak-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
     echo -e "${GREEN}✅ Entrées DNS ajoutées${NC}"
 else
     echo -e "${GREEN}✅ Entrées DNS déjà présentes${NC}"

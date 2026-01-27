@@ -44,8 +44,9 @@ Le script génère :
 
 Le certificat couvre :
 - `*.stagingkub.intra.leuwen-lc.fr` (wildcard)
-- `rhdemo.stagingkub.intra.leuwen-lc.fr` (SAN)
-- `keycloak.stagingkub.intra.leuwen-lc.fr` (SAN)
+- `rhdemo-stagingkub.intra.leuwen-lc.fr` (SAN)
+- `keycloak-stagingkub.intra.leuwen-lc.fr` (SAN)
+- `grafana-stagingkub.intra.leuwen-lc.fr` (SAN)
 
 #### 2. Configurer Helm pour utiliser le certificat auto-signé
 
@@ -65,7 +66,7 @@ ingress:
   tls:
     - secretName: grafana-tls-cert  # Certificat auto-signé Grafana
       hosts:
-        - grafana.stagingkub.intra.leuwen-lc.fr
+        - grafana-stagingkub.intra.leuwen-lc.fr
 ```
 
 #### 3. Installer la stack d'observabilité (Grafana)
@@ -80,7 +81,7 @@ cd rhDemo/infra/stagingkub
 Ce script :
 
 - Crée le namespace `loki-stack`
-- Génère un certificat auto-signé pour `grafana.stagingkub.intra.leuwen-lc.fr`
+- Génère un certificat auto-signé pour `grafana-stagingkub.intra.leuwen-lc.fr`
 - Crée le secret `grafana-tls-cert` dans le namespace `loki-stack`
 - Installe Loki et Grafana via Helm
 
@@ -118,7 +119,7 @@ Avec un certificat auto-signé, le **logout SSO Keycloak ne fonctionne pas**.
 Le logout OIDC nécessite que Spring Security découvre l'endpoint `end_session_endpoint` de Keycloak. Cette découverte se fait via :
 
 ```
-https://keycloak.stagingkub.intra.leuwen-lc.fr/realms/RHDemo/.well-known/openid-configuration
+https://keycloak-stagingkub.intra.leuwen-lc.fr/realms/RHDemo/.well-known/openid-configuration
 ```
 
 Avec un certificat auto-signé :
@@ -128,7 +129,7 @@ Avec un certificat auto-signé :
 
 **Contournement** : L'utilisateur peut se déconnecter manuellement de Keycloak via :
 ```
-https://keycloak.stagingkub.intra.leuwen-lc.fr/realms/RHDemo/protocol/openid-connect/logout
+https://keycloak-stagingkub.intra.leuwen-lc.fr/realms/RHDemo/protocol/openid-connect/logout
 ```
 
 #### Avertissement navigateur
@@ -279,7 +280,7 @@ ingress:
   tls:
     - secretName: intra-wildcard-tls  # Let's Encrypt
       hosts:
-        - grafana.stagingkub.intra.leuwen-lc.fr
+        - grafana-stagingkub.intra.leuwen-lc.fr
 ```
 
 #### 7. Déployer
@@ -317,9 +318,9 @@ Voir [Jenkinsfile-CD](../Jenkinsfile-CD) pour les détails du pipeline.
 
 Identique pour les deux options :
 ```
-127.0.0.1 rhdemo.stagingkub.intra.leuwen-lc.fr
-127.0.0.1 keycloak.stagingkub.intra.leuwen-lc.fr
-127.0.0.1 grafana.stagingkub.intra.leuwen-lc.fr
+127.0.0.1 rhdemo-stagingkub.intra.leuwen-lc.fr
+127.0.0.1 keycloak-stagingkub.intra.leuwen-lc.fr
+127.0.0.1 grafana-stagingkub.intra.leuwen-lc.fr
 ```
 
 ---

@@ -72,18 +72,18 @@ Les utilisateurs sont créés à partir des clés `rhdemo.test.*` :
 ### URLs configurées
 
 Le client OAuth2 est configuré pour l'environnement stagingkub :
-- Root URL: `https://rhdemo.stagingkub.intra.leuwen-lc.fr/`
-- Redirect URIs: `https://rhdemo.stagingkub.intra.leuwen-lc.fr/*`
-- Web Origins: `https://rhdemo.stagingkub.intra.leuwen-lc.fr`
+- Root URL: `https://rhdemo-stagingkub.intra.leuwen-lc.fr/`
+- Redirect URIs: `https://rhdemo-stagingkub.intra.leuwen-lc.fr/*`
+- Web Origins: `https://rhdemo-stagingkub.intra.leuwen-lc.fr`
 
 ## Résultat
 
 Après exécution réussie, vous pouvez :
 
-1. **Accéder à Keycloak** : https://keycloak.stagingkub.intra.leuwen-lc.fr
+1. **Accéder à Keycloak** : https://keycloak-stagingkub.intra.leuwen-lc.fr
    - Admin console avec les credentials depuis `secrets-stagingkub.yml`
 
-2. **Se connecter à l'application** : https://rhdemo.stagingkub.intra.leuwen-lc.fr
+2. **Se connecter à l'application** : https://rhdemo-stagingkub.intra.leuwen-lc.fr
    - Avec l'un des utilisateurs de test créés
 
 3. **Vérifier la configuration** :

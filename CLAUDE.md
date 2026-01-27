@@ -167,8 +167,8 @@ Le dépôt contient **3 projets distincts** :
   - 5 Services, 4 Secrets, 2 PVC
 - **Port HTTPS** : 443 (NodePort 30443)
 - **URLs** :
-  - App : https://rhdemo.stagingkub.intra.leuwen-lc.fr
-  - Keycloak : https://keycloak.stagingkub.intra.leuwen-lc.fr
+  - App : https://rhdemo-stagingkub.intra.leuwen-lc.fr
+  - Keycloak : https://keycloak-stagingkub.intra.leuwen-lc.fr
 - **Observabilité** : Promtail → Loki → Grafana (logs centralisés)
 - **Persistance des données** :
   - extraMounts KinD : `/home/leno-vo/kind-data/rhdemo-stagingkub`

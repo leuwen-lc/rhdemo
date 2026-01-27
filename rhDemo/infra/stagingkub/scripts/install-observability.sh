@@ -142,7 +142,7 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 LOKI_NS="loki-stack"
-DOMAIN="grafana.stagingkub.local"
+DOMAIN="grafana.stagingkub.intra.leuwen-lc.fr"
 
 log "Création du namespace $LOKI_NS..."
 kubectl create namespace $LOKI_NS 2>/dev/null || warn "Namespace existe déjà"

@@ -4,7 +4,7 @@
 global:
   namespace: rhdemo-stagingkub
   environment: stagingkub
-  domain: stagingkub.local
+  domain: stagingkub.intra.leuwen-lc.fr
 
 # ═══════════════════════════════════════════════════════════════
 # Backups PostgreSQL (CronJobs)
@@ -138,7 +138,7 @@ keycloak:
       key: password
 
   # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
-  hostname: keycloak.stagingkub.local
+  hostname: keycloak.stagingkub.intra.leuwen-lc.fr
 
   proxyHeaders: xforwarded
   httpEnabled: true
@@ -263,14 +263,14 @@ ingress:
   className: nginx
 
   hosts:
-    - host: rhdemo.stagingkub.local
+    - host: rhdemo.stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak.stagingkub.local
+    - host: keycloak.stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix
@@ -279,8 +279,10 @@ ingress:
 
   tls:
     enabled: true
-    # Les certificats seront créés via cert-manager ou manuellement
-    secretName: rhdemo-tls-cert
+    # Secret contenant le certificat TLS :
+    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
+    # - Auto-signé : rhdemo-tls-cert (généré par init-stagingkub.sh)
+    secretName: intra-wildcard-tls
 
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"

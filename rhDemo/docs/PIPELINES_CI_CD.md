@@ -256,8 +256,8 @@ SKIP_HEALTH_CHECK=true
 
 Après un déploiement réussi :
 
-- **Application RHDemo** : https://rhdemo.stagingkub.intra.leuwen-lc.fr
-- **Keycloak** : https://keycloak.stagingkub.intra.leuwen-lc.fr
+- **Application RHDemo** : https://rhdemo-stagingkub.intra.leuwen-lc.fr
+- **Keycloak** : https://keycloak-stagingkub.intra.leuwen-lc.fr
 
 ---
 
@@ -363,8 +363,8 @@ Il est conservé pour compatibilité temporaire mais **sera supprimé dans une v
        ▼
 ┌────────────────────────────────────────────────┐
 │        Application accessible                  │
-│  - https://rhdemo.stagingkub.intra.leuwen-lc.fr             │
-│  - https://keycloak.stagingkub.intra.leuwen-lc.fr           │
+│  - https://rhdemo-stagingkub.intra.leuwen-lc.fr             │
+│  - https://keycloak-stagingkub.intra.leuwen-lc.fr           │
 └────────────────────────────────────────────────┘
 ```
 

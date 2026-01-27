@@ -271,13 +271,13 @@ keycloak:
     client-id: RHDemo
     name: RHDemo
     secret: ${KEYCLOAK_CLIENT_SECRET}
-    root-url: https://rhdemo.stagingkub.intra.leuwen-lc.fr/
+    root-url: https://rhdemo-stagingkub.intra.leuwen-lc.fr/
     base-url: ''
     admin-url: ''
     redirect-uris:
-      - https://rhdemo.stagingkub.intra.leuwen-lc.fr/*
+      - https://rhdemo-stagingkub.intra.leuwen-lc.fr/*
     web-origins:
-      - https://rhdemo.stagingkub.intra.leuwen-lc.fr
+      - https://rhdemo-stagingkub.intra.leuwen-lc.fr
     roles:
       - ROLE_admin
       - ROLE_consult
@@ -340,7 +340,7 @@ if [ ${INIT_EXIT_CODE} -eq 0 ]; then
     echo -e "${GREEN}Keycloak est maintenant configuré pour l'environnement stagingkub:${NC}"
     echo -e "  • Realm: RHDemo"
     echo -e "  • Client: RHDemo"
-    echo -e "  • URL: https://keycloak.stagingkub.intra.leuwen-lc.fr"
+    echo -e "  • URL: https://keycloak-stagingkub.intra.leuwen-lc.fr"
     echo -e "  • Utilisateurs créés:"
     echo -e "      - ${TEST_USER_ADMIN} (ROLE_admin)"
     echo -e "      - ${TEST_USER_CONSULT} (ROLE_consult)"

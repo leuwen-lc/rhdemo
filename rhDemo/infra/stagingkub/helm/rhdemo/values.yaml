@@ -138,7 +138,7 @@ keycloak:
       key: password
 
   # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
-  hostname: keycloak.stagingkub.intra.leuwen-lc.fr
+  hostname: keycloak-stagingkub.intra.leuwen-lc.fr
 
   proxyHeaders: xforwarded
   httpEnabled: true
@@ -263,14 +263,14 @@ ingress:
   className: nginx
 
   hosts:
-    - host: rhdemo.stagingkub.intra.leuwen-lc.fr
+    - host: rhdemo-stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak.stagingkub.intra.leuwen-lc.fr
+    - host: keycloak-stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix

@@ -142,7 +142,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Grafana (Deployment, replicas: 1)                  │  │
 │  │ - Service: grafana:80 (ClusterIP)                  │  │
-│  │ - Ingress: grafana.stagingkub.intra.leuwen-lc.fr (HTTPS)       │  │
+│  │ - Ingress: grafana-stagingkub.intra.leuwen-lc.fr (HTTPS)       │  │
 │  │                                                     │  │
 │  │ DataSources configurées:                           │  │
 │  │ • Loki: http://loki-gateway:80                    │  │
@@ -274,7 +274,7 @@ kubectl describe nodes rhdemo-control-plane | grep -A 5 "Allocated resources"
 
 ```bash
 # Ajouter à /etc/hosts
-echo "127.0.0.1 grafana.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+echo "127.0.0.1 grafana-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ```
 
 ---
@@ -335,7 +335,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 **Durée:** ~5-8 minutes
 
 **Accès après installation:**
-- **Grafana**: https://grafana.stagingkub.intra.leuwen-lc.fr (admin / voir grafana-values.yaml)
+- **Grafana**: https://grafana-stagingkub.intra.leuwen-lc.fr (admin / voir grafana-values.yaml)
 - **Prometheus**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090`
 - **AlertManager**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093`
 
@@ -597,11 +597,11 @@ ingress:
   enabled: true
   ingressClassName: nginx
   hosts:
-    - grafana.stagingkub.intra.leuwen-lc.fr
+    - grafana-stagingkub.intra.leuwen-lc.fr
   tls:
     - secretName: grafana-tls-cert
       hosts:
-        - grafana.stagingkub.intra.leuwen-lc.fr
+        - grafana-stagingkub.intra.leuwen-lc.fr
 
 datasources:
   datasources.yaml:
@@ -625,8 +625,8 @@ datasources:
 
 grafana.ini:
   server:
-    domain: grafana.stagingkub.intra.leuwen-lc.fr
-    root_url: https://grafana.stagingkub.intra.leuwen-lc.fr
+    domain: grafana-stagingkub.intra.leuwen-lc.fr
+    root_url: https://grafana-stagingkub.intra.leuwen-lc.fr
   analytics:
     reporting_enabled: false
     check_for_updates: false
@@ -657,7 +657,7 @@ TMP=$(mktemp -d)
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout $TMP/tls.key \
   -out $TMP/tls.crt \
-  -subj "/CN=grafana.stagingkub.intra.leuwen-lc.fr/O=RHDemo"
+  -subj "/CN=grafana-stagingkub.intra.leuwen-lc.fr/O=RHDemo"
 
 # Créer le secret dans Kubernetes
 kubectl create secret tls grafana-tls-cert \
@@ -797,10 +797,10 @@ kill %1
 
 ```bash
 # Déjà ajouté en prérequis, vérifier
-grep grafana.stagingkub.intra.leuwen-lc.fr /etc/hosts
+grep grafana-stagingkub.intra.leuwen-lc.fr /etc/hosts
 
 # Si absent:
-echo "127.0.0.1 grafana.stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+echo "127.0.0.1 grafana-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ```
 
 ### 5.2 Ajuster la Rétention des Logs
@@ -884,7 +884,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 ### 6.1 Accéder à Grafana
 
-**URL:** https://grafana.stagingkub.intra.leuwen-lc.fr
+**URL:** https://grafana-stagingkub.intra.leuwen-lc.fr
 
 **Credentials:**
 - Username: `admin`
@@ -1639,7 +1639,7 @@ kubectl rollout restart deployment/grafana -n loki-stack
 
 ### 9.5 Ingress Grafana ne Fonctionne Pas
 
-**Symptôme:** `curl https://grafana.stagingkub.intra.leuwen-lc.fr` timeout
+**Symptôme:** `curl https://grafana-stagingkub.intra.leuwen-lc.fr` timeout
 
 **Vérification:**
 
@@ -1914,7 +1914,7 @@ kubectl delete namespace monitoring
 kubectl delete namespace loki-stack
 
 # Retirer du DNS
-sudo sed -i '/grafana.stagingkub.intra.leuwen-lc.fr/d' /etc/hosts
+sudo sed -i '/grafana-stagingkub.intra.leuwen-lc.fr/d' /etc/hosts
 ```
 
 **Désinstallation partielle (garder Loki, supprimer Prometheus):**

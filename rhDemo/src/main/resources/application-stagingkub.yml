@@ -20,7 +20,7 @@ spring:
         provider:
           keycloak:
             # URL publique HTTPS pour le navigateur (redirection login)
-            authorization-uri: https://keycloak.stagingkub.intra.leuwen-lc.fr/realms/RHDemo/protocol/openid-connect/auth
+            authorization-uri: https://keycloak-stagingkub.intra.leuwen-lc.fr/realms/RHDemo/protocol/openid-connect/auth
 
             # URLs internes HTTP pour les appels serveur Spring Boot → Keycloak
             # (échange code→token, récupération JWKS)

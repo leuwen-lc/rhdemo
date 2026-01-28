@@ -21,13 +21,17 @@ public class AccueilController {
     
     @GetMapping("/")
     public String getInfo() {
-	StringBuffer info=new StringBuffer();
+	StringBuffer info = new StringBuffer();
+	info.append("Avec role profil maj ou consult: <br>");
 	info.append("API disponibles sur /api/... <br>");
 	info.append("Front end disponible sur /front <br>");
-	info.append("Documentation Swagger UI sur /api-docs/swagger-ui/index.html (dispo en dev local uniquement)<br>");
-	info.append("Documentation OpenAPI sur /api-docs/docs (dispo en dev local uniquement)<br>");
+
+	info.append("<br>Avec role profil admin: <br>");
 	info.append("Monitoring sur /actuator (dispo en dev local uniquement)<br>");
-	info.append("Info utilisateurs sur /who (dispo en dev local uniquement)<br>");
+	
+	info.append("<br>Documentation Swagger UI sur /api-docs/swagger-ui/index.html (dispo en dev local uniquement)<br>");
+	info.append("Documentation OpenAPI sur /api-docs/docs (dispo en dev local uniquement)<br>");
+	info.append("<br>Info utilisateurs sur /who<br>");
 	info.append("Logout sur /logout");
 	return info.toString();
     }

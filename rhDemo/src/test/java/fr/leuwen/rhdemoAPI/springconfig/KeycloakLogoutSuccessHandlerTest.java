@@ -218,40 +218,22 @@ class KeycloakLogoutSuccessHandlerTest {
             assertThat(result).isEqualTo("http://localhost:9000");
         }
 
-        @Test
-        @DisplayName("doit utiliser les headers X-Forwarded-* quand présents")
-        void shouldUseForwardedHeaders() {
-            when(request.getHeader("X-Forwarded-Proto")).thenReturn("https");
-            when(request.getHeader("X-Forwarded-Host")).thenReturn("rhdemo-stagingkub.intra.leuwen-lc.fr");
-            when(request.getHeader("X-Forwarded-Port")).thenReturn("443");
+        @ParameterizedTest(name = "X-Forwarded: proto={0}, host={1}, port={2} → {3}")
+        @CsvSource({
+            "https, rhdemo-stagingkub.intra.leuwen-lc.fr, 443, https://rhdemo-stagingkub.intra.leuwen-lc.fr",
+            "https, rhdemo.example.com, 8443, https://rhdemo.example.com:8443",
+            "https, rhdemo.example.com, , https://rhdemo.example.com"
+        })
+        @DisplayName("doit construire l'URL correctement avec les headers X-Forwarded-*")
+        void shouldBuildUrlWithForwardedHeaders(String proto, String host, String port, String expectedUrl) {
+            when(request.getHeader("X-Forwarded-Proto")).thenReturn(proto);
+            when(request.getHeader("X-Forwarded-Host")).thenReturn(host);
+            // CsvSource traite les valeurs vides comme null
+            when(request.getHeader("X-Forwarded-Port")).thenReturn(port != null && port.isEmpty() ? null : port);
 
             String result = handler.buildBaseUrl(request);
 
-            assertThat(result).isEqualTo("https://rhdemo-stagingkub.intra.leuwen-lc.fr");
-        }
-
-        @Test
-        @DisplayName("doit inclure le port forwarded non standard")
-        void shouldIncludeForwardedNonStandardPort() {
-            when(request.getHeader("X-Forwarded-Proto")).thenReturn("https");
-            when(request.getHeader("X-Forwarded-Host")).thenReturn("rhdemo.example.com");
-            when(request.getHeader("X-Forwarded-Port")).thenReturn("8443");
-
-            String result = handler.buildBaseUrl(request);
-
-            assertThat(result).isEqualTo("https://rhdemo.example.com:8443");
-        }
-
-        @Test
-        @DisplayName("doit ignorer X-Forwarded-Port si absent")
-        void shouldIgnoreMissingForwardedPort() {
-            when(request.getHeader("X-Forwarded-Proto")).thenReturn("https");
-            when(request.getHeader("X-Forwarded-Host")).thenReturn("rhdemo.example.com");
-            when(request.getHeader("X-Forwarded-Port")).thenReturn(null);
-
-            String result = handler.buildBaseUrl(request);
-
-            assertThat(result).isEqualTo("https://rhdemo.example.com");
+            assertThat(result).isEqualTo(expectedUrl);
         }
     }
 

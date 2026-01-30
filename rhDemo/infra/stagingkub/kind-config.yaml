@@ -1,17 +1,28 @@
 # Configuration KinD pour le cluster rhdemo
 # Permet la persistance des données PostgreSQL via extraMounts
 # Configure l'accès HTTPS au registry Docker local
+# Utilise Cilium 1.18 comme CNI (remplace kindnet)
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 
-# Configuration de containerd pour le registry HTTPS
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-    endpoint = ["https://kind-registry:5000"]
+# ═══════════════════════════════════════════════════════════════
+# Configuration réseau pour Cilium
+# ═══════════════════════════════════════════════════════════════
+networking:
+  # Désactive le CNI par défaut (kindnet) pour utiliser Cilium
+  disableDefaultCNI: true
+  # Désactive kube-proxy pour utiliser Cilium kube-proxy replacement
+  # Offre de meilleures performances et fonctionnalités (eBPF-based)
+  kubeProxyMode: none
+
+# Configuration du registry HTTPS :
+# - Le script init-stagingkub.sh configure containerd via hosts.toml
+# - Une ConfigMap local-registry-hosting est créée dans kube-public (KEP-1755)
 
 nodes:
 - role: control-plane
+  # Liste des images disponibles : https://github.com/kubernetes-sigs/kind/releases
+  image: kindest/node:v1.35.0
   extraMounts:
   # Montage pour persistance PostgreSQL rhdemo
   - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo
@@ -29,3 +40,26 @@ nodes:
   - containerPort: 443
     hostPort: 443
     protocol: TCP
+
+# ═══════════════════════════════════════════════════════════════
+# Notes d'installation Cilium 1.18 (via Helm)
+# ═══════════════════════════════════════════════════════════════
+# Le script init-stagingkub.sh installe automatiquement Cilium via Helm.
+#
+# Prérequis système (limites inotify) :
+#   sudo sysctl -w fs.inotify.max_user_watches=524288
+#   sudo sysctl -w fs.inotify.max_user_instances=512
+#
+# Installation manuelle (si nécessaire) :
+#   helm repo add cilium https://helm.cilium.io/
+#   helm install cilium cilium/cilium --version 1.18.6 \
+#     --namespace kube-system \
+#     --set kubeProxyReplacement=true \
+#     --set k8sServiceHost=rhdemo-control-plane \
+#     --set k8sServicePort=6443 \
+#     --set hubble.enabled=false \
+#     --set ipam.mode=kubernetes
+#
+# Vérification :
+#   kubectl get pods -n kube-system -l k8s-app=cilium
+# ═══════════════════════════════════════════════════════════════

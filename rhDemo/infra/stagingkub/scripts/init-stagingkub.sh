@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Ingress: Nginx Ingress Controller${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -38,6 +39,45 @@ if ! command -v helm &> /dev/null; then
     echo -e "${RED}❌ Helm n'est pas installé. Veuillez installer Helm d'abord.${NC}"
     exit 1
 fi
+
+# ═══════════════════════════════════════════════════════════════
+# Prérequis système pour Cilium
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Vérification des prérequis système pour Cilium...${NC}"
+
+# Vérifier les limites inotify (évite "too many open files" avec Cilium)
+INOTIFY_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo "0")
+INOTIFY_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo "0")
+INOTIFY_OK=true
+
+if [ "$INOTIFY_WATCHES" -lt 524288 ]; then
+    echo -e "${RED}❌ fs.inotify.max_user_watches insuffisant : ${INOTIFY_WATCHES} (minimum: 524288)${NC}"
+    INOTIFY_OK=false
+fi
+
+if [ "$INOTIFY_INSTANCES" -lt 512 ]; then
+    echo -e "${RED}❌ fs.inotify.max_user_instances insuffisant : ${INOTIFY_INSTANCES} (minimum: 512)${NC}"
+    INOTIFY_OK=false
+fi
+
+if [ "$INOTIFY_OK" = false ]; then
+    echo ""
+    echo -e "${YELLOW}Cilium nécessite des limites inotify plus élevées.${NC}"
+    echo -e "${YELLOW}Exécutez les commandes suivantes puis relancez ce script :${NC}"
+    echo ""
+    echo -e "${BLUE}  # Correction temporaire (jusqu'au prochain reboot)${NC}"
+    echo "  sudo sysctl -w fs.inotify.max_user_watches=524288"
+    echo "  sudo sysctl -w fs.inotify.max_user_instances=512"
+    echo ""
+    echo -e "${BLUE}  # Ou correction permanente${NC}"
+    echo "  echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.d/99-cilium.conf"
+    echo "  echo 'fs.inotify.max_user_instances=512' | sudo tee -a /etc/sysctl.d/99-cilium.conf"
+    echo "  sudo sysctl --system"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Limites inotify OK (watches=${INOTIFY_WATCHES}, instances=${INOTIFY_INSTANCES})${NC}"
 
 # ═══════════════════════════════════════════════════════════════
 # Configuration du registry Docker local
@@ -131,7 +171,57 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     docker network connect kind ${REGISTRY_NAME} --alias kind-registry
     echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
 
+    # ═══════════════════════════════════════════════════════════════
+    # Installation de Cilium 1.18 (CNI) via Helm
+    # ═══════════════════════════════════════════════════════════════
+    # IMPORTANT: Cilium doit être installé AVANT d'attendre que le nœud soit prêt
+    # car sans CNI, le nœud reste en état NotReady
+    echo -e "${YELLOW}▶ Installation de Cilium 1.18 (CNI) via Helm...${NC}"
+
+    # Ajouter le repo Helm Cilium si nécessaire
+    if ! helm repo list | grep -q "^cilium"; then
+        echo -e "${YELLOW}  - Ajout du repo Helm Cilium...${NC}"
+        helm repo add cilium https://helm.cilium.io/
+    fi
+    helm repo update cilium > /dev/null
+
+    # Récupérer l'API server endpoint du cluster KinD
+    CILIUM_K8S_API_SERVER="rhdemo-control-plane"
+    CILIUM_K8S_API_PORT="6443"
+
+    # Installer Cilium via Helm
+    # kubeProxyReplacement=true car kube-proxy est désactivé (kubeProxyMode: none)
+    echo -e "${YELLOW}  - Installation de Cilium 1.18.6 dans le cluster...${NC}"
+    helm install cilium cilium/cilium --version 1.18.6 \
+        --namespace kube-system \
+        --set kubeProxyReplacement=true \
+        --set k8sServiceHost=${CILIUM_K8S_API_SERVER} \
+        --set k8sServicePort=${CILIUM_K8S_API_PORT} \
+        --set hubble.enabled=false \
+        --set ipam.mode=kubernetes
+
+    # Attendre que les pods Cilium soient créés
+    echo -e "${YELLOW}  - Attente de la création des pods Cilium...${NC}"
+    for i in {1..60}; do
+        if kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | grep -q .; then
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo ""
+
+    # Attendre que Cilium soit prêt
+    echo -e "${YELLOW}  - Attente que Cilium soit opérationnel (jusqu'à 5 minutes)...${NC}"
+    kubectl wait --namespace kube-system \
+        --for=condition=ready pod \
+        --selector=k8s-app=cilium \
+        --timeout=300s
+
+    echo -e "${GREEN}✅ Cilium 1.18.6 installé et opérationnel${NC}"
+
     CLUSTER_CREATED=true
+    CILIUM_INSTALLED=true
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
@@ -148,13 +238,27 @@ else
         echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
 
+    # Vérifier que Cilium est installé
+    echo -e "${YELLOW}▶ Vérification de Cilium...${NC}"
+    if kubectl get daemonset -n kube-system cilium &> /dev/null; then
+        echo -e "${GREEN}✅ Cilium déjà installé${NC}"
+        CILIUM_INSTALLED=false
+    else
+        echo -e "${YELLOW}⚠️  Cilium n'est pas installé dans le cluster existant${NC}"
+        echo -e "${YELLOW}   Le cluster a peut-être été créé avec l'ancienne configuration (kindnet)${NC}"
+        echo -e "${YELLOW}   Pour migrer vers Cilium, supprimez et recréez le cluster :${NC}"
+        echo -e "${YELLOW}   kind delete cluster --name rhdemo${NC}"
+        echo -e "${YELLOW}   ./init-stagingkub.sh${NC}"
+        CILIUM_INSTALLED=false
+    fi
+
     CLUSTER_CREATED=false
 fi
 
 # ═══════════════════════════════════════════════════════════════
 # Configuration HTTPS du registry dans le nœud KinD
 # ═══════════════════════════════════════════════════════════════
-echo -e "${YELLOW}▶ Configuration du certificat HTTPS dans le nœud KinD...${NC}"
+echo -e "${YELLOW}▶ Configuration du registry HTTPS dans le nœud KinD...${NC}"
 
 # Copier le certificat CA dans le nœud KinD
 docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
@@ -162,15 +266,22 @@ docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates
 # Mettre à jour les CA du nœud
 docker exec rhdemo-control-plane update-ca-certificates > /dev/null 2>&1
 
-# Vérifier si containerd utilise encore HTTP
-if docker exec rhdemo-control-plane grep -q "http://kind-registry:5000" /etc/containerd/config.toml 2>/dev/null; then
-    echo -e "${YELLOW}  - Mise à jour de containerd pour HTTPS...${NC}"
-    docker exec rhdemo-control-plane sed -i 's|http://kind-registry:5000|https://kind-registry:5000|g' /etc/containerd/config.toml
-    docker exec rhdemo-control-plane systemctl restart containerd
-    echo -e "${GREEN}✅ Containerd configuré pour HTTPS${NC}"
-else
-    echo -e "${GREEN}✅ Containerd déjà configuré pour HTTPS${NC}"
-fi
+# Configurer containerd pour utiliser le registry HTTPS
+# On crée un fichier de configuration hosts.toml pour le registry
+echo -e "${YELLOW}  - Configuration de containerd pour le registry...${NC}"
+
+# Créer le répertoire de configuration pour le registry
+docker exec rhdemo-control-plane mkdir -p /etc/containerd/certs.d/localhost:5000
+
+# Créer le fichier hosts.toml pour configurer le registry avec HTTPS
+docker exec rhdemo-control-plane bash -c 'cat > /etc/containerd/certs.d/localhost:5000/hosts.toml << EOF
+server = "https://kind-registry:5000"
+
+[host."https://kind-registry:5000"]
+  ca = "/usr/local/share/ca-certificates/kind-registry.crt"
+EOF'
+
+echo -e "${GREEN}✅ Containerd configuré pour le registry HTTPS${NC}"
 
 # Définir le contexte kubectl
 kubectl config use-context kind-rhdemo
@@ -179,6 +290,25 @@ kubectl config use-context kind-rhdemo
 echo -e "${YELLOW}▶ Attente que le nœud KinD soit prêt...${NC}"
 kubectl wait --for=condition=ready node --all --timeout=120s
 echo -e "${GREEN}✅ Nœud KinD prêt${NC}"
+
+# ═══════════════════════════════════════════════════════════════
+# ConfigMap pour la découverte du registry local (KEP-1755)
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration de la ConfigMap local-registry-hosting...${NC}"
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-registry-hosting
+  namespace: kube-public
+data:
+  localRegistryHosting.v1: |
+    host: "localhost:${REGISTRY_PORT}"
+    hostFromContainerRuntime: "kind-registry:${REGISTRY_PORT}"
+    hostFromClusterNetwork: "kind-registry:${REGISTRY_PORT}"
+    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+EOF
+echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 # Installer Nginx Ingress Controller si nécessaire
 echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller...${NC}"

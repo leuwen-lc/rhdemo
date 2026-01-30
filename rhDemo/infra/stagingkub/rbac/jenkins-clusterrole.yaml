@@ -25,10 +25,11 @@ rules:
     resources: ["storageclasses"]
     verbs: ["get", "list", "watch"]
 
-  # Namespaces : Helm a besoin de créer le namespace si --create-namespace
+  # Namespaces : Helm a besoin de créer/mettre à jour le namespace
+  # Le verbe 'patch' est nécessaire car Helm met à jour les labels/annotations
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "list", "watch", "create"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
 
   # Nodes : lecture seule pour kubectl cluster-info et debug
   - apiGroups: [""]

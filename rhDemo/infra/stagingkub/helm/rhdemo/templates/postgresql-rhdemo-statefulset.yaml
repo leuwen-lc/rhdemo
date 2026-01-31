@@ -39,6 +39,17 @@ spec:
               key: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.key }}
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
+        {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+        # Arguments PostgreSQL pour activer pg_stat_statements (métriques requêtes)
+        args:
+        - postgres
+        - -c
+        - shared_preload_libraries=pg_stat_statements
+        - -c
+        - pg_stat_statements.track=all
+        - -c
+        - pg_stat_statements.max=10000
+        {{- end }}
         volumeMounts:
         - name: postgresql-data
           mountPath: /var/lib/postgresql/data
@@ -66,6 +77,51 @@ spec:
           failureThreshold: 5
         resources:
           {{- toYaml (index .Values "postgresql-rhdemo").resources | nindent 10 }}
+      {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
+      # Sidecar postgres_exporter pour métriques Prometheus
+      # Utilise uniquement les collecteurs intégrés (pas de extend-query-path déprécié)
+      - name: postgres-exporter
+        image: "{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.repository }}:{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.tag }}"
+        imagePullPolicy: {{ (index .Values "postgresql-rhdemo").metrics.exporter.image.pullPolicy | default "IfNotPresent" }}
+        args:
+        # Activer les collecteurs désactivés par défaut mais utiles pour notre monitoring
+        - "--collector.stat_statements"
+        - "--collector.long_running_transactions"
+        - "--collector.process_idle"
+        ports:
+        - name: metrics
+          containerPort: 9187
+          protocol: TCP
+        env:
+        - name: DATA_SOURCE_USER
+          value: {{ (index .Values "postgresql-rhdemo").database.user }}
+        - name: DATA_SOURCE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.name }}
+              key: {{ (index .Values "postgresql-rhdemo").database.passwordSecret.key }}
+        - name: DATA_SOURCE_URI
+          value: "localhost:{{ (index .Values "postgresql-rhdemo").service.port }}/{{ (index .Values "postgresql-rhdemo").database.name }}?sslmode=disable"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: metrics
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      {{- end }}
       volumes:
       - name: init-scripts
         configMap:

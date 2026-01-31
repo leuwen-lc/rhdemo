@@ -105,11 +105,13 @@ tool:
 #    - Secret: ${NVD_API_KEY}
 #    - Description: NVD API Key for OWASP Dependency-Check
 #    - Obtenir une clé sur: https://nvd.nist.gov/developers/request-an-api-key
-# ═══════════════════════════════════════════════════════════════════
-# credentials:
-#   system:
-#     domainCredentials:
-#       - credentials: []
+#  
+# 4. kubeconfig-stagingkub
+#    - Type: Secret file
+#    - ID: kubeconfig-stagingkub
+#    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
+#    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
+
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION GLOBALE

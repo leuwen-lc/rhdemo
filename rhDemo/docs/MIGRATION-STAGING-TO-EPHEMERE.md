@@ -208,7 +208,7 @@ Dans Jenkins, sélectionner :
 ### 1. Environnement stagingkub PRÉSERVÉ
 
 L'environnement Kubernetes `stagingkub` reste **TOTALEMENT INCHANGÉ** :
-- Domaines : `*.stagingkub.local`
+- Domaines : `*.stagingkub.intra.leuwen-lc.fr`
 - Port : `443` (via NodePort 30443)
 - Namespace : `rhdemo-staging`
 - Tous les fichiers dans `rhDemo/infra/stagingkub/` intacts

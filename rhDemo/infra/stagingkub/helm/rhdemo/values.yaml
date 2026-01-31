@@ -4,7 +4,7 @@
 global:
   namespace: rhdemo-stagingkub
   environment: stagingkub
-  domain: stagingkub.local
+  domain: stagingkub.intra.leuwen-lc.fr
 
 # ═══════════════════════════════════════════════════════════════
 # Backups PostgreSQL (CronJobs)
@@ -56,6 +56,21 @@ postgresql-rhdemo:
     name: postgresql-rhdemo
     type: ClusterIP
     port: 5432
+
+  # Configuration des métriques PostgreSQL via postgres_exporter
+  # Expose les métriques pg_stat_statements pour identifier les requêtes lentes
+  metrics:
+    enabled: true
+    exporter:
+      image:
+        repository: quay.io/prometheuscommunity/postgres-exporter
+        tag: "v0.15.0"
+        pullPolicy: IfNotPresent
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
 
 # ═══════════════════════════════════════════════════════════════
 # PostgreSQL pour Keycloak
@@ -123,7 +138,7 @@ keycloak:
       key: password
 
   # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
-  hostname: keycloak.stagingkub.local
+  hostname: keycloak-stagingkub.intra.leuwen-lc.fr
 
   proxyHeaders: xforwarded
   httpEnabled: true
@@ -194,6 +209,14 @@ rhdemo:
     health:
       showDetails: when_authorized
 
+  # Configuration des métriques Prometheus
+  metrics:
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring  # Namespace où Prometheus Operator est installé
+      interval: 30s
+      scrapeTimeout: 10s
+
   # Configuration des niveaux de logs
   logging:
     level:
@@ -240,14 +263,14 @@ ingress:
   className: nginx
 
   hosts:
-    - host: rhdemo.stagingkub.local
+    - host: rhdemo-stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak.stagingkub.local
+    - host: keycloak-stagingkub.intra.leuwen-lc.fr
       paths:
         - path: /
           pathType: Prefix
@@ -256,8 +279,10 @@ ingress:
 
   tls:
     enabled: true
-    # Les certificats seront créés via cert-manager ou manuellement
-    secretName: rhdemo-tls-cert
+    # Secret contenant le certificat TLS :
+    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
+    # - Auto-signé : rhdemo-tls-cert (généré par init-stagingkub.sh)
+    secretName: intra-wildcard-tls
 
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -295,3 +320,33 @@ nginx-ingress:
       limits:
         memory: "256Mi"
         cpu: "200m"
+
+# ═══════════════════════════════════════════════════════════════
+# Network Policies - Sécurité réseau
+# ═══════════════════════════════════════════════════════════════
+# Active les NetworkPolicies pour isoler les pods et contrôler
+# les flux réseau selon le principe du moindre privilège.
+#
+# Stratégie: Zero Trust / Default Deny
+#   1. Tout trafic est bloqué par défaut (ingress + egress)
+#   2. Chaque flux légitime est explicitement autorisé
+#   3. L'accès Internet est bloqué (sauf DNS)
+#
+# Voir: docs/NETWORK_SECURITY_POLICY.md pour les détails des flux
+# ═══════════════════════════════════════════════════════════════
+networkPolicies:
+  # Activer/désactiver toutes les NetworkPolicies
+  # ATTENTION: Désactiver = pas d'isolation réseau
+  enabled: true
+
+  # Configuration spécifique Keycloak (accès externes optionnels)
+  keycloak:
+    # Autoriser l'envoi d'emails via SMTP
+    # Nécessite de spécifier le CIDR du serveur SMTP
+    allowSmtp: false
+    smtpCidr: "0.0.0.0/32"  # À remplacer par l'IP du serveur SMTP
+
+    # Autoriser la connexion LDAP/Active Directory
+    # Nécessite de spécifier le CIDR du serveur LDAP
+    allowLdap: false
+    ldapCidr: "0.0.0.0/32"  # À remplacer par l'IP du serveur LDAP

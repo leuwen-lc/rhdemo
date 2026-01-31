@@ -1,0 +1,53 @@
+{{- if and .Values.rhdemo.enabled .Values.rhdemo.metrics.serviceMonitor.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# ServiceMonitor pour rhdemo-app
+# ═══════════════════════════════════════════════════════════════
+# Ce ServiceMonitor permet à Prometheus Operator de découvrir
+# automatiquement les métriques Spring Boot Actuator exposées
+# sur /actuator/prometheus
+#
+# Prérequis:
+#   - Prometheus Operator installé (namespace: monitoring)
+#   - Endpoint /actuator/prometheus accessible sans auth
+#   - NetworkPolicy autorisant le scraping depuis monitoring
+# ═══════════════════════════════════════════════════════════════
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rhdemo-app
+  namespace: {{ .Values.rhdemo.metrics.serviceMonitor.namespace | default "monitoring" }}
+  labels:
+    {{- include "rhdemo-app.labels" . | nindent 4 }}
+    app: rhdemo-app
+    release: prometheus  # Label requis pour que Prometheus Operator détecte ce ServiceMonitor
+spec:
+  # Sélection du namespace où se trouve le Service
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.global.namespace }}
+  # Sélection du Service à scraper
+  selector:
+    matchLabels:
+      app: rhdemo-app
+  # Configuration des endpoints à scraper
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: {{ .Values.rhdemo.metrics.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.rhdemo.metrics.serviceMonitor.scrapeTimeout | default "10s" }}
+      # Schéma HTTP (l'app n'a pas de TLS interne, le TLS est terminé par nginx-ingress)
+      scheme: http
+      # Honoraires labels pour éviter les conflits avec les labels Prometheus par défaut
+      honorLabels: true
+      # Ajouter des labels personnalisés aux métriques
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        # Label environnement pour distinguer stagingkub d'autres environnements
+        - targetLabel: environment
+          replacement: {{ .Values.global.environment }}
+{{- end }}

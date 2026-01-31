@@ -107,6 +107,32 @@ Le dépôt contient **3 projets distincts** :
 - **Certificats auto-signés** : Activés sur ephemere (port 58443) et stagingkub (port 443)
 - **Nginx reverse proxy** : Terminaison TLS
 
+### RBAC Kubernetes (Jenkins)
+
+- **ServiceAccount dédié** : `jenkins-deployer` avec permissions limitées
+- **Principe du moindre privilège** : Accès uniquement au namespace `rhdemo-stagingkub`
+- **Pas d'accès admin** : `kind` CLI supprimé de l'image Jenkins
+- **Kubeconfig RBAC** : Généré automatiquement par `init-stagingkub.sh`
+- **Credential Jenkins** : `kubeconfig-stagingkub` (Secret file)
+- **Permissions accordées** :
+  - Namespace `rhdemo-stagingkub` : pods, deployments, services, secrets, configmaps, ingresses, etc.
+  - Namespace `monitoring` : servicemonitors (Prometheus)
+  - Cluster-wide : persistentvolumes, namespaces (création)
+- **Documentation** : [rbac/README.md](rhDemo/infra/stagingkub/rbac/README.md)
+
+### Network Policies (Zero Trust)
+
+- **Stratégie** : Default Deny + Whitelist explicite
+- **Isolation complète** : Chaque pod n'accepte que les flux légitimes
+- **Egress bloqué** : Pas d'accès Internet (sauf DNS interne)
+- **Flux autorisés** :
+  - Ingress → rhdemo-app, keycloak (trafic utilisateur)
+  - rhdemo-app → keycloak (OAuth2), postgresql-rhdemo
+  - keycloak → postgresql-keycloak
+  - Prometheus → rhdemo-app, postgresql (scraping métriques)
+- **Options configurables** : SMTP et LDAP pour Keycloak (désactivés par défaut)
+- **Documentation** : [NETWORK_SECURITY_POLICY.md](rhDemo/docs/NETWORK_SECURITY_POLICY.md)
+
 ---
 
 ## 🚀 Environnements de déploiement
@@ -141,8 +167,8 @@ Le dépôt contient **3 projets distincts** :
   - 5 Services, 4 Secrets, 2 PVC
 - **Port HTTPS** : 443 (NodePort 30443)
 - **URLs** :
-  - App : https://rhdemo.stagingkub.local
-  - Keycloak : https://keycloak.stagingkub.local
+  - App : https://rhdemo-stagingkub.intra.leuwen-lc.fr
+  - Keycloak : https://keycloak-stagingkub.intra.leuwen-lc.fr
 - **Observabilité** : Promtail → Loki → Grafana (logs centralisés)
 - **Persistance des données** :
   - extraMounts KinD : `/home/leno-vo/kind-data/rhdemo-stagingkub`
@@ -344,13 +370,17 @@ Le dépôt contient **3 projets distincts** :
 - [PIPELINES_CI_CD.md](rhDemo/docs/PIPELINES_CI_CD.md) - Détail pipelines
 
 ### Sécurité
+
 - [SECURITE_WEB_CSP.md](rhDemo/docs/SECURITE_WEB_CSP.md) - Content Security Policy
+- [CERTIFICATS-WEB.md](rhDemo/docs/CERTIFICATS-WEB.md) - Certificats TLS (auto-signés vs Let's Encrypt)
 - [CSRF_GUIDE.md](rhDemo/docs/CSRF_GUIDE.md) - Protection CSRF
 - [SOPS_SETUP.md](rhDemo/docs/SOPS_SETUP.md) - Gestion secrets
 - [OWASP_DEPENDENCY_CHECK.md](rhDemo/docs/OWASP_DEPENDENCY_CHECK.md) - Scan dépendances
 - [TRIVY_SECURITY_SCAN.md](rhDemo/docs/TRIVY_SECURITY_SCAN.md) - Scan images Docker
 - [TESTS_SECURITY_COVERAGE.md](rhDemo/docs/TESTS_SECURITY_COVERAGE.md) - Couverture tests sécu
 - [SECURITY_ADVISORIES.md](rhDemo/docs/SECURITY_ADVISORIES.md) - Advisories de sécurité
+- [**NETWORK_SECURITY_POLICY.md**](rhDemo/docs/NETWORK_SECURITY_POLICY.md) - 🆕 Network Policies et flux réseau
+- [**infra/stagingkub/rbac/README.md**](rhDemo/infra/stagingkub/rbac/README.md) - 🆕 RBAC Jenkins (moindre privilège)
 
 ### Infrastructure & Déploiement
 - [infra/dev/README.md](rhDemo/infra/dev/README.md) - Setup dev local
@@ -378,16 +408,18 @@ Le dépôt contient **3 projets distincts** :
 
 ### Production readiness
 Le projet **n'est PAS prêt pour la production**. Points critiques :
+
 - Modules périphériques exposés (OpenAPI/Swagger sur `:9000`)
 - Keycloak en mode dev (pas de vérification email, MFA, politique mdp stricte)
 - Verbosité logs excessive (niveau INFO)
 - Pas de collecte métriques/logs complète avec alertes
 - Pas de mécanisme de scalabilité (Redis pour sessions partagées)
 - Configuration Jenkins simplifiée (tout sur master node)
-- Network Policy Kubernetes basique
 
 ### Fonctionnalités métier
+
 Application volontairement simpliste :
+
 - Informations employés minimalistes
 - Adresse dans un seul champ (devrait être table séparée, norme internationale)
 - Pas de gestion hiérarchique, départements, contrats, etc.
@@ -397,12 +429,27 @@ Application volontairement simpliste :
 ## 🗓️ Changelog
 
 ### Version 1.1.3 (En cours)
+
 - **Persistance des données KinD** : Configuration extraMounts pour survivre aux redémarrages machine
 - Création fichier `kind-config.yaml` persistant avec montage `/home/leno-vo/kind-data/rhdemo-stagingkub`
 - Modification `init-stagingkub.sh` pour utiliser la configuration persistante
 - **Suppression complète de CloudNativePG** : Retour aux StatefulSets PostgreSQL classiques avec CronJobs de backup
 - Amélioration rapports ZAP : Suppression versions NGINX, élimination doublons HSTS, durcissement CSP
 - Suppression warnings Keycloak et Spring Boot
+- **RBAC Jenkins (moindre privilège)** :
+  - ServiceAccount `jenkins-deployer` avec permissions limitées au namespace `rhdemo-stagingkub`
+  - Suppression de `kind` CLI de l'image Jenkins (empêche génération kubeconfig admin)
+  - Kubeconfig RBAC généré automatiquement par `init-stagingkub.sh`
+  - Credential Jenkins `kubeconfig-stagingkub` requis pour le pipeline CD
+  - Documentation : [rbac/README.md](rhDemo/infra/stagingkub/rbac/README.md)
+- **Network Policies (Zero Trust)** :
+  - Politique Default Deny : tout trafic bloqué par défaut
+  - Whitelist explicite pour chaque flux légitime (ingress + egress)
+  - Isolation des bases PostgreSQL (pas de communication inter-DB)
+  - Blocage de l'accès Internet (egress) sauf DNS interne
+  - Options SMTP/LDAP pour Keycloak (désactivées par défaut)
+  - Configuration via `values.yaml` : `networkPolicies.enabled`
+  - Documentation : [NETWORK_SECURITY_POLICY.md](rhDemo/docs/NETWORK_SECURITY_POLICY.md)
 
 ### Version 1.1.2-RELEASE
 - Configuration caches Loki (réduction mémoire de 11Go → acceptable)
@@ -433,10 +480,12 @@ Application volontairement simpliste :
 - [x] **Backups PostgreSQL automatisés** : CronJobs quotidiens avec rétention 7 jours
 
 ### Sécurité & Qualité
+
 - [ ] Génération SBOM (Syft, CycloneDX, OWASP Dependency Track)
 - [ ] Snyk pour dépendances frontend
 - [ ] Revue pipelines selon OWASP Top 10 CI/CD Security Risks
-- [ ] Network Policy production-ready
+- [x] **Network Policies Zero Trust** : Default Deny + whitelist explicite pour tous les flux
+- [x] **RBAC Jenkins** : ServiceAccount limité, suppression accès admin cluster
 
 ### Observabilité
 - [ ] Collecte métriques Prometheus + Grafana
@@ -482,12 +531,29 @@ Application volontairement simpliste :
 - **extraMounts** pour persistance des données hors du conteneur
 
 ### Pourquoi StatefulSets + CronJobs pour PostgreSQL ?
+
 - **Simplicité** : Pas de dépendance à un opérateur externe
 - **Ressources limitées** : Adapté à un environnement PC (16Go RAM)
 - **Backups automatiques** : CronJobs quotidiens avec rétention configurable (7 jours)
 - **Persistance garantie** : extraMounts KinD assurent la survie aux redémarrages
 - **Contrôle total** : Configuration PostgreSQL directe sans abstraction
 - **Débogage facile** : kubectl logs/exec standards, pas de CRDs complexes
+
+### Pourquoi RBAC pour Jenkins ?
+
+- **Moindre privilège** : Jenkins ne peut agir que sur le namespace de déploiement
+- **Pas d'accès admin** : Impossible de générer un kubeconfig admin (kind CLI retiré)
+- **Isolation** : Pas d'accès à kube-system ou autres namespaces sensibles
+- **Audit** : Les actions Jenkins sont traçables via l'API audit Kubernetes
+- **Credential sécurisé** : Le kubeconfig RBAC est stocké comme credential Jenkins chiffré
+
+### Pourquoi Network Policies Zero Trust ?
+
+- **Default Deny** : Tout trafic est bloqué par défaut, seuls les flux explicites sont autorisés
+- **Isolation des données** : Les deux PostgreSQL ne peuvent pas communiquer entre eux
+- **Pas d'exfiltration** : Egress vers Internet bloqué (sauf DNS interne)
+- **Défense en profondeur** : Même si une application est compromise, la propagation est limitée
+- **Conformité** : Prépare le terrain pour des audits de sécurité (PCI-DSS, SOC2)
 
 ---
 
@@ -524,10 +590,11 @@ docker-compose down
 ```
 
 ### Kubernetes (stagingkub)
+
 ```bash
 cd rhDemo/infra/stagingkub
 
-# Initialisation cluster (une seule fois)
+# Initialisation cluster (une seule fois, installe aussi RBAC)
 ./scripts/init-stagingkub.sh
 
 # Déploiement
@@ -539,6 +606,31 @@ kubectl logs -n rhdemo-stagingkub deployment/rhdemo-app -f
 
 # Accès base de données
 kubectl port-forward -n rhdemo-stagingkub statefulset/postgresql-rhdemo 5432:5432
+```
+
+### RBAC & Network Policies
+
+```bash
+# Vérifier les permissions du ServiceAccount Jenkins
+kubectl auth can-i list pods -n rhdemo-stagingkub \
+    --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer
+
+# Vérifier le NON-accès à kube-system (doit retourner "no")
+kubectl auth can-i get pods -n kube-system \
+    --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer
+
+# Lister les NetworkPolicies actives
+kubectl get networkpolicies -n rhdemo-stagingkub
+
+# Tester la connectivité (depuis un pod)
+kubectl exec -n rhdemo-stagingkub deploy/rhdemo-app -- nc -zv postgresql-rhdemo 5432
+
+# Tester le blocage egress Internet (doit échouer)
+kubectl exec -n rhdemo-stagingkub deploy/rhdemo-app -- wget -qO- --timeout=5 http://example.com || echo "BLOQUÉ (OK)"
+
+# Régénérer le kubeconfig RBAC Jenkins
+cd rhDemo/infra/stagingkub/rbac
+./setup-jenkins-rbac.sh --generate-kubeconfig
 ```
 
 ### Jenkins

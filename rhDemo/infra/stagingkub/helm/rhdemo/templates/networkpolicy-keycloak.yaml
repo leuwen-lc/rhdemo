@@ -1,0 +1,111 @@
+{{- if and .Values.keycloak.enabled .Values.networkPolicies.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# NetworkPolicy: keycloak
+# ═══════════════════════════════════════════════════════════════
+# Règles réseau pour le serveur d'authentification Keycloak
+#
+# INGRESS autorisé depuis:
+#   - ingress-nginx (interface admin)
+#   - rhdemo-app (OAuth2/OIDC)
+#   - kubelet (health checks)
+#
+# EGRESS autorisé vers:
+#   - postgresql-keycloak:5432 (base de données)
+#   - kube-dns:53 (résolution DNS)
+#
+# NOTE: L'accès SMTP/LDAP externe est désactivé par défaut.
+# Voir NETWORK_SECURITY_POLICY.md pour activer si nécessaire.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: keycloak-netpol
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Règle 1: Trafic utilisateur/admin via nginx-ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: {{ .Values.keycloak.service.port }}
+
+    # Règle 2: Requêtes OAuth2 depuis rhdemo-app
+    - from:
+        - podSelector:
+            matchLabels:
+              app: rhdemo-app
+      ports:
+        - protocol: TCP
+          port: {{ .Values.keycloak.service.port }}
+
+    # Règle 3: Health checks kubelet
+    # Port 9000 pour les endpoints /health/live et /health/ready
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.keycloak.service.port }}
+        - protocol: TCP
+          port: 9000
+
+  egress:
+    # Règle 1: Accès à PostgreSQL keycloak
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgresql-keycloak
+      ports:
+        - protocol: TCP
+          port: {{ (index .Values "postgresql-keycloak").service.port }}
+
+    # Règle 2: DNS (kube-dns)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    {{- if .Values.networkPolicies.keycloak.allowSmtp }}
+    # Règle 3 (optionnelle): Accès SMTP pour envoi d'emails
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.keycloak.smtpCidr }}
+      ports:
+        - protocol: TCP
+          port: 587
+        - protocol: TCP
+          port: 465
+        - protocol: TCP
+          port: 25
+    {{- end }}
+
+    {{- if .Values.networkPolicies.keycloak.allowLdap }}
+    # Règle 4 (optionnelle): Accès LDAP/AD pour fédération
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.keycloak.ldapCidr }}
+      ports:
+        - protocol: TCP
+          port: 636
+        - protocol: TCP
+          port: 389
+    {{- end }}
+{{- end }}

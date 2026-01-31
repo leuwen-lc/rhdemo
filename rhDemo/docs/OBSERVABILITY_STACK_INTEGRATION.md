@@ -1,7 +1,7 @@
 # INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 10 janvier 2026
-**Version:** 3.0 (Stack Complète: Prometheus + Loki)
+**Date:** 22 janvier 2026
+**Version:** 3.1 (Stack Complète: Prometheus + Loki + Métriques Spring Boot Actuator)
 **Environnement:** stagingkub (Kubernetes KinD)
 
 **⚠️ Sécurité:** Consultez [/infra/stagingkub/SECURITY.md](../infra/stagingkub/SECURITY.md) pour les bonnes pratiques de configuration sécurisée.
@@ -142,7 +142,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ Grafana (Deployment, replicas: 1)                  │  │
 │  │ - Service: grafana:80 (ClusterIP)                  │  │
-│  │ - Ingress: grafana.stagingkub.local (HTTPS)       │  │
+│  │ - Ingress: grafana-stagingkub.intra.leuwen-lc.fr (HTTPS)       │  │
 │  │                                                     │  │
 │  │ DataSources configurées:                           │  │
 │  │ • Loki: http://loki-gateway:80                    │  │
@@ -179,8 +179,8 @@ Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
 |--------|---------------------|---------------|
 | **Node Exporter** | Métriques nodes (CPU, RAM, disque, réseau) | DaemonSet automatique |
 | **Kube State Metrics** | État ressources K8s (pods, deployments, etc.) | Deployment automatique |
-| **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes) | StatefulSet avec postgres_exporter (optionnel) |
-| **Application rhDemo** | Métriques Spring Boot Actuator | ServiceMonitor à créer (optionnel) |
+| **PostgreSQL** | Métriques PostgreSQL (connexions, requêtes, tables, cache) | Sidecar postgres_exporter avec collecteurs intégrés (`stat_statements`, `long_running_transactions`, `process_idle`) |
+| **Application rhDemo** | Métriques Spring Boot Actuator (JVM, HTTP, HikariCP) | ServiceMonitor configuré automatiquement |
 
 ### 2.3 Flux de Données
 
@@ -274,7 +274,7 @@ kubectl describe nodes rhdemo-control-plane | grep -A 5 "Allocated resources"
 
 ```bash
 # Ajouter à /etc/hosts
-echo "127.0.0.1 grafana.stagingkub.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 grafana-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ```
 
 ---
@@ -335,7 +335,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 **Durée:** ~5-8 minutes
 
 **Accès après installation:**
-- **Grafana**: https://grafana.stagingkub.local (admin / voir grafana-values.yaml)
+- **Grafana**: https://grafana-stagingkub.intra.leuwen-lc.fr (admin / voir grafana-values.yaml)
 - **Prometheus**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090`
 - **AlertManager**: `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093`
 
@@ -515,11 +515,16 @@ backend:
 # Configuration Promtail
 # Chart: grafana/promtail v6.x
 config:
+  # URL de Loki (FQDN pour résolution DNS cross-namespace)
   clients:
-    - url: http://loki-gateway/loki/api/v1/push
+    - url: http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push
       tenant_id: ""
+
+  # Position des logs - utiliser le volume monté en écriture
   positions:
-    filename: /tmp/positions.yaml
+    filename: /run/promtail/positions.yaml
+
+  # Scrape configs
   snippets:
     scrapeConfigs: |
       - job_name: kubernetes-pods
@@ -531,17 +536,35 @@ config:
         pipeline_stages:
           - cri: {}
         relabel_configs:
+          # Garder seulement les pods avec label app
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: keep
             regex: .+
+          # Namespace
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
+          # Pod name
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+          # Container name
           - source_labels: [__meta_kubernetes_pod_container_name]
             target_label: container
+          # App label
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: app
+          # Component label
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            target_label: component
+          # Job: namespace/app
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_label_app]
+            separator: /
+            target_label: job
+          # Path to logs - Format: /var/log/pods/<namespace>_<podname>_<uid>/<container>/*.log
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name, __meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+            target_label: __path__
+            separator: ;
+            regex: (.+);(.+);(.+);(.+)
+            replacement: /var/log/pods/${1}_${2}_${3}/${4}/*.log
 
 resources:
   requests:
@@ -574,11 +597,11 @@ ingress:
   enabled: true
   ingressClassName: nginx
   hosts:
-    - grafana.stagingkub.local
+    - grafana-stagingkub.intra.leuwen-lc.fr
   tls:
     - secretName: grafana-tls-cert
       hosts:
-        - grafana.stagingkub.local
+        - grafana-stagingkub.intra.leuwen-lc.fr
 
 datasources:
   datasources.yaml:
@@ -602,8 +625,8 @@ datasources:
 
 grafana.ini:
   server:
-    domain: grafana.stagingkub.local
-    root_url: https://grafana.stagingkub.local
+    domain: grafana-stagingkub.intra.leuwen-lc.fr
+    root_url: https://grafana-stagingkub.intra.leuwen-lc.fr
   analytics:
     reporting_enabled: false
     check_for_updates: false
@@ -634,7 +657,7 @@ TMP=$(mktemp -d)
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout $TMP/tls.key \
   -out $TMP/tls.crt \
-  -subj "/CN=grafana.stagingkub.local/O=RHDemo"
+  -subj "/CN=grafana-stagingkub.intra.leuwen-lc.fr/O=RHDemo"
 
 # Créer le secret dans Kubernetes
 kubectl create secret tls grafana-tls-cert \
@@ -774,10 +797,10 @@ kill %1
 
 ```bash
 # Déjà ajouté en prérequis, vérifier
-grep grafana.stagingkub.local /etc/hosts
+grep grafana-stagingkub.intra.leuwen-lc.fr /etc/hosts
 
 # Si absent:
-echo "127.0.0.1 grafana.stagingkub.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 grafana-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ```
 
 ### 5.2 Ajuster la Rétention des Logs
@@ -861,7 +884,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 ### 6.1 Accéder à Grafana
 
-**URL:** https://grafana.stagingkub.local
+**URL:** https://grafana-stagingkub.intra.leuwen-lc.fr
 
 **Credentials:**
 - Username: `admin`
@@ -1104,21 +1127,63 @@ rate(node_network_receive_bytes_total[5m])
 rate(node_network_transmit_bytes_total[5m])
 ```
 
-#### 7.2.4 Métriques Application (Spring Boot Actuator - si activé)
+#### 7.2.4 Métriques Application Spring Boot Actuator
+
+Les métriques Spring Boot Actuator sont collectées automatiquement via le ServiceMonitor `rhdemo-app` déployé dans le namespace `monitoring`.
+
+**Configuration requise:**
+
+- Endpoint `/actuator/prometheus` exposé sans authentification (protégé par NetworkPolicy)
+- ServiceMonitor configuré dans le chart Helm `rhdemo`
+- Label `environment=stagingkub` ajouté aux métriques
+
+**JVM Heap Memory:**
+```promql
+sum(jvm_memory_used_bytes{environment="stagingkub", area="heap"}) / 1024 / 1024
+```
+
+**JVM Threads actifs:**
+```promql
+jvm_threads_live_threads{environment="stagingkub"}
+```
 
 **Requêtes HTTP par seconde:**
 ```promql
-rate(http_server_requests_seconds_count{namespace="rhdemo-stagingkub"}[5m])
+sum(rate(http_server_requests_seconds_count{environment="stagingkub"}[5m]))
 ```
 
-**Latence HTTP 95e percentile:**
+**Latence HTTP p50/p95/p99:**
 ```promql
-histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
+histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{environment="stagingkub"}[5m])))
 ```
 
-**Erreurs HTTP 5xx:**
+**Erreurs HTTP 4xx/5xx:**
 ```promql
-sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+sum(rate(http_server_requests_seconds_count{environment="stagingkub", status=~"4.."}[5m]))
+sum(rate(http_server_requests_seconds_count{environment="stagingkub", status=~"5.."}[5m]))
+```
+
+**Connexions HikariCP actives:**
+```promql
+hikaricp_connections_active{environment="stagingkub"}
+```
+
+**Pool HikariCP complet:**
+```promql
+hikaricp_connections{environment="stagingkub"}
+hikaricp_connections_idle{environment="stagingkub"}
+hikaricp_connections_pending{environment="stagingkub"}
+hikaricp_connections_max{environment="stagingkub"}
+```
+
+**Garbage Collection:**
+```promql
+rate(jvm_gc_pause_seconds_sum{environment="stagingkub"}[5m])
+```
+
+**Logs par niveau (Logback):**
+```promql
+rate(logback_events_total{environment="stagingkub", level="error"}[5m])
 ```
 
 ---
@@ -1162,7 +1227,175 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
-### 8.2 Dashboard Keycloak - Logs d'Authentification (Custom)
+### 8.2 Dashboard rhDemo - Métriques Spring Boot Actuator (Pré-configuré)
+
+**Dashboard automatiquement disponible après installation!**
+
+Le dashboard "rhDemo - Metriques Spring Boot Actuator" affiche les métriques JVM, HTTP et HikariCP collectées via `/actuator/prometheus`.
+
+**Accès:** Grafana → Dashboards → "rhDemo - Metriques Spring Boot Actuator"
+
+**Prérequis:**
+
+- ServiceMonitor `rhdemo-app` déployé dans le namespace `monitoring`
+- Endpoint `/actuator/prometheus` accessible sans authentification
+- NetworkPolicy autorisant le scraping depuis le namespace `monitoring`
+
+**Contenu du dashboard:**
+
+| Section | Panels | Métriques |
+|---------|--------|-----------|
+| **Vue d'ensemble** | Heap %, Threads, Req/s, DB Active | Stats instantanées |
+| **JVM Memory** | Heap Used/Committed/Max, Non-Heap, Par Pool | `jvm_memory_*` |
+| **JVM Threads** | Par état, Live/Daemon/Peak | `jvm_threads_*` |
+| **Garbage Collection** | Durée GC par action/cause | `jvm_gc_pause_*` |
+| **HTTP Requests** | Req/s par status, Latence p50/p95/p99, Par endpoint, Erreurs 4xx/5xx | `http_server_requests_*` |
+| **HikariCP** | Active/Idle/Pending/Total/Max, Acquire/Creation Time | `hikaricp_*` |
+| **Logback** | Events par niveau (ERROR/WARN/INFO), Uptime | `logback_events_*`, `process_uptime_*` |
+
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo-springboot.json`
+
+**Déploiement:**
+
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh springboot
+# ou pour tous les dashboards:
+./deploy-grafana-dashboard.sh all
+```
+
+**Configuration ServiceMonitor (Helm):**
+
+Le ServiceMonitor est automatiquement créé lors du déploiement du chart Helm `rhdemo` si `rhdemo.metrics.serviceMonitor.enabled: true` dans `values.yaml`.
+
+```yaml
+# values.yaml
+rhdemo:
+  metrics:
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
+```
+
+**Fichiers associés:**
+
+- ServiceMonitor: `infra/stagingkub/helm/rhdemo/templates/servicemonitor-rhdemo.yaml`
+- NetworkPolicy: `infra/stagingkub/helm/rhdemo/templates/networkpolicy-prometheus.yaml`
+- Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-springboot.json`
+
+### 8.3 Dashboard rhDemo - Métriques PostgreSQL (Pré-configuré)
+
+**Dashboard automatiquement disponible après installation!**
+
+Le dashboard "rhDemo - Métriques PostgreSQL" affiche les métriques de performance de la base de données collectées via les collecteurs intégrés de `postgres_exporter` v0.15.0 (sans requêtes personnalisées dépréciées).
+
+**Accès:** Grafana → Dashboards → "rhDemo - Metriques PostgreSQL"
+
+**Prérequis:**
+
+- Sidecar `postgres_exporter` déployé avec le StatefulSet PostgreSQL
+- Extension `pg_stat_statements` activée dans PostgreSQL
+- ServiceMonitor `postgresql-rhdemo` déployé dans le namespace `monitoring`
+
+**Contenu du dashboard:**
+
+| Section | Panels | Métriques (collecteurs intégrés) |
+|---------|--------|-----------|
+| **Vue d'ensemble** | Taille DB, Connexions, Verrous, Dead Tuples, Requêtes Longues | `pg_database_size_bytes`, `pg_stat_activity_count`, `pg_locks_count`, `pg_stat_user_tables_n_dead_tup`, `pg_long_running_transactions` |
+| **Top 10 Requêtes Lentes** | Table avec temps total, temps moyen, appels, lignes | `pg_stat_statements_seconds_total`, `pg_stat_statements_calls_total`, `pg_stat_statements_rows_total` |
+| **Statistiques Requêtes** | Temps moyen par requête, Appels par requête, Lignes retournées | `pg_stat_statements_seconds_total / pg_stat_statements_calls_total`, `pg_stat_statements_rows_total` |
+| **Connexions & Activité** | Par état (active/idle), Verrous par mode | `pg_stat_activity_count{state=...}`, `pg_locks_count{mode=...}` |
+| **Statistiques Tables** | Opérations CRUD, Scans seq vs index, Live/Dead tuples | `pg_stat_user_tables_n_tup_ins/upd/del`, `pg_stat_user_tables_seq_scan/idx_scan`, `pg_stat_user_tables_n_live_tup/n_dead_tup` |
+| **Cache & I/O** | Cache Hit Ratio, Blocks Hit vs Read | `pg_stat_database_blks_hit`, `pg_stat_database_blks_read` |
+
+**Fichier source:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
+
+**Déploiement:**
+
+```bash
+cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
+./deploy-grafana-dashboard.sh postgresql
+# ou pour tous les dashboards:
+./deploy-grafana-dashboard.sh all
+```
+
+**Configuration postgres_exporter (Helm):**
+
+Le sidecar postgres_exporter est automatiquement déployé si `postgresql-rhdemo.metrics.enabled: true` dans `values.yaml`.
+
+**Approche:** Utilisation exclusive des collecteurs intégrés de postgres_exporter v0.15.0 (pas de `--extend.query-path` déprécié). Les collecteurs suivants sont activés explicitement (désactivés par défaut) :
+
+- `--collector.stat_statements` : Statistiques des requêtes SQL (temps, appels, lignes)
+- `--collector.long_running_transactions` : Détection des transactions longues
+- `--collector.process_idle` : Processus PostgreSQL idle
+
+Les collecteurs activés par défaut (`stat_user_tables`, `locks`, `database`, etc.) fournissent les métriques de tables, verrous et taille de base.
+
+```yaml
+# values.yaml
+postgresql-rhdemo:
+  metrics:
+    enabled: true
+    exporter:
+      image:
+        repository: quay.io/prometheuscommunity/postgres-exporter
+        tag: "v0.15.0"
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      scrapeTimeout: 10s
+```
+
+**Fichiers associés:**
+
+- StatefulSet avec sidecar: `infra/stagingkub/helm/rhdemo/templates/postgresql-rhdemo-statefulset.yaml`
+- ServiceMonitor: `infra/stagingkub/helm/rhdemo/templates/servicemonitor-postgresql.yaml`
+- Dashboard: `infra/stagingkub/grafana-dashboard-rhdemo-postgresql.json`
+
+**Requêtes PromQL utiles (collecteurs intégrés):**
+
+Top 10 requêtes les plus lentes (temps total):
+
+```promql
+topk(10, pg_stat_statements_seconds_total{datname="rhdemo"})
+```
+
+Temps moyen par requête:
+
+```promql
+pg_stat_statements_seconds_total{datname="rhdemo"} / pg_stat_statements_calls_total{datname="rhdemo"} > 0
+```
+
+Connexions par état:
+
+```promql
+pg_stat_activity_count{datname="rhdemo"}
+```
+
+Cache Hit Ratio:
+
+```promql
+sum(pg_stat_database_blks_hit{datname="rhdemo"}) / (sum(pg_stat_database_blks_hit{datname="rhdemo"}) + sum(pg_stat_database_blks_read{datname="rhdemo"}) + 1)
+```
+
+Transactions longues en cours:
+
+```promql
+pg_long_running_transactions or vector(0)
+```
+
+Opérations sur les tables (insertions/mises à jour/suppressions):
+
+```promql
+rate(pg_stat_user_tables_n_tup_ins{datname="rhdemo"}[5m])
+rate(pg_stat_user_tables_n_tup_upd{datname="rhdemo"}[5m])
+rate(pg_stat_user_tables_n_tup_del{datname="rhdemo"}[5m])
+```
+
+### 8.4 Dashboard Keycloak - Logs d'Authentification (Custom)
 
 **Query principale:**
 ```logql
@@ -1177,7 +1410,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 | **Failed Logins** | `sum(count_over_time({app="keycloak"} \|~ "failed.*login" [1h]))` | Total failures |
 | **Active Users** | Extraction custom via `\| regexp "user=(?P<user>\\w+)"` | Unique users |
 
-### 8.3 Dashboard PostgreSQL - Logs des Bases de Données
+### 8.5 Dashboard PostgreSQL - Logs des Bases de Données (Loki)
 
 **Query principale:**
 ```logql
@@ -1406,7 +1639,7 @@ kubectl rollout restart deployment/grafana -n loki-stack
 
 ### 9.5 Ingress Grafana ne Fonctionne Pas
 
-**Symptôme:** `curl https://grafana.stagingkub.local` timeout
+**Symptôme:** `curl https://grafana-stagingkub.intra.leuwen-lc.fr` timeout
 
 **Vérification:**
 
@@ -1681,7 +1914,7 @@ kubectl delete namespace monitoring
 kubectl delete namespace loki-stack
 
 # Retirer du DNS
-sudo sed -i '/grafana.stagingkub.local/d' /etc/hosts
+sudo sed -i '/grafana-stagingkub.intra.leuwen-lc.fr/d' /etc/hosts
 ```
 
 **Désinstallation partielle (garder Loki, supprimer Prometheus):**

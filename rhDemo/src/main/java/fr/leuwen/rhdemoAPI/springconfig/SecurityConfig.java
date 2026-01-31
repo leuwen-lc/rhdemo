@@ -6,8 +6,9 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+// Note: OidcClientInitiatedLogoutSuccessHandler remplacé par KeycloakLogoutSuccessHandler
+// car il nécessite issuer-uri pour découvrir end_session_endpoint, ce qui ne fonctionne pas
+// quand le pod ne peut pas résoudre l'URL externe de Keycloak
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -175,10 +176,8 @@ public class SecurityConfig {
             .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
             // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
                     .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
-                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-            // Endpoints env accessibles sans authentification (phase de mise au point des environnements)
-                    .requestMatchers("/actuator/env", "/actuator/env/**").permitAll()
+            // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)
+                    .requestMatchers("/actuator/prometheus").permitAll()
             // Autres endpoints actuator réservés aux admins
             .requestMatchers("/actuator/**").hasRole("admin")
             .requestMatchers("/front")).hasAnyRole("consult","MAJ")
@@ -194,13 +193,19 @@ public class SecurityConfig {
 	return http.build();
     }
     
-    //Logout handler spécifique appelé par Spring.
+    /**
+     * Logout handler personnalisé pour Keycloak.
+     *
+     * Utilise KeycloakLogoutSuccessHandler au lieu de OidcClientInitiatedLogoutSuccessHandler
+     * car ce dernier nécessite la découverte de end_session_endpoint via issuer-uri,
+     * ce qui ne fonctionne pas quand le pod ne peut pas résoudre l'URL externe de Keycloak.
+     *
+     * Le handler personnalisé dérive l'URL de logout depuis authorization-uri
+     * en remplaçant /auth par /logout, ce qui fonctionne pour tous les environnements.
+     */
     @Bean
-    public LogoutSuccessHandler oidcLogoutSuccessHandler(ClientRegistrationRepository clientRegistrationRepository) {
-        OidcClientInitiatedLogoutSuccessHandler successHandler =
-            new OidcClientInitiatedLogoutSuccessHandler(clientRegistrationRepository);
-        successHandler.setPostLogoutRedirectUri("{baseUrl}/"); // optionnel, page de retour
-        return successHandler;
+    public LogoutSuccessHandler keycloakLogoutSuccessHandler() {
+        return new KeycloakLogoutSuccessHandler(keycloakAuthorizationUri, "{baseUrl}/");
     }
 }
 

@@ -1,0 +1,9 @@
+# Ne pas commiter les kubeconfigs générés (contiennent des tokens)
+*.yaml
+*.yml
+
+# Garder ce fichier .gitignore
+!.gitignore
+
+# README explicatif
+!README.md

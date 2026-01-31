@@ -8,7 +8,7 @@
 #   - Prometheus (métriques) + Prometheus Operator + AlertManager
 #   - Loki (logs) + Promtail + Grafana
 #   - Configuration Grafana avec les deux datasources
-#   - Dashboards: rhDemo Logs
+#   - Dashboards: Logs, Métriques Pods, Spring Boot Actuator, PostgreSQL
 #
 # Utilisation:
 #   ./install-observability.sh
@@ -142,7 +142,7 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 LOKI_NS="loki-stack"
-DOMAIN="grafana.stagingkub.local"
+DOMAIN="grafana-stagingkub.intra.leuwen-lc.fr"
 
 log "Création du namespace $LOKI_NS..."
 kubectl create namespace $LOKI_NS 2>/dev/null || warn "Namespace existe déjà"
@@ -235,46 +235,8 @@ echo ""
 # 6. Déploiement des dashboards Grafana
 # ═══════════════════════════════════════════════════════════════
 
-log "Deploiement des dashboards Grafana..."
-
-# Dashboard rhDemo Logs (Loki)
-DASHBOARD_LOGS="../grafana-dashboard-rhdemo-logs.json"
-if [ -f "$DASHBOARD_LOGS" ]; then
-    cat "$DASHBOARD_LOGS" | jq '.dashboard' > /tmp/rhdemo-logs.json 2>/dev/null || cp "$DASHBOARD_LOGS" /tmp/rhdemo-logs.json
-
-    kubectl create configmap grafana-dashboard-rhdemo \
-        --from-file="rhdemo-logs.json=/tmp/rhdemo-logs.json" \
-        --namespace="$LOKI_NS" \
-        --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
-
-    kubectl patch configmap grafana-dashboard-rhdemo -n $LOKI_NS \
-        -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
-
-    rm -f /tmp/rhdemo-logs.json
-    success "Dashboard rhDemo Logs deploye"
-else
-    warn "Dashboard $DASHBOARD_LOGS introuvable"
-fi
-
-# Dashboard rhDemo Metriques (Prometheus)
-DASHBOARD_METRICS="../grafana-dashboard-rhdemo-metrics.json"
-if [ -f "$DASHBOARD_METRICS" ]; then
-    cat "$DASHBOARD_METRICS" | jq '.dashboard' > /tmp/rhdemo-metrics.json 2>/dev/null || cp "$DASHBOARD_METRICS" /tmp/rhdemo-metrics.json
-
-    kubectl create configmap grafana-dashboard-rhdemo-metrics \
-        --from-file="rhdemo-metrics.json=/tmp/rhdemo-metrics.json" \
-        --namespace="$LOKI_NS" \
-        --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
-
-    kubectl patch configmap grafana-dashboard-rhdemo-metrics -n $LOKI_NS \
-        -p '{"metadata":{"labels":{"grafana_dashboard":"1"}}}' >/dev/null 2>&1
-
-    rm -f /tmp/rhdemo-metrics.json
-    success "Dashboard rhDemo Metriques deploye"
-else
-    warn "Dashboard $DASHBOARD_METRICS introuvable"
-fi
-
+log "Deploiement des dashboards Grafana via deploy-grafana-dashboard.sh..."
+"${SCRIPT_DIR}/deploy-grafana-dashboard.sh" all
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
@@ -317,6 +279,8 @@ echo ""
 echo -e "  Dashboards:"
 echo -e "    - ${GREEN}✓${NC} rhDemo - Logs Application (Loki)"
 echo -e "    - ${GREEN}✓${NC} rhDemo - Metriques Pods (Prometheus)"
+echo -e "    - ${GREEN}✓${NC} rhDemo - Metriques Spring Boot Actuator (Prometheus)"
+echo -e "    - ${GREEN}✓${NC} rhDemo - Metriques PostgreSQL (Prometheus)"
 echo ""
 
 echo -e "${YELLOW}📈 Prometheus (Métriques):${NC}"

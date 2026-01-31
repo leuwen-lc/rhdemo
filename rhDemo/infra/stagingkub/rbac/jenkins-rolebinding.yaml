@@ -1,0 +1,17 @@
+# RoleBinding pour lier le ServiceAccount jenkins-deployer au Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-rolebinding
+  namespace: rhdemo-stagingkub
+  labels:
+    app.kubernetes.io/name: jenkins-deployer
+    app.kubernetes.io/component: ci-cd
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-deployer
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-deployer-role
+  apiGroup: rbac.authorization.k8s.io

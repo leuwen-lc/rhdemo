@@ -100,7 +100,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 │               │                                              │
 │  ┌────────────▼──────────┐    ┌────────────────────────┐   │
 │  │ Ingress                │    │ Ingress                │   │
-│  │ rhdemo.stagingkub.local   │    │ keycloak.stagingkub.local │   │
+│  │ rhdemo-stagingkub.intra.leuwen-lc.fr   │    │ keycloak-stagingkub.intra.leuwen-lc.fr │   │
 │  └────────────┬───────────┘    └────────────┬───────────┘   │
 │               │                               │              │
 │  ┌────────────▼───────────┐    ┌─────────────▼──────────┐  │
@@ -504,7 +504,7 @@ kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
 kubectl get secret rhdemo-tls-cert -n rhdemo-stagingkub
 
 # Tester avec curl (ignorer le certificat self-signed)
-curl -k https://rhdemo.stagingkub.local
+curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr
 ```
 
 ### /etc/hosts non configuré
@@ -514,8 +514,8 @@ curl -k https://rhdemo.stagingkub.local
 cat /etc/hosts | grep ephemere.local
 
 # Ajouter manuellement si nécessaire
-echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
-echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 rhdemo-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+echo "127.0.0.1 keycloak-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ```
 
 ### Image Docker non trouvée
@@ -574,4 +574,4 @@ kind load docker-image rhdemo-api:VERSION --name rhdemo
 - [ ] Image chargée dans KinD
 - [ ] Helm chart déployé
 - [ ] Tous les pods en status `Running`
-- [ ] Ingress accessible via https://rhdemo.stagingkub.local
+- [ ] Ingress accessible via https://rhdemo-stagingkub.intra.leuwen-lc.fr

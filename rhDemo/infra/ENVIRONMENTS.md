@@ -148,8 +148,8 @@ DEPLOY_ENV=stagingkub
 
 ### URLs d'accès
 
-- Application : https://rhdemo.stagingkub.local
-- Keycloak : https://keycloak.stagingkub.local
+- Application : https://rhdemo-stagingkub.intra.leuwen-lc.fr
+- Keycloak : https://keycloak-stagingkub.intra.leuwen-lc.fr
 
 ### Avantages
 

@@ -19,6 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Ingress: Nginx Ingress Controller${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -38,6 +39,45 @@ if ! command -v helm &> /dev/null; then
     echo -e "${RED}❌ Helm n'est pas installé. Veuillez installer Helm d'abord.${NC}"
     exit 1
 fi
+
+# ═══════════════════════════════════════════════════════════════
+# Prérequis système pour Cilium
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Vérification des prérequis système pour Cilium...${NC}"
+
+# Vérifier les limites inotify (évite "too many open files" avec Cilium)
+INOTIFY_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo "0")
+INOTIFY_INSTANCES=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null || echo "0")
+INOTIFY_OK=true
+
+if [ "$INOTIFY_WATCHES" -lt 524288 ]; then
+    echo -e "${RED}❌ fs.inotify.max_user_watches insuffisant : ${INOTIFY_WATCHES} (minimum: 524288)${NC}"
+    INOTIFY_OK=false
+fi
+
+if [ "$INOTIFY_INSTANCES" -lt 512 ]; then
+    echo -e "${RED}❌ fs.inotify.max_user_instances insuffisant : ${INOTIFY_INSTANCES} (minimum: 512)${NC}"
+    INOTIFY_OK=false
+fi
+
+if [ "$INOTIFY_OK" = false ]; then
+    echo ""
+    echo -e "${YELLOW}Cilium nécessite des limites inotify plus élevées.${NC}"
+    echo -e "${YELLOW}Exécutez les commandes suivantes puis relancez ce script :${NC}"
+    echo ""
+    echo -e "${BLUE}  # Correction temporaire (jusqu'au prochain reboot)${NC}"
+    echo "  sudo sysctl -w fs.inotify.max_user_watches=524288"
+    echo "  sudo sysctl -w fs.inotify.max_user_instances=512"
+    echo ""
+    echo -e "${BLUE}  # Ou correction permanente${NC}"
+    echo "  echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.d/99-cilium.conf"
+    echo "  echo 'fs.inotify.max_user_instances=512' | sudo tee -a /etc/sysctl.d/99-cilium.conf"
+    echo "  sudo sysctl --system"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Limites inotify OK (watches=${INOTIFY_WATCHES}, instances=${INOTIFY_INSTANCES})${NC}"
 
 # ═══════════════════════════════════════════════════════════════
 # Configuration du registry Docker local
@@ -131,7 +171,57 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     docker network connect kind ${REGISTRY_NAME} --alias kind-registry
     echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
 
+    # ═══════════════════════════════════════════════════════════════
+    # Installation de Cilium 1.18 (CNI) via Helm
+    # ═══════════════════════════════════════════════════════════════
+    # IMPORTANT: Cilium doit être installé AVANT d'attendre que le nœud soit prêt
+    # car sans CNI, le nœud reste en état NotReady
+    echo -e "${YELLOW}▶ Installation de Cilium 1.18 (CNI) via Helm...${NC}"
+
+    # Ajouter le repo Helm Cilium si nécessaire
+    if ! helm repo list | grep -q "^cilium"; then
+        echo -e "${YELLOW}  - Ajout du repo Helm Cilium...${NC}"
+        helm repo add cilium https://helm.cilium.io/
+    fi
+    helm repo update cilium > /dev/null
+
+    # Récupérer l'API server endpoint du cluster KinD
+    CILIUM_K8S_API_SERVER="rhdemo-control-plane"
+    CILIUM_K8S_API_PORT="6443"
+
+    # Installer Cilium via Helm
+    # kubeProxyReplacement=true car kube-proxy est désactivé (kubeProxyMode: none)
+    echo -e "${YELLOW}  - Installation de Cilium 1.18.6 dans le cluster...${NC}"
+    helm install cilium cilium/cilium --version 1.18.6 \
+        --namespace kube-system \
+        --set kubeProxyReplacement=true \
+        --set k8sServiceHost=${CILIUM_K8S_API_SERVER} \
+        --set k8sServicePort=${CILIUM_K8S_API_PORT} \
+        --set hubble.enabled=false \
+        --set ipam.mode=kubernetes
+
+    # Attendre que les pods Cilium soient créés
+    echo -e "${YELLOW}  - Attente de la création des pods Cilium...${NC}"
+    for i in {1..60}; do
+        if kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | grep -q .; then
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo ""
+
+    # Attendre que Cilium soit prêt
+    echo -e "${YELLOW}  - Attente que Cilium soit opérationnel (jusqu'à 5 minutes)...${NC}"
+    kubectl wait --namespace kube-system \
+        --for=condition=ready pod \
+        --selector=k8s-app=cilium \
+        --timeout=300s
+
+    echo -e "${GREEN}✅ Cilium 1.18.6 installé et opérationnel${NC}"
+
     CLUSTER_CREATED=true
+    CILIUM_INSTALLED=true
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
@@ -148,13 +238,27 @@ else
         echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
 
+    # Vérifier que Cilium est installé
+    echo -e "${YELLOW}▶ Vérification de Cilium...${NC}"
+    if kubectl get daemonset -n kube-system cilium &> /dev/null; then
+        echo -e "${GREEN}✅ Cilium déjà installé${NC}"
+        CILIUM_INSTALLED=false
+    else
+        echo -e "${YELLOW}⚠️  Cilium n'est pas installé dans le cluster existant${NC}"
+        echo -e "${YELLOW}   Le cluster a peut-être été créé avec l'ancienne configuration (kindnet)${NC}"
+        echo -e "${YELLOW}   Pour migrer vers Cilium, supprimez et recréez le cluster :${NC}"
+        echo -e "${YELLOW}   kind delete cluster --name rhdemo${NC}"
+        echo -e "${YELLOW}   ./init-stagingkub.sh${NC}"
+        CILIUM_INSTALLED=false
+    fi
+
     CLUSTER_CREATED=false
 fi
 
 # ═══════════════════════════════════════════════════════════════
 # Configuration HTTPS du registry dans le nœud KinD
 # ═══════════════════════════════════════════════════════════════
-echo -e "${YELLOW}▶ Configuration du certificat HTTPS dans le nœud KinD...${NC}"
+echo -e "${YELLOW}▶ Configuration du registry HTTPS dans le nœud KinD...${NC}"
 
 # Copier le certificat CA dans le nœud KinD
 docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
@@ -162,15 +266,22 @@ docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates
 # Mettre à jour les CA du nœud
 docker exec rhdemo-control-plane update-ca-certificates > /dev/null 2>&1
 
-# Vérifier si containerd utilise encore HTTP
-if docker exec rhdemo-control-plane grep -q "http://kind-registry:5000" /etc/containerd/config.toml 2>/dev/null; then
-    echo -e "${YELLOW}  - Mise à jour de containerd pour HTTPS...${NC}"
-    docker exec rhdemo-control-plane sed -i 's|http://kind-registry:5000|https://kind-registry:5000|g' /etc/containerd/config.toml
-    docker exec rhdemo-control-plane systemctl restart containerd
-    echo -e "${GREEN}✅ Containerd configuré pour HTTPS${NC}"
-else
-    echo -e "${GREEN}✅ Containerd déjà configuré pour HTTPS${NC}"
-fi
+# Configurer containerd pour utiliser le registry HTTPS
+# On crée un fichier de configuration hosts.toml pour le registry
+echo -e "${YELLOW}  - Configuration de containerd pour le registry...${NC}"
+
+# Créer le répertoire de configuration pour le registry
+docker exec rhdemo-control-plane mkdir -p /etc/containerd/certs.d/localhost:5000
+
+# Créer le fichier hosts.toml pour configurer le registry avec HTTPS
+docker exec rhdemo-control-plane bash -c 'cat > /etc/containerd/certs.d/localhost:5000/hosts.toml << EOF
+server = "https://kind-registry:5000"
+
+[host."https://kind-registry:5000"]
+  ca = "/usr/local/share/ca-certificates/kind-registry.crt"
+EOF'
+
+echo -e "${GREEN}✅ Containerd configuré pour le registry HTTPS${NC}"
 
 # Définir le contexte kubectl
 kubectl config use-context kind-rhdemo
@@ -179,6 +290,25 @@ kubectl config use-context kind-rhdemo
 echo -e "${YELLOW}▶ Attente que le nœud KinD soit prêt...${NC}"
 kubectl wait --for=condition=ready node --all --timeout=120s
 echo -e "${GREEN}✅ Nœud KinD prêt${NC}"
+
+# ═══════════════════════════════════════════════════════════════
+# ConfigMap pour la découverte du registry local (KEP-1755)
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration de la ConfigMap local-registry-hosting...${NC}"
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-registry-hosting
+  namespace: kube-public
+data:
+  localRegistryHosting.v1: |
+    host: "localhost:${REGISTRY_PORT}"
+    hostFromContainerRuntime: "kind-registry:${REGISTRY_PORT}"
+    hostFromClusterNetwork: "kind-registry:${REGISTRY_PORT}"
+    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+EOF
+echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 # Installer Nginx Ingress Controller si nécessaire
 echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller...${NC}"
@@ -374,19 +504,146 @@ else
     rm /tmp/secrets-rhdemo.yml
 fi
 
+# ═══════════════════════════════════════════════════════════════
+# CONFIGURATION RBAC POUR JENKINS (accès limité au namespace)
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Configuration RBAC pour Jenkins...${NC}"
+
+RBAC_DIR="$STAGINGKUB_DIR/rbac"
+JENKINS_KUBECONFIG_DIR="$STAGINGKUB_DIR/jenkins-kubeconfig"
+mkdir -p "$JENKINS_KUBECONFIG_DIR"
+
+if [ -d "$RBAC_DIR" ]; then
+    # Créer le namespace monitoring si nécessaire (pour les ServiceMonitors)
+    if ! kubectl get namespace monitoring > /dev/null 2>&1; then
+        echo -e "${YELLOW}  - Création du namespace 'monitoring'...${NC}"
+        kubectl create namespace monitoring
+    fi
+
+    # Appliquer les ressources RBAC
+    echo -e "${YELLOW}  - Application des ressources RBAC...${NC}"
+
+    # ServiceAccount et Secret
+    kubectl apply -f "$RBAC_DIR/jenkins-serviceaccount.yaml"
+
+    # Role et RoleBinding dans rhdemo-stagingkub
+    kubectl apply -f "$RBAC_DIR/jenkins-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-rolebinding.yaml"
+
+    # ClusterRole et ClusterRoleBinding (pour PersistentVolumes)
+    kubectl apply -f "$RBAC_DIR/jenkins-clusterrole.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-clusterrolebinding.yaml"
+
+    # Role et RoleBinding dans monitoring (pour ServiceMonitors)
+    kubectl apply -f "$RBAC_DIR/jenkins-monitoring-role.yaml"
+
+    echo -e "${GREEN}✅ Ressources RBAC appliquées${NC}"
+
+    # Attendre que le token du ServiceAccount soit créé
+    echo -e "${YELLOW}  - Attente du token du ServiceAccount...${NC}"
+    for i in {1..30}; do
+        SA_TOKEN=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
+        if [ -n "$SA_TOKEN" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -z "$SA_TOKEN" ]; then
+        echo -e "${RED}❌ Impossible de récupérer le token du ServiceAccount après 30 secondes${NC}"
+        exit 1
+    fi
+
+    # Récupérer le certificat CA
+    CA_CERT=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.ca\.crt}')
+
+    # Récupérer l'URL du serveur API
+    API_SERVER="https://rhdemo-control-plane:6443"
+
+    # Générer le kubeconfig RBAC pour Jenkins
+    JENKINS_KUBECONFIG="$JENKINS_KUBECONFIG_DIR/kubeconfig-jenkins-rbac.yaml"
+    cat > "$JENKINS_KUBECONFIG" <<KUBECONFIG_EOF
+# Kubeconfig RBAC pour Jenkins
+# Ce fichier contient un token avec des permissions limitées au namespace rhdemo-stagingkub
+# Généré automatiquement par init-stagingkub.sh
+#
+# IMPORTANT: Ce fichier doit être ajouté comme credential Jenkins
+# de type "Secret file" avec l'ID: kubeconfig-stagingkub
+#
+apiVersion: v1
+kind: Config
+preferences: {}
+
+clusters:
+  - name: kind-rhdemo
+    cluster:
+      certificate-authority-data: $CA_CERT
+      server: $API_SERVER
+
+contexts:
+  - name: kind-rhdemo
+    context:
+      cluster: kind-rhdemo
+      namespace: rhdemo-stagingkub
+      user: jenkins-deployer
+
+current-context: kind-rhdemo
+
+users:
+  - name: jenkins-deployer
+    user:
+      token: $SA_TOKEN
+KUBECONFIG_EOF
+
+    chmod 600 "$JENKINS_KUBECONFIG"
+    echo -e "${GREEN}✅ Kubeconfig RBAC généré : $JENKINS_KUBECONFIG${NC}"
+
+    # Vérifier les permissions du ServiceAccount
+    echo -e "${YELLOW}  - Vérification des permissions RBAC...${NC}"
+    if kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Accès aux pods${NC}"
+    else
+        echo -e "${RED}    ✗ Accès aux pods refusé${NC}"
+    fi
+
+    if kubectl auth can-i create secrets -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des secrets${NC}"
+    else
+        echo -e "${RED}    ✗ Création des secrets refusée${NC}"
+    fi
+
+    if kubectl auth can-i create persistentvolumes --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des PersistentVolumes${NC}"
+    else
+        echo -e "${RED}    ✗ Création des PersistentVolumes refusée${NC}"
+    fi
+
+    # Vérifier le NON-accès aux autres namespaces
+    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès à kube-system (sécurité OK)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Accès à kube-system détecté${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Dossier RBAC non trouvé : $RBAC_DIR${NC}"
+    echo -e "${YELLOW}   Les ressources RBAC ne seront pas créées${NC}"
+fi
+
 # Générer les certificats SSL
 echo -e "${YELLOW}▶ Génération des certificats SSL...${NC}"
 CERTS_DIR="$STAGINGKUB_DIR/certs"
 mkdir -p "$CERTS_DIR"
 
 if [ ! -f "$CERTS_DIR/tls.crt" ]; then
-    # Générer un certificat self-signed
+    # Générer un certificat self-signed pour le domaine intra.leuwen-lc.fr
+    # Note: Ce certificat auto-signé est utilisé quand Let's Encrypt n'est pas disponible
+    # Avec Let's Encrypt (cert-manager), le secret intra-wildcard-tls est utilisé à la place
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout "$CERTS_DIR/tls.key" \
       -out "$CERTS_DIR/tls.crt" \
-      -subj "/CN=*.stagingkub.local/O=RHDemo" \
-      -addext "subjectAltName=DNS:rhdemo.stagingkub.local,DNS:keycloak.stagingkub.local"
-    echo -e "${GREEN}✅ Certificats SSL générés${NC}"
+      -subj "/CN=*.stagingkub.intra.leuwen-lc.fr/O=RHDemo" \
+      -addext "subjectAltName=DNS:rhdemo-stagingkub.intra.leuwen-lc.fr,DNS:keycloak-stagingkub.intra.leuwen-lc.fr,DNS:grafana-stagingkub.intra.leuwen-lc.fr"
+    echo -e "${GREEN}✅ Certificats SSL auto-signés générés${NC}"
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
 fi
@@ -401,10 +658,10 @@ echo -e "${GREEN}✅ Secret TLS créé${NC}"
 
 # Mettre à jour /etc/hosts si nécessaire
 echo -e "${YELLOW}▶ Vérification de /etc/hosts...${NC}"
-if ! grep -q "rhdemo.stagingkub.local" /etc/hosts; then
+if ! grep -q "rhdemo-stagingkub.intra.leuwen-lc.fr" /etc/hosts; then
     echo -e "${YELLOW}Ajout des entrées DNS dans /etc/hosts (nécessite sudo)...${NC}"
-    echo "127.0.0.1 rhdemo.stagingkub.local" | sudo tee -a /etc/hosts
-    echo "127.0.0.1 keycloak.stagingkub.local" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 rhdemo-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
+    echo "127.0.0.1 keycloak-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
     echo -e "${GREEN}✅ Entrées DNS ajoutées${NC}"
 else
     echo -e "${GREEN}✅ Entrées DNS déjà présentes${NC}"
@@ -428,4 +685,15 @@ echo ""
 echo -e "${YELLOW}💡 Commandes utiles du registry :${NC}"
 echo -e "  • Voir les images : ${BLUE}curl http://localhost:5000/v2/_catalog${NC}"
 echo -e "  • Voir les tags : ${BLUE}curl http://localhost:5000/v2/rhdemo-api/tags/list${NC}"
+echo ""
+echo -e "${YELLOW}🔐 Configuration Jenkins (RBAC) :${NC}"
+echo -e "  Le kubeconfig RBAC a été généré avec des permissions limitées."
+echo -e "  Pour configurer Jenkins :"
+echo -e ""
+echo -e "  1. ${BLUE}Accédez à Jenkins > Manage Jenkins > Credentials${NC}"
+echo -e "  2. ${BLUE}Ajoutez un credential de type 'Secret file'${NC}"
+echo -e "  3. ${BLUE}ID: kubeconfig-stagingkub${NC}"
+echo -e "  4. ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml${NC}"
+echo ""
+echo -e "  Documentation: ${BLUE}$RBAC_DIR/README.md${NC}"
 echo ""

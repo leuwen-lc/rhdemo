@@ -190,7 +190,7 @@ kubectl get pods -n rhdemo-stagingkub -w
 ✅ Registry 'kind-registry' validé
 ✅ Registry connecté au réseau kind avec alias 'kind-registry' (IP: 172.21.0.4)
 ✅ Pod rhdemo-app passe de ImagePullBackOff à Running
-✅ Application accessible via https://rhdemo.stagingkub.local
+✅ Application accessible via https://rhdemo-stagingkub.intra.leuwen-lc.fr
 ```
 
 **Prévention** :

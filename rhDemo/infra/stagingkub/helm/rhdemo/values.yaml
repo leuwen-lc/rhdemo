@@ -265,26 +265,45 @@ rhdemo:
 # ═══════════════════════════════════════════════════════════════
 gateway:
   enabled: true
-  name: rhdemo-gateway
-  className: nginx
 
-  # Listeners TLS (points d'entrée HTTPS)
-  listeners:
-    - name: https-rhdemo
-      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-      port: 443
-      protocol: HTTPS
-      tls:
-        mode: Terminate
-        secretName: intra-wildcard-tls
+  # ═══════════════════════════════════════════════════════════════
+  # Option 1: Utiliser le Gateway partagé (RECOMMANDÉ)
+  # ═══════════════════════════════════════════════════════════════
+  # Le shared-gateway est créé par init-stagingkub.sh dans nginx-gateway.
+  # Il gère le certificat TLS et le NodePort automatiquement.
+  # Les HTTPRoutes de ce namespace s'attachent au Gateway partagé.
+  useSharedGateway: true
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Nom du listener dans shared-gateway.yaml
 
-    - name: https-keycloak
-      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-      port: 443
-      protocol: HTTPS
-      tls:
-        mode: Terminate
-        secretName: intra-wildcard-tls
+  # ═══════════════════════════════════════════════════════════════
+  # Option 2: Créer un Gateway dédié (déconseillé)
+  # ═══════════════════════════════════════════════════════════════
+  # Mettre useSharedGateway: false pour créer un Gateway dans ce namespace.
+  # Nécessite de configurer le certificat TLS et le NodePort manuellement.
+  dedicatedGateway:
+    name: rhdemo-gateway
+    className: nginx
+    listeners:
+      - name: https-rhdemo
+        hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+        port: 443
+        protocol: HTTPS
+        tls:
+          mode: Terminate
+          # Certificat auto-signé (init-stagingkub.sh) ou Let's Encrypt (cert-manager)
+          # Let's Encrypt: intra-wildcard-tls
+          secretName: rhdemo-tls-cert
+      - name: https-keycloak
+        hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+        port: 443
+        protocol: HTTPS
+        tls:
+          mode: Terminate
+          # Let's Encrypt: intra-wildcard-tls
+          secretName: rhdemo-tls-cert
 
   # Routes HTTP vers les services backend
   routes:

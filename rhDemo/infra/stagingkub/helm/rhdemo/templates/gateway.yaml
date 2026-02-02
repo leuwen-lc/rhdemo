@@ -1,27 +1,26 @@
 {{- if .Values.gateway.enabled }}
+{{- if not .Values.gateway.useSharedGateway }}
 # ═══════════════════════════════════════════════════════════════
-# Gateway - Point d'entrée du trafic externe (NGINX Gateway Fabric)
+# Gateway dédié - Point d'entrée du trafic externe (NGINX Gateway Fabric)
 # ═══════════════════════════════════════════════════════════════
-# Remplace l'ancien Ingress par Gateway API (gateway.networking.k8s.io/v1)
+# Ce Gateway est créé uniquement si useSharedGateway: false
+# Sinon, les HTTPRoutes s'attachent au shared-gateway dans nginx-gateway
 #
-# Listeners:
-#   - https-rhdemo : Application RHDemo sur port 443
-#   - https-keycloak : Keycloak IAM sur port 443
-#
-# TLS: Terminaison TLS avec certificat wildcard
+# Note: Le mode shared-gateway est recommandé car il simplifie la gestion
+# des certificats TLS et des NodePorts (gérés par init-stagingkub.sh)
 # ═══════════════════════════════════════════════════════════════
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: {{ .Values.gateway.name }}
+  name: {{ .Values.gateway.dedicatedGateway.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "rhdemo.labels" . | nindent 4 }}
     app.kubernetes.io/component: gateway
 spec:
-  gatewayClassName: {{ .Values.gateway.className }}
+  gatewayClassName: {{ .Values.gateway.dedicatedGateway.className }}
   listeners:
-  {{- range .Values.gateway.listeners }}
+  {{- range .Values.gateway.dedicatedGateway.listeners }}
   - name: {{ .name }}
     hostname: {{ .hostname | quote }}
     port: {{ .port }}
@@ -35,15 +34,7 @@ spec:
     {{- end }}
     allowedRoutes:
       namespaces:
-        {{- if .allowedNamespaces }}
-        from: Selector
-        selector:
-          matchLabels:
-            {{- range $key, $value := .allowedNamespaces }}
-            {{ $key }}: {{ $value | quote }}
-            {{- end }}
-        {{- else }}
         from: Same
-        {{- end }}
   {{- end }}
+{{- end }}
 {{- end }}

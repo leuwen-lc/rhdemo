@@ -3,8 +3,8 @@
 # ═══════════════════════════════════════════════════════════════
 # HTTPRoute: {{ .name }}
 # ═══════════════════════════════════════════════════════════════
-# Route le trafic vers le service backend
-# Si snippetsFilter est défini, applique la configuration NGINX personnalisée
+# Route le trafic vers le service backend.
+# S'attache au Gateway partagé (shared-gateway) ou dédié selon la config.
 # ═══════════════════════════════════════════════════════════════
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -17,8 +17,16 @@ metadata:
     app.kubernetes.io/component: route
 spec:
   parentRefs:
-  - name: {{ $.Values.gateway.name }}
+  {{- if $.Values.gateway.useSharedGateway }}
+  # Utilise le Gateway partagé (créé par init-stagingkub.sh)
+  - name: {{ $.Values.gateway.sharedGateway.name }}
+    namespace: {{ $.Values.gateway.sharedGateway.namespace }}
+    sectionName: {{ $.Values.gateway.sharedGateway.sectionName }}
+  {{- else }}
+  # Utilise le Gateway dédié (créé par ce chart)
+  - name: {{ $.Values.gateway.dedicatedGateway.name }}
     sectionName: {{ .listenerName }}
+  {{- end }}
   hostnames:
   - {{ .hostname | quote }}
   rules:

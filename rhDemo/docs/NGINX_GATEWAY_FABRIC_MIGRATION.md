@@ -4,6 +4,7 @@
 **Statut** : ✅ Migration implémentée
 **Environnement cible** : stagingkub (Kubernetes/KinD)
 **Version NGF cible** : **2.3.0** (dernière stable, décembre 2024)
+**Architecture** : **Shared Gateway** (Gateway partagé dans nginx-gateway)
 
 ---
 
@@ -49,6 +50,73 @@ La version 2.3.0 est l'une des 5 seules implémentations Gateway API certifiées
 | **Namespace** | `ingress-nginx` | `nginx-gateway` |
 | **Installation** | Manifest YAML officiel KinD | Helm chart OCI |
 
+### 2.1 Architecture Shared Gateway (implémentée)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ARCHITECTURE SHARED GATEWAY                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Internet (HTTPS :443)
+         │
+         ▼
+┌─────────────────────────┐
+│   KinD Node            │
+│   hostPort: 443        │
+│         │              │
+│         ▼              │
+│   NodePort: 32616      │
+└─────────┬───────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  NAMESPACE: nginx-gateway                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  shared-gateway (Gateway)                                               ││
+│  │  - Listener: https (*.intra.leuwen-lc.fr:443)                          ││
+│  │  - TLS: shared-tls-cert (auto-signé) ou intra-wildcard-tls (Let's Encrypt)
+│  │  - allowedRoutes: from: All                                             ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│  ┌───────────────────────┐                                                  │
+│  │ ClientSettingsPolicy  │ ← maxBodySize: 50m (pour toutes les apps)        │
+│  │ (cible: shared-gateway)│                                                 │
+│  └───────────────────────┘                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+          │
+          │ parentRefs (cross-namespace)
+          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  NAMESPACE: rhdemo-stagingkub                                               │
+│  ┌───────────────┐     ┌───────────────┐                                    │
+│  │ HTTPRoute     │     │ HTTPRoute     │                                    │
+│  │ rhdemo-route  │     │ keycloak-route│                                    │
+│  │ → rhdemo-app  │     │ → keycloak    │                                    │
+│  └───────────────┘     └───────┬───────┘                                    │
+│                                │                                            │
+│                    ┌───────────┴───────────┐                                │
+│                    │ SnippetsFilter        │                                │
+│                    │ keycloak-proxy-buffers│                                │
+│                    └───────────────────────┘                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+          │
+          │ parentRefs (cross-namespace)
+          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  NAMESPACE: loki-stack                                                       │
+│  ┌───────────────┐                                                          │
+│  │ HTTPRoute     │ (créé par grafana-gateway.yaml)                          │
+│  │ grafana       │                                                          │
+│  │ → grafana     │                                                          │
+│  └───────────────┘                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Avantages de l'architecture Shared Gateway** :
+- **Certificat unique** : Un seul Secret TLS wildcard `*.intra.leuwen-lc.fr` pour toutes les apps
+- **Point d'entrée centralisé** : Gestion simplifiée du NodePort (32616)
+- **Cross-namespace** : Les HTTPRoutes de différents namespaces s'attachent au même Gateway
+- **Consistance** : Grafana, rhdemo, keycloak utilisent la même configuration TLS
+
 ---
 
 ## 3. Inventaire des fichiers impactés
@@ -83,7 +151,7 @@ La version 2.3.0 est l'une des 5 seules implémentations Gateway API certifiées
 
 ## 4. Conversion des ressources Kubernetes
 
-### 4.1 Ingress actuel → Gateway + HTTPRoute
+### 4.1 Ingress actuel → Shared Gateway + HTTPRoute
 
 **Avant** (Ingress) :
 
@@ -112,10 +180,12 @@ spec:
               number: 9000
 ```
 
-**Après** (Gateway API) - 3 ressources :
+**Après** (Gateway API avec Shared Gateway) :
+
+L'architecture implémentée utilise un **Gateway partagé** dans le namespace `nginx-gateway`, auquel s'attachent les HTTPRoutes de différents namespaces.
 
 ```yaml
-# 1. GatewayClass (une seule fois dans le cluster)
+# 1. GatewayClass (créé automatiquement par l'installation Helm de NGF)
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
@@ -123,33 +193,33 @@ metadata:
 spec:
   controllerName: gateway.nginx.org/nginx-gateway-controller
 ---
-# 2. Gateway (remplace le Service LoadBalancer/NodePort)
+# 2. Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
+# Fichier: infra/stagingkub/shared-gateway.yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: rhdemo-gateway
-  namespace: rhdemo-stagingkub
+  name: shared-gateway
+  namespace: nginx-gateway  # ← Namespace centralisé
 spec:
   gatewayClassName: nginx
   listeners:
-  - name: https-rhdemo
-    hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: intra-wildcard-tls
-  - name: https-keycloak
-    hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - name: intra-wildcard-tls
+    - name: https
+      hostname: "*.intra.leuwen-lc.fr"  # ← Wildcard pour toutes les apps
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          # Certificat auto-signé (init-stagingkub.sh) ou Let's Encrypt (cert-manager)
+          # Let's Encrypt: intra-wildcard-tls
+          - name: shared-tls-cert
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All  # ← Permet les HTTPRoutes de tous les namespaces
 ---
-# 3. HTTPRoute (remplace les rules Ingress)
+# 3. HTTPRoute (dans le namespace de l'application)
+# S'attache au shared-gateway via parentRefs cross-namespace
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -157,8 +227,9 @@ metadata:
   namespace: rhdemo-stagingkub
 spec:
   parentRefs:
-  - name: rhdemo-gateway
-    sectionName: https-rhdemo
+  - name: shared-gateway
+    namespace: nginx-gateway  # ← Référence cross-namespace
+    sectionName: https
   hostnames:
   - rhdemo-stagingkub.intra.leuwen-lc.fr
   rules:
@@ -169,6 +240,26 @@ spec:
     backendRefs:
     - name: rhdemo-app
       port: 9000
+```
+
+### 4.1.1 Modes Gateway : Shared vs Dedicated
+
+Le chart Helm supporte deux modes via `values.yaml` :
+
+| Mode                             | Configuration              | Cas d'usage                                |
+|----------------------------------|----------------------------|--------------------------------------------|
+| **Shared Gateway** (recommandé)  | `useSharedGateway: true`   | Certificat TLS unique, gestion centralisée |
+| **Dedicated Gateway**            | `useSharedGateway: false`  | Isolation complète par namespace           |
+
+```yaml
+# values.yaml - Mode shared (défaut)
+gateway:
+  enabled: true
+  useSharedGateway: true  # ← Utilise le shared-gateway
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https
 ```
 
 ### 4.2 Conversion des annotations
@@ -308,7 +399,7 @@ cat <<EOF | kubectl apply -f - # ConfigMap custom-headers
 EOF
 ```
 
-### Après (simplifié grâce aux headers automatiques)
+### Après (simplifié grâce aux headers automatiques + shared-gateway)
 
 ```bash
 # 1. Installer les CRDs Gateway API
@@ -323,11 +414,7 @@ helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
   -n nginx-gateway \
   --set nginx.service.type=NodePort \
   --set nginx.service.externalTrafficPolicy=Local \
-  --set nginxGateway.snippetsFilters.enable=true \
-  --set 'nginx.service.nodePorts[0].port=31792' \
-  --set 'nginx.service.nodePorts[0].listenerPort=80' \
-  --set 'nginx.service.nodePorts[1].port=32616' \
-  --set 'nginx.service.nodePorts[1].listenerPort=443'
+  --set nginxGateway.snippetsFilters.enable=true
 
 # 3. Attendre le déploiement (control plane)
 echo "Attente du démarrage du control plane..."
@@ -335,12 +422,64 @@ kubectl wait --namespace nginx-gateway \
   --for=condition=available deployment/ngf-nginx-gateway-fabric \
   --timeout=120s
 
-# 4. Vérifier que le GatewayClass est créé
-kubectl get gatewayclass nginx
+# 4. Créer le certificat TLS wildcard auto-signé
+echo "Création du certificat TLS wildcard..."
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /tmp/tls.key \
+    -out /tmp/tls.crt \
+    -subj "/CN=*.intra.leuwen-lc.fr/O=RHDemo"
 
-echo "✅ NGINX Gateway Fabric 2.3.0 installé"
+kubectl create secret tls shared-tls-cert \
+    --key=/tmp/tls.key \
+    --cert=/tmp/tls.crt \
+    -n nginx-gateway
+
+# 5. Créer le shared-gateway
+echo "Création du shared-gateway..."
+kubectl apply -f infra/stagingkub/shared-gateway.yaml
+
+# 6. IMPORTANT: Patcher le NodePort après création du Gateway
+# Le Service est créé dynamiquement par NGF quand le Gateway est créé
+echo "Attente du Service shared-gateway-nginx..."
+kubectl wait --namespace nginx-gateway \
+    --for=jsonpath='{.spec.type}'=NodePort \
+    service/shared-gateway-nginx \
+    --timeout=60s
+
+# CRITIQUE: Utiliser --type='json' (pas --type='merge') pour les éléments de liste
+kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
+    -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
+
+echo "✅ NGINX Gateway Fabric 2.3.0 + shared-gateway installés"
 # Note: Les headers X-Forwarded-* sont configurés automatiquement par NGF
 ```
+
+### 5.1 Problème NodePort et solution
+
+⚠️ **Point critique découvert lors de l'implémentation** : Les options Helm `nginx.service.nodePorts[].port` ne fonctionnent pas comme attendu. Le NodePort doit être patché **après** la création du Gateway.
+
+**Problème** : Le Service NodePort est créé dynamiquement par NGF quand le Gateway est créé, pas lors de l'installation Helm.
+
+**Erreur courante** avec `--type='merge'` :
+
+```bash
+# ❌ NE FONCTIONNE PAS - merge ne modifie pas les éléments de liste
+kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='merge' \
+    -p '{"spec":{"ports":[{"nodePort":32616}]}}'
+```
+
+**Solution** avec `--type='json'` :
+
+```bash
+# ✅ FONCTIONNE - json patch pour modifier un élément de liste par index
+kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
+    -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
+```
+
+**Explication** :
+
+- `--type='merge'` : Fusionne les objets mais ne peut pas cibler un élément spécifique dans une liste
+- `--type='json'` : Permet d'utiliser JSON Patch (RFC 6902) pour modifier un élément par son index (`/spec/ports/0`)
 
 ### Syntaxe des NodePorts (format Helm)
 
@@ -500,64 +639,101 @@ ingress2gateway print \
 
 ---
 
-## 12. Conclusion et recommandation
+## 12. Conclusion et statut
 
-**Faisabilité** : ✅ Migration réalisable avec les éléments techniques identifiés
+**Statut** : ✅ **Migration terminée et fonctionnelle**
 
-### Résumé des découvertes (phase recherche)
+### Résumé de l'implémentation
 
-| Question initiale | Réponse | Impact |
-|-------------------|---------|--------|
-| Version à cibler ? | **2.3.0** | Dernière stable, conformité Gateway API |
-| Headers X-Forwarded-* ? | **Automatiques** | Simplifie le script d'install (~70 lignes en moins) |
-| Proxy buffers ? | **SnippetsFilter** | ProxySettingsPolicy pas encore dispo |
-| Syntaxe NodePorts ? | `nodePorts[].port` + `listenerPort` | Format différent de nginx-ingress |
+| Élément                  | Décision finale                            | Statut |
+|--------------------------|--------------------------------------------|--------|
+| Version NGF              | **2.3.0**                                  | ✅     |
+| Architecture             | **Shared Gateway** (recommandé)            | ✅     |
+| Headers X-Forwarded-*    | **Automatiques** (plus de ConfigMaps)      | ✅     |
+| Proxy buffers Keycloak   | **SnippetsFilter**                         | ✅     |
+| NodePort patching        | **`--type='json'`** (pas merge)            | ✅     |
+| Certificat TLS           | Wildcard auto-signé `*.intra.leuwen-lc.fr` | ✅     |
 
-### Points critiques à surveiller
+### Points critiques résolus
 
-1. ~~Configuration TLS/OAuth2~~ → **Résolu** : Headers X-Forwarded-* automatiques dans NGF
-2. **Proxy buffers** : Utiliser SnippetsFilter (section 4.4) - activer via `snippetsFilters.enable=true`
-3. **RBAC** : Ajouter permissions `gateway.networking.k8s.io` ET `gateway.nginx.org` (incluant `snippetsfilters`)
-4. **Test SnippetsFilter** : Valider la syntaxe NGINX avant déploiement (risque de blocage des updates)
+1. ✅ **TLS/OAuth2** : Headers X-Forwarded-* automatiques dans NGF
+2. ✅ **Proxy buffers** : SnippetsFilter activé via `snippetsFilters.enable=true`
+3. ✅ **RBAC Jenkins** : Permissions `gateway.networking.k8s.io` et `gateway.nginx.org` ajoutées
+4. ✅ **NodePort** : Patch JSON après création du Gateway (pas via options Helm)
+5. ✅ **Certificat** : Domaine `*.intra.leuwen-lc.fr` (pas `*.stagingkub.local`)
 
-### Avantages de la migration
+### Avantages constatés après migration
 
-- Architecture Gateway API standardisée (portable vers d'autres implémentations)
-- Séparation claire des responsabilités (GatewayClass/Gateway/Route)
-- Control et data planes indépendants (meilleure scalabilité)
-- Support actif à long terme par F5/NGINX
-- **Headers X-Forwarded-* automatiques** (simplification majeure vs config manuelle actuelle)
+- **Simplification** : Plus de ConfigMaps manuels pour les headers X-Forwarded-*
+- **Consistance** : Toutes les apps (rhdemo, keycloak, grafana) utilisent le même Gateway
+- **Certificat unique** : Un seul Secret TLS wildcard pour tout le domaine
+- **Gateway API standard** : Portable vers Cilium Gateway, Envoy, etc.
+- **Architecture distribuée** : Control et data planes séparés (meilleure scalabilité)
 
-### Prêt pour l'implémentation
+### Fichiers modifiés/créés
 
-Tous les éléments techniques sont maintenant documentés pour une migration autonome :
-- ✅ Syntaxe Helm exacte pour NodePorts
-- ✅ Configuration automatique des headers (plus de ConfigMaps manuels)
-- ✅ Solution SnippetsFilter pour les proxy buffers Keycloak
-- ✅ RBAC complet incluant les nouvelles ressources
-- ✅ Templates Helm proposés dans cette documentation
+| Fichier                                           | Action   |
+|---------------------------------------------------|----------|
+| `helm/rhdemo/templates/gateway.yaml`              | Créé     |
+| `helm/rhdemo/templates/httproute.yaml`            | Créé     |
+| `helm/rhdemo/templates/snippetsfilter.yaml`       | Créé     |
+| `helm/rhdemo/templates/clientsettingspolicy.yaml` | Créé     |
+| `helm/rhdemo/templates/ingress.yaml`              | Supprimé |
+| `helm/rhdemo/values.yaml`                         | Modifié  |
+| `scripts/init-stagingkub.sh`                      | Modifié  |
+| `scripts/validate-stagingkub.sh`                  | Modifié  |
+| `shared-gateway.yaml`                             | Créé     |
+| `rbac/jenkins-role.yaml`                          | Modifié  |
+| Network Policies                                  | Modifié  |
+| `Jenkinsfile-CD`                                  | Modifié  |
+
+### Commandes utiles post-migration
+
+```bash
+# Vérifier le Gateway partagé
+kubectl get gateway -n nginx-gateway
+
+# Vérifier les HTTPRoutes
+kubectl get httproute -n rhdemo-stagingkub
+kubectl get httproute -n loki-stack
+
+# Vérifier le NodePort du Service
+kubectl get svc shared-gateway-nginx -n nginx-gateway -o jsonpath='{.spec.ports[0].nodePort}'
+
+# Tester la connectivité
+curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr
+curl -k https://keycloak-stagingkub.intra.leuwen-lc.fr
+curl -k https://grafana-stagingkub.intra.leuwen-lc.fr
+
+# Voir les logs NGF
+kubectl logs -n nginx-gateway deployment/ngf-nginx-gateway-fabric
+```
 
 ---
 
-## Annexe : Nouveaux templates Helm proposés
+## Annexe : Templates Helm implémentés
 
-### A. gateway.yaml
+### A. gateway.yaml (mode dedicated uniquement)
+
+Le Gateway dédié n'est créé que si `useSharedGateway: false`. Sinon, les HTTPRoutes s'attachent au shared-gateway.
 
 ```yaml
 {{- if .Values.gateway.enabled }}
+{{- if not .Values.gateway.useSharedGateway }}
+# Gateway dédié - créé uniquement si useSharedGateway: false
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: rhdemo-gateway
+  name: {{ .Values.gateway.dedicatedGateway.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "rhdemo.labels" . | nindent 4 }}
 spec:
-  gatewayClassName: {{ .Values.gateway.className }}
+  gatewayClassName: {{ .Values.gateway.dedicatedGateway.className }}
   listeners:
-  {{- range .Values.gateway.listeners }}
+  {{- range .Values.gateway.dedicatedGateway.listeners }}
   - name: {{ .name }}
-    hostname: {{ .hostname }}
+    hostname: {{ .hostname | quote }}
     port: {{ .port }}
     protocol: {{ .protocol }}
     {{- if .tls }}
@@ -565,14 +741,20 @@ spec:
       mode: {{ .tls.mode }}
       certificateRefs:
       - name: {{ .tls.secretName }}
+        kind: Secret
     {{- end }}
+    allowedRoutes:
+      namespaces:
+        from: Same
   {{- end }}
+{{- end }}
 {{- end }}
 ```
 
-### B. httproute.yaml
+### B. httproute.yaml (supporte shared et dedicated)
 
 ```yaml
+{{- if .Values.gateway.enabled }}
 {{- range .Values.gateway.routes }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -584,27 +766,48 @@ metadata:
     {{- include "rhdemo.labels" $ | nindent 4 }}
 spec:
   parentRefs:
-  - name: rhdemo-gateway
+  {{- if $.Values.gateway.useSharedGateway }}
+  # Utilise le Gateway partagé (créé par init-stagingkub.sh)
+  - name: {{ $.Values.gateway.sharedGateway.name }}
+    namespace: {{ $.Values.gateway.sharedGateway.namespace }}
+    sectionName: {{ $.Values.gateway.sharedGateway.sectionName }}
+  {{- else }}
+  # Utilise le Gateway dédié (créé par ce chart)
+  - name: {{ $.Values.gateway.dedicatedGateway.name }}
     sectionName: {{ .listenerName }}
+  {{- end }}
   hostnames:
-  - {{ .hostname }}
+  - {{ .hostname | quote }}
   rules:
   {{- range .rules }}
   - matches:
     - path:
         type: {{ .pathType }}
         value: {{ .path }}
+    {{- if $.Values.gateway.snippetsFilter.enabled }}
+    {{- if eq .serviceName "keycloak" }}
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.nginx.org
+        kind: SnippetsFilter
+        name: keycloak-proxy-buffers
+    {{- end }}
+    {{- end }}
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}
   {{- end }}
 {{- end }}
+{{- end }}
 ```
 
-### C. snippetsfilter-keycloak.yaml (NOUVEAU - critique pour Keycloak)
+### C. snippetsfilter.yaml (proxy buffers pour Keycloak)
 
 ```yaml
+{{- if .Values.gateway.enabled }}
 {{- if .Values.gateway.snippetsFilter.enabled }}
+# SnippetsFilter pour les gros cookies OAuth2 de Keycloak
 apiVersion: gateway.nginx.org/v1alpha1
 kind: SnippetsFilter
 metadata:
@@ -616,42 +819,91 @@ spec:
   snippets:
     - context: http.server.location
       value: |
-        # Buffers pour les gros headers Keycloak (cookies de session)
+        # Buffers pour les gros headers Keycloak (cookies de session OAuth2)
         proxy_buffer_size {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
         proxy_buffers {{ .Values.gateway.snippetsFilter.proxyBuffersNumber }} {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
         proxy_busy_buffers_size {{ .Values.gateway.snippetsFilter.proxyBusyBuffersSize }};
 {{- end }}
+{{- end }}
 ```
 
-### D. Structure values.yaml proposée (mise à jour)
+### D. clientsettingspolicy.yaml (mode dedicated uniquement)
+
+⚠️ **Important** : Cette policy n'est créée que pour le Gateway dédié. Pour le shared-gateway, la ClientSettingsPolicy est créée dans le namespace `nginx-gateway` par `init-stagingkub.sh`.
 
 ```yaml
+{{- if .Values.gateway.enabled }}
+{{- if .Values.gateway.clientSettings.enabled }}
+{{- if not .Values.gateway.useSharedGateway }}
+# ClientSettingsPolicy - uniquement pour le Gateway dédié
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: rhdemo-client-settings
+  namespace: {{ .Values.global.namespace }}
+spec:
+  targetRef:  # ← ATTENTION: targetRef (singulier), pas targetRefs
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ .Values.gateway.dedicatedGateway.name }}
+  body:
+    maxSize: {{ .Values.gateway.clientSettings.maxBodySize | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+```
+
+### E. Structure values.yaml implémentée
+
+```yaml
+# ═══════════════════════════════════════════════════════════════
+# GATEWAY API (NGINX Gateway Fabric)
+# ═══════════════════════════════════════════════════════════════
 gateway:
   enabled: true
-  className: nginx
 
-  listeners:
-    - name: https-rhdemo
-      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-      port: 443
-      protocol: HTTPS
-      tls:
-        mode: Terminate
-        secretName: intra-wildcard-tls
+  # ─────────────────────────────────────────────────────────────
+  # MODE SHARED GATEWAY (recommandé)
+  # Le Gateway est créé par init-stagingkub.sh dans nginx-gateway
+  # Les HTTPRoutes s'y attachent via parentRefs cross-namespace
+  # ─────────────────────────────────────────────────────────────
+  useSharedGateway: true
 
-    - name: https-keycloak
-      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-      port: 443
-      protocol: HTTPS
-      tls:
-        mode: Terminate
-        secretName: intra-wildcard-tls
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Nom du listener dans le Gateway
 
+  # ─────────────────────────────────────────────────────────────
+  # MODE DEDICATED GATEWAY (alternative)
+  # Créé dans le namespace de l'application si useSharedGateway: false
+  # ─────────────────────────────────────────────────────────────
+  dedicatedGateway:
+    name: rhdemo-gateway
+    className: nginx
+    listeners:
+      - name: https-rhdemo
+        hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+        port: 443
+        protocol: HTTPS
+        tls:
+          mode: Terminate
+          secretName: intra-wildcard-tls
+      - name: https-keycloak
+        hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+        port: 443
+        protocol: HTTPS
+        tls:
+          mode: Terminate
+          secretName: intra-wildcard-tls
+
+  # ─────────────────────────────────────────────────────────────
+  # ROUTES (communes aux deux modes)
+  # ─────────────────────────────────────────────────────────────
   routes:
     - name: rhdemo-route
-      listenerName: https-rhdemo
+      listenerName: https-rhdemo  # Utilisé uniquement en mode dedicated
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-      snippetsFilter: null  # Pas besoin pour rhdemo-app
       rules:
         - path: /
           pathType: PathPrefix
@@ -659,77 +911,70 @@ gateway:
           servicePort: 9000
 
     - name: keycloak-route
-      listenerName: https-keycloak
+      listenerName: https-keycloak  # Utilisé uniquement en mode dedicated
       hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-      snippetsFilter: keycloak-proxy-buffers  # Référence au SnippetsFilter
       rules:
         - path: /
           pathType: PathPrefix
           serviceName: keycloak
           servicePort: 8080
 
-  # ClientSettingsPolicy pour la taille max du body
+  # ClientSettingsPolicy (mode dedicated uniquement)
   clientSettings:
     enabled: true
     maxBodySize: 10m
 
-  # SnippetsFilter pour les proxy buffers (Keycloak)
-  # ATTENTION: Nécessite nginxGateway.snippetsFilters.enable=true lors de l'install Helm
+  # SnippetsFilter pour les proxy buffers Keycloak
   snippetsFilter:
     enabled: true
     proxyBufferSize: "128k"
     proxyBuffersNumber: "4"
     proxyBusyBuffersSize: "256k"
-
-# ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric (remplace nginx-ingress)
-# ═══════════════════════════════════════════════════════════════
-nginx-gateway-fabric:
-  enabled: true
-
-  # CRITIQUE: Activer SnippetsFilter pour les proxy buffers
-  nginxGateway:
-    snippetsFilters:
-      enable: true
-
-  nginx:
-    service:
-      type: NodePort
-      externalTrafficPolicy: Local  # Préserve l'IP client source
-
-      # Format NodePorts pour NGF (différent de nginx-ingress!)
-      nodePorts:
-        - port: 31792        # NodePort exposé sur le cluster
-          listenerPort: 80   # Correspond au listener HTTP de la Gateway
-        - port: 32616        # NodePort exposé sur le cluster
-          listenerPort: 443  # Correspond au listener HTTPS de la Gateway
-
-    container:
-      resources:
-        requests:
-          memory: "128Mi"
-          cpu: "100m"
-        limits:
-          memory: "256Mi"
-          cpu: "200m"
-
-  # Control plane resources
-  nginxGateway:
-    resources:
-      requests:
-        memory: "64Mi"
-        cpu: "50m"
-      limits:
-        memory: "128Mi"
-        cpu: "100m"
 ```
 
-### E. Résumé des nouveaux fichiers Helm à créer
+### F. shared-gateway.yaml (créé par init-stagingkub.sh)
 
-| Fichier | Remplace | Description |
-|---------|----------|-------------|
-| `gateway.yaml` | `ingress.yaml` | Définit le Gateway avec listeners TLS |
-| `httproute-rhdemo.yaml` | (partie de ingress.yaml) | Route vers rhdemo-app |
-| `httproute-keycloak.yaml` | (partie de ingress.yaml) | Route vers Keycloak avec SnippetsFilter |
-| `clientsettingspolicy.yaml` | annotation proxy-body-size | Limite taille body 10m |
-| `snippetsfilter-keycloak.yaml` | **NOUVEAU** | Proxy buffers pour Keycloak |
+Ce fichier est appliqué manuellement par le script d'initialisation, pas par Helm :
+
+```yaml
+# Fichier: infra/stagingkub/shared-gateway.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared-gateway
+  namespace: nginx-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: https
+      hostname: "*.intra.leuwen-lc.fr"
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          # Certificat auto-signé (init-stagingkub.sh) ou Let's Encrypt (cert-manager)
+          # Let's Encrypt: intra-wildcard-tls
+          - name: shared-tls-cert
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All  # Permet les HTTPRoutes de tous les namespaces
+```
+
+### G. Résumé des fichiers Helm créés
+
+| Fichier                       | Mode      | Description                                    |
+|-------------------------------|-----------|------------------------------------------------|
+| `gateway.yaml`                | Dedicated | Gateway dédié (si useSharedGateway: false)     |
+| `httproute.yaml`              | Les deux  | Routes vers rhdemo-app et keycloak             |
+| `snippetsfilter.yaml`         | Les deux  | Proxy buffers pour gros cookies Keycloak       |
+| `clientsettingspolicy.yaml`   | Dedicated | Limite taille body (mode dedicated uniquement) |
+
+### H. Fichiers hors Helm (init-stagingkub.sh)
+
+| Fichier                       | Namespace      | Description                              |
+|-------------------------------|----------------|------------------------------------------|
+| `shared-gateway.yaml`         | nginx-gateway  | Gateway partagé pour toutes les apps     |
+| Secret `shared-tls-cert`      | nginx-gateway  | Certificat TLS wildcard auto-signé       |
+| ClientSettingsPolicy          | nginx-gateway  | maxBodySize: 50m (pour shared-gateway)   |

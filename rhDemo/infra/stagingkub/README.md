@@ -119,32 +119,44 @@ sudo sysctl --system
 │  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │ NGINX Gateway Fabric 2.3.0                           │  │
-│  │ • NodePort 31792 (HTTP) → 80 (host)                  │  │
 │  │ • NodePort 32616 (HTTPS) → 443 (host)                │  │
 │  │ • GatewayClass: nginx                                │  │
+│  │                                                      │  │
+│  │ Gateway: shared-gateway (point d'entrée unique)      │  │
+│  │ • Listener: https (*.intra.leuwen-lc.fr)            │  │
+│  │ • TLS: shared-tls-cert (auto-signé)                 │  │
+│  │ • allowedRoutes: All namespaces                      │  │
 │  └────────────┬─────────────────────────────────────────┘  │
+│               │                                             │
 ├───────────────┼─────────────────────────────────────────────┤
 │  Namespace: rhdemo-stagingkub                               │
 │               │                                             │
-│  ┌────────────▼──────────┐    ┌────────────────────────┐   │
-│  │ Gateway: rhdemo-gw    │    │                        │   │
-│  │ └─ HTTPRoute: rhdemo  │    │ └─ HTTPRoute: keycloak │   │
-│  │    → rhdemo-app:9000  │    │    → keycloak:8080     │   │
-│  └────────────┬──────────┘    └────────────┬───────────┘   │
-│               │                             │               │
-│  ┌────────────▼───────────┐    ┌───────────▼───────────┐   │
-│  │ Deployment: rhdemo-app │    │ Deployment: keycloak  │   │
-│  │ • Image: rhdemo-api    │    │ • Image: keycloak     │   │
-│  │ • Replicas: 1          │    │ • Replicas: 1         │   │
-│  │ • Port: 9000           │    │ • Port: 8080          │   │
-│  └────────────┬───────────┘    └───────────┬───────────┘   │
-│               │                             │               │
-│  ┌────────────▼──────────────┐ ┌───────────▼────────────┐  │
-│  │ StatefulSet:              │ │ StatefulSet:           │  │
-│  │ postgresql-rhdemo         │ │ postgresql-keycloak    │  │
-│  │ • Image: postgres:16      │ │ • Image: postgres:16   │  │
-│  │ • PVC: 2Gi                │ │ • PVC: 2Gi             │  │
-│  └───────────────────────────┘ └────────────────────────┘  │
+│  ┌────────────┴─────────────────────────────────────────┐  │
+│  │ HTTPRoutes (attachées au shared-gateway)             │  │
+│  │ • rhdemo-route → rhdemo-app:9000                     │  │
+│  │ • keycloak-route → keycloak:8080                     │  │
+│  └────────────┬────────────────────────┬────────────────┘  │
+│               │                        │                    │
+│  ┌────────────▼───────────┐ ┌──────────▼────────────────┐  │
+│  │ Deployment: rhdemo-app │ │ Deployment: keycloak      │  │
+│  │ • Image: rhdemo-api    │ │ • Image: keycloak         │  │
+│  │ • Replicas: 1          │ │ • Replicas: 1             │  │
+│  │ • Port: 9000           │ │ • Port: 8080              │  │
+│  └────────────┬───────────┘ └──────────┬────────────────┘  │
+│               │                        │                    │
+│  ┌────────────▼───────────┐ ┌──────────▼────────────────┐  │
+│  │ StatefulSet:           │ │ StatefulSet:              │  │
+│  │ postgresql-rhdemo      │ │ postgresql-keycloak       │  │
+│  │ • Image: postgres:16   │ │ • Image: postgres:16      │  │
+│  │ • PVC: 2Gi             │ │ • PVC: 2Gi                │  │
+│  └────────────────────────┘ └───────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
+│  Namespace: loki-stack                                      │
+│               │                                             │
+│  ┌────────────┴─────────────────────────────────────────┐  │
+│  │ HTTPRoute: grafana-route (attachée au shared-gateway)│  │
+│  │ • grafana-stagingkub.intra.leuwen-lc.fr → grafana:80│  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,6 +167,8 @@ sudo sysctl --system
 - **Cilium** : CNI avec kube-proxy replacement
 - **NGINX Gateway Fabric** : Gateway API implementation
 - **GatewayClass** : `nginx`
+- **shared-gateway** : Gateway partagé dans `nginx-gateway` (point d'entrée unique)
+- **shared-tls-cert** : Certificat TLS auto-signé dans `nginx-gateway`
 
 **Application (par Helm chart) :**
 
@@ -170,17 +184,14 @@ sudo sysctl --system
   - `keycloak` (ClusterIP)
   - `rhdemo-app` (ClusterIP)
 - **Gateway API resources** :
-  - `rhdemo-gateway` (Gateway)
-  - `rhdemo-route` (HTTPRoute)
-  - `keycloak-route` (HTTPRoute)
+  - `rhdemo-route` (HTTPRoute → shared-gateway)
+  - `keycloak-route` (HTTPRoute → shared-gateway)
   - `keycloak-proxy-buffers` (SnippetsFilter)
-  - `rhdemo-client-settings` (ClientSettingsPolicy)
-- **5 Secrets** :
+- **4 Secrets** :
   - `rhdemo-db-secret` (mot de passe PostgreSQL rhdemo)
   - `keycloak-db-secret` (mot de passe PostgreSQL keycloak)
   - `keycloak-admin-secret` (mot de passe admin Keycloak)
   - `rhdemo-app-secrets` (secrets-rhdemo.yml)
-  - `intra-wildcard-tls` (certificats SSL)
 - **2 PersistentVolumes statiques** (hostPath)
 - **2 PersistentVolumeClaims**
 - **2 CronJobs** (backups PostgreSQL)
@@ -301,24 +312,22 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 
 ### Configuration Gateway API (values.yaml)
 
+Le chart utilise par défaut le **shared-gateway** créé par `init-stagingkub.sh` :
+
 ```yaml
 gateway:
   enabled: true
-  name: rhdemo-gateway
-  className: nginx
 
-  listeners:
-    - name: https-rhdemo
-      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-      port: 443
-      protocol: HTTPS
-      tls:
-        mode: Terminate
-        secretName: intra-wildcard-tls
+  # Mode recommandé : utiliser le Gateway partagé
+  useSharedGateway: true
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Listener dans shared-gateway.yaml
 
+  # Routes HTTP vers les services backend
   routes:
     - name: rhdemo-route
-      listenerName: https-rhdemo
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
       rules:
         - path: /
@@ -326,11 +335,23 @@ gateway:
           serviceName: rhdemo-app
           servicePort: 9000
 
+    - name: keycloak-route
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      rules:
+        - path: /
+          pathType: PathPrefix
+          serviceName: keycloak
+          servicePort: 8080
+
   # Proxy buffers pour Keycloak (gros cookies OAuth2)
   snippetsFilter:
     enabled: true
     proxyBufferSize: "128k"
 ```
+
+> **Note** : Le mode `useSharedGateway: false` permet de créer un Gateway dédié
+> dans le namespace de l'application, mais nécessite une configuration manuelle
+> du certificat TLS et du NodePort.
 
 ### Secrets
 
@@ -517,15 +538,38 @@ kubectl logs -n nginx-gateway -l app.kubernetes.io/name=nginx-gateway-fabric
 # Vérifier le GatewayClass
 kubectl get gatewayclass nginx
 
-# Vérifier la Gateway et les routes
-kubectl describe gateway rhdemo-gateway -n rhdemo-stagingkub
+# Vérifier le Gateway partagé et son service
+kubectl describe gateway shared-gateway -n nginx-gateway
+kubectl get svc shared-gateway-nginx -n nginx-gateway
+
+# Vérifier que le NodePort est correct (doit être 32616)
+kubectl get svc shared-gateway-nginx -n nginx-gateway -o jsonpath='{.spec.ports[0].nodePort}'
+
+# Vérifier les HTTPRoutes
 kubectl describe httproute rhdemo-route -n rhdemo-stagingkub
+kubectl describe httproute keycloak-route -n rhdemo-stagingkub
 
 # Vérifier les certificats TLS
-kubectl get secret intra-wildcard-tls -n rhdemo-stagingkub
+kubectl get secret shared-tls-cert -n nginx-gateway
 
 # Tester avec curl (ignorer le certificat self-signed)
-curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr
+curl -vk https://rhdemo-stagingkub.intra.leuwen-lc.fr
+```
+
+### Erreur SSL_ERROR_UNRECOGNIZED_NAME_ALERT
+
+Cette erreur indique que le Gateway ne reconnaît pas le hostname demandé :
+
+```bash
+# Vérifier que les HTTPRoutes sont attachées au Gateway
+kubectl get httproute -A
+
+# Vérifier le statut des HTTPRoutes (doit être "Accepted: True")
+kubectl get httproute rhdemo-route -n rhdemo-stagingkub -o jsonpath='{.status.parents[0].conditions}'
+
+# Si le NodePort est incorrect, le patcher
+kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
+    -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
 ```
 
 ### /etc/hosts non configuré
@@ -603,11 +647,14 @@ kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 - [ ] Cilium CNI opérationnel
 - [ ] NGINX Gateway Fabric déployé
 - [ ] GatewayClass `nginx` disponible
+- [ ] shared-gateway créé dans `nginx-gateway` (par init-stagingkub.sh)
+- [ ] NodePort 32616 configuré sur `shared-gateway-nginx`
+- [ ] Certificat TLS `shared-tls-cert` créé
 - [ ] Secrets créés dans le namespace `rhdemo-stagingkub`
-- [ ] Certificats SSL générés
 - [ ] `/etc/hosts` mis à jour
 - [ ] Image Docker construite et poussée vers le registry
 - [ ] Helm chart déployé
 - [ ] Tous les pods en status `Running`
-- [ ] Gateway et HTTPRoutes configurés
-- [ ] Application accessible via https://rhdemo-stagingkub.intra.leuwen-lc.fr
+- [ ] HTTPRoutes attachées au shared-gateway
+- [ ] Application accessible via `https://rhdemo-stagingkub.intra.leuwen-lc.fr`
+- [ ] Keycloak accessible via `https://keycloak-stagingkub.intra.leuwen-lc.fr`

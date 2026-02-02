@@ -4,7 +4,7 @@
 # HTTPRoute: {{ .name }}
 # ═══════════════════════════════════════════════════════════════
 # Route le trafic vers le service backend.
-# S'attache au Gateway partagé (shared-gateway) ou dédié selon la config.
+# S'attache au shared-gateway dans nginx-gateway (cross-namespace).
 # ═══════════════════════════════════════════════════════════════
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -17,16 +17,9 @@ metadata:
     app.kubernetes.io/component: route
 spec:
   parentRefs:
-  {{- if $.Values.gateway.useSharedGateway }}
-  # Utilise le Gateway partagé (créé par init-stagingkub.sh)
   - name: {{ $.Values.gateway.sharedGateway.name }}
     namespace: {{ $.Values.gateway.sharedGateway.namespace }}
     sectionName: {{ $.Values.gateway.sharedGateway.sectionName }}
-  {{- else }}
-  # Utilise le Gateway dédié (créé par ce chart)
-  - name: {{ $.Values.gateway.dedicatedGateway.name }}
-    sectionName: {{ .listenerName }}
-  {{- end }}
   hostnames:
   - {{ .hostname | quote }}
   rules:

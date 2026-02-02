@@ -258,7 +258,8 @@ rhdemo:
 # ═══════════════════════════════════════════════════════════════
 # Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.3.0)
 # ═══════════════════════════════════════════════════════════════
-# Remplace l'ancien Ingress NGINX par Gateway API standard.
+# Utilise le shared-gateway créé par init-stagingkub.sh.
+# Les HTTPRoutes s'attachent au Gateway partagé via parentRefs cross-namespace.
 # Les headers X-Forwarded-* sont configurés automatiquement par NGF.
 #
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
@@ -266,49 +267,16 @@ rhdemo:
 gateway:
   enabled: true
 
-  # ═══════════════════════════════════════════════════════════════
-  # Option 1: Utiliser le Gateway partagé (RECOMMANDÉ)
-  # ═══════════════════════════════════════════════════════════════
-  # Le shared-gateway est créé par init-stagingkub.sh dans nginx-gateway.
-  # Il gère le certificat TLS et le NodePort automatiquement.
-  # Les HTTPRoutes de ce namespace s'attachent au Gateway partagé.
-  useSharedGateway: true
+  # Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
+  # Gère le certificat TLS wildcard et le NodePort (32616)
   sharedGateway:
     name: shared-gateway
     namespace: nginx-gateway
     sectionName: https  # Nom du listener dans shared-gateway.yaml
 
-  # ═══════════════════════════════════════════════════════════════
-  # Option 2: Créer un Gateway dédié (déconseillé)
-  # ═══════════════════════════════════════════════════════════════
-  # Mettre useSharedGateway: false pour créer un Gateway dans ce namespace.
-  # Nécessite de configurer le certificat TLS et le NodePort manuellement.
-  dedicatedGateway:
-    name: rhdemo-gateway
-    className: nginx
-    listeners:
-      - name: https-rhdemo
-        hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-        port: 443
-        protocol: HTTPS
-        tls:
-          mode: Terminate
-          # Certificat auto-signé (init-stagingkub.sh) ou Let's Encrypt (cert-manager)
-          # Let's Encrypt: intra-wildcard-tls
-          secretName: rhdemo-tls-cert
-      - name: https-keycloak
-        hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-        port: 443
-        protocol: HTTPS
-        tls:
-          mode: Terminate
-          # Let's Encrypt: intra-wildcard-tls
-          secretName: rhdemo-tls-cert
-
   # Routes HTTP vers les services backend
   routes:
     - name: rhdemo-route
-      listenerName: https-rhdemo
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
       rules:
         - path: /
@@ -317,7 +285,6 @@ gateway:
           servicePort: 9000
 
     - name: keycloak-route
-      listenerName: https-keycloak
       hostname: keycloak-stagingkub.intra.leuwen-lc.fr
       rules:
         - path: /
@@ -325,14 +292,9 @@ gateway:
           serviceName: keycloak
           servicePort: 8080
 
-  # ClientSettingsPolicy : taille max du body (remplace proxy-body-size)
-  clientSettings:
-    enabled: true
-    maxBodySize: 10m
-
   # SnippetsFilter : buffers proxy pour Keycloak
-  # CRITIQUE: Les gros cookies OAuth2 nécessitent des buffers plus grands
-  # PRÉREQUIS: nginxGateway.snippetsFilters.enable=true lors de l'install Helm
+  # Les gros cookies OAuth2 nécessitent des buffers plus grands
+  # Prérequis: snippetsFilters.enable=true lors de l'install NGF
   snippetsFilter:
     enabled: true
     proxyBufferSize: "128k"
@@ -340,45 +302,18 @@ gateway:
     proxyBusyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric 2.3.0 (remplace nginx-ingress)
+# NGINX Gateway Fabric 2.3.0 (référence)
 # ═══════════════════════════════════════════════════════════════
-# Installation via Helm OCI: oci://ghcr.io/nginx/charts/nginx-gateway-fabric
-# Les CRDs Gateway API doivent être installés au préalable.
-#
-# Note: NGF est installé dans le namespace 'nginx-gateway' par init-stagingkub.sh
-# Cette section est documentative, l'installation réelle est dans le script.
+# NGF est installé par init-stagingkub.sh dans le namespace nginx-gateway.
+# Cette section documente la configuration utilisée (non appliquée par Helm).
 # ═══════════════════════════════════════════════════════════════
 nginx-gateway-fabric:
-  # NGF est installé par init-stagingkub.sh, pas par ce chart
-  # Cette section documente la configuration utilisée
-  enabled: false  # Installé séparément
+  enabled: false  # Installé par init-stagingkub.sh, pas par ce chart
 
-  # Configuration de référence pour init-stagingkub.sh
-  nginxGateway:
-    snippetsFilters:
-      enable: true  # CRITIQUE pour les proxy buffers Keycloak
-
-  nginx:
-    service:
-      type: NodePort
-      externalTrafficPolicy: Local  # Préserve l'IP client source
-
-      # NodePorts mappés dans kind-config.yaml
-      # Format NGF: port = NodePort exposé, listenerPort = port Gateway
-      nodePorts:
-        - port: 31792        # NodePort HTTP (non utilisé, redirige vers HTTPS)
-          listenerPort: 80
-        - port: 32616        # NodePort HTTPS
-          listenerPort: 443
-
-    container:
-      resources:
-        requests:
-          memory: "128Mi"
-          cpu: "100m"
-        limits:
-          memory: "256Mi"
-          cpu: "200m"
+  # Référence: configuration utilisée par init-stagingkub.sh
+  # - snippetsFilters.enable: true (pour proxy buffers Keycloak)
+  # - service.type: NodePort
+  # - NodePort 32616 → listener 443 (HTTPS)
 
 # ═══════════════════════════════════════════════════════════════
 # Network Policies - Sécurité réseau

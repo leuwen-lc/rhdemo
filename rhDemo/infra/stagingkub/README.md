@@ -312,14 +312,13 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 
 ### Configuration Gateway API (values.yaml)
 
-Le chart utilise par défaut le **shared-gateway** créé par `init-stagingkub.sh` :
+Le chart utilise le **shared-gateway** créé par `init-stagingkub.sh` :
 
 ```yaml
 gateway:
   enabled: true
 
-  # Mode recommandé : utiliser le Gateway partagé
-  useSharedGateway: true
+  # Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
   sharedGateway:
     name: shared-gateway
     namespace: nginx-gateway
@@ -348,10 +347,6 @@ gateway:
     enabled: true
     proxyBufferSize: "128k"
 ```
-
-> **Note** : Le mode `useSharedGateway: false` permet de créer un Gateway dédié
-> dans le namespace de l'application, mais nécessite une configuration manuelle
-> du certificat TLS et du NodePort.
 
 ### Secrets
 

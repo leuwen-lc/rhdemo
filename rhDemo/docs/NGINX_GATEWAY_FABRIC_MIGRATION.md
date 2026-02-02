@@ -242,24 +242,18 @@ spec:
       port: 9000
 ```
 
-### 4.1.1 Modes Gateway : Shared vs Dedicated
+### 4.1.1 Configuration values.yaml
 
-Le chart Helm supporte deux modes via `values.yaml` :
-
-| Mode                             | Configuration              | Cas d'usage                                |
-|----------------------------------|----------------------------|--------------------------------------------|
-| **Shared Gateway** (recommandé)  | `useSharedGateway: true`   | Certificat TLS unique, gestion centralisée |
-| **Dedicated Gateway**            | `useSharedGateway: false`  | Isolation complète par namespace           |
+Le chart Helm utilise exclusivement le shared-gateway :
 
 ```yaml
-# values.yaml - Mode shared (défaut)
+# values.yaml
 gateway:
   enabled: true
-  useSharedGateway: true  # ← Utilise le shared-gateway
   sharedGateway:
     name: shared-gateway
     namespace: nginx-gateway
-    sectionName: https
+    sectionName: https  # Listener dans shared-gateway.yaml
 ```
 
 ### 4.2 Conversion des annotations
@@ -672,20 +666,18 @@ ingress2gateway print \
 
 ### Fichiers modifiés/créés
 
-| Fichier                                           | Action   |
-|---------------------------------------------------|----------|
-| `helm/rhdemo/templates/gateway.yaml`              | Créé     |
-| `helm/rhdemo/templates/httproute.yaml`            | Créé     |
-| `helm/rhdemo/templates/snippetsfilter.yaml`       | Créé     |
-| `helm/rhdemo/templates/clientsettingspolicy.yaml` | Créé     |
-| `helm/rhdemo/templates/ingress.yaml`              | Supprimé |
-| `helm/rhdemo/values.yaml`                         | Modifié  |
-| `scripts/init-stagingkub.sh`                      | Modifié  |
-| `scripts/validate-stagingkub.sh`                  | Modifié  |
-| `shared-gateway.yaml`                             | Créé     |
-| `rbac/jenkins-role.yaml`                          | Modifié  |
-| Network Policies                                  | Modifié  |
-| `Jenkinsfile-CD`                                  | Modifié  |
+| Fichier                                     | Action   |
+|---------------------------------------------|----------|
+| `helm/rhdemo/templates/httproute.yaml`      | Créé     |
+| `helm/rhdemo/templates/snippetsfilter.yaml` | Créé     |
+| `helm/rhdemo/templates/ingress.yaml`        | Supprimé |
+| `helm/rhdemo/values.yaml`                   | Modifié  |
+| `scripts/init-stagingkub.sh`                | Modifié  |
+| `scripts/validate-stagingkub.sh`            | Modifié  |
+| `shared-gateway.yaml`                       | Créé     |
+| `rbac/jenkins-role.yaml`                    | Modifié  |
+| Network Policies                            | Modifié  |
+| `Jenkinsfile-CD`                            | Modifié  |
 
 ### Commandes utiles post-migration
 
@@ -713,45 +705,9 @@ kubectl logs -n nginx-gateway deployment/ngf-nginx-gateway-fabric
 
 ## Annexe : Templates Helm implémentés
 
-### A. gateway.yaml (mode dedicated uniquement)
+### A. httproute.yaml
 
-Le Gateway dédié n'est créé que si `useSharedGateway: false`. Sinon, les HTTPRoutes s'attachent au shared-gateway.
-
-```yaml
-{{- if .Values.gateway.enabled }}
-{{- if not .Values.gateway.useSharedGateway }}
-# Gateway dédié - créé uniquement si useSharedGateway: false
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: {{ .Values.gateway.dedicatedGateway.name }}
-  namespace: {{ .Values.global.namespace }}
-  labels:
-    {{- include "rhdemo.labels" . | nindent 4 }}
-spec:
-  gatewayClassName: {{ .Values.gateway.dedicatedGateway.className }}
-  listeners:
-  {{- range .Values.gateway.dedicatedGateway.listeners }}
-  - name: {{ .name }}
-    hostname: {{ .hostname | quote }}
-    port: {{ .port }}
-    protocol: {{ .protocol }}
-    {{- if .tls }}
-    tls:
-      mode: {{ .tls.mode }}
-      certificateRefs:
-      - name: {{ .tls.secretName }}
-        kind: Secret
-    {{- end }}
-    allowedRoutes:
-      namespaces:
-        from: Same
-  {{- end }}
-{{- end }}
-{{- end }}
-```
-
-### B. httproute.yaml (supporte shared et dedicated)
+Les HTTPRoutes s'attachent au shared-gateway via parentRefs cross-namespace.
 
 ```yaml
 {{- if .Values.gateway.enabled }}
@@ -766,16 +722,9 @@ metadata:
     {{- include "rhdemo.labels" $ | nindent 4 }}
 spec:
   parentRefs:
-  {{- if $.Values.gateway.useSharedGateway }}
-  # Utilise le Gateway partagé (créé par init-stagingkub.sh)
   - name: {{ $.Values.gateway.sharedGateway.name }}
     namespace: {{ $.Values.gateway.sharedGateway.namespace }}
     sectionName: {{ $.Values.gateway.sharedGateway.sectionName }}
-  {{- else }}
-  # Utilise le Gateway dédié (créé par ce chart)
-  - name: {{ $.Values.gateway.dedicatedGateway.name }}
-    sectionName: {{ .listenerName }}
-  {{- end }}
   hostnames:
   - {{ .hostname | quote }}
   rules:
@@ -802,7 +751,7 @@ spec:
 {{- end }}
 ```
 
-### C. snippetsfilter.yaml (proxy buffers pour Keycloak)
+### B. snippetsfilter.yaml (proxy buffers pour Keycloak)
 
 ```yaml
 {{- if .Values.gateway.enabled }}
@@ -827,33 +776,7 @@ spec:
 {{- end }}
 ```
 
-### D. clientsettingspolicy.yaml (mode dedicated uniquement)
-
-⚠️ **Important** : Cette policy n'est créée que pour le Gateway dédié. Pour le shared-gateway, la ClientSettingsPolicy est créée dans le namespace `nginx-gateway` par `init-stagingkub.sh`.
-
-```yaml
-{{- if .Values.gateway.enabled }}
-{{- if .Values.gateway.clientSettings.enabled }}
-{{- if not .Values.gateway.useSharedGateway }}
-# ClientSettingsPolicy - uniquement pour le Gateway dédié
-apiVersion: gateway.nginx.org/v1alpha1
-kind: ClientSettingsPolicy
-metadata:
-  name: rhdemo-client-settings
-  namespace: {{ .Values.global.namespace }}
-spec:
-  targetRef:  # ← ATTENTION: targetRef (singulier), pas targetRefs
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: {{ .Values.gateway.dedicatedGateway.name }}
-  body:
-    maxSize: {{ .Values.gateway.clientSettings.maxBodySize | quote }}
-{{- end }}
-{{- end }}
-{{- end }}
-```
-
-### E. Structure values.yaml implémentée
+### C. Structure values.yaml
 
 ```yaml
 # ═══════════════════════════════════════════════════════════════
@@ -862,47 +785,15 @@ spec:
 gateway:
   enabled: true
 
-  # ─────────────────────────────────────────────────────────────
-  # MODE SHARED GATEWAY (recommandé)
-  # Le Gateway est créé par init-stagingkub.sh dans nginx-gateway
-  # Les HTTPRoutes s'y attachent via parentRefs cross-namespace
-  # ─────────────────────────────────────────────────────────────
-  useSharedGateway: true
-
+  # Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
   sharedGateway:
     name: shared-gateway
     namespace: nginx-gateway
     sectionName: https  # Nom du listener dans le Gateway
 
-  # ─────────────────────────────────────────────────────────────
-  # MODE DEDICATED GATEWAY (alternative)
-  # Créé dans le namespace de l'application si useSharedGateway: false
-  # ─────────────────────────────────────────────────────────────
-  dedicatedGateway:
-    name: rhdemo-gateway
-    className: nginx
-    listeners:
-      - name: https-rhdemo
-        hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
-        port: 443
-        protocol: HTTPS
-        tls:
-          mode: Terminate
-          secretName: intra-wildcard-tls
-      - name: https-keycloak
-        hostname: keycloak-stagingkub.intra.leuwen-lc.fr
-        port: 443
-        protocol: HTTPS
-        tls:
-          mode: Terminate
-          secretName: intra-wildcard-tls
-
-  # ─────────────────────────────────────────────────────────────
-  # ROUTES (communes aux deux modes)
-  # ─────────────────────────────────────────────────────────────
+  # Routes HTTP vers les services backend
   routes:
     - name: rhdemo-route
-      listenerName: https-rhdemo  # Utilisé uniquement en mode dedicated
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
       rules:
         - path: /
@@ -911,18 +802,12 @@ gateway:
           servicePort: 9000
 
     - name: keycloak-route
-      listenerName: https-keycloak  # Utilisé uniquement en mode dedicated
       hostname: keycloak-stagingkub.intra.leuwen-lc.fr
       rules:
         - path: /
           pathType: PathPrefix
           serviceName: keycloak
           servicePort: 8080
-
-  # ClientSettingsPolicy (mode dedicated uniquement)
-  clientSettings:
-    enabled: true
-    maxBodySize: 10m
 
   # SnippetsFilter pour les proxy buffers Keycloak
   snippetsFilter:
@@ -932,9 +817,9 @@ gateway:
     proxyBusyBuffersSize: "256k"
 ```
 
-### F. shared-gateway.yaml (créé par init-stagingkub.sh)
+### D. shared-gateway.yaml (créé par init-stagingkub.sh)
 
-Ce fichier est appliqué manuellement par le script d'initialisation, pas par Helm :
+Ce fichier est appliqué par le script d'initialisation, pas par Helm :
 
 ```yaml
 # Fichier: infra/stagingkub/shared-gateway.yaml
@@ -962,19 +847,19 @@ spec:
           from: All  # Permet les HTTPRoutes de tous les namespaces
 ```
 
-### G. Résumé des fichiers Helm créés
+### E. Résumé des fichiers créés
 
-| Fichier                       | Mode      | Description                                    |
-|-------------------------------|-----------|------------------------------------------------|
-| `gateway.yaml`                | Dedicated | Gateway dédié (si useSharedGateway: false)     |
-| `httproute.yaml`              | Les deux  | Routes vers rhdemo-app et keycloak             |
-| `snippetsfilter.yaml`         | Les deux  | Proxy buffers pour gros cookies Keycloak       |
-| `clientsettingspolicy.yaml`   | Dedicated | Limite taille body (mode dedicated uniquement) |
+**Templates Helm (helm/rhdemo/templates/) :**
 
-### H. Fichiers hors Helm (init-stagingkub.sh)
+| Fichier               | Description                                      |
+|-----------------------|--------------------------------------------------|
+| `httproute.yaml`      | Routes vers rhdemo-app et keycloak               |
+| `snippetsfilter.yaml` | Proxy buffers pour gros cookies Keycloak (OAuth2)|
 
-| Fichier                       | Namespace      | Description                              |
-|-------------------------------|----------------|------------------------------------------|
-| `shared-gateway.yaml`         | nginx-gateway  | Gateway partagé pour toutes les apps     |
-| Secret `shared-tls-cert`      | nginx-gateway  | Certificat TLS wildcard auto-signé       |
-| ClientSettingsPolicy          | nginx-gateway  | maxBodySize: 50m (pour shared-gateway)   |
+**Fichiers hors Helm (init-stagingkub.sh) :**
+
+| Fichier                  | Namespace     | Description                            |
+|--------------------------|---------------|----------------------------------------|
+| `shared-gateway.yaml`    | nginx-gateway | Gateway partagé (point d'entrée unique)|
+| Secret `shared-tls-cert` | nginx-gateway | Certificat TLS wildcard auto-signé     |
+| ClientSettingsPolicy     | nginx-gateway | maxBodySize: 50m                       |

@@ -819,8 +819,8 @@ EOF
                     kubectl get svc -n ${env.K8S_NAMESPACE}
 
                     echo ""
-                    echo "🌐 Ingress:"
-                    kubectl get ingress -n ${env.K8S_NAMESPACE}
+                    echo "🌐 Gateway & HTTPRoutes:"
+                    kubectl get gateway,httproute -n ${env.K8S_NAMESPACE}
 
                     echo ""
                     echo "📦 Images déployées:"

@@ -12,7 +12,7 @@
 
 🌐 URLS D'ACCÈS
 
-{{- if .Values.ingress.enabled }}
+{{- if .Values.gateway.enabled }}
   Application RHDemo:
     https://rhdemo-{{ .Values.global.domain }}
 
@@ -20,7 +20,7 @@
     https://keycloak-{{ .Values.global.domain }}
     👤 Admin: {{ .Values.keycloak.admin.user }}
 {{- else }}
-  Ingress désactivé. Utilisez port-forward pour accéder aux services:
+  Gateway désactivé. Utilisez port-forward pour accéder aux services:
 
   kubectl port-forward -n {{ .Release.Namespace }} svc/rhdemo-app 9000:9000
   kubectl port-forward -n {{ .Release.Namespace }} svc/keycloak 8080:8080
@@ -42,9 +42,9 @@
   # Statut des services
   kubectl get svc -n {{ .Release.Namespace }}
 
-{{- if .Values.ingress.enabled }}
-  # Statut de l'ingress
-  kubectl get ingress -n {{ .Release.Namespace }}
+{{- if .Values.gateway.enabled }}
+  # Statut du Gateway et HTTPRoutes
+  kubectl get gateway,httproute -n {{ .Release.Namespace }}
 {{- end }}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -72,14 +72,7 @@
 
 ⚠️  NOTES IMPORTANTES
 
-{{- if not .Values.ingress.tls.enabled }}
-  ⚠️  TLS désactivé - Les connexions HTTP ne sont pas sécurisées
-{{- end }}
 
-{{- if eq .Values.global.environment "production" }}
-  🔒 Environnement PRODUCTION détecté
-     Assurez-vous que les secrets sont correctement configurés !
-{{- end }}
 
   💡 Pour les tests locaux avec KinD, assurez-vous que /etc/hosts
      contient les entrées pour *.{{ .Values.global.domain }}

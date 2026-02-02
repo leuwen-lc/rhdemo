@@ -149,22 +149,6 @@ kubectl create namespace $LOKI_NS 2>/dev/null || warn "Namespace existe déjà"
 success "Namespace $LOKI_NS prêt"
 echo ""
 
-# Certificat TLS pour Grafana
-log "Génération du certificat TLS pour Grafana..."
-if ! kubectl get secret -n $LOKI_NS grafana-tls-cert >/dev/null 2>&1; then
-    TMP=$(mktemp -d)
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout $TMP/tls.key -out $TMP/tls.crt \
-        -subj "/CN=$DOMAIN/O=RHDemo" 2>/dev/null
-    kubectl create secret tls grafana-tls-cert \
-        --cert=$TMP/tls.crt --key=$TMP/tls.key -n $LOKI_NS
-    rm -rf $TMP
-    success "Certificat TLS créé"
-else
-    warn "Certificat TLS existe déjà"
-fi
-echo ""
-
 # Installation Loki
 log "Installation de Loki..."
 helm upgrade --install loki grafana/loki \
@@ -190,6 +174,41 @@ helm upgrade --install grafana grafana/grafana \
     -f $VALUES_DIR/grafana-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
 success "Grafana installé"
+echo ""
+
+# Application des ressources Gateway API pour Grafana
+log "Application des ressources Gateway API pour Grafana..."
+
+# Création de l'HTTPRoute pour Grafana (attachée au Gateway partagé)
+# Utilise le Gateway partagé 'shared-gateway' dans nginx-gateway qui écoute déjà sur le NodePort 32616
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+  namespace: $LOKI_NS
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https
+  hostnames:
+  - "$DOMAIN"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: grafana
+      port: 80
+EOF
+
+success "HTTPRoute Grafana créée (attachée au Gateway partagé)"
+
+log "Vérification du statut de l'HTTPRoute..."
+sleep 2
+kubectl get httproute grafana-route -n $LOKI_NS
 echo ""
 
 # ═══════════════════════════════════════════════════════════════

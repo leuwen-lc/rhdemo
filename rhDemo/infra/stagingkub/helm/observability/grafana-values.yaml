@@ -29,20 +29,12 @@ persistence:
   enabled: false
 
 ###########################################
-# Ingress
+# Ingress (désactivé - utilisation de Gateway API)
 ###########################################
+# NOTE: Depuis la migration vers NGINX Gateway Fabric, on utilise
+# Gateway + HTTPRoute au lieu de Ingress. Voir grafana-gateway.yaml
 ingress:
-  enabled: true
-  ingressClassName: nginx
-  hosts:
-    - grafana-stagingkub.intra.leuwen-lc.fr
-  tls:
-    # Secret contenant le certificat TLS :
-    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
-    # - Auto-signé : grafana-tls-cert (généré manuellement)
-    - secretName: intra-wildcard-tls
-      hosts:
-        - grafana-stagingkub.intra.leuwen-lc.fr
+  enabled: false
 
 ###########################################
 # Datasources

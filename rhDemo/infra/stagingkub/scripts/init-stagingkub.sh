@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
-echo -e "${BLUE}  CNI: Cilium 1.18 | Ingress: Nginx Ingress Controller${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.3.0${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -310,25 +310,61 @@ data:
 EOF
 echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
-# Installer Nginx Ingress Controller si nécessaire
-echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller...${NC}"
-if ! kubectl get namespace ingress-nginx &> /dev/null; then
-    echo -e "${YELLOW}Installation de Nginx Ingress Controller...${NC}"
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
-    INGRESS_INSTALLED=true
+# ═══════════════════════════════════════════════════════════════
+# Installation de NGINX Gateway Fabric 2.3.0 (remplace nginx-ingress)
+# ═══════════════════════════════════════════════════════════════
+# NGINX Gateway Fabric implémente Gateway API (gateway.networking.k8s.io/v1)
+# Les headers X-Forwarded-* sont configurés automatiquement par NGF
+# Documentation: https://docs.nginx.com/nginx-gateway-fabric/
+# ═══════════════════════════════════════════════════════════════
+
+NGF_VERSION="2.3.0"
+NGF_NAMESPACE="nginx-gateway"
+
+echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"
+
+# Vérifier si NGF est déjà installé
+if kubectl get namespace ${NGF_NAMESPACE} &> /dev/null; then
+    echo -e "${GREEN}✅ NGINX Gateway Fabric déjà installé${NC}"
+    NGF_INSTALLED=false
 else
-    echo -e "${GREEN}✅ Nginx Ingress Controller déjà installé${NC}"
-    INGRESS_INSTALLED=false
+    NGF_INSTALLED=true
+
+    # 1. Installer les CRDs Gateway API (standard)
+    echo -e "${YELLOW}  - Installation des CRDs Gateway API...${NC}"
+    kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v${NGF_VERSION}" | kubectl apply -f -
+    echo -e "${GREEN}    ✓ CRDs Gateway API installés${NC}"
+
+    # 2. Ajouter le repo Helm NGINX si nécessaire
+    if ! helm repo list 2>/dev/null | grep -q "^oci://ghcr.io/nginx"; then
+        echo -e "${YELLOW}  - Configuration du registry Helm OCI...${NC}"
+    fi
+
+    # 3. Installer NGINX Gateway Fabric via Helm OCI
+    echo -e "${YELLOW}  - Installation de NGINX Gateway Fabric via Helm...${NC}"
+    helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+        --version ${NGF_VERSION} \
+        --create-namespace \
+        --namespace ${NGF_NAMESPACE} \
+        --set nginx.service.type=NodePort \
+        --set nginx.service.externalTrafficPolicy=Local \
+        --set nginxGateway.snippetsFilters.enable=true \
+        --set 'nginx.service.ports[0].port=80' \
+        --set 'nginx.service.ports[0].nodePort=31792' \
+        --set 'nginx.service.ports[1].port=443' \
+        --set 'nginx.service.ports[1].nodePort=32616'
+
+    echo -e "${GREEN}    ✓ Helm release 'ngf' créée${NC}"
 fi
 
-# Attendre que l'Ingress Controller soit prêt (que ce soit une nouvelle installation ou existant)
-echo -e "${YELLOW}Attente du démarrage de Nginx Ingress Controller (jusqu'à 3 minutes)...${NC}"
+# Attendre que NGINX Gateway Fabric soit prêt
+echo -e "${YELLOW}  - Attente du démarrage de NGINX Gateway Fabric (jusqu'à 3 minutes)...${NC}"
 
-# Attendre d'abord que le pod existe (jusqu'à 2 minutes)
-echo -n "  - Attente de la création du pod"
+# Attendre d'abord que le pod existe
+echo -n "    Attente de la création du pod"
 POD_FOUND=false
 for i in {1..120}; do
-    if kubectl get pod -l app.kubernetes.io/component=controller -n ingress-nginx &> /dev/null; then
+    if kubectl get pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ${NGF_NAMESPACE} --no-headers 2>/dev/null | grep -q .; then
         POD_FOUND=true
         break
     fi
@@ -338,81 +374,37 @@ done
 echo ""
 
 if [ "$POD_FOUND" = false ]; then
-    echo -e "${RED}❌ Le pod Ingress Controller n'a pas été créé${NC}"
-    kubectl get pods -n ingress-nginx
+    echo -e "${RED}❌ Le pod NGINX Gateway Fabric n'a pas été créé${NC}"
+    kubectl get pods -n ${NGF_NAMESPACE}
     exit 1
 fi
 
-# Maintenant attendre que le pod soit ready
-echo "  - Attente que le pod soit prêt..."
-if kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s > /dev/null 2>&1; then
-    if [ "$INGRESS_INSTALLED" = true ]; then
-        echo -e "${GREEN}✅ Nginx Ingress Controller installé et prêt${NC}"
-    else
-        echo -e "${GREEN}✅ Nginx Ingress Controller prêt${NC}"
-    fi
+# Attendre que le pod soit ready
+echo "    Attente que le pod soit prêt..."
+if kubectl wait --namespace ${NGF_NAMESPACE} \
+    --for=condition=ready pod \
+    --selector=app.kubernetes.io/name=nginx-gateway-fabric \
+    --timeout=120s > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ NGINX Gateway Fabric ${NGF_VERSION} installé et opérationnel${NC}"
 else
-    echo -e "${RED}❌ Timeout lors de l'attente de l'Ingress Controller${NC}"
+    echo -e "${RED}❌ Timeout lors de l'attente de NGINX Gateway Fabric${NC}"
     echo -e "${YELLOW}Vérification de l'état des pods...${NC}"
-    kubectl get pods -n ingress-nginx
-    kubectl describe pod -l app.kubernetes.io/component=controller -n ingress-nginx | tail -50
+    kubectl get pods -n ${NGF_NAMESPACE}
+    kubectl describe pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ${NGF_NAMESPACE} | tail -50
     exit 1
 fi
 
-# Configurer les NodePorts fixes pour l'Ingress Controller
-# Ces NodePorts correspondent aux ports mappés dans la configuration KinD :
-# - NodePort 31792 (HTTP) → Host port 80
-# - NodePort 32616 (HTTPS) → Host port 443
-echo -e "${YELLOW}▶ Configuration des NodePorts pour l'Ingress Controller...${NC}"
-kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"protocol":"TCP","targetPort":"http","nodePort":31792},{"name":"https","port":443,"protocol":"TCP","targetPort":"https","nodePort":32616}]}}'
-echo -e "${GREEN}✅ NodePorts configurés (HTTP: 31792→80, HTTPS: 32616→443)${NC}"
+# Vérifier que le GatewayClass 'nginx' est créé
+echo -e "${YELLOW}  - Vérification du GatewayClass...${NC}"
+if kubectl get gatewayclass nginx &> /dev/null; then
+    echo -e "${GREEN}    ✓ GatewayClass 'nginx' disponible${NC}"
+else
+    echo -e "${YELLOW}    ⚠ GatewayClass 'nginx' non trouvé, il sera créé par le chart Helm${NC}"
+fi
 
-# Configurer nginx-ingress pour forcer les headers X-Forwarded-Port et X-Forwarded-Proto
-# Ceci permet à Spring Boot de construire les URLs OAuth2 avec le bon port (443)
-echo -e "${YELLOW}▶ Configuration des headers X-Forwarded-* dans nginx-ingress...${NC}"
-kubectl patch configmap ingress-nginx-controller -n ingress-nginx --type merge -p '{"data":{"use-forwarded-headers":"true","compute-full-forwarded-for":"true","forwarded-for-header":"X-Forwarded-For"}}'
-
-# Ajouter la configuration pour forcer X-Forwarded-Port à 443 pour HTTPS
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ingress-nginx-controller
-  namespace: ingress-nginx
-data:
-  use-forwarded-headers: "true"
-  compute-full-forwarded-for: "true"
-  forwarded-for-header: "X-Forwarded-For"
-  http-snippet: |
-    map \$server_port \$custom_forwarded_port {
-      443 443;
-      default \$server_port;
-    }
-  proxy-set-headers: "ingress-nginx/custom-headers"
-EOF
-
-# Créer une ConfigMap pour les headers personnalisés
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: custom-headers
-  namespace: ingress-nginx
-data:
-  X-Forwarded-Port: "443"
-  X-Forwarded-Proto: "https"
-EOF
-
-echo -e "${GREEN}✅ Headers X-Forwarded-* configurés dans nginx-ingress${NC}"
-
-# Redémarrer le contrôleur nginx-ingress pour appliquer les changements
-echo -e "${YELLOW}▶ Redémarrage du contrôleur nginx-ingress...${NC}"
-kubectl rollout restart deployment ingress-nginx-controller -n ingress-nginx
-kubectl rollout status deployment ingress-nginx-controller -n ingress-nginx --timeout=60s
-echo -e "${GREEN}✅ Contrôleur nginx-ingress redémarré${NC}"
+# Note: Les headers X-Forwarded-* sont configurés automatiquement par NGF
+# Pas besoin de ConfigMaps manuels comme avec nginx-ingress
+echo -e "${GREEN}✅ Headers X-Forwarded-* configurés automatiquement par NGF${NC}"
 
 # Charger les secrets depuis SOPS si disponibles
 echo -e "${YELLOW}▶ Chargement des secrets...${NC}"
@@ -618,6 +610,25 @@ KUBECONFIG_EOF
         echo -e "${RED}    ✗ Création des PersistentVolumes refusée${NC}"
     fi
 
+    # Vérifier les permissions Gateway API
+    if kubectl auth can-i create gateways.gateway.networking.k8s.io -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des Gateways (Gateway API)${NC}"
+    else
+        echo -e "${RED}    ✗ Création des Gateways refusée${NC}"
+    fi
+
+    if kubectl auth can-i create httproutes.gateway.networking.k8s.io -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des HTTPRoutes (Gateway API)${NC}"
+    else
+        echo -e "${RED}    ✗ Création des HTTPRoutes refusée${NC}"
+    fi
+
+    if kubectl auth can-i create snippetsfilters.gateway.nginx.org -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des SnippetsFilters (NGF)${NC}"
+    else
+        echo -e "${RED}    ✗ Création des SnippetsFilters refusée${NC}"
+    fi
+
     # Vérifier le NON-accès aux autres namespaces
     if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès à kube-system (sécurité OK)${NC}"
@@ -641,20 +652,74 @@ if [ ! -f "$CERTS_DIR/tls.crt" ]; then
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout "$CERTS_DIR/tls.key" \
       -out "$CERTS_DIR/tls.crt" \
-      -subj "/CN=*.stagingkub.intra.leuwen-lc.fr/O=RHDemo" \
+      -subj "/CN=*.intra.leuwen-lc.fr/O=RHDemo" \
       -addext "subjectAltName=DNS:rhdemo-stagingkub.intra.leuwen-lc.fr,DNS:keycloak-stagingkub.intra.leuwen-lc.fr,DNS:grafana-stagingkub.intra.leuwen-lc.fr"
     echo -e "${GREEN}✅ Certificats SSL auto-signés générés${NC}"
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
 fi
 
-# Créer le secret TLS
+# Créer le secret TLS dans rhdemo-stagingkub
 kubectl create secret tls rhdemo-tls-cert \
   --cert="$CERTS_DIR/tls.crt" \
   --key="$CERTS_DIR/tls.key" \
   --namespace rhdemo-stagingkub \
   --dry-run=client -o yaml | kubectl apply -f -
-echo -e "${GREEN}✅ Secret TLS créé${NC}"
+echo -e "${GREEN}✅ Secret TLS créé (rhdemo-stagingkub)${NC}"
+
+# Créer le secret TLS dans nginx-gateway pour le Gateway partagé
+kubectl create secret tls shared-tls-cert \
+  --cert="$CERTS_DIR/tls.crt" \
+  --key="$CERTS_DIR/tls.key" \
+  --namespace nginx-gateway \
+  --dry-run=client -o yaml | kubectl apply -f -
+echo -e "${GREEN}✅ Secret TLS créé (nginx-gateway)${NC}"
+
+# ═══════════════════════════════════════════════════════════════
+# Création du Gateway partagé
+# ═══════════════════════════════════════════════════════════════
+# Ce Gateway est le point d'entrée unique pour tout le trafic HTTPS.
+# Il permet aux HTTPRoutes de différents namespaces de l'utiliser.
+# ═══════════════════════════════════════════════════════════════
+echo -e "${YELLOW}▶ Création du Gateway partagé...${NC}"
+SHARED_GATEWAY_FILE="$STAGINGKUB_DIR/shared-gateway.yaml"
+
+if [ -f "$SHARED_GATEWAY_FILE" ]; then
+    kubectl apply -f "$SHARED_GATEWAY_FILE"
+    echo -e "${GREEN}✅ Gateway partagé créé${NC}"
+
+    # Attendre que NGF crée le service shared-gateway-nginx (créé dynamiquement)
+    echo -e "${YELLOW}  - Attente du service shared-gateway-nginx...${NC}"
+    for i in {1..60}; do
+        if kubectl get svc shared-gateway-nginx -n nginx-gateway &> /dev/null; then
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    echo ""
+
+    # Patcher le NodePort pour correspondre au mapping KinD (hostPort 443 → containerPort 32616)
+    # NGF crée un NodePort dynamique, mais KinD attend un port fixe configuré dans kind-config.yaml
+    echo -e "${YELLOW}  - Configuration du NodePort HTTPS (32616)...${NC}"
+    if kubectl get svc shared-gateway-nginx -n nginx-gateway &> /dev/null; then
+        # Ciblage spécifique du port 443 pour éviter les erreurs d'index
+        CURRENT_NODEPORT=$(kubectl get svc shared-gateway-nginx -n nginx-gateway -o jsonpath='{.spec.ports[?(@.port==443)].nodePort}')
+        if [ "$CURRENT_NODEPORT" != "32616" ]; then
+            # Patch JSON pour modifier le nodePort du premier (et seul) port
+            # Note: --type='merge' ne fonctionne pas pour les éléments de liste
+            kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
+                -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
+            echo -e "${GREEN}    ✓ NodePort HTTPS patché (${CURRENT_NODEPORT} → 32616)${NC}"
+        else
+            echo -e "${GREEN}    ✓ NodePort HTTPS déjà configuré (32616)${NC}"
+        fi
+    else
+        echo -e "${RED}    ✗ Service shared-gateway-nginx non trouvé${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  Fichier shared-gateway.yaml non trouvé : $SHARED_GATEWAY_FILE${NC}"
+fi
 
 # Mettre à jour /etc/hosts si nécessaire
 echo -e "${YELLOW}▶ Vérification de /etc/hosts...${NC}"

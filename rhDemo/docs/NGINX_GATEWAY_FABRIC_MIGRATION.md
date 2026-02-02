@@ -1,7 +1,7 @@
 # Étude d'impact : Migration Nginx Ingress Controller → Nginx Gateway Fabric 2.3
 
-**Date** : 2026-01-29
-**Statut** : Recherche technique complétée
+**Date** : 2026-02-02
+**Statut** : ✅ Migration implémentée
 **Environnement cible** : stagingkub (Kubernetes/KinD)
 **Version NGF cible** : **2.3.0** (dernière stable, décembre 2024)
 

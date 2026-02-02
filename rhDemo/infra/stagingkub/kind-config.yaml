@@ -34,10 +34,14 @@ nodes:
   - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups
     containerPath: /mnt/backups
   extraPortMappings:
-  - containerPort: 80
+  # NodePort pour NGINX Gateway Fabric (HTTP)
+  # Le NodePort 31792 est configuré dans init-stagingkub.sh via Helm
+  - containerPort: 31792
     hostPort: 80
     protocol: TCP
-  - containerPort: 443
+  # NodePort pour NGINX Gateway Fabric (HTTPS)
+  # Le NodePort 32616 est configuré dans init-stagingkub.sh via Helm
+  - containerPort: 32616
     hostPort: 443
     protocol: TCP
 

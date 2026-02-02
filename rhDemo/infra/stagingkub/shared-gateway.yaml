@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════════════════
+# Gateway partagé pour stagingkub (NGINX Gateway Fabric)
+# ═══════════════════════════════════════════════════════════════
+# Ce Gateway est le point d'entrée unique pour tout le trafic HTTPS.
+# Il est créé par init-stagingkub.sh et utilisé par :
+#   - rhdemo-app (HTTPRoute dans rhdemo-stagingkub)
+#   - keycloak (HTTPRoute dans rhdemo-stagingkub)
+#   - grafana (HTTPRoute dans loki-stack)
+#
+# Architecture:
+#   Internet → KinD (hostPort 443) → NodePort 32616 → shared-gateway → HTTPRoutes
+#
+# Listeners:
+#   - https : Port 443, accepte les routes de tous les namespaces
+# ═══════════════════════════════════════════════════════════════
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared-gateway
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/name: shared-gateway
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: stagingkub
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: https
+      hostname: "*.intra.leuwen-lc.fr"
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          # Certificat auto-signé créé par init-stagingkub.sh
+          # Sera remplacé par Let's Encrypt si cert-manager est configuré
+          - name: shared-tls-cert
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          # Permet les HTTPRoutes de tous les namespaces
+          from: All

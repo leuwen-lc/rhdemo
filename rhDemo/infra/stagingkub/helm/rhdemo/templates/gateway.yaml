@@ -1,0 +1,49 @@
+{{- if .Values.gateway.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# Gateway - Point d'entrée du trafic externe (NGINX Gateway Fabric)
+# ═══════════════════════════════════════════════════════════════
+# Remplace l'ancien Ingress par Gateway API (gateway.networking.k8s.io/v1)
+#
+# Listeners:
+#   - https-rhdemo : Application RHDemo sur port 443
+#   - https-keycloak : Keycloak IAM sur port 443
+#
+# TLS: Terminaison TLS avec certificat wildcard
+# ═══════════════════════════════════════════════════════════════
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  listeners:
+  {{- range .Values.gateway.listeners }}
+  - name: {{ .name }}
+    hostname: {{ .hostname | quote }}
+    port: {{ .port }}
+    protocol: {{ .protocol }}
+    {{- if .tls }}
+    tls:
+      mode: {{ .tls.mode }}
+      certificateRefs:
+      - name: {{ .tls.secretName }}
+        kind: Secret
+    {{- end }}
+    allowedRoutes:
+      namespaces:
+        {{- if .allowedNamespaces }}
+        from: Selector
+        selector:
+          matchLabels:
+            {{- range $key, $value := .allowedNamespaces }}
+            {{ $key }}: {{ $value | quote }}
+            {{- end }}
+        {{- else }}
+        from: Same
+        {{- end }}
+  {{- end }}
+{{- end }}

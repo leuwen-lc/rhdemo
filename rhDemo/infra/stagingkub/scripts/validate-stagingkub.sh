@@ -144,17 +144,25 @@ else
 fi
 echo ""
 
-# 4. Vérification de Nginx Ingress
-echo -e "${YELLOW}▶ Vérification de Nginx Ingress Controller${NC}"
-echo -n "Vérification du namespace ingress-nginx... "
-if kubectl get namespace ingress-nginx &> /dev/null; then
+# 4. Vérification de NGINX Gateway Fabric
+echo -e "${YELLOW}▶ Vérification de NGINX Gateway Fabric${NC}"
+echo -n "Vérification du namespace nginx-gateway... "
+if kubectl get namespace nginx-gateway &> /dev/null; then
     echo -e "${GREEN}✅ OK${NC}"
 
-    echo -n "Vérification du controller... "
-    if kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller 2>/dev/null | grep -q "Running"; then
+    echo -n "Vérification du pod NGF... "
+    if kubectl get pods -n nginx-gateway -l app.kubernetes.io/name=nginx-gateway-fabric 2>/dev/null | grep -q "Running"; then
         echo -e "${GREEN}✅ OK${NC}"
     else
         echo -e "${RED}❌ Pas en Running${NC}"
+        ((ERRORS++))
+    fi
+
+    echo -n "Vérification du GatewayClass 'nginx'... "
+    if kubectl get gatewayclass nginx &> /dev/null; then
+        echo -e "${GREEN}✅ OK${NC}"
+    else
+        echo -e "${RED}❌ MANQUANT${NC}"
         ((ERRORS++))
     fi
 else
@@ -201,7 +209,30 @@ if helm list -n rhdemo-stagingkub 2>/dev/null | grep -q "rhdemo"; then
     check_k8s_resource "service" "postgresql-keycloak" "rhdemo-stagingkub"
     check_k8s_resource "service" "keycloak" "rhdemo-stagingkub"
     check_k8s_resource "service" "rhdemo-app" "rhdemo-stagingkub"
-    check_k8s_resource "ingress" "rhdemo-ingress" "rhdemo-stagingkub"
+
+    # Gateway API resources
+    echo ""
+    echo -e "${YELLOW}▶ Vérification des ressources Gateway API${NC}"
+    check_k8s_resource "gateway" "rhdemo-gateway" "rhdemo-stagingkub"
+    check_k8s_resource "httproute" "rhdemo-route" "rhdemo-stagingkub"
+    check_k8s_resource "httproute" "keycloak-route" "rhdemo-stagingkub"
+
+    # NGINX Gateway Fabric policies
+    echo ""
+    echo -e "${YELLOW}▶ Vérification des policies NGF${NC}"
+    echo -n "Vérification SnippetsFilter keycloak-proxy-buffers... "
+    if kubectl get snippetsfilters.gateway.nginx.org keycloak-proxy-buffers -n rhdemo-stagingkub &> /dev/null; then
+        echo -e "${GREEN}✅ OK${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Non déployé (optionnel)${NC}"
+    fi
+
+    echo -n "Vérification ClientSettingsPolicy... "
+    if kubectl get clientsettingspolicies.gateway.nginx.org rhdemo-client-settings -n rhdemo-stagingkub &> /dev/null; then
+        echo -e "${GREEN}✅ OK${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Non déployé (optionnel)${NC}"
+    fi
 
     # Vérification du statut des pods
     echo ""

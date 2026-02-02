@@ -158,14 +158,16 @@ Le dépôt contient **3 projets distincts** :
 - **Localisation** : `rhDemo/infra/stagingkub/`
 - **Usage** : Environnement représentatif d'une production Kubernetes
 - **Technologie** : KinD (Kubernetes in Docker) 0.30+
+- **CNI** : Cilium 1.18 (eBPF, remplace kube-proxy)
+- **Gateway** : NGINX Gateway Fabric 2.3.0 (Gateway API)
 - **Namespace** : `rhdemo-stagingkub`
 - **Cluster** : `kind-rhdemo`
 - **Ressources** :
   - 2 StatefulSets (PostgreSQL rhdemo + keycloak)
   - 2 Deployments (rhdemo-app + keycloak)
-  - 1 Ingress (Nginx Ingress Controller)
+  - 1 Gateway + 2 HTTPRoutes (NGINX Gateway Fabric)
   - 5 Services, 4 Secrets, 2 PVC
-- **Port HTTPS** : 443 (NodePort 30443)
+- **Port HTTPS** : 443 (NodePort 32616)
 - **URLs** :
   - App : https://rhdemo-stagingkub.intra.leuwen-lc.fr
   - Keycloak : https://keycloak-stagingkub.intra.leuwen-lc.fr
@@ -428,7 +430,19 @@ Application volontairement simpliste :
 
 ## 🗓️ Changelog
 
-### Version 1.1.3 (En cours)
+### Version 1.1.4 (En cours)
+
+- **Migration NGINX Gateway Fabric 2.3.0** (remplace nginx-ingress, EOL mars 2026) :
+  - Implémentation Gateway API standard (`gateway.networking.k8s.io/v1`)
+  - Nouveaux templates Helm : `gateway.yaml`, `httproute.yaml`, `snippetsfilter.yaml`, `clientsettingspolicy.yaml`
+  - Headers X-Forwarded-* automatiques (plus de ConfigMaps manuels)
+  - SnippetsFilter pour proxy buffers Keycloak (gros cookies OAuth2)
+  - RBAC Jenkins enrichi pour Gateway API et ressources NGF
+  - Network Policies mises à jour (namespace `nginx-gateway`)
+  - Documentation : [NGINX_GATEWAY_FABRIC_MIGRATION.md](rhDemo/docs/NGINX_GATEWAY_FABRIC_MIGRATION.md)
+- **Cilium 1.18 CNI** : Installation via Helm avec `kubeProxyReplacement=true`
+
+### Version 1.1.3-RELEASE
 
 - **Persistance des données KinD** : Configuration extraMounts pour survivre aux redémarrages machine
 - Création fichier `kind-config.yaml` persistant avec montage `/home/leno-vo/kind-data/rhdemo-stagingkub`
@@ -554,6 +568,24 @@ Application volontairement simpliste :
 - **Pas d'exfiltration** : Egress vers Internet bloqué (sauf DNS interne)
 - **Défense en profondeur** : Même si une application est compromise, la propagation est limitée
 - **Conformité** : Prépare le terrain pour des audits de sécurité (PCI-DSS, SOC2)
+
+### Pourquoi NGINX Gateway Fabric plutôt que nginx-ingress ?
+
+- **Fin de vie nginx-ingress** : Le projet Ingress-NGINX sera en EOL mars 2026
+- **Standard Gateway API** : API Kubernetes officielle (`gateway.networking.k8s.io/v1`)
+- **Portabilité** : Migration vers d'autres implémentations (Cilium, Envoy) facilitée
+- **Architecture distribuée** : Control et data planes séparés (meilleure scalabilité)
+- **Headers automatiques** : X-Forwarded-* configurés par défaut (plus de ConfigMaps manuels)
+- **Conformité certifiée** : Une des 5 implémentations Gateway API certifiées conformes
+- **Support F5/NGINX** : Maintenu activement par F5, pas de risque d'abandon
+
+### Pourquoi Cilium comme CNI ?
+
+- **eBPF** : Performances réseau supérieures à iptables
+- **kube-proxy replacement** : Simplifie l'architecture (moins de composants)
+- **Network Policies L7** : Filtrage HTTP/gRPC natif si besoin futur
+- **Hubble** : Observabilité réseau intégrée (optionnel)
+- **Compatibilité Gateway API** : Cilium peut aussi implémenter Gateway API (alternative future)
 
 ---
 

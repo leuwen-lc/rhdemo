@@ -1,0 +1,34 @@
+{{- if .Values.gateway.enabled }}
+{{- if .Values.gateway.snippetsFilter.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# SnippetsFilter: keycloak-proxy-buffers
+# ═══════════════════════════════════════════════════════════════
+# Injecte une configuration NGINX personnalisée pour Keycloak
+#
+# POURQUOI: Keycloak utilise de gros cookies de session et headers
+# qui peuvent dépasser les buffers par défaut de NGINX, causant
+# des erreurs 502 Bad Gateway.
+#
+# PRÉREQUIS: SnippetsFilter doit être activé dans NGF via:
+#   --set nginxGateway.snippetsFilters.enable=true
+#
+# Documentation: https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets/
+# ═══════════════════════════════════════════════════════════════
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: keycloak-proxy-buffers
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: snippets-filter
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        # Buffers pour les gros headers Keycloak (cookies de session OAuth2)
+        proxy_buffer_size {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
+        proxy_buffers {{ .Values.gateway.snippetsFilter.proxyBuffersNumber }} {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
+        proxy_busy_buffers_size {{ .Values.gateway.snippetsFilter.proxyBusyBuffersSize }};
+{{- end }}
+{{- end }}

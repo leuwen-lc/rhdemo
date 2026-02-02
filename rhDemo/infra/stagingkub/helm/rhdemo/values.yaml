@@ -256,70 +256,110 @@ rhdemo:
     failureThreshold: 3
 
 # ═══════════════════════════════════════════════════════════════
-# Ingress - Exposition HTTPS
+# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.3.0)
 # ═══════════════════════════════════════════════════════════════
-ingress:
+# Remplace l'ancien Ingress NGINX par Gateway API standard.
+# Les headers X-Forwarded-* sont configurés automatiquement par NGF.
+#
+# Documentation: https://docs.nginx.com/nginx-gateway-fabric/
+# ═══════════════════════════════════════════════════════════════
+gateway:
   enabled: true
+  name: rhdemo-gateway
   className: nginx
 
-  hosts:
-    - host: rhdemo-stagingkub.intra.leuwen-lc.fr
-      paths:
+  # Listeners TLS (points d'entrée HTTPS)
+  listeners:
+    - name: https-rhdemo
+      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        secretName: intra-wildcard-tls
+
+    - name: https-keycloak
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        secretName: intra-wildcard-tls
+
+  # Routes HTTP vers les services backend
+  routes:
+    - name: rhdemo-route
+      listenerName: https-rhdemo
+      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      rules:
         - path: /
-          pathType: Prefix
+          pathType: PathPrefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak-stagingkub.intra.leuwen-lc.fr
-      paths:
+    - name: keycloak-route
+      listenerName: https-keycloak
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      rules:
         - path: /
-          pathType: Prefix
+          pathType: PathPrefix
           serviceName: keycloak
           servicePort: 8080
 
-  tls:
+  # ClientSettingsPolicy : taille max du body (remplace proxy-body-size)
+  clientSettings:
     enabled: true
-    # Secret contenant le certificat TLS :
-    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
-    # - Auto-signé : rhdemo-tls-cert (généré par init-stagingkub.sh)
-    secretName: intra-wildcard-tls
+    maxBodySize: 10m
 
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    # Configuration pour Keycloak derrière proxy
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # Headers X-Forwarded-* sont gérés automatiquement par nginx-ingress
-    # en combinaison avec forward-headers-strategy: framework dans Spring Boot
+  # SnippetsFilter : buffers proxy pour Keycloak
+  # CRITIQUE: Les gros cookies OAuth2 nécessitent des buffers plus grands
+  # PRÉREQUIS: nginxGateway.snippetsFilters.enable=true lors de l'install Helm
+  snippetsFilter:
+    enabled: true
+    proxyBufferSize: "128k"
+    proxyBuffersNumber: "4"
+    proxyBusyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# Nginx Ingress Controller
+# NGINX Gateway Fabric 2.3.0 (remplace nginx-ingress)
 # ═══════════════════════════════════════════════════════════════
-nginx-ingress:
-  enabled: true
-  # Si false, suppose que nginx-ingress est déjà installé dans le cluster
-  install: true
+# Installation via Helm OCI: oci://ghcr.io/nginx/charts/nginx-gateway-fabric
+# Les CRDs Gateway API doivent être installés au préalable.
+#
+# Note: NGF est installé dans le namespace 'nginx-gateway' par init-stagingkub.sh
+# Cette section est documentative, l'installation réelle est dans le script.
+# ═══════════════════════════════════════════════════════════════
+nginx-gateway-fabric:
+  # NGF est installé par init-stagingkub.sh, pas par ce chart
+  # Cette section documente la configuration utilisée
+  enabled: false  # Installé séparément
 
-  controller:
+  # Configuration de référence pour init-stagingkub.sh
+  nginxGateway:
+    snippetsFilters:
+      enable: true  # CRITIQUE pour les proxy buffers Keycloak
+
+  nginx:
     service:
       type: NodePort
+      externalTrafficPolicy: Local  # Préserve l'IP client source
+
+      # NodePorts mappés dans kind-config.yaml
+      # Format NGF: port = NodePort exposé, listenerPort = port Gateway
       nodePorts:
-        http: 30080
-        https: 30443
+        - port: 31792        # NodePort HTTP (non utilisé, redirige vers HTTPS)
+          listenerPort: 80
+        - port: 32616        # NodePort HTTPS
+          listenerPort: 443
 
-    # Configuration pour masquer la version nginx (protection Trivy/ZAP)
-    config:
-      server-tokens: "false"
-
-    resources:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "256Mi"
-        cpu: "200m"
+    container:
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
 
 # ═══════════════════════════════════════════════════════════════
 # Network Policies - Sécurité réseau

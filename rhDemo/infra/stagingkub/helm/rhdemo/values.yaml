@@ -256,7 +256,7 @@ rhdemo:
     failureThreshold: 3
 
 # ═══════════════════════════════════════════════════════════════
-# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.3.0)
+# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.4.0)
 # ═══════════════════════════════════════════════════════════════
 # Utilise le shared-gateway créé par init-stagingkub.sh.
 # Les HTTPRoutes s'attachent au Gateway partagé via parentRefs cross-namespace.
@@ -292,17 +292,17 @@ gateway:
           serviceName: keycloak
           servicePort: 8080
 
-  # SnippetsFilter : buffers proxy pour Keycloak
+  # ProxySettingsPolicy : buffers proxy pour Keycloak (NGF 2.4+)
   # Les gros cookies OAuth2 nécessitent des buffers plus grands
-  # Prérequis: snippetsFilters.enable=true lors de l'install NGF
-  snippetsFilter:
+  # Cible l'HTTPRoute keycloak-route directement (pas besoin de SnippetsFilter)
+  proxySettings:
     enabled: true
-    proxyBufferSize: "128k"
-    proxyBuffersNumber: "4"
-    proxyBusyBuffersSize: "256k"
+    bufferSize: "128k"
+    buffersNumber: 4
+    busyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric 2.3.0 (référence)
+# NGINX Gateway Fabric 2.4.0 (référence)
 # ═══════════════════════════════════════════════════════════════
 # NGF est installé par init-stagingkub.sh dans le namespace nginx-gateway.
 # Cette section documente la configuration utilisée (non appliquée par Helm).
@@ -311,9 +311,9 @@ nginx-gateway-fabric:
   enabled: false  # Installé par init-stagingkub.sh, pas par ce chart
 
   # Référence: configuration utilisée par init-stagingkub.sh
-  # - snippetsFilters.enable: true (pour proxy buffers Keycloak)
   # - service.type: NodePort
   # - NodePort 32616 → listener 443 (HTTPS)
+  # - ProxySettingsPolicy pour les proxy buffers (remplace SnippetsFilter)
 
 # ═══════════════════════════════════════════════════════════════
 # Network Policies - Sécurité réseau

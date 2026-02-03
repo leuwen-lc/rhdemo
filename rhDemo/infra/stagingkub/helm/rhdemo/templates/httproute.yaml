@@ -28,16 +28,6 @@ spec:
     - path:
         type: {{ .pathType }}
         value: {{ .path }}
-    {{- if $.Values.gateway.snippetsFilter.enabled }}
-    {{- if eq .serviceName "keycloak" }}
-    filters:
-    - type: ExtensionRef
-      extensionRef:
-        group: gateway.nginx.org
-        kind: SnippetsFilter
-        name: keycloak-proxy-buffers
-    {{- end }}
-    {{- end }}
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}

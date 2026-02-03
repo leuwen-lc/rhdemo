@@ -6,7 +6,8 @@
 # Admin (À CONFIGURER AVANT INSTALLATION)
 ###########################################
 adminUser: admin
-# ⚠️ SÉCURITÉ: Définir un mot de passe fort avant installation
+# ⚠️ SÉCURITÉ: Copier grafana-values.yaml.template en grafana-values.yaml
+# Définir un mot de passe fort avant installation
 # adminPassword doit être défini avec un mot de passe sécurisé
 # Exemple: openssl rand -base64 32
 adminPassword: ""  # TODO: Renseigner un mot de passe fort

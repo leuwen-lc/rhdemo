@@ -1,9 +1,9 @@
-# Étude d'impact : Migration Nginx Ingress Controller → Nginx Gateway Fabric 2.3
+# Étude d'impact : Migration Nginx Ingress Controller → Nginx Gateway Fabric 2.4
 
-**Date** : 2026-02-02
+**Date** : 2026-02-03
 **Statut** : ✅ Migration implémentée
 **Environnement cible** : stagingkub (Kubernetes/KinD)
-**Version NGF cible** : **2.3.0** (dernière stable, décembre 2024)
+**Version NGF cible** : **2.4.0** (ProxySettingsPolicy disponible)
 **Architecture** : **Shared Gateway** (Gateway partagé dans nginx-gateway)
 
 ---
@@ -17,16 +17,15 @@ Le projet **Ingress-NGINX** (maintenu par la communauté Kubernetes) atteindra s
 
 **Important** : NGINX Gateway Fabric est le successeur recommandé par F5/NGINX et implémente la **Gateway API**, le nouveau standard Kubernetes pour la gestion du trafic.
 
-### Choix de la version 2.3.0
+### Choix de la version 2.4.0
 
 | Version | Date | Recommandation |
 |---------|------|----------------|
-| 2.2.0 | Octobre 2024 | ❌ Ancienne |
-| 2.2.1 | Novembre 2024 | ❌ Correctifs mineurs |
-| 2.2.2 | Décembre 2024 | ❌ Correctifs mineurs |
-| **2.3.0** | **18 décembre 2024** | ✅ **Recommandée** - Gateway API v1.4.1, conformité complète |
+| 2.2.x | Oct-Déc 2024 | ❌ Ancienne |
+| 2.3.0 | 18 décembre 2024 | ❌ Nécessite SnippetsFilter pour proxy buffers |
+| **2.4.0** | **Janvier 2025** | ✅ **Recommandée** - ProxySettingsPolicy native |
 
-La version 2.3.0 est l'une des 5 seules implémentations Gateway API certifiées conformes.
+La version 2.4.0 apporte la **ProxySettingsPolicy** qui remplace SnippetsFilter pour configurer les proxy buffers de manière native (YAML validé par CRD).
 
 ### Références
 
@@ -35,7 +34,7 @@ La version 2.3.0 est l'une des 5 seules implémentations Gateway API certifiées
 - [NGINX Gateway Fabric GitHub](https://github.com/nginx/nginx-gateway-fabric)
 - [NGINX Gateway Fabric 2.0 Architecture](https://community.f5.com/kb/technicalarticles/announcing-f5-nginx-gateway-fabric-2-0-0-with-a-new-distributed-architecture/341657)
 - [Ingress NGINX Deprecation Guide](https://k8s-ops.net/posts/nginx-ingress-deprecation-gateway-api-migration-guide/)
-- [SnippetsFilter Documentation](https://docs.nginx.com/nginx-gateway-fabric/traffic-management/snippets/)
+- [ProxySettingsPolicy API Reference](https://docs.nginx.com/nginx-gateway-fabric/reference/api/) (NGF 2.4+)
 
 ---
 
@@ -94,7 +93,7 @@ Internet (HTTPS :443)
 │  └───────────────┘     └───────┬───────┘                                    │
 │                                │                                            │
 │                    ┌───────────┴───────────┐                                │
-│                    │ SnippetsFilter        │                                │
+│                    │ ProxySettingsPolicy   │                                │
 │                    │ keycloak-proxy-buffers│                                │
 │                    └───────────────────────┘                                │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -263,8 +262,17 @@ gateway:
 | `nginx.ingress.kubernetes.io/ssl-redirect: "true"` | **Natif** : HTTPS listeners redirigent automatiquement |
 | `nginx.ingress.kubernetes.io/force-ssl-redirect: "true"` | **Natif** : même comportement |
 | `nginx.ingress.kubernetes.io/proxy-body-size: "10m"` | `ClientSettingsPolicy` CRD avec `body.maxSize: 10m` |
-| `nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"` | ⚠️ **SnippetsFilter** (voir section 4.4) |
-| `nginx.ingress.kubernetes.io/proxy-buffers-number: "4"` | ⚠️ **SnippetsFilter** (voir section 4.4) |
+| `nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"` | **ProxySettingsPolicy** avec `buffering.bufferSize` |
+| `nginx.ingress.kubernetes.io/proxy-buffers-number: "4"` | **ProxySettingsPolicy** avec `buffering.buffers.number` |
+
+> **✅ NGF 2.4.0** : La `ProxySettingsPolicy` remplace `SnippetsFilter` pour les proxy buffers.
+> Avantages :
+>
+> - Configuration YAML native (validation CRD)
+> - Pas besoin d'activer `snippetsFilters.enable` à l'installation
+> - Cible directement l'HTTPRoute (pas de filter dans la route)
+>
+> Paramètres supportés : `bufferSize`, `buffers.number`, `buffers.size`, `busyBuffersSize`
 
 **Exemple de ClientSettingsPolicy** :
 
@@ -301,26 +309,49 @@ proxy_set_header Connection "$connection_upgrade";
 
 **Impact** : La configuration manuelle actuelle dans `init-stagingkub.sh` (lignes 246-277) qui crée les ConfigMaps `ingress-nginx-controller` et `custom-headers` **n'est plus nécessaire**.
 
-### 4.4 Proxy Buffers pour Keycloak (SnippetsFilter)
+### 4.4 Proxy Buffers pour Keycloak (ProxySettingsPolicy)
 
-⚠️ **Point critique** : Les directives `proxy_buffer_size` et `proxy_buffers` ne sont **PAS encore supportées nativement** dans NGF. Une `ProxySettingsPolicy` est prévue mais pas encore disponible.
+✅ **NGF 2.4.0** : La **ProxySettingsPolicy** permet de configurer les proxy buffers de manière native, sans SnippetsFilter.
 
-**Solution** : Utiliser **SnippetsFilter** pour injecter la configuration NGINX personnalisée.
+**Solution implémentée** : Utiliser `ProxySettingsPolicy` qui cible directement l'HTTPRoute Keycloak.
 
-#### Activation de SnippetsFilter
-
-SnippetsFilter est **désactivé par défaut** pour des raisons de sécurité. Pour l'activer :
-
-```bash
-# Via Helm
-helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
-  --set nginxGateway.snippetsFilters.enable=true \
-  # ... autres options
-```
-
-#### Configuration SnippetsFilter pour Keycloak
+#### Configuration ProxySettingsPolicy pour Keycloak
 
 ```yaml
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: keycloak-proxy-buffers
+  namespace: rhdemo-stagingkub
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: keycloak-route
+  buffering:
+    bufferSize: "128k"
+    buffers:
+      number: 4
+      size: "128k"
+    busyBuffersSize: "256k"
+```
+
+#### Avantages vs SnippetsFilter (NGF 2.3)
+
+| Aspect        | SnippetsFilter (2.3)                | ProxySettingsPolicy (2.4)   |
+|---------------|-------------------------------------|-----------------------------|
+| Activation    | `--set snippetsFilters.enable=true` | Natif, pas de flag          |
+| Validation    | Aucune (raw NGINX config)           | CRD avec validation YAML    |
+| Sécurité      | Injection NGINX directe             | Configuration structurée    |
+| Référencement | Filter dans HTTPRoute               | Cible HTTPRoute directement |
+
+#### Ancienne méthode SnippetsFilter (obsolète)
+
+<details>
+<summary>SnippetsFilter (NGF 2.3 - obsolète)</summary>
+
+```yaml
+# ⚠️ OBSOLÈTE - Utiliser ProxySettingsPolicy à la place
 apiVersion: gateway.nginx.org/v1alpha1
 kind: SnippetsFilter
 metadata:
@@ -335,43 +366,9 @@ spec:
         proxy_busy_buffers_size 256k;
 ```
 
-#### Référencement dans HTTPRoute
+Nécessitait `--set nginxGateway.snippetsFilters.enable=true` à l'installation.
 
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: keycloak-route
-  namespace: rhdemo-stagingkub
-spec:
-  parentRefs:
-  - name: rhdemo-gateway
-    sectionName: https-keycloak
-  hostnames:
-  - keycloak-stagingkub.intra.leuwen-lc.fr
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    filters:
-    - type: ExtensionRef
-      extensionRef:
-        group: gateway.nginx.org
-        kind: SnippetsFilter
-        name: keycloak-proxy-buffers
-    backendRefs:
-    - name: keycloak
-      port: 8080
-```
-
-#### Risques de SnippetsFilter
-
-| Risque | Mitigation |
-|--------|------------|
-| Configuration NGINX invalide | Tester en environnement de dev avant prod |
-| Bloque les mises à jour de config | Valider la syntaxe NGINX avant apply |
-| Accès aux certificats TLS | Restreindre l'accès RBAC aux SnippetsFilter |
+</details>
 
 ---
 
@@ -401,14 +398,13 @@ echo "Installation des CRDs Gateway API..."
 kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.3.0" | kubectl apply -f -
 
 # 2. Installer NGINX Gateway Fabric via Helm OCI
-echo "Installation de NGINX Gateway Fabric 2.3.0..."
+echo "Installation de NGINX Gateway Fabric 2.4.0..."
 helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
-  --version 2.3.0 \
+  --version 2.4.0 \
   --create-namespace \
   -n nginx-gateway \
   --set nginx.service.type=NodePort \
-  --set nginx.service.externalTrafficPolicy=Local \
-  --set nginxGateway.snippetsFilters.enable=true
+  --set nginx.service.externalTrafficPolicy=Local
 
 # 3. Attendre le déploiement (control plane)
 echo "Attente du démarrage du control plane..."
@@ -521,7 +517,7 @@ Les Network Policies actuelles référencent le namespace `ingress-nginx` :
 
 ## 7. Impact sur le RBAC Jenkins
 
-Le fichier `rbac/jenkins-role.yaml` doit être enrichi pour gérer les CRDs Gateway API et SnippetsFilter :
+Le fichier `rbac/jenkins-role.yaml` doit être enrichi pour gérer les CRDs Gateway API et les policies NGF :
 
 ```yaml
 # Ajouter ces règles pour Gateway API (standard)
@@ -534,17 +530,17 @@ Le fichier `rbac/jenkins-role.yaml` doit être enrichi pour gérer les CRDs Gate
     - gatewayclasses
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-# Ajouter pour les policies et SnippetsFilter NGINX Gateway Fabric
+# Ajouter pour les policies NGINX Gateway Fabric
 - apiGroups: ["gateway.nginx.org"]
   resources:
     - clientsettingspolicies
     - clientsettingspolicies/status
-    - snippetsfilters              # CRITIQUE pour les proxy buffers Keycloak
-    - snippetsfilters/status
+    - proxysettingspolicies        # CRITIQUE pour les proxy buffers Keycloak
+    - proxysettingspolicies/status
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ```
 
-**Note** : Sans les permissions `snippetsfilters`, le déploiement CD échouera car la configuration des proxy buffers pour Keycloak utilise un SnippetsFilter.
+**Note** : Sans les permissions `proxysettingspolicies`, le déploiement CD échouera car la configuration des proxy buffers pour Keycloak utilise une ProxySettingsPolicy.
 
 ---
 
@@ -597,25 +593,24 @@ ingress2gateway print \
 
 ---
 
-## 10. Matrice des risques (mise à jour après recherche)
+## 10. Matrice des risques (mise à jour NGF 2.4.0)
 
-| Risque | Probabilité | Impact | Mitigation |
-|--------|-------------|--------|------------|
-| Headers X-Forwarded-* mal configurés | **Faible** ✅ | OAuth2 cassé | NGF les configure automatiquement |
-| Proxy buffers insuffisants pour Keycloak | **Élevée** ⚠️ | 502 Bad Gateway | Configurer SnippetsFilter (section 4.4) |
-| SnippetsFilter invalide bloque les updates | **Moyenne** | Config gelée | Tester la syntaxe NGINX avant apply |
-| Network Policies bloquant le trafic | **Moyenne** | App inaccessible | Valider namespace `nginx-gateway` |
-| Jenkins sans permissions Gateway API | **Élevée** | Déploiement CD échoue | Mettre à jour RBAC avant migration |
-| Jenkins sans permissions SnippetsFilter | **Élevée** | Déploiement CD échoue | Ajouter `snippetsfilters` au RBAC |
-| Rollback difficile | **Faible** | Downtime prolongé | Conserver l'ancien Ingress en parallèle |
+| Risque                                   | Probabilité    | Impact            | Mitigation                               |
+|------------------------------------------|----------------|-------------------|------------------------------------------|
+| Headers X-Forwarded-* mal configurés     | **Faible** ✅  | OAuth2 cassé      | NGF les configure automatiquement        |
+| Proxy buffers insuffisants pour Keycloak | **Faible** ✅  | 502 Bad Gateway   | ProxySettingsPolicy (section 4.4)        |
+| Network Policies bloquant le trafic      | **Moyenne**    | App inaccessible  | Valider namespace `nginx-gateway`        |
+| Jenkins sans permissions Gateway API     | **Élevée**     | Déploiement échoue| Mettre à jour RBAC avant migration       |
+| Jenkins sans permissions ProxySettings   | **Élevée**     | Déploiement échoue| Ajouter `proxysettingspolicies` au RBAC  |
+| Rollback difficile                       | **Faible**     | Downtime prolongé | Conserver l'ancien Ingress en parallèle  |
 
-### Changements de risque après recherche
+### Évolution des risques NGF 2.3 → 2.4
 
-| Élément | Avant recherche | Après recherche | Raison |
-|---------|-----------------|-----------------|--------|
-| Headers X-Forwarded-* | Risque élevé | **Risque faible** | NGF les ajoute automatiquement |
-| Proxy buffers | Via Policy | **Via SnippetsFilter** | ProxySettingsPolicy pas encore dispo |
-| Activation SnippetsFilter | Non identifié | **Nouveau risque** | Désactivé par défaut, nécessite Helm flag |
+| Élément             | NGF 2.3                  | NGF 2.4                      | Impact                         |
+|---------------------|--------------------------|------------------------------|--------------------------------|
+| Headers X-Forwarded | Automatiques             | Automatiques                 | Aucun changement               |
+| Proxy buffers       | SnippetsFilter (risqué)  | **ProxySettingsPolicy**      | ✅ Risque réduit (YAML natif)  |
+| Activation snippet  | Flag Helm requis         | **Plus nécessaire**          | ✅ Simplification              |
 
 ---
 
@@ -641,17 +636,17 @@ ingress2gateway print \
 
 | Élément                  | Décision finale                            | Statut |
 |--------------------------|--------------------------------------------|--------|
-| Version NGF              | **2.3.0**                                  | ✅     |
+| Version NGF              | **2.4.0**                                  | ✅     |
 | Architecture             | **Shared Gateway** (recommandé)            | ✅     |
 | Headers X-Forwarded-*    | **Automatiques** (plus de ConfigMaps)      | ✅     |
-| Proxy buffers Keycloak   | **SnippetsFilter**                         | ✅     |
+| Proxy buffers Keycloak   | **ProxySettingsPolicy** (natif NGF 2.4)    | ✅     |
 | NodePort patching        | **`--type='json'`** (pas merge)            | ✅     |
 | Certificat TLS           | Wildcard auto-signé `*.intra.leuwen-lc.fr` | ✅     |
 
 ### Points critiques résolus
 
 1. ✅ **TLS/OAuth2** : Headers X-Forwarded-* automatiques dans NGF
-2. ✅ **Proxy buffers** : SnippetsFilter activé via `snippetsFilters.enable=true`
+2. ✅ **Proxy buffers** : ProxySettingsPolicy native (plus besoin de SnippetsFilter)
 3. ✅ **RBAC Jenkins** : Permissions `gateway.networking.k8s.io` et `gateway.nginx.org` ajoutées
 4. ✅ **NodePort** : Patch JSON après création du Gateway (pas via options Helm)
 5. ✅ **Certificat** : Domaine `*.intra.leuwen-lc.fr` (pas `*.stagingkub.local`)
@@ -666,18 +661,18 @@ ingress2gateway print \
 
 ### Fichiers modifiés/créés
 
-| Fichier                                     | Action   |
-|---------------------------------------------|----------|
-| `helm/rhdemo/templates/httproute.yaml`      | Créé     |
-| `helm/rhdemo/templates/snippetsfilter.yaml` | Créé     |
-| `helm/rhdemo/templates/ingress.yaml`        | Supprimé |
-| `helm/rhdemo/values.yaml`                   | Modifié  |
-| `scripts/init-stagingkub.sh`                | Modifié  |
-| `scripts/validate-stagingkub.sh`            | Modifié  |
-| `shared-gateway.yaml`                       | Créé     |
-| `rbac/jenkins-role.yaml`                    | Modifié  |
-| Network Policies                            | Modifié  |
-| `Jenkinsfile-CD`                            | Modifié  |
+| Fichier                                          | Action   |
+|--------------------------------------------------|----------|
+| `helm/rhdemo/templates/httproute.yaml`           | Créé     |
+| `helm/rhdemo/templates/proxysettingspolicy.yaml` | Créé     |
+| `helm/rhdemo/templates/ingress.yaml`             | Supprimé |
+| `helm/rhdemo/values.yaml`                        | Modifié  |
+| `scripts/init-stagingkub.sh`                     | Modifié  |
+| `scripts/validate-stagingkub.sh`                 | Modifié  |
+| `shared-gateway.yaml`                            | Créé     |
+| `rbac/jenkins-role.yaml`                         | Modifié  |
+| Network Policies                                 | Modifié  |
+| `Jenkinsfile-CD`                                 | Modifié  |
 
 ### Commandes utiles post-migration
 
@@ -708,6 +703,7 @@ kubectl logs -n nginx-gateway deployment/ngf-nginx-gateway-fabric
 ### A. httproute.yaml
 
 Les HTTPRoutes s'attachent au shared-gateway via parentRefs cross-namespace.
+La ProxySettingsPolicy cible l'HTTPRoute directement (pas de filter dans la route).
 
 ```yaml
 {{- if .Values.gateway.enabled }}
@@ -733,16 +729,6 @@ spec:
     - path:
         type: {{ .pathType }}
         value: {{ .path }}
-    {{- if $.Values.gateway.snippetsFilter.enabled }}
-    {{- if eq .serviceName "keycloak" }}
-    filters:
-    - type: ExtensionRef
-      extensionRef:
-        group: gateway.nginx.org
-        kind: SnippetsFilter
-        name: keycloak-proxy-buffers
-    {{- end }}
-    {{- end }}
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}
@@ -751,27 +737,30 @@ spec:
 {{- end }}
 ```
 
-### B. snippetsfilter.yaml (proxy buffers pour Keycloak)
+### B. proxysettingspolicy.yaml (proxy buffers pour Keycloak - NGF 2.4+)
 
 ```yaml
 {{- if .Values.gateway.enabled }}
-{{- if .Values.gateway.snippetsFilter.enabled }}
-# SnippetsFilter pour les gros cookies OAuth2 de Keycloak
+{{- if .Values.gateway.proxySettings.enabled }}
+# ProxySettingsPolicy pour les gros cookies OAuth2 de Keycloak
 apiVersion: gateway.nginx.org/v1alpha1
-kind: SnippetsFilter
+kind: ProxySettingsPolicy
 metadata:
   name: keycloak-proxy-buffers
   namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "rhdemo.labels" . | nindent 4 }}
 spec:
-  snippets:
-    - context: http.server.location
-      value: |
-        # Buffers pour les gros headers Keycloak (cookies de session OAuth2)
-        proxy_buffer_size {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
-        proxy_buffers {{ .Values.gateway.snippetsFilter.proxyBuffersNumber }} {{ .Values.gateway.snippetsFilter.proxyBufferSize }};
-        proxy_busy_buffers_size {{ .Values.gateway.snippetsFilter.proxyBusyBuffersSize }};
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: keycloak-route
+  buffering:
+    bufferSize: {{ .Values.gateway.proxySettings.bufferSize | quote }}
+    buffers:
+      number: {{ .Values.gateway.proxySettings.buffersNumber }}
+      size: {{ .Values.gateway.proxySettings.bufferSize | quote }}
+    busyBuffersSize: {{ .Values.gateway.proxySettings.busyBuffersSize | quote }}
 {{- end }}
 {{- end }}
 ```
@@ -780,7 +769,7 @@ spec:
 
 ```yaml
 # ═══════════════════════════════════════════════════════════════
-# GATEWAY API (NGINX Gateway Fabric)
+# GATEWAY API (NGINX Gateway Fabric 2.4.0)
 # ═══════════════════════════════════════════════════════════════
 gateway:
   enabled: true
@@ -809,12 +798,12 @@ gateway:
           serviceName: keycloak
           servicePort: 8080
 
-  # SnippetsFilter pour les proxy buffers Keycloak
-  snippetsFilter:
+  # ProxySettingsPolicy pour les proxy buffers Keycloak (NGF 2.4+)
+  proxySettings:
     enabled: true
-    proxyBufferSize: "128k"
-    proxyBuffersNumber: "4"
-    proxyBusyBuffersSize: "256k"
+    bufferSize: "128k"
+    buffersNumber: 4
+    busyBuffersSize: "256k"
 ```
 
 ### D. shared-gateway.yaml (créé par init-stagingkub.sh)
@@ -851,15 +840,18 @@ spec:
 
 **Templates Helm (helm/rhdemo/templates/) :**
 
-| Fichier               | Description                                      |
-|-----------------------|--------------------------------------------------|
-| `httproute.yaml`      | Routes vers rhdemo-app et keycloak               |
-| `snippetsfilter.yaml` | Proxy buffers pour gros cookies Keycloak (OAuth2)|
+| Fichier                    | Description                                        |
+|----------------------------|----------------------------------------------------|
+| `httproute.yaml`           | Routes vers rhdemo-app et keycloak                 |
+| `proxysettingspolicy.yaml` | Proxy buffers pour Keycloak (NGF 2.4 natif)        |
 
 **Fichiers hors Helm (init-stagingkub.sh) :**
 
-| Fichier                  | Namespace     | Description                            |
-|--------------------------|---------------|----------------------------------------|
-| `shared-gateway.yaml`    | nginx-gateway | Gateway partagé (point d'entrée unique)|
-| Secret `shared-tls-cert` | nginx-gateway | Certificat TLS wildcard auto-signé     |
-| ClientSettingsPolicy     | nginx-gateway | maxBodySize: 50m                       |
+| Fichier                  | Namespace     | Description                             |
+|--------------------------|---------------|-----------------------------------------|
+| `shared-gateway.yaml`    | nginx-gateway | Gateway partagé (point d'entrée unique) |
+| Secret `shared-tls-cert` | nginx-gateway | Certificat TLS wildcard auto-signé      |
+| ClientSettingsPolicy     | nginx-gateway | maxBodySize: 50m                        |
+
+> **Note NGF 2.4.0** : La ProxySettingsPolicy remplace SnippetsFilter pour les proxy buffers.
+> Plus besoin d'activer `snippetsFilters.enable` à l'installation Helm.

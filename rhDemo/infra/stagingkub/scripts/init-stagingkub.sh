@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
-echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.3.0${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.4.0${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -311,14 +311,15 @@ EOF
 echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 # ═══════════════════════════════════════════════════════════════
-# Installation de NGINX Gateway Fabric 2.3.0 (remplace nginx-ingress)
+# Installation de NGINX Gateway Fabric 2.4.0 (remplace nginx-ingress)
 # ═══════════════════════════════════════════════════════════════
 # NGINX Gateway Fabric implémente Gateway API (gateway.networking.k8s.io/v1)
 # Les headers X-Forwarded-* sont configurés automatiquement par NGF
+# ProxySettingsPolicy remplace SnippetsFilter pour les proxy buffers
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
 # ═══════════════════════════════════════════════════════════════
 
-NGF_VERSION="2.3.0"
+NGF_VERSION="2.4.0"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"
@@ -348,7 +349,6 @@ else
         --namespace ${NGF_NAMESPACE} \
         --set nginx.service.type=NodePort \
         --set nginx.service.externalTrafficPolicy=Local \
-        --set nginxGateway.snippetsFilters.enable=true \
         --set 'nginx.service.ports[0].port=80' \
         --set 'nginx.service.ports[0].nodePort=31792' \
         --set 'nginx.service.ports[1].port=443' \

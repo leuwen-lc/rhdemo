@@ -55,7 +55,7 @@ public class SecurityConfig {
                 return "";
             }
             return uri.getScheme() + "://" + uri.getHost() + (uri.getPort() > 0 && uri.getPort() != 80 && uri.getPort() != 443 ? ":" + uri.getPort() : "");
-        } catch (Exception e) {
+        } catch (Exception _) {
             return "";
         }
     }
@@ -152,7 +152,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LogoutSuccessHandler logoutSuccessHandler) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, LogoutSuccessHandler logoutSuccessHandler) {
 	http
 	// Active la protection CSRF avec cookie accessible en JavaScript
 	.csrf(csrf -> csrf

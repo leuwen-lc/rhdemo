@@ -8,32 +8,37 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class AccueilController {
 
-    @GetMapping("/who")
+	@GetMapping("/who")
     public String getUserInfo() {
 	StringBuffer userInfo=new StringBuffer();
 	Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-	userInfo.append("Principal <br>");
-	userInfo.append(auth.getPrincipal()+"<br><br>");
-	userInfo.append("Authorities <br>");
-	userInfo.append(auth.getAuthorities());
+	if (auth!=null) {
+		userInfo.append("Principal <br>");
+		userInfo.append(auth.getPrincipal()+"<br><br>");
+		userInfo.append("Authorities <br>");
+		userInfo.append(auth.getAuthorities());
+	} else {
+		userInfo.append("Erreur de lecture du SecurityContextHolder");
+	}
 	return userInfo.toString();
     }
-    
-    @GetMapping("/")
-    public String getInfo() {
-	StringBuffer info = new StringBuffer();
-	info.append("Avec role profil maj ou consult: <br>");
-	info.append("API disponibles sur /api/... <br>");
-	info.append("Front end disponible sur /front <br>");
 
-	info.append("<br>Avec role profil admin: <br>");
-	info.append("Monitoring sur /actuator (dispo en dev local uniquement)<br>");
-	
-	info.append("<br>Documentation Swagger UI sur /api-docs/swagger-ui/index.html (dispo en dev local uniquement)<br>");
-	info.append("Documentation OpenAPI sur /api-docs/docs (dispo en dev local uniquement)<br>");
-	info.append("<br>Info utilisateurs sur /who<br>");
-	info.append("Logout sur /logout");
-	return info.toString();
-    }
- 
+	@GetMapping("/")
+	public String getInfo() {
+		StringBuffer info = new StringBuffer();
+		info.append("Avec role profil maj ou consult: <br>");
+		info.append("API disponibles sur /api/... <br>");
+		info.append("Front end disponible sur /front <br>");
+
+		info.append("<br>Avec role profil admin: <br>");
+		info.append("Monitoring sur /actuator (dispo en dev local uniquement)<br>");
+
+		info.append(
+				"<br>Documentation Swagger UI sur /api-docs/swagger-ui/index.html (dispo en dev local uniquement)<br>");
+		info.append("Documentation OpenAPI sur /api-docs/docs (dispo en dev local uniquement)<br>");
+		info.append("<br>Info utilisateurs sur /who<br>");
+		info.append("Logout sur /logout");
+		return info.toString();
+	}
+
 }

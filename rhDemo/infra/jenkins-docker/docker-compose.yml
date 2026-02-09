@@ -119,7 +119,7 @@ services:
   # SONARQUBE - Analyse qualité du code
   # ═══════════════════════════════════════════════════════════════════
   sonarqube:
-    image: sonarqube:25.11.0.114957-community
+    image: sonarqube:26.2.0.119303-community
     container_name: rhdemo-sonarqube
     restart: unless-stopped
     stop_grace_period: 30s  # Temps d'arrêt gracieux

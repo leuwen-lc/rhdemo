@@ -31,7 +31,7 @@ jenkins:
         remoteFS: "/home/jenkins/agent"
         retentionStrategy: "always"
         launcher:
-          jnlp:
+          inbound:
             webSocket: true
         nodeProperties:
           - envVars:

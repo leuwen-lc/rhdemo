@@ -37,11 +37,10 @@ spec:
             secretKeyRef:
               name: {{ (index .Values "postgresql-keycloak").database.passwordSecret.name }}
               key: {{ (index .Values "postgresql-keycloak").database.passwordSecret.key }}
-        - name: PGDATA
-          value: /var/lib/postgresql/data/pgdata
+        # PostgreSQL 18+ : pas de PGDATA custom, PG gère ses sous-répertoires versionnés (18/main/)
         volumeMounts:
         - name: postgresql-data
-          mountPath: /var/lib/postgresql/data
+          mountPath: /var/lib/postgresql
         livenessProbe:
           exec:
             command:

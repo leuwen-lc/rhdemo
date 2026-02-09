@@ -18,12 +18,10 @@ public class ClientScopeService {
     
     private static final Logger logger = LoggerFactory.getLogger(ClientScopeService.class);
     private final Keycloak keycloak;
-    private final KeycloakProperties properties;
     private final String realmName;
     
     public ClientScopeService(Keycloak keycloak, KeycloakProperties properties) {
         this.keycloak = keycloak;
-        this.properties = properties;
         this.realmName = properties.getRealm().getName();
     }
     

@@ -29,7 +29,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
-    public void addResourceHandlers(@org.springframework.lang.NonNull ResourceHandlerRegistry registry) {
+    public void addResourceHandlers(@org.jspecify.annotations.NonNull ResourceHandlerRegistry registry) {
         // Mapper les ressources JavaScript
         registry.addResourceHandler("/js/**")
                 .addResourceLocations("classpath:/static/js/");

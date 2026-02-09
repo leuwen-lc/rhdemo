@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db:
-    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     container_name: rhdemo-ephemere-db
     restart: unless-stopped
     environment:
@@ -11,7 +11,9 @@ services:
       POSTGRES_USER: rhdemo
       POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD}
     volumes:
-      - rhdemo-db-data:/var/lib/postgresql/data
+      # PostgreSQL 18+ : monter sur /var/lib/postgresql (et non /data)
+      # PG 18 gère ses propres sous-répertoires versionnés (18/main/)
+      - rhdemo-db-data:/var/lib/postgresql
       # Note: pgddl.sql est copié via script init au lieu de bind mount
       # pour éviter les problèmes de layers Docker corrompus
     networks:
@@ -26,7 +28,7 @@ services:
   # Base de données PostgreSQL pour Keycloak
   # ═══════════════════════════════════════════════════════════════
   keycloak-db:
-    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
     container_name: keycloak-ephemere-db
     restart: unless-stopped
     environment:
@@ -34,7 +36,9 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
     volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
+      # PostgreSQL 18+ : monter sur /var/lib/postgresql (et non /data)
+      # PG 18 gère ses propres sous-répertoires versionnés (18/main/)
+      - keycloak-db-data:/var/lib/postgresql
     networks:
       - rhdemo-ephemere
     healthcheck:
@@ -47,7 +51,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.4.2}
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.5.0}
     container_name: keycloak-ephemere
     restart: unless-stopped
     command:

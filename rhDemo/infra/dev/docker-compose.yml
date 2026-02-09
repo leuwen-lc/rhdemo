@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo (dev local)
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db-dev:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: rhdemo-dev-db
     restart: unless-stopped
     ports:
@@ -13,7 +13,13 @@ services:
       POSTGRES_USER: dbrhdemo
       POSTGRES_PASSWORD: ${RHDEMO_DB_PASSWORD:-changeme}
     volumes:
-      - rhdemo-dev-db-data:/var/lib/postgresql/data
+      # PostgreSQL 18+ : monter sur /var/lib/postgresql (et non /data)
+      # PG 18 gère ses propres sous-répertoires versionnés (18/docker/)
+      - rhdemo-dev-db-data:/var/lib/postgresql
+      # Scripts d'initialisation (exécutés uniquement sur volume vierge)
+      # Ordre alphabétique : 1-schema puis 2-data
+      - ../../pgschema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../../pgdata.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
     networks:
       - rhdemo-dev
     healthcheck:
@@ -26,7 +32,7 @@ services:
   # Keycloak - Serveur d'authentification (dev local avec H2)
   # ═══════════════════════════════════════════════════════════════
   keycloak-dev:
-    image: quay.io/keycloak/keycloak:26.4.2
+    image: quay.io/keycloak/keycloak:26.5.0
     container_name: keycloak-dev
     restart: unless-stopped
     ports:

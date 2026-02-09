@@ -1,0 +1,274 @@
+# ═══════════════════════════════════════════════════════════════
+# Network Policies pour le namespace nginx-gateway
+# ═══════════════════════════════════════════════════════════════
+# Ce fichier contient les Network Policies pour sécuriser NGINX
+# Gateway Fabric dans le namespace nginx-gateway.
+#
+# Stratégie: Zero Trust / Default Deny
+#   1. Tout trafic bloqué par défaut
+#   2. Whitelist explicite pour chaque flux légitime
+#
+# Application:
+#   kubectl apply -f nginx-gateway-networkpolicies.yaml
+#
+# Composants protégés:
+#   - nginx-gateway-fabric (data plane + control plane)
+#
+# Architecture:
+#   Internet → NodePort (32616) → nginx-gateway → backends
+#
+# Backends autorisés:
+#   - rhdemo-stagingkub: rhdemo-app:9000, keycloak:8080
+#   - loki-stack: grafana:80
+# ═══════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  # Appliquer à TOUS les pods du namespace
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Aucune règle = tout est bloqué
+  ingress: []
+  egress: []
+---
+# ═══════════════════════════════════════════════════════════════
+# DNS: Autoriser tous les pods à résoudre les noms DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# NGINX Gateway Fabric (Data Plane)
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Tout (Internet via NodePort): trafic utilisateur HTTPS
+#   - monitoring: Prometheus scraping métriques NGF
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - rhdemo-stagingkub: backends (rhdemo-app:9000, keycloak:8080)
+#   - loki-stack: backend (grafana:80)
+#   - DNS
+#
+# IMPORTANT: L'egress est strictement limité aux backends autorisés.
+# NGF ne peut pas contacter Internet ou d'autres services.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nginx-gateway-fabric-netpol
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-gateway-fabric
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Trafic utilisateur (Internet via NodePort)
+    # Note: Pas de from = autorise tout le monde sur ces ports
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    # Prometheus scraping (métriques NGINX)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9113  # NGINX metrics
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 8081  # Health endpoint
+  egress:
+    # Backend: rhdemo-app (application principale)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rhdemo-stagingkub
+          podSelector:
+            matchLabels:
+              app: rhdemo-app
+      ports:
+        - protocol: TCP
+          port: 9000
+    # Backend: keycloak (authentification)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rhdemo-stagingkub
+          podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Backend: grafana (monitoring UI)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 3000
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# NGINX Gateway Fabric Controller (optionnel si séparé)
+# ═══════════════════════════════════════════════════════════════
+# Note: Dans NGF 2.4+, le controller et le data plane peuvent
+# être dans le même pod ou séparés. Cette policy couvre le cas
+# où ils seraient séparés.
+#
+# INGRESS:
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - API Server: lecture Gateway/HTTPRoute CRDs
+#   - Data plane: configuration
+#   - DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nginx-gateway-controller-netpol
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: controller
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    # API Server (lecture CRDs)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+      ports:
+        - protocol: TCP
+          port: 443
+    # Communication avec le data plane (même namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nginx-gateway
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8081
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# CiliumNetworkPolicy: Accès API Server pour NGINX Gateway Fabric
+# ═══════════════════════════════════════════════════════════════
+# IMPORTANT: Avec Cilium, l'API Server sur le node est vu comme
+# l'entité "host" et non comme un CIDR externe. Les règles ipBlock
+# standard ne fonctionnent pas pour atteindre le node host.
+#
+# Cette CiliumNetworkPolicy autorise l'egress vers:
+#   - host: le node Kubernetes (où tourne l'API Server)
+#   - kube-apiserver: entité spéciale pour l'API Server
+# ═══════════════════════════════════════════════════════════════
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-access
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-gateway-fabric
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.8</version>
+        <version>4.0.2</version>
         <relativePath/>
     </parent>
 
@@ -21,8 +21,8 @@
     <description>Projet d'initialisation automatique de la configuration Keycloak pour RHDemo (Spring Boot)</description>
 
     <properties>
-        <java.version>21</java.version>
-        <keycloak.version>26.0.7</keycloak.version>
+        <java.version>25</java.version>
+        <keycloak.version>26.0.8</keycloak.version>
     </properties>
 
     <dependencies>
@@ -44,6 +44,7 @@
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-admin-client</artifactId>
             <version>${keycloak.version}</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- JAX-RS Client Implementation (Resteasy) -->

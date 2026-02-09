@@ -1,6 +1,9 @@
 services:
   # ═══════════════════════════════════════════════════════════════════
-  # JENKINS - Serveur CI/CD
+  # JENKINS CONTROLLER (master) - Pilotage uniquement
+  # ═══════════════════════════════════════════════════════════════════
+  # Le master ne fait qu'orchestrer les pipelines et gérer l'interface.
+  # Tous les builds sont délégués à l'agent "builder" (sécurité).
   # ═══════════════════════════════════════════════════════════════════
   jenkins:
     build:
@@ -9,20 +12,12 @@ services:
     image: rhdemo-jenkins:latest
     container_name: rhdemo-jenkins
     restart: unless-stopped
-    stop_grace_period: 60s  # Temps d'arrêt gracieux
-    
-    # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
-    # L'accès Docker se fait via le groupe docker (GID 984 de l'hôte)
-    user: jenkins
-    
-    # Ajouter le groupe docker avec le bon GID de l'hôte (984)
-    group_add:
-      - 984
-    
+    stop_grace_period: 60s
+
     ports:
       - "8080:8080"      # Interface Web Jenkins
-      - "50000:50000"    # Port agents Jenkins
-    
+      - "50000:50000"    # Port agents Jenkins (WebSocket/JNLP)
+
     volumes:
       # Persistance des données Jenkins
       - jenkins_home:/var/jenkins_home
@@ -30,41 +25,23 @@ services:
       # Configuration as Code (JCasC)
       - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
 
-      # Socket Docker pour Docker-in-Docker (DinD)
-      - /var/run/docker.sock:/var/run/docker.sock
-
-      # Binaire Docker CLI
-      - /usr/bin/docker:/usr/bin/docker
-
-      # Maven local repository (cache) - utilisateur jenkins
-      - maven_repository:/var/jenkins_home/.m2
-
-      # Répertoire de travail partagé (optionnel)
-      - ./workspace:/workspace
-
-      # Certificat du registry pour cosign et curl (HTTPS)
-      - ./certs/registry/registry.crt:/etc/ssl/certs/registry.crt:ro
-    
     environment:
       # Désactiver le setup wizard
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
-      
+
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
-      
+
       # Credentials depuis .env (tokens gérés dans l'interface Jenkins)
       - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
-      
+
       # Timezone
       - TZ=${TZ:-Europe/Paris}
-      
-      # Configuration Docker
-      - DOCKER_HOST=unix:///var/run/docker.sock
-    
+
     networks:
       - jenkins-network
-    
+
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/login || exit 1"]
       interval: 30s
@@ -73,36 +50,70 @@ services:
       start_period: 120s
 
   # ═══════════════════════════════════════════════════════════════════
-  # JENKINS AGENT (optionnel - pour builds distribués)
+  # JENKINS AGENT (builder) - Exécution des pipelines CI/CD
   # ═══════════════════════════════════════════════════════════════════
-  # ⚠️ DÉSACTIVÉ : L'image jenkins/inbound-agent ne contient pas les outils
-  #    nécessaires pour exécuter les pipelines RHDemo (Maven, Docker Compose,
-  #    Firefox, SOPS, kubectl, Helm, etc.)
+  # Image personnalisée avec tous les outils nécessaires :
+  # Maven, JDK 25, Docker, SOPS, Trivy, kubectl, Helm, Cosign,
+  # Firefox/Selenium, Node.js, etc.
   #
-  # Pour activer un agent, il faudrait créer une image personnalisée basée
-  # sur Dockerfile.jenkins avec tous les outils requis.
-  #
-  # jenkins-agent:
-  #   image: jenkins/inbound-agent:latest-jdk21
-  #   container_name: rhdemo-jenkins-agent
-  #   restart: unless-stopped
-  #
-  #   environment:
-  #     - JENKINS_URL=http://jenkins:8080
-  #     - JENKINS_AGENT_NAME=docker-agent
-  #     - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
-  #     - JENKINS_SECRET=${JENKINS_SECRET}
-  #
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #     - /usr/bin/docker:/usr/bin/docker
-  #     - jenkins_agent_workspace:/home/jenkins/agent
-  #
-  #   networks:
-  #     - jenkins-network
-  #
-  #   depends_on:
-  #     - jenkins
+  # CONFIGURATION DU SECRET :
+  #   1. Démarrer Jenkins master : docker-compose up -d jenkins
+  #   2. Aller dans Jenkins > Manage Jenkins > Nodes > builder
+  #   3. Copier le secret affiché
+  #   4. Mettre à jour JENKINS_SECRET dans .env
+  #   5. Démarrer l'agent : docker-compose up -d jenkins-agent
+  # ═══════════════════════════════════════════════════════════════════
+  jenkins-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: rhdemo-jenkins-agent:latest
+    container_name: rhdemo-jenkins-agent
+    restart: on-failure
+    stop_grace_period: 30s
+
+    # Exécuter en tant qu'utilisateur jenkins (non-root pour sécurité)
+    user: jenkins
+
+    # Ajouter le groupe docker avec le bon GID de l'hôte (984)
+    group_add:
+      - 984
+
+    environment:
+      - JENKINS_URL=http://jenkins:8080
+      - JENKINS_AGENT_NAME=builder
+      - JENKINS_AGENT_WORKDIR=/home/jenkins/agent
+      - JENKINS_SECRET=${JENKINS_SECRET}
+      - JENKINS_WEB_SOCKET=true
+
+      # Configuration Docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+      # Timezone
+      - TZ=${TZ:-Europe/Paris}
+
+    volumes:
+      # Socket Docker pour Docker-in-Docker (DinD)
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Binaire Docker CLI
+      - /usr/bin/docker:/usr/bin/docker
+
+      # Workspace de l'agent
+      - jenkins_agent_workspace:/home/jenkins/agent
+
+      # Maven local repository (cache)
+      - maven_repository:/home/jenkins/.m2
+
+      # Certificat du registry pour cosign et curl (HTTPS)
+      - ./certs/registry/registry.crt:/etc/ssl/certs/registry.crt:ro
+
+    networks:
+      - jenkins-network
+
+    depends_on:
+      jenkins:
+        condition: service_healthy
 
   # ═══════════════════════════════════════════════════════════════════
   # SONARQUBE - Analyse qualité du code

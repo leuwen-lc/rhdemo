@@ -24,7 +24,7 @@
  */
 
 pipeline {
-    agent any
+    agent { label 'builder' }
 
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -33,7 +33,7 @@ pipeline {
     }
 
     tools {
-        jdk 'JDK21'
+        jdk 'JDK25'
         maven 'Maven3'
     }
 

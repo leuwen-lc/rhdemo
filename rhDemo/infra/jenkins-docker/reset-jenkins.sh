@@ -19,13 +19,14 @@ docker volume rm rhdemo-sonarqube-logs 2>/dev/null || true
 docker volume rm rhdemo-sonarqube-db 2>/dev/null || true
 docker volume rm kind-registry-data 2>/dev/null || true
 
-echo "🧹 Nettoyage des images Jenkins..."
+echo "🧹 Nettoyage des images Jenkins (controller + agent)..."
 docker rmi rhdemo-jenkins:latest 2>/dev/null || true
+docker rmi rhdemo-jenkins-agent:latest 2>/dev/null || true
 
-echo "🔨 Build de l'image Jenkins personnalisée..."
-docker compose build --no-cache jenkins
+echo "🔨 Build des images Jenkins (controller + agent)..."
+docker compose build --no-cache jenkins jenkins-agent
 
-echo "🚀 Démarrage de Jenkins..."
+echo "🚀 Démarrage de Jenkins (controller)..."
 docker compose up -d jenkins
 
 echo ""
@@ -37,5 +38,11 @@ echo "🔑 Mot de passe: admin123"
 echo ""
 echo "⏳ Attendez 1-2 minutes que Jenkins démarre complètement..."
 echo ""
+echo "🔧 Prochaines étapes:"
+echo "   1. Allez dans Jenkins > Manage Jenkins > Nodes > builder"
+echo "   2. Copiez le secret et mettez-le dans .env (JENKINS_SECRET=...)"
+echo "   3. Démarrez l'agent: docker compose up -d jenkins-agent"
+echo ""
 echo "📋 Vérifier les logs:"
 echo "   docker compose logs -f jenkins"
+echo "   docker compose logs -f jenkins-agent"

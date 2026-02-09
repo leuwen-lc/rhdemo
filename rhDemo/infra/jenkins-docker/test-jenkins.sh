@@ -40,40 +40,51 @@ fi
 echo ""
 
 # ────────────────────────────────────────────────────────────────
-# TEST 3 : Outils installés (JDK, Maven)
+# TEST 3 : Outils installés dans l'agent (builder)
 # ────────────────────────────────────────────────────────────────
 
-echo "3️⃣  Vérification des outils dans Jenkins..."
+echo "3️⃣  Vérification des outils dans l'agent builder..."
 
-echo "   ☕ Java version:"
-docker compose exec -T jenkins java -version 2>&1 | head -1
+if docker compose ps jenkins-agent | grep -q "Up"; then
+    echo "   ☕ Java version:"
+    docker compose exec -T jenkins-agent /opt/java/temurin-25/bin/java --version 2>&1 | head -1
 
-echo "   📦 Maven version:"
-docker compose exec -T jenkins mvn -version | head -1
+    echo "   📦 Maven version:"
+    docker compose exec -T jenkins-agent mvn -version 2>&1 | head -1
 
-echo "   🐳 Docker version:"
-docker compose exec -T jenkins docker --version
+    echo "   🐳 Docker version:"
+    docker compose exec -T jenkins-agent docker --version
 
-echo "   🐳 Docker Compose version:"
-docker compose exec -T jenkins docker compose --version
+    echo "   🐳 Docker Compose version:"
+    docker compose exec -T jenkins-agent docker-compose --version
 
-echo "✅ Tous les outils sont installés"
+    echo "   ☸️  kubectl version:"
+    docker compose exec -T jenkins-agent kubectl version --client --short 2>&1 | head -1
+
+    echo "   ⎈  Helm version:"
+    docker compose exec -T jenkins-agent helm version --short 2>&1 | head -1
+
+    echo "✅ Tous les outils sont installés dans l'agent"
+else
+    echo "⚠️  L'agent builder n'est pas démarré"
+    echo "   Configurez JENKINS_SECRET dans .env puis: docker compose up -d jenkins-agent"
+fi
 
 echo ""
 
 # ────────────────────────────────────────────────────────────────
-# TEST 4 : Docker-in-Docker fonctionnel
+# TEST 4 : Docker-in-Docker fonctionnel (sur l'agent)
 # ────────────────────────────────────────────────────────────────
 
-echo "4️⃣  Test Docker-in-Docker..."
+echo "4️⃣  Test Docker-in-Docker (agent)..."
 
-if docker compose exec -T jenkins docker ps > /dev/null 2>&1; then
-    echo "✅ Docker-in-Docker fonctionne"
-    echo "   Conteneurs visibles depuis Jenkins:"
-    docker compose exec -T jenkins docker ps --format "table {{.Names}}\t{{.Status}}" | head -5
+if docker compose exec -T jenkins-agent docker ps > /dev/null 2>&1; then
+    echo "✅ Docker-in-Docker fonctionne sur l'agent"
+    echo "   Conteneurs visibles depuis l'agent:"
+    docker compose exec -T jenkins-agent docker ps --format "table {{.Names}}\t{{.Status}}" | head -5
 else
-    echo "⚠️  Docker-in-Docker ne fonctionne pas correctement"
-    echo "   Vérifiez les permissions du socket Docker"
+    echo "⚠️  Docker-in-Docker ne fonctionne pas sur l'agent"
+    echo "   Vérifiez les permissions du socket Docker et le GID docker (984)"
 fi
 
 echo ""
@@ -143,12 +154,12 @@ echo ""
 # TEST 9 : Test de compilation Maven simple
 # ────────────────────────────────────────────────────────────────
 
-echo "9️⃣  Test Maven (version uniquement)..."
+echo "9️⃣  Test Maven sur l'agent (version uniquement)..."
 
-if docker compose exec -T jenkins mvn --version > /dev/null 2>&1; then
-    echo "✅ Maven opérationnel"
+if docker compose exec -T jenkins-agent mvn --version > /dev/null 2>&1; then
+    echo "✅ Maven opérationnel sur l'agent"
 else
-    echo "❌ Problème avec Maven"
+    echo "⚠️  Maven non disponible (agent pas démarré ou problème)"
 fi
 
 echo ""

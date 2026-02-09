@@ -33,14 +33,12 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
         Set<GrantedAuthority> mappedAuthorities = new HashSet<>();
 
         authorities.forEach(authority -> {
-            if (OidcUserAuthority.class.isInstance(authority)) {
-                final OidcUserAuthority oidcUserAuthority = (OidcUserAuthority) authority;
+            // Java 21+ pattern matching for instanceof
+            if (authority instanceof OidcUserAuthority oidcUserAuthority) {
                 mappedAuthorities.addAll(extractAuthorities(oidcUserAuthority.getIdToken().getClaims()));
-
-            } else if (OAuth2UserAuthority.class.isInstance(authority)) {
-                    final OAuth2UserAuthority oauth2UserAuthority = (OAuth2UserAuthority) authority;
-                    final Map<String, Object> userAttributes = oauth2UserAuthority.getAttributes();
-                    mappedAuthorities.addAll(extractAuthorities(userAttributes));
+            } else if (authority instanceof OAuth2UserAuthority oauth2UserAuthority) {
+                final Map<String, Object> userAttributes = oauth2UserAuthority.getAttributes();
+                mappedAuthorities.addAll(extractAuthorities(userAttributes));
             }
         });
 

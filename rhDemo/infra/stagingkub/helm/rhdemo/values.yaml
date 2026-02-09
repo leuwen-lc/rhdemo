@@ -26,7 +26,7 @@ postgresql-rhdemo:
   enabled: true
   image:
     repository: postgres
-    tag: "16-alpine"
+    tag: "18-alpine"
     pullPolicy: IfNotPresent
 
   database:
@@ -79,7 +79,7 @@ postgresql-keycloak:
   enabled: true
   image:
     repository: postgres
-    tag: "16-alpine"
+    tag: "18-alpine"
     pullPolicy: IfNotPresent
 
   database:
@@ -116,7 +116,7 @@ keycloak:
   enabled: true
   image:
     repository: quay.io/keycloak/keycloak
-    tag: "26.4.2"
+    tag: "26.5.0"
     pullPolicy: IfNotPresent
 
   replicaCount: 1

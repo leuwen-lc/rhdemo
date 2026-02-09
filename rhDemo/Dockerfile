@@ -101,7 +101,7 @@ USER spring:spring
 # HEALTHCHECK
 # ───────────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+    CMD bash -c 'echo > /dev/tcp/localhost/8080' || exit 1
 
 # ───────────────────────────────────────────────────────────────────
 # POINT D'ENTRÉE

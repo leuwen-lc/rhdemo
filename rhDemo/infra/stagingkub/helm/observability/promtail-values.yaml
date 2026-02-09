@@ -1,6 +1,6 @@
 # Configuration Promtail
-# Chart: grafana/promtail v6.x
-# Date: 2025-12-31
+# Chart: grafana/promtail 6.17.1 (Promtail 3.5.1)
+# Version figée dans install-observability.sh
 
 ###########################################
 # Configuration Promtail

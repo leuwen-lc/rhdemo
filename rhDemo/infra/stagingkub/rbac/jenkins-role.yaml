@@ -132,10 +132,10 @@ rules:
     resources: ["clientsettingspolicies", "clientsettingspolicies/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
-  # SnippetsFilter : injection de configuration NGINX personnalisée
-  # CRITIQUE pour les proxy buffers Keycloak
+  # ProxySettingsPolicy : configuration proxy buffers (NGF 2.4+)
+  # CRITIQUE pour les proxy buffers Keycloak (gros cookies OAuth2)
   - apiGroups: ["gateway.nginx.org"]
-    resources: ["snippetsfilters", "snippetsfilters/status"]
+    resources: ["proxysettingspolicies", "proxysettingspolicies/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
   # ObservabilityPolicy : métriques et traces (optionnel)

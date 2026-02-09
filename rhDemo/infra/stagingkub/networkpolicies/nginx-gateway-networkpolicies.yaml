@@ -70,8 +70,12 @@ spec:
           port: 53
 ---
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric (Data Plane)
+# NGINX Gateway Fabric - Data Plane (shared-gateway-nginx)
 # ═══════════════════════════════════════════════════════════════
+# Dans NGF 2.4+, le controller et le data plane sont séparés :
+#   - Controller (ngf-nginx-gateway-fabric-*) : watch API Server, génère la config
+#   - Data plane (shared-gateway-nginx-*) : exécute NGINX, gère le trafic
+#
 # INGRESS:
 #   - Tout (Internet via NodePort): trafic utilisateur HTTPS
 #   - monitoring: Prometheus scraping métriques NGF
@@ -96,7 +100,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: nginx-gateway-fabric
+      app.kubernetes.io/name: shared-gateway-nginx
   policyTypes:
     - Ingress
     - Egress
@@ -159,6 +163,20 @@ spec:
           port: 80
         - protocol: TCP
           port: 3000
+    # Controller NGF: le data plane se connecte au controller via gRPC
+    # Service ClusterIP port 443 → container port 8443 (après DNAT Cilium)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nginx-gateway
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nginx-gateway-fabric
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 8443
     # DNS
     - to:
         - namespaceSelector:
@@ -174,18 +192,17 @@ spec:
           port: 53
 ---
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric Controller (optionnel si séparé)
+# NGINX Gateway Fabric Controller (ngf-nginx-gateway-fabric)
 # ═══════════════════════════════════════════════════════════════
-# Note: Dans NGF 2.4+, le controller et le data plane peuvent
-# être dans le même pod ou séparés. Cette policy couvre le cas
-# où ils seraient séparés.
+# Dans NGF 2.4+, le controller est séparé du data plane.
+# Il watch l'API Server et pousse la configuration au data plane.
 #
 # INGRESS:
 #   - kubelet: health checks
 #
 # EGRESS:
-#   - API Server: lecture Gateway/HTTPRoute CRDs
-#   - Data plane: configuration
+#   - API Server: lecture Gateway/HTTPRoute CRDs (via CiliumNetworkPolicy)
+#   - Data plane: envoi de configuration
 #   - DNS
 # ═══════════════════════════════════════════════════════════════
 apiVersion: networking.k8s.io/v1
@@ -199,7 +216,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: controller
+      app.kubernetes.io/name: nginx-gateway-fabric
   policyTypes:
     - Ingress
     - Egress
@@ -208,15 +225,22 @@ spec:
     - ports:
         - protocol: TCP
           port: 8081
-  egress:
-    # API Server (lecture CRDs)
-    - to:
+    # Data plane: connexion gRPC pour recevoir la configuration
+    # Container port 8443 (le service expose 443 mais Cilium DNAT vers 8443)
+    - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: default
+              kubernetes.io/metadata.name: nginx-gateway
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: shared-gateway-nginx
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 8443
+  egress:
+    # API Server (lecture CRDs) - voir CiliumNetworkPolicy allow-apiserver-access
     # Communication avec le data plane (même namespace)
     - to:
         - namespaceSelector:

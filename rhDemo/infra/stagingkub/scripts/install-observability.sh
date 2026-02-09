@@ -21,6 +21,14 @@
 
 set -e
 
+# ═══════════════════════════════════════════════════════════════
+# Versions des charts Helm (figées pour reproductibilité)
+# ═══════════════════════════════════════════════════════════════
+KUBE_PROMETHEUS_STACK_VERSION="81.5.1"  # App: Prometheus Operator v0.88.1
+LOKI_VERSION="6.52.0"                   # App: Loki 3.6.4
+PROMTAIL_VERSION="6.17.1"               # App: Promtail 3.5.1
+GRAFANA_VERSION="10.5.15"               # App: Grafana 12.3.1
+
 # Couleurs
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -118,6 +126,7 @@ echo -e "${BLUE}  - Rétention: 7 jours, Storage: 10Gi${NC}"
 echo ""
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+    --version $KUBE_PROMETHEUS_STACK_VERSION \
     --namespace $MONITORING_NS \
     --values "$VALUES_DIR/prometheus-values.yaml" \
     --wait \
@@ -152,6 +161,7 @@ echo ""
 # Installation Loki
 log "Installation de Loki..."
 helm upgrade --install loki grafana/loki \
+    --version $LOKI_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/loki-modern-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
@@ -161,6 +171,7 @@ echo ""
 # Installation Promtail
 log "Installation de Promtail..."
 helm upgrade --install promtail grafana/promtail \
+    --version $PROMTAIL_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/promtail-values.yaml \
     --wait --timeout 2m >/dev/null 2>&1
@@ -170,6 +181,7 @@ echo ""
 # Installation Grafana
 log "Installation de Grafana..."
 helm upgrade --install grafana grafana/grafana \
+    --version $GRAFANA_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/grafana-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1

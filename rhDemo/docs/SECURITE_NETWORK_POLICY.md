@@ -17,7 +17,15 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐   │
 │  │                              Namespace: nginx-gateway                                            │   │
 │  │  ┌──────────────────────────────────────────────────────────────────────────────────────────┐   │   │
-│  │  │  nginx-gateway-fabric (NGINX Gateway Fabric 2.4+)                                        │   │   │
+│  │  │  NGF Controller (ngf-nginx-gateway-fabric-*)                                             │   │   │
+│  │  │  Label: app.kubernetes.io/name: nginx-gateway-fabric                                     │   │   │
+│  │  │  Watch API Server, pousse config via gRPC (:443/:8443)                                   │   │   │
+│  │  └──────────────────┬───────────────────────────────────────────────────────────────────────┘   │   │
+│  │                     │ gRPC :443/:8443                                                           │   │
+│  │                     ▼                                                                           │   │
+│  │  ┌──────────────────────────────────────────────────────────────────────────────────────────┐   │   │
+│  │  │  NGF Data Plane (shared-gateway-nginx-*)                                                 │   │   │
+│  │  │  Label: app.kubernetes.io/name: shared-gateway-nginx                                     │   │   │
 │  │  │  Ports: 80 (HTTP), 443 (HTTPS), 9113 (metrics)                                          │   │   │
 │  │  │  Backends autorisés: rhdemo-app:9000, keycloak:8080, grafana:80                         │   │   │
 │  │  │  ❌ Pas d'accès Internet (egress bloqué)                                                 │   │   │
@@ -86,10 +94,10 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 
 | Source | Destination | Port | Protocole | Description |
 |--------|-------------|------|-----------|-------------|
-| Internet | nginx-gateway-fabric | 443 | HTTPS | Trafic utilisateur TLS |
-| nginx-gateway-fabric | rhdemo-app | 9000 | HTTP | Application web |
-| nginx-gateway-fabric | keycloak | 8080 | HTTP | Interface admin Keycloak |
-| nginx-gateway-fabric | grafana | 80 | HTTP | Interface Grafana |
+| Internet | shared-gateway-nginx (data plane) | 443 | HTTPS | Trafic utilisateur TLS |
+| shared-gateway-nginx (data plane) | rhdemo-app | 9000 | HTTP | Application web |
+| shared-gateway-nginx (data plane) | keycloak | 8080 | HTTP | Interface admin Keycloak |
+| shared-gateway-nginx (data plane) | grafana | 80 | HTTP | Interface Grafana |
 
 ### 2. Flux applicatifs internes
 
@@ -125,6 +133,11 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 |--------|-------------|------|-----------|-------------|
 | Tous les pods | kube-dns | 53 | UDP/TCP | Résolution DNS |
 | kubelet | Tous les pods | * | TCP | Health checks (liveness/readiness) |
+| Promtail | API Server (host) | 6443 | TCP | Découverte des pods (`kubernetes_sd_configs`) |
+| Prometheus Operator | API Server (host) | 6443 | TCP | Gestion des ServiceMonitors/PrometheusRules |
+| Kube State Metrics | API Server (host) | 6443 | TCP | Collecte métriques état du cluster |
+| NGF Controller | API Server (host) | 6443 | TCP | Watch des Gateway/HTTPRoute |
+| NGF Data Plane → Controller | ngf-nginx-gateway-fabric | 443/8443 | TCP (gRPC) | Réception configuration NGINX |
 
 ### 6. Flux Debug (optionnel)
 
@@ -149,21 +162,22 @@ Ces flux peuvent être activés via des NetworkPolicies spécifiques si nécessa
 ## Matrice des communications
 
 ```text
-                    │ rhdemo-app │ keycloak │ pg-rhdemo │ pg-keycloak │ Prometheus │ Grafana │ Loki │ NGF │
-────────────────────┼────────────┼──────────┼───────────┼─────────────┼────────────┼─────────┼──────┼─────┤
-rhdemo-app          │     -      │    ✓     │     ✓     │      ✗      │     ✗      │    ✗    │  ✗   │  ✗  │
-keycloak            │     ✗      │    -     │     ✗     │      ✓      │     ✗      │    ✗    │  ✗   │  ✗  │
-postgresql-rhdemo   │     ✗      │    ✗     │     -     │      ✗      │     ✗      │    ✗    │  ✗   │  ✗  │
-postgresql-keycloak │     ✗      │    ✗     │     ✗     │      -      │     ✗      │    ✗    │  ✗   │  ✗  │
-Prometheus          │     ✓      │    ✗     │     ✓     │      ✗      │     -      │    ✓    │  ✓   │  ✓  │
-Grafana             │     ✗      │    ✗     │     ✗     │      ✗      │     ✓      │    -    │  ✓   │  ✗  │
-Loki                │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  -   │  ✗  │
-nginx-gateway       │     ✓      │    ✓     │     ✗     │      ✗      │     ✗      │    ✓    │  ✗   │  -  │
-Promtail            │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✓   │  ✗  │
-Backup CronJobs     │     ✗      │    ✗     │     ✓     │      ✓      │     ✗      │    ✗    │  ✗   │  ✗  │
+                     │ rhdemo-app │ keycloak │ pg-rhdemo │ pg-keycloak │ Prometheus │ Grafana │ Loki │ NGF DP │ NGF Ctrl │
+─────────────────────┼────────────┼──────────┼───────────┼─────────────┼────────────┼─────────┼──────┼────────┼──────────┤
+rhdemo-app           │     -      │    ✓     │     ✓     │      ✗      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
+keycloak             │     ✗      │    -     │     ✗     │      ✓      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
+postgresql-rhdemo    │     ✗      │    ✗     │     -     │      ✗      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
+postgresql-keycloak  │     ✗      │    ✗     │     ✗     │      -      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
+Prometheus           │     ✓      │    ✗     │     ✓     │      ✗      │     -      │    ✓    │  ✓   │   ✓    │    ✗     │
+Grafana              │     ✗      │    ✗     │     ✗     │      ✗      │     ✓      │    -    │  ✓   │   ✗    │    ✗     │
+Loki                 │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  -   │   ✗    │    ✗     │
+NGF Data Plane       │     ✓      │    ✓     │     ✗     │      ✗      │     ✗      │    ✓    │  ✗   │   -    │    ✓     │
+NGF Controller       │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✗   │   ✗    │    -     │
+Promtail             │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✓   │   ✗    │    ✗     │
+Backup CronJobs      │     ✗      │    ✗     │     ✓     │      ✓      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
 ```
 
-Légende : ✓ = Autorisé, ✗ = Bloqué, - = N/A
+Légende : ✓ = Autorisé, ✗ = Bloqué, - = N/A, NGF DP = Data Plane (shared-gateway-nginx), NGF Ctrl = Controller (nginx-gateway-fabric)
 
 ## Implémentation des NetworkPolicies
 
@@ -191,9 +205,13 @@ Les Network Policies sont réparties en deux emplacements :
 
 | Fichier | Namespace | Description |
 |---------|-----------|-------------|
-| `networkpolicies/monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, etc. |
-| `networkpolicies/loki-stack-networkpolicies.yaml` | loki-stack | Loki, Promtail, Grafana |
-| `networkpolicies/nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric |
+| `networkpolicies/monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, etc. + CiliumNetworkPolicies API Server |
+| `networkpolicies/loki-stack-networkpolicies.yaml` | loki-stack | Loki, Promtail, Grafana + CiliumNetworkPolicy API Server |
+| `networkpolicies/nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric + CiliumNetworkPolicy API Server |
+
+> **Note** : Chaque fichier YAML peut contenir à la fois des `NetworkPolicy` Kubernetes standard
+> et des `CiliumNetworkPolicy` spécifiques à Cilium. Les CiliumNetworkPolicies sont nécessaires
+> pour autoriser l'accès à l'API Server (voir section [CiliumNetworkPolicy et accès API Server](#ciliumnetworkpolicy-et-accès-api-server)).
 
 ### Application des policies externes
 
@@ -261,6 +279,7 @@ kubectl exec -n loki-stack deploy/loki -- wget -qO- --timeout=5 http://example.c
 ## Considérations de sécurité
 
 ### Points forts
+
 - Isolation complète entre les bases de données (postgresql-rhdemo ↔ postgresql-keycloak)
 - Pas d'accès Internet direct depuis les pods applicatifs
 - Scraping Prometheus limité aux endpoints autorisés
@@ -270,9 +289,11 @@ kubectl exec -n loki-stack deploy/loki -- wget -qO- --timeout=5 http://example.c
 - Egress strictement contrôlé pour chaque composant
 
 ### Limitations connues
+
 - Les health checks kubelet nécessitent une règle permissive (pas de sélection par namespace)
 - Le DNS est autorisé vers kube-dns uniquement (pas de DNS externe)
-- Prometheus Operator nécessite un accès à l'API Server (règle plus large)
+- L'accès à l'API Server nécessite des CiliumNetworkPolicies (voir section dédiée ci-dessous)
+- Le DNAT Cilium traduit les ports des Services ClusterIP avant l'évaluation des policies : il faut autoriser le port Service **et** le port conteneur (voir section [DNAT Cilium et ports](#dnat-cilium-et-ports-des-services-clusterip))
 
 ### Comparaison avec/sans Network Policies
 
@@ -335,7 +356,7 @@ networkPolicies:
 Si vous ajoutez un nouveau service exposé via la Gateway, modifiez `nginx-gateway-networkpolicies.yaml` :
 
 ```yaml
-# Ajouter dans la section egress de nginx-gateway-fabric-netpol
+# Ajouter dans la section egress de nginx-gateway-fabric-netpol (data plane, podSelector: shared-gateway-nginx)
 - to:
     - namespaceSelector:
         matchLabels:
@@ -370,6 +391,7 @@ Si vous ajoutez un nouveau service exposé via la Gateway, modifiez `nginx-gatew
 ### Prometheus ne scrape plus les métriques
 
 Vérifiez que le namespace monitoring a le bon label :
+
 ```bash
 kubectl get namespace monitoring --show-labels
 # Doit avoir: kubernetes.io/metadata.name=monitoring
@@ -378,9 +400,163 @@ kubectl get namespace monitoring --show-labels
 ### Grafana affiche "Data source is not working"
 
 Testez manuellement la connexion depuis le pod Grafana :
+
 ```bash
 kubectl exec -n loki-stack deploy/grafana -- wget -qO- http://prometheus-kube-prometheus-prometheus.monitoring:9090/-/ready
 kubectl exec -n loki-stack deploy/grafana -- wget -qO- http://loki.loki-stack:3100/ready
+```
+
+### Routes HTTPS inaccessibles (timeout nginx-gateway)
+
+Si les URLs `https://*.intra.leuwen-lc.fr` répondent par un timeout, vérifiez les points suivants :
+
+**1. Architecture NGF 2.4 : controller et data plane séparés**
+
+Dans NGINX Gateway Fabric 2.4+, le controller et le data plane sont des **pods distincts**
+avec des labels différents :
+
+| Composant | Pod | Label |
+|-----------|-----|-------|
+| Controller | `ngf-nginx-gateway-fabric-*` | `app.kubernetes.io/name: nginx-gateway-fabric` |
+| Data Plane | `shared-gateway-nginx-*` | `app.kubernetes.io/name: shared-gateway-nginx` |
+
+Les NetworkPolicies doivent cibler le **bon pod** :
+- `nginx-gateway-fabric-netpol` (ingress/egress trafic) → `shared-gateway-nginx` (data plane)
+- `nginx-gateway-controller-netpol` (API Server, config) → `nginx-gateway-fabric` (controller)
+
+**2. Communication data plane ↔ controller (gRPC)**
+
+Le data plane se connecte au controller via gRPC pour recevoir sa configuration.
+Le Service ClusterIP expose le port 443, mais le conteneur écoute sur 8443.
+Avec Cilium DNAT, **les deux ports doivent être autorisés** dans les NetworkPolicies.
+
+```bash
+# Vérifier les logs du data plane
+kubectl logs -n nginx-gateway -l app.kubernetes.io/name=shared-gateway-nginx --tail=50
+
+# Si vous voyez "dial tcp <IP>:443: i/o timeout", la communication gRPC est bloquée
+# Vérifier les drops Cilium
+kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
+kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
+```
+
+**3. Vérifier que les HTTPRoutes sont acceptées**
+
+```bash
+kubectl get httproutes -n rhdemo-stagingkub -o wide
+kubectl get gateway -n nginx-gateway
+```
+
+### Promtail ne collecte aucun log (i/o timeout vers l'API Server)
+
+Si Promtail affiche des erreurs `failed to list *v1.Pod: dial tcp 10.96.0.1:443: i/o timeout`,
+c'est que l'accès à l'API Server est bloqué. Avec Cilium, il faut une CiliumNetworkPolicy :
+
+```bash
+# Vérifier que la CiliumNetworkPolicy existe
+kubectl get ciliumnetworkpolicies -n loki-stack
+
+# Si elle manque, l'appliquer
+kubectl apply -f rhDemo/infra/stagingkub/networkpolicies/loki-stack-networkpolicies.yaml
+
+# Redémarrer Promtail
+kubectl rollout restart daemonset/promtail -n loki-stack
+```
+
+Voir la section [CiliumNetworkPolicy et accès API Server](#ciliumnetworkpolicy-et-accès-api-server) pour plus de détails.
+
+## CiliumNetworkPolicy et accès API Server
+
+### Problème avec les NetworkPolicies standard et Cilium
+
+Avec Cilium configuré en `kubeProxyReplacement=true` (remplacement complet de kube-proxy par eBPF),
+les règles `ipBlock` standard des NetworkPolicies Kubernetes **ne fonctionnent pas** pour autoriser
+l'accès à l'API Server Kubernetes. Voici pourquoi :
+
+1. Un pod envoie une requête vers le ClusterIP de l'API Server (`10.96.0.1:443`)
+2. Cilium effectue le **DNAT** (traduction d'adresse) **avant** l'évaluation de la NetworkPolicy
+3. Le paquet est réécrit vers l'IP du noeud control-plane (`172.21.0.2:6443`)
+4. L'API Server est identifié par Cilium comme l'entité réservée `host`, pas comme un CIDR
+5. Les règles `ipBlock` ne matchent pas l'identité `host` → le paquet est **droppé**
+
+### Solution : CiliumNetworkPolicy avec `toEntities`
+
+Cilium fournit des entités réservées (`host`, `kube-apiserver`) qui permettent de cibler l'API Server
+indépendamment de son adresse IP :
+
+```yaml
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-<composant>
+  namespace: <namespace>
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: <composant>
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+```
+
+### CiliumNetworkPolicies déployées
+
+| Namespace | Nom | Pod cible | Raison |
+|-----------|-----|-----------|--------|
+| loki-stack | `allow-apiserver-promtail` | Promtail | `kubernetes_sd_configs` (découverte des pods) |
+| monitoring | `allow-apiserver-prometheus-operator` | Prometheus Operator | Watch ServiceMonitors/PrometheusRules |
+| monitoring | `allow-apiserver-kube-state-metrics` | Kube State Metrics | Collecte métriques état cluster |
+| nginx-gateway | `allow-apiserver-access` | NGINX Gateway Fabric | Watch Gateway/HTTPRoute |
+
+### Diagnostic
+
+Pour vérifier si un pod est bloqué par une NetworkPolicy vers l'API Server :
+
+```bash
+# Identifier l'endpoint Cilium du pod
+kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep <pod-name>
+
+# Monitorer les drops en temps réel (remplacer <ID> par l'endpoint ID)
+kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ID>
+
+# Lister les CiliumNetworkPolicies
+kubectl get ciliumnetworkpolicies -A
+```
+
+Si le monitor affiche `drop (Policy denied) ... identity <N>->host: ... -> 172.21.0.2:6443`,
+il manque une CiliumNetworkPolicy `toEntities: [host, kube-apiserver]` pour ce pod.
+
+### DNAT Cilium et ports des Services ClusterIP
+
+Le DNAT Cilium affecte aussi les communications inter-pods via un Service ClusterIP.
+Quand un pod contacte un Service sur le port exposé (ex: 443), Cilium traduit l'adresse
+**avant** l'évaluation de la NetworkPolicy. Le paquet arrive donc avec le **port conteneur**
+(ex: 8443), pas le port du Service.
+
+**Conséquence** : dans les règles NetworkPolicy, il faut autoriser **les deux ports**
+(service et conteneur) pour couvrir tous les cas :
+
+```yaml
+# Exemple : data plane NGF → controller NGF
+# Service expose :443 mais le conteneur écoute sur :8443
+ports:
+  - protocol: TCP
+    port: 443    # port du Service ClusterIP
+  - protocol: TCP
+    port: 8443   # port conteneur réel (après DNAT Cilium)
+```
+
+**Diagnostic** : `cilium-dbg monitor --type drop` montre le port réel après DNAT :
+
+```text
+drop (Policy denied) identity 17962->14583: 10.244.0.186:46896 -> 10.244.0.207:8443
+#                                                                              ^^^^
+#                                                          Port conteneur (pas le port Service 443)
 ```
 
 ## Évolutions futures
@@ -418,5 +594,6 @@ spec:
 ### mTLS avec service mesh
 
 Pour ajouter le chiffrement inter-services :
+
 - Istio ou Linkerd peuvent être intégrés
 - Nécessite des ajustements des Network Policies pour autoriser les sidecars

@@ -752,8 +752,8 @@ EOF
 
                     echo "   Pod: \$RHDEMO_POD"
 
-                    # Vérifier l'actuator health
-                    if kubectl exec \$RHDEMO_POD -n ${env.K8S_NAMESPACE} -- curl -sf http://localhost:9000/actuator/health > /dev/null 2>&1; then
+                    # Vérifier l'actuator health (wget car curl n'est pas installé dans l'image JRE minimale)
+                    if kubectl exec \$RHDEMO_POD -n ${env.K8S_NAMESPACE} -- wget -qO- http://localhost:9000/actuator/health > /dev/null 2>&1; then
                         echo "✅ Application RHDemo : healthy"
                     else
                         echo "❌ Application RHDemo : unhealthy"

@@ -59,7 +59,7 @@ WORKDIR /app
 # SÉCURITÉ : Créer un utilisateur non-root
 # ───────────────────────────────────────────────────────────────────
 RUN groupadd -r spring && \
-    useradd -r -g spring -u 1000 spring && \
+    useradd -r -g spring spring && \
     chown -R spring:spring /app
 
 # ───────────────────────────────────────────────────────────────────

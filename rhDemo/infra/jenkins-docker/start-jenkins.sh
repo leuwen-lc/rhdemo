@@ -146,11 +146,11 @@ if [ ! -f .env ]; then
 fi
 
 # ────────────────────────────────────────────────────────────────
-# BUILD DE L'IMAGE JENKINS PERSONNALISÉE
+# BUILD DES IMAGES JENKINS (CONTROLLER + AGENT)
 # ────────────────────────────────────────────────────────────────
 
 echo ""
-echo "🔨 Build de l'image Jenkins personnalisée..."
+echo "🔨 Build des images Jenkins..."
 
 # Gestion de l'option --rebuild-plugins
 FORCE_REBUILD=false
@@ -166,6 +166,7 @@ for arg in "$@"; do
     esac
 done
 
+# --- Build de l'image Controller ---
 if [ -f Dockerfile.jenkins ]; then
     # Calculer le hash combiné du Dockerfile ET de plugins.txt
     DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
@@ -174,7 +175,7 @@ if [ -f Dockerfile.jenkins ]; then
 
     # Vérifier si l'image existe déjà
     if docker image inspect rhdemo-jenkins:latest &> /dev/null; then
-        echo "ℹ️  Image Jenkins existante trouvée"
+        echo "ℹ️  Image controller existante trouvée"
 
         # Vérifier si le Dockerfile OU plugins.txt a changé depuis le dernier build
         IMAGE_HASH=$(docker image inspect rhdemo-jenkins:latest --format '{{.Config.Labels.config_hash}}' 2>/dev/null || echo "")
@@ -186,7 +187,7 @@ if [ -f Dockerfile.jenkins ]; then
             echo "🔄 Configuration modifiée (Dockerfile ou plugins.txt), rebuild nécessaire..."
             NEED_REBUILD=true
         else
-            echo "✅ Image Jenkins à jour, pas de rebuild nécessaire"
+            echo "✅ Image controller à jour, pas de rebuild nécessaire"
             NEED_REBUILD=false
         fi
 
@@ -199,24 +200,56 @@ if [ -f Dockerfile.jenkins ]; then
             fi
 
             docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
-            echo "✅ Image Jenkins reconstruite avec succès"
+            echo "✅ Image controller reconstruite avec succès"
         fi
     else
-        echo "📦 Première construction de l'image..."
+        echo "📦 Première construction de l'image controller..."
         docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
-        echo "✅ Image Jenkins construite avec succès"
+        echo "✅ Image controller construite avec succès"
     fi
-
-    # Afficher les versions des outils installés
-    echo ""
-    echo "📦 Outils Kubernetes installés dans Jenkins:"
-    docker run --rm rhdemo-jenkins:latest sh -c "
-        (kubectl version --client --short 2>/dev/null || echo '  kubectl: non installé') &&
-        (helm version --short 2>/dev/null || echo '  helm: non installé') &&
-        (kind --version 2>/dev/null || echo '  kind: non installé')
-    " 2>/dev/null || echo "  ℹ️  Vérification des outils ignorée"
 else
     echo "⚠️  Dockerfile.jenkins non trouvé, utilisation de l'image officielle"
+fi
+
+# --- Build de l'image Agent ---
+if [ -f Dockerfile.agent ]; then
+    AGENT_HASH=$(md5sum Dockerfile.agent | cut -d' ' -f1)
+
+    if docker image inspect rhdemo-jenkins-agent:latest &> /dev/null; then
+        AGENT_IMAGE_HASH=$(docker image inspect rhdemo-jenkins-agent:latest --format '{{.Config.Labels.config_hash}}' 2>/dev/null || echo "")
+
+        if [ "$FORCE_REBUILD" = true ]; then
+            echo "🔄 Rebuild agent forcé (--rebuild)..."
+            NEED_AGENT_REBUILD=true
+        elif [ "$AGENT_HASH" != "$AGENT_IMAGE_HASH" ]; then
+            echo "🔄 Dockerfile.agent modifié, rebuild nécessaire..."
+            NEED_AGENT_REBUILD=true
+        else
+            echo "✅ Image agent à jour, pas de rebuild nécessaire"
+            NEED_AGENT_REBUILD=false
+        fi
+
+        if [ "$NEED_AGENT_REBUILD" = true ]; then
+            docker build -f Dockerfile.agent --label config_hash=$AGENT_HASH -t rhdemo-jenkins-agent:latest .
+            echo "✅ Image agent reconstruite avec succès"
+        fi
+    else
+        echo "📦 Première construction de l'image agent..."
+        docker build -f Dockerfile.agent --label config_hash=$AGENT_HASH -t rhdemo-jenkins-agent:latest .
+        echo "✅ Image agent construite avec succès"
+    fi
+
+    # Afficher les versions des outils installés dans l'agent
+    echo ""
+    echo "📦 Outils de build installés dans l'agent:"
+    docker run --rm rhdemo-jenkins-agent:latest sh -c "
+        echo \"  Java: \$(/opt/java/temurin-25/bin/java --version 2>&1 | head -1)\" &&
+        echo \"  Maven: \$(mvn --version 2>&1 | head -1)\" &&
+        (kubectl version --client --short 2>/dev/null || echo '  kubectl: non installé') &&
+        (helm version --short 2>/dev/null || echo '  helm: non installé')
+    " 2>/dev/null || echo "  ℹ️  Vérification des outils ignorée"
+else
+    echo "⚠️  Dockerfile.agent non trouvé"
 fi
 
 # ────────────────────────────────────────────────────────────────
@@ -280,14 +313,16 @@ echo "✅ Jenkins est démarré avec succès !"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 echo "📚 Commandes utiles:"
-echo "   • Voir les logs:        docker compose logs -f jenkins"
-echo "   • Arrêter Jenkins:      docker compose stop"
-echo "   • Redémarrer Jenkins:   docker compose restart jenkins"
-echo "   • Arrêter tout:         docker compose down"
-echo "   • Tout supprimer:       docker compose down -v"
+echo "   • Voir les logs:           docker compose logs -f jenkins"
+echo "   • Logs agent:              docker compose logs -f jenkins-agent"
+echo "   • Arrêter Jenkins:         docker compose stop"
+echo "   • Redémarrer Jenkins:      docker compose restart jenkins"
+echo "   • Redémarrer agent:        docker compose restart jenkins-agent"
+echo "   • Arrêter tout:            docker compose down"
+echo "   • Tout supprimer:          docker compose down -v"
 echo ""
 echo "🔧 Options de rebuild:"
-echo "   • ./start-jenkins.sh --rebuild            # Force rebuild de l'image"
+echo "   • ./start-jenkins.sh --rebuild            # Force rebuild des images"
 echo "   • ./start-jenkins.sh --clean-plugins      # Nettoie plugins + rebuild"
 echo ""
 echo "🌐 Services disponibles:"
@@ -297,10 +332,12 @@ echo "   • Docker Registry:      https://localhost:5000"
 echo ""
 echo "📖 Documentation:"
 echo "   • README.md dans ce répertoire"
-echo "   • Jenkinsfile à la racine du projet"
+echo "   • QUICKSTART.md pour le guide de démarrage rapide"
 echo ""
 echo "🔧 Prochaines étapes:"
 echo "   1. Connectez-vous à Jenkins: http://localhost:8080"
-echo "   2. Configurez les credentials manquants si nécessaire"
-echo "   3. Créez un nouveau job Pipeline pointant vers le Jenkinsfile"
+echo "   2. Allez dans Manage Jenkins > Nodes > builder"
+echo "   3. Copiez le secret et mettez-le dans .env (JENKINS_SECRET=...)"
+echo "   4. Redémarrez l'agent: docker compose up -d jenkins-agent"
+echo "   5. Configurez les credentials (SOPS, SonarQube, etc.)"
 echo ""

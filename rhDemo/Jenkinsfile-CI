@@ -26,7 +26,7 @@
  */
 
 pipeline {
-    agent any
+    agent { label 'builder' }
 
     options {
         timeout(time: 2, unit: 'HOURS')
@@ -35,7 +35,7 @@ pipeline {
     }
 
     tools {
-        jdk 'JDK21'
+        jdk 'JDK25'
         maven 'Maven3'
     }
 
@@ -46,8 +46,8 @@ pipeline {
 
         // Configuration Docker
         NGINX_IMAGE = "nginx:1.29.4-alpine"
-        POSTGRES_IMAGE = "postgres:16-alpine"
-        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.4.2"
+        POSTGRES_IMAGE = "postgres:18-alpine"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -585,10 +585,11 @@ YMLEOF
                     sh './mvnw jacoco:report'
                 }
 
-                jacoco(
-                    execPattern: '**/rhDemo/target/jacoco.exec',
-                    classPattern: '**/rhDemo/target/classes',
-                    sourcePattern: '**/rhDemo/src/main/java'
+                recordCoverage(
+                    tools: [[parser: 'JACOCO', pattern: '**/rhDemo/target/site/jacoco/jacoco.xml']],
+                    id: 'jacoco',
+                    name: 'Code Coverage (JaCoCo)',
+                    sourceCodeRetention: 'MODIFIED'
                 )
             }
         }
@@ -728,25 +729,20 @@ YMLEOF
             }
         }
 
-        stage('🔗 Connexion Jenkins au Réseau Staging') {
+        stage('🔗 Connexion Agent au Réseau Staging') {
             steps {
                 script {
-                    echo "▶ Connexion de Jenkins au réseau ephemere pour accès direct aux services..."
+                    echo "▶ Connexion de l'agent au réseau ephemere pour accès direct aux services..."
                 }
 
                 sh """
-                    # Trouver le conteneur Jenkins principal (pas l'agent)
-                    JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
-                    echo "📦 Conteneur Jenkins trouvé: \$JENKINS_CONTAINER"
+                    # Connecter le conteneur agent au réseau ephemere
+                    # \$(hostname) retourne le conteneur où s'exécute le pipeline (l'agent builder)
+                    AGENT_CONTAINER=\$(hostname)
+                    echo "📦 Conteneur agent trouvé: \$AGENT_CONTAINER"
 
-                    if [ -n "\$JENKINS_CONTAINER" ]; then
-                        docker network connect ${env.NETWORK_EPHEMERE} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà connecté au réseau"
-                        echo "✅ Jenkins (\$JENKINS_CONTAINER) connecté au réseau ${env.NETWORK_EPHEMERE}"
-                    else
-                        echo "❌ ERREUR: Conteneur Jenkins introuvable!"
-                        docker ps --filter "name=jenkins"
-                        exit 1
-                    fi
+                    docker network connect ${env.NETWORK_EPHEMERE} \$AGENT_CONTAINER 2>/dev/null || echo "⚠️  Agent déjà connecté au réseau"
+                    echo "✅ Agent (\$AGENT_CONTAINER) connecté au réseau ${env.NETWORK_EPHEMERE}"
                 """
             }
         }
@@ -1163,16 +1159,16 @@ YMLEOF
 
                     echo "⏳ Attente du démarrage de ZAP (60s max)..."
                     echo "   (ZAP doit charger ses add-ons, créer le certificat CA, etc.)"
-                    timeout=60
+                    timeout=120
                     attempt=0
                     while [ \$timeout -gt 0 ]; do
                         attempt=\$((attempt + 1))
                         if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
-                            echo "✅ ZAP démarré et accessible (après \$((60 - timeout))s)"
+                            echo "✅ ZAP démarré et accessible (après \$((120 - timeout))s)"
                             break
                         fi
                         if [ \$((attempt % 5)) -eq 0 ]; then
-                            echo "   Attente... (\$((60 - timeout))s écoulées, reste \${timeout}s)"
+                            echo "   Attente... (\$((120 - timeout))s écoulées, reste \${timeout}s)"
                         fi
                         sleep 2
                         timeout=\$((timeout - 2))
@@ -1708,13 +1704,11 @@ YMLEOF
                 if (!params.KEEP_EPHEMERE_ENV) {
                     echo "🧹 Nettoyage de l'environnement ephemere..."
 
-                    // Déconnecter Jenkins du réseau ephemere
+                    // Déconnecter l'agent du réseau ephemere
                     sh """
-                        JENKINS_CONTAINER=\$(docker ps --filter "name=jenkins" --format "{{.Names}}" | grep -v agent | head -n 1)
-                        if [ -n "\$JENKINS_CONTAINER" ]; then
-                            docker network disconnect ${env.NETWORK_EPHEMERE} \$JENKINS_CONTAINER 2>/dev/null || echo "⚠️  Jenkins déjà déconnecté"
-                            echo "✅ Jenkins déconnecté du réseau ephemere"
-                        fi
+                        AGENT_CONTAINER=\$(hostname)
+                        docker network disconnect ${env.NETWORK_EPHEMERE} \$AGENT_CONTAINER 2>/dev/null || echo "⚠️  Agent déjà déconnecté"
+                        echo "✅ Agent déconnecté du réseau ephemere"
                     """
 
                     // Arrêter et supprimer le container ZAP

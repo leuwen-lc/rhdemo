@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════════
+# Gateway API resources for Grafana (loki-stack namespace)
+# ═══════════════════════════════════════════════════════════════
+# Utilisé depuis la migration vers NGINX Gateway Fabric 2.3.0
+# Remplace l'Ingress nginx classique
+# ═══════════════════════════════════════════════════════════════
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: grafana-gateway
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: https-grafana
+      hostname: grafana-stagingkub.intra.leuwen-lc.fr
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          # Utilise le certificat Let's Encrypt wildcard de cert-manager
+          # Fallback: grafana-tls-cert (auto-signé)
+          - name: intra-wildcard-tls
+            kind: Secret
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: route
+spec:
+  parentRefs:
+    - name: grafana-gateway
+      namespace: loki-stack
+      sectionName: https-grafana
+  hostnames:
+    - grafana-stagingkub.intra.leuwen-lc.fr
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: grafana
+          port: 80

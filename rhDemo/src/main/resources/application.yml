@@ -2,12 +2,19 @@ spring:
   application:
     name: rhdemoAPI
 
+  # Virtual Threads (Java 21+, Spring Boot 4)
+  # Améliore significativement la scalabilité pour les opérations I/O-bound
+  threads:
+    virtual:
+      enabled: true
+
   # Import des secrets depuis fichiers externes
   # En dev local: créer secrets/secrets-rhdemo.yml depuis secrets.yml.template
   # En ephemere Docker: fichier monté dans /workspace/secrets/secrets-rhdemo.yml
   config:
     import:
       - optional:file:./secrets/secrets-rhdemo.yml
+      - optional:file:./rhDemo/secrets/secrets-rhdemo.yml
       - optional:file:/workspace/secrets/secrets-rhdemo.yml
 
   # PostgreSQL (prod)

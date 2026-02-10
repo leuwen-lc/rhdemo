@@ -1,6 +1,6 @@
 # Configuration Loki moderne (chart grafana/loki)
-# Chart: grafana/loki v6.x
-# Date: 2025-12-31
+# Chart: grafana/loki 6.52.0 (Loki 3.6.4)
+# Version figée dans install-observability.sh
 
 ###########################################
 # Mode de déploiement

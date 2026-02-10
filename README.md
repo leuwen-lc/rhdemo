@@ -51,7 +51,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé). Certificats autosignés ou Let's Encrypt (sur mon domaine intra.leuwen-lc.fr).
 - Logging / monitoring fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana : succès/échecs d'authentification, erreurs applicatives.
 - Compte de service et Role RBAC pour limiter les droits de Jenkins sur Stagingkub.
-- Tester des network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement Kind en ajoutant Cilium.
+- Tester des network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement Kind grace à l'ajout de Cilium.
 
 ## Fonctionnalités
 
@@ -81,14 +81,14 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 ## Installation
 
 - Git
-- Java 21+
+- Java 25+
 - Pour édition/lancement mode dev :
   - VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue.
   - Possibilité d'utiliser également Spring Tool Suite (Eclipse)
-- Pour env de développement : PostgresSQL 16 ou supérieur, Keycloak 26.4 ou supérieur
-- Pour chaine CI/CD  Jenkins 2.528.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
+- Pour env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
+- Pour chaine CI/CD  Jenkins 2.541.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
 - Pour déploiement env de ephemere : Docker Compose avec un réseau dédié.
-- Pour déploiement env staginkub : KinD 0.30 ou +
+- Pour déploiement env staginkub : KinD 0.31 ou +
 
 ## Limites
 
@@ -98,12 +98,9 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - Il faut bien sur faire le travail spécifique de conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
   - Mais il reste aussi un travail de configuration sur certains composants applicatifs en cible production :
     - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) qui serait fait probablement dans le cadre d'un projet IAM séparé.
-    - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins : ajout de slaves dédié et utilisation d'un deuxième master dédié production.
+    - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins avec ajout d'une instance dédiee production.
     - permettre la mise en place les mécanismes de scalabilité (Redis, etc...)
-    - (TODO) Revoir le mécanisme de logout avec Keycloak
-    - (TODO) mettre en place des dashboards de collecte de logs et métriques applicatives plus complets en spécifiques en lien avec les ops 
-
-- Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :
+  -  Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :
   - manque énormément d'informations sur les employes,
   - l'adresse est dans un seul champ, elle devrait être dans une table à part et répondre aux normes internationales,
   - (etc ...)
@@ -136,9 +133,28 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
-### Version 1.1.4-RELEASE 
+### Version 1.1.5
 
-Sur l'environnement de Stagingkub
+Outillage CI-CD (infra/jenkins-docker)
+- Séparation de Jenkins en une instance master de pilotage et un agent spécialisé pour le build (recommandations sécurité)
+- Remplacement plugin Jacoco obsolète par Coverage Plugin
+- Montée de niveau SonarQube (26.2.0.119303)
+
+Applicatif rhDemo
+- Montées de version (cf rhDemo/docs/SPRING_BOOT_4_MIGRATION.md):
+  - Java 25, Spring Boot 4.0.2, PostgreSQL 18.1, Keycloack 26.5.0
+  - Junit 6.0.2, Selenium 4.40, 
+  - Frontend : Actualisation des versions par NPM update (cf package-lock.json)
+
+Environnement stagingkub
+- Passage de Ingress Nginx (fin de vie mars 2026) à Nginx Gateway Fabric 2.4 (cf rhDemo/docs/NGINX_GATEWAY_FABRIC_MIGRATION.md)
+- Adaptation des network policies
+- "Pin" des versions des outils d'observabilité (prometheus, loki, grafana,...) pour éviter l'instabilité liée aux versions "latest"
+
+
+### Version 1.1.4
+
+Environnement de Stagingkub
 - Ajout d'un tableau de bord Grafana exposant les métriques Spring Actuator/Micrometer(métriques JVM, Http, Pool de connexion db, ...) exposées sur le end point prometheus (port dédié non exposé en externe).
 
 - Ajout d'un tableau de bord Grafana exposant les métriques PostgreSQL (stats requètes, connexions, cache, ...)  via postgres-exporter pour Prometheus.
@@ -155,7 +171,7 @@ Sur l'environnement de Stagingkub
 
 - Ajout d'un handler spécifique pour le logout OIDC qui ne fonctionnait pas car en standard il utilise issuer-uri qui n'est pas configurable, le pod ne pouvant résoudre l'url externe. On dérive donc l'url de logout de l'authorization-uri
 
-### Version 1.1.3-RELEASE
+### Version 1.1.3
 
 Environnement stagingkub
 
@@ -181,7 +197,7 @@ Sécurité applicative
 
 - Amélioration du score du rapport ZAP : Suppression des numéros de version NGINX dans la réponse http, élimination des doublons dans l'éntête HSTS (gérée désormais uniquement par NGINX, pas par Spring Boot), durcissement de la configuration CSP rhDemo.
 
-### Version 1.1.2-RELEASE
+### Version 1.1.2
 
 - Configuration des caches Loki (11Go de mémoire par défaut ce qui compromettait l'exécution locale)
 
@@ -191,13 +207,13 @@ Sécurité applicative
 
 - Duplication des caches Trivy pour éviter les coflits d'accès lors des scans en parallèle dans la chaine CI.
 
-### Version 1.1.1-RELEASE
+### Version 1.1.1
 
 - Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/LOKI_STACK_INTEGRATION.md
 
 - Ajout de possibilité de réglage niveaux de logs rhDemo via rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
 
-### Version 1.1.0-RELEASE
+### Version 1.1.0
 
 - Déploiement sur un deuxième environnement stagingkub basé cette fois sur Kubernetes (Kind) en conservant les données applicatives/keycloack d'un déploiement sur l'autre
 

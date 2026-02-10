@@ -39,7 +39,7 @@ jdk-tool:latest                     # tools { jdk 'JDK21' }
 # QUALITÉ DU CODE
 # ────────────────────────────────────────────────────────────────
 sonar:latest                        # withSonarQubeEnv, waitForQualityGate
-jacoco:latest                       # jacoco(execPattern: ...)
+coverage:latest                     # recordCoverage(tools: [[parser: 'JACOCO']])
 
 # ────────────────────────────────────────────────────────────────
 # TESTS & RAPPORTS

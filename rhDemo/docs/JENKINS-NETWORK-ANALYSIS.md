@@ -1,4 +1,4 @@
-# Analyse des problèmes d'accès Jenkins → stagingkub
+# Analyse des problèmes d'accès Jenkins Agent → stagingkub
 
 ## 🔍 Problèmes identifiés et résolus
 
@@ -10,8 +10,8 @@
 ```
 
 **Cause** :
-- Jenkins tourne dans un container Docker
-- `localhost:5000` dans le contexte de Jenkins fait référence au container Jenkins lui-même, pas à l'hôte
+- L'agent Jenkins (builder) tourne dans un container Docker
+- `localhost:5000` dans le contexte de l'agent fait référence au container agent lui-même, pas à l'hôte
 - Le registry `kind-registry` est sur un réseau Docker différent
 
 **Note importante** : Le registry doit s'appeler **exactement** `kind-registry` pour garantir la résolution DNS dans le cluster KinD. Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour plus de détails.
@@ -39,15 +39,15 @@ Unable to connect to the server: dial tcp 127.0.0.1:33309: connect: connection r
 ```
 
 **Cause** :
-- Jenkins n'était PAS connecté au réseau Docker `kind`
-- La kubeconfig par défaut utilise `https://127.0.0.1:33309` qui n'est pas accessible depuis le container Jenkins
+- L'agent Jenkins n'était PAS connecté au réseau Docker `kind`
+- La kubeconfig par défaut utilise `https://127.0.0.1:33309` qui n'est pas accessible depuis le container agent
 - L'API Kubernetes est accessible via `https://rhdemo-control-plane:6443` sur le réseau `kind`
 
 **Solutions appliquées** :
 
 #### a) Connexion réseau
 ```bash
-docker network connect kind rhdemo-jenkins
+docker network connect kind rhdemo-jenkins-agent
 ```
 
 #### b) Configuration kubectl dynamique : [Jenkinsfile-CD:233-305](../Jenkinsfile-CD#L233-L305)
@@ -66,10 +66,10 @@ Cette étape :
 
 **Code clé** :
 ```bash
-# Connexion automatique de Jenkins au réseau kind
-JENKINS_CONTAINER=$(hostname)
-if ! docker network inspect kind 2>/dev/null | grep -q "$JENKINS_CONTAINER"; then
-    docker network connect kind $JENKINS_CONTAINER
+# Connexion automatique de l'agent au réseau kind
+AGENT_CONTAINER=$(hostname)
+if ! docker network inspect kind 2>/dev/null | grep -q "$AGENT_CONTAINER"; then
+    docker network connect kind $AGENT_CONTAINER
 fi
 
 # Vérification du nom du registry (DOIT être 'kind-registry')
@@ -93,7 +93,7 @@ kind get kubeconfig --name rhdemo | \
 
 **Résultat** :
 ```bash
-✅ Jenkins déjà connecté au réseau kind
+✅ Agent déjà connecté au réseau kind
 ✅ Registry 'kind-registry' validé
 ✅ Registry déjà connecté au réseau kind avec alias 'kind-registry' (IP: 172.21.0.4)
 ✅ Configuration kubectl installée
@@ -221,38 +221,36 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 
 ### Réseaux Docker
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Réseau: kind                             │
-│                                                              │
-│  ┌──────────────────┐  ┌─────────────────┐  ┌────────────┐ │
-│  │ rhdemo-jenkins   │  │ kind-registry   │  │ rhdemo-    │ │
-│  │                  │  │ (container)     │  │ control-   │ │
-│  │ IP: 172.21.0.x   │  │ IP: 172.21.0.3  │  │ plane      │ │
-│  │                  │  │                 │  │            │ │
-│  │                  │  │ Alias DNS:      │  │ :6443 API  │ │
-│  │                  │  │ kind-registry   │  │            │ │
-│  └──────────────────┘  └─────────────────┘  └────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│                          Réseau: kind                                    │
+│                                                                          │
+│  ┌─────────────────────┐  ┌─────────────────┐  ┌────────────┐          │
+│  │ rhdemo-jenkins-agent│  │ kind-registry   │  │ rhdemo-    │          │
+│  │ (builder)           │  │ (container)     │  │ control-   │          │
+│  │ IP: 172.21.0.x      │  │ IP: 172.21.0.3  │  │ plane      │          │
+│  │                     │  │                 │  │            │          │
+│  │                     │  │ Alias DNS:      │  │ :6443 API  │          │
+│  │                     │  │ kind-registry   │  │            │          │
+│  └─────────────────────┘  └─────────────────┘  └────────────┘          │
+└──────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│              Réseau: rhdemo-jenkins-network                  │
-│                                                              │
-│  ┌──────────────────┐  ┌─────────────────┐                 │
-│  │ rhdemo-jenkins   │  │ kind-registry   │                 │
-│  │                  │  │                 │                 │
-│  │ IP: 172.18.0.6   │  │ IP: 172.18.0.3  │                 │
-│  │                  │  │                 │                 │
-│  │ Port: 8080       │  │ Port: 5000      │                 │
-│  └──────────────────┘  └─────────────────┘                 │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│              Réseau: rhdemo-jenkins-network                               │
+│                                                                          │
+│  ┌──────────────────┐  ┌─────────────────────┐  ┌─────────────────┐    │
+│  │ rhdemo-jenkins   │  │ rhdemo-jenkins-agent│  │ kind-registry   │    │
+│  │ (controller)     │  │ (builder)           │  │                 │    │
+│  │ Port: 8080       │  │                     │  │ Port: 5000      │    │
+│  └──────────────────┘  └─────────────────────┘  └─────────────────┘    │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Note importante** : Le registry doit avoir le nom exact `kind-registry` et l'alias DNS `kind-registry` sur le réseau `kind` pour que containerd dans KinD puisse résoudre `kind-registry:5000`.
 
-### Accès depuis Jenkins
+### Accès depuis l'agent Jenkins
 
-| Cible | Depuis Jenkins (container) | Protocole | Port |
+| Cible | Depuis l'agent (container) | Protocole | Port |
 |-------|----------------------------|-----------|------|
 | Registry Docker | `http://localhost:5000` ou `http://kind-registry:5000` | HTTP | 5000 |
 | KinD API Server | `https://rhdemo-control-plane:6443` | HTTPS | 6443 |
@@ -289,13 +287,14 @@ Avant de lancer un build Jenkins avec `DEPLOY_ENV=stagingkub` :
 - [ ] **Registry nommé `kind-registry`** : `docker ps --filter "publish=5000" --format '{{.Names}}'` ⚠️ **DOIT afficher exactement `kind-registry`**
 - [ ] Registry actif : `docker ps | grep kind-registry`
 - [ ] Jenkins démarré : `docker ps | grep rhdemo-jenkins`
-- [ ] Jenkins connecté au réseau kind : `docker network inspect kind | grep rhdemo-jenkins`
+- [ ] Agent builder démarré : `docker ps | grep rhdemo-jenkins-agent`
+- [ ] Agent connecté au réseau kind : `docker network inspect kind | grep rhdemo-jenkins-agent`
 - [ ] **Registry connecté au réseau kind avec alias** : `docker network inspect kind | grep -A2 kind-registry | grep Aliases` ⚠️ **Critique pour éviter ImagePullBackOff**
 - [ ] Secrets SOPS disponibles : `ls rhDemo/secrets/env-vars.sh`
 
 **Note** :
 - Le nom `kind-registry` est **obligatoire** et vérifié par les pipelines CI/CD
-- Les connexions Jenkins et Registry au réseau kind sont vérifiées et établies automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
+- Les connexions de l'agent et du Registry au réseau kind sont vérifiées et établies automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
 - Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour la configuration complète du registry
 
 **Commande d'initialisation** :
@@ -344,37 +343,32 @@ docker restart kind-registry
 
 ### Erreur : "Unable to connect to Kubernetes cluster"
 ```bash
-# Vérifier que Jenkins est sur le réseau kind
-docker network inspect kind | grep rhdemo-jenkins
+# Vérifier que l'agent est sur le réseau kind
+docker network inspect kind | grep rhdemo-jenkins-agent
 
 # Reconnecter manuellement si nécessaire
-docker network connect kind rhdemo-jenkins
+docker network connect kind rhdemo-jenkins-agent
 
-# Vérifier depuis Jenkins
-docker exec rhdemo-jenkins kubectl cluster-info
+# Vérifier depuis l'agent
+docker exec rhdemo-jenkins-agent kubectl cluster-info
 ```
 
 ### Erreur : "kind: command not found" dans Jenkins
-```bash
-# Vérifier que kind est installé dans l'image Jenkins
-docker exec rhdemo-jenkins which kind
 
-# Si absent, vérifier le Dockerfile.jenkins
-cat rhDemo/infra/jenkins-docker/Dockerfile.jenkins | grep kind
-```
+C'est **normal** et voulu. `kind` CLI n'est PAS installé sur l'agent pour des raisons de sécurité (RBAC - moindre privilège). L'agent utilise un kubeconfig RBAC pré-provisionné avec des permissions limitées. La gestion du cluster KinD se fait uniquement depuis la machine hôte.
 
 ### Commandes kubectl échouent dans le pipeline
 ```bash
-# Tester l'accès manuellement
-docker exec rhdemo-jenkins kubectl get nodes
+# Tester l'accès manuellement depuis l'agent
+docker exec rhdemo-jenkins-agent kubectl get nodes
 
-# Vérifier la kubeconfig
-docker exec rhdemo-jenkins cat /var/jenkins_home/.kube/config
+# Vérifier la kubeconfig sur l'agent
+docker exec rhdemo-jenkins-agent cat /home/jenkins/.kube/config
 
-# Recréer la kubeconfig
+# Recréer la kubeconfig (depuis l'hôte)
 kind get kubeconfig --name rhdemo | \
     sed 's|https://127.0.0.1:[0-9]*|https://rhdemo-control-plane:6443|g' | \
-    docker exec -i rhdemo-jenkins tee /var/jenkins_home/.kube/config
+    docker exec -i rhdemo-jenkins-agent tee /home/jenkins/.kube/config
 ```
 
 ---
@@ -395,11 +389,12 @@ kind get kubeconfig --name rhdemo | \
 | 2025-12-11 | Création initiale - Connexion Jenkins au réseau kind | Claude Code |
 | 2026-01-09 | Ajout connexion automatique du registry au réseau kind | Claude Code |
 | 2026-01-15 | Standardisation nom registry → `kind-registry` + vérification obligatoire + alias DNS | Claude Code |
+| 2026-02-08 | Mise à jour architecture master/agent : l'agent (builder) remplace le master pour les connexions réseau | Claude Code |
 
 ---
 
 **Date de création** : 2025-12-11
-**Dernière mise à jour** : 2026-01-15
+**Dernière mise à jour** : 2026-02-08
 **Auteur** : Configuration automatisée via Claude Code
 
 **Voir aussi** :

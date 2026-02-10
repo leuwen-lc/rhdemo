@@ -35,3 +35,11 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get", "list"]
+
+  # === Gateway API (cluster-scoped resources) ===
+
+  # GatewayClass : ressource cluster-wide qui définit l'implémentation Gateway
+  # Créé par NGINX Gateway Fabric, lecture seule pour Jenkins
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses"]
+    verbs: ["get", "list", "watch"]

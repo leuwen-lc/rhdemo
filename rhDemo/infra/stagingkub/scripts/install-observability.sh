@@ -21,6 +21,14 @@
 
 set -e
 
+# ═══════════════════════════════════════════════════════════════
+# Versions des charts Helm (figées pour reproductibilité)
+# ═══════════════════════════════════════════════════════════════
+KUBE_PROMETHEUS_STACK_VERSION="81.5.1"  # App: Prometheus Operator v0.88.1
+LOKI_VERSION="6.52.0"                   # App: Loki 3.6.4
+PROMTAIL_VERSION="6.17.1"               # App: Promtail 3.5.1
+GRAFANA_VERSION="10.5.15"               # App: Grafana 12.3.1
+
 # Couleurs
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -118,6 +126,7 @@ echo -e "${BLUE}  - Rétention: 7 jours, Storage: 10Gi${NC}"
 echo ""
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+    --version $KUBE_PROMETHEUS_STACK_VERSION \
     --namespace $MONITORING_NS \
     --values "$VALUES_DIR/prometheus-values.yaml" \
     --wait \
@@ -149,25 +158,10 @@ kubectl create namespace $LOKI_NS 2>/dev/null || warn "Namespace existe déjà"
 success "Namespace $LOKI_NS prêt"
 echo ""
 
-# Certificat TLS pour Grafana
-log "Génération du certificat TLS pour Grafana..."
-if ! kubectl get secret -n $LOKI_NS grafana-tls-cert >/dev/null 2>&1; then
-    TMP=$(mktemp -d)
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout $TMP/tls.key -out $TMP/tls.crt \
-        -subj "/CN=$DOMAIN/O=RHDemo" 2>/dev/null
-    kubectl create secret tls grafana-tls-cert \
-        --cert=$TMP/tls.crt --key=$TMP/tls.key -n $LOKI_NS
-    rm -rf $TMP
-    success "Certificat TLS créé"
-else
-    warn "Certificat TLS existe déjà"
-fi
-echo ""
-
 # Installation Loki
 log "Installation de Loki..."
 helm upgrade --install loki grafana/loki \
+    --version $LOKI_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/loki-modern-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
@@ -177,6 +171,7 @@ echo ""
 # Installation Promtail
 log "Installation de Promtail..."
 helm upgrade --install promtail grafana/promtail \
+    --version $PROMTAIL_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/promtail-values.yaml \
     --wait --timeout 2m >/dev/null 2>&1
@@ -186,10 +181,46 @@ echo ""
 # Installation Grafana
 log "Installation de Grafana..."
 helm upgrade --install grafana grafana/grafana \
+    --version $GRAFANA_VERSION \
     -n $LOKI_NS \
     -f $VALUES_DIR/grafana-values.yaml \
     --wait --timeout 3m >/dev/null 2>&1
 success "Grafana installé"
+echo ""
+
+# Application des ressources Gateway API pour Grafana
+log "Application des ressources Gateway API pour Grafana..."
+
+# Création de l'HTTPRoute pour Grafana (attachée au Gateway partagé)
+# Utilise le Gateway partagé 'shared-gateway' dans nginx-gateway qui écoute déjà sur le NodePort 32616
+cat <<EOF | kubectl apply -f -
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-route
+  namespace: $LOKI_NS
+spec:
+  parentRefs:
+  - name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https
+  hostnames:
+  - "$DOMAIN"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: grafana
+      port: 80
+EOF
+
+success "HTTPRoute Grafana créée (attachée au Gateway partagé)"
+
+log "Vérification du statut de l'HTTPRoute..."
+sleep 2
+kubectl get httproute grafana-route -n $LOKI_NS
 echo ""
 
 # ═══════════════════════════════════════════════════════════════

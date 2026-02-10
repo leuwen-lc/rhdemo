@@ -12,10 +12,8 @@ certs/
 secrets/
 *.secret
 
-# Fichiers de configuration personnalisés
-values-custom.yaml
-values-*.yaml
-!values.yaml
+# Fichiers de configuration personnalisés avec mdp
+helm/observability/grafana-values.yaml
 
 # Logs
 *.log

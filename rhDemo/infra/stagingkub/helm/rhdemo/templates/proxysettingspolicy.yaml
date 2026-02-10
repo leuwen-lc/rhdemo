@@ -1,0 +1,39 @@
+{{- if .Values.gateway.enabled }}
+{{- if .Values.gateway.proxySettings.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# ProxySettingsPolicy: keycloak-proxy-buffers (NGF 2.4+)
+# ═══════════════════════════════════════════════════════════════
+# Configure les buffers proxy pour Keycloak via l'API native NGF
+#
+# POURQUOI: Keycloak utilise de gros cookies de session et headers
+# qui peuvent dépasser les buffers par défaut de NGINX, causant
+# des erreurs 502 Bad Gateway.
+#
+# AVANTAGES vs SnippetsFilter:
+#   - Pas besoin d'activer snippetsFilters.enable
+#   - Configuration YAML native (validation CRD)
+#   - Cible directement l'HTTPRoute
+#
+# Documentation: https://docs.nginx.com/nginx-gateway-fabric/reference/api/
+# ═══════════════════════════════════════════════════════════════
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: keycloak-proxy-buffers
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: proxy-settings
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: keycloak-route
+  buffering:
+    bufferSize: {{ .Values.gateway.proxySettings.bufferSize | quote }}
+    buffers:
+      number: {{ .Values.gateway.proxySettings.buffersNumber }}
+      size: {{ .Values.gateway.proxySettings.bufferSize | quote }}
+    busyBuffersSize: {{ .Values.gateway.proxySettings.busyBuffersSize | quote }}
+{{- end }}
+{{- end }}

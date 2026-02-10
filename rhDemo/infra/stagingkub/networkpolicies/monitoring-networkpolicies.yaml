@@ -1,0 +1,539 @@
+# ═══════════════════════════════════════════════════════════════
+# Network Policies pour le namespace monitoring
+# ═══════════════════════════════════════════════════════════════
+# Ce fichier contient les Network Policies pour sécuriser la stack
+# Prometheus (kube-prometheus-stack) dans le namespace monitoring.
+#
+# Stratégie: Zero Trust / Default Deny
+#   1. Tout trafic bloqué par défaut
+#   2. Whitelist explicite pour chaque flux légitime
+#
+# Application:
+#   kubectl apply -f monitoring-networkpolicies.yaml
+#
+# Composants protégés:
+#   - Prometheus (scraping métriques)
+#   - AlertManager (alertes)
+#   - Prometheus Operator (gestion CRDs)
+#   - Node Exporter (métriques nodes)
+#   - Kube State Metrics (métriques K8s)
+# ═══════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  # Appliquer à TOUS les pods du namespace
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Aucune règle = tout est bloqué
+  ingress: []
+  egress: []
+---
+# ═══════════════════════════════════════════════════════════════
+# DNS: Autoriser tous les pods à résoudre les noms DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Prometheus Server
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Grafana (loki-stack): requêtes PromQL
+#   - AlertManager: notifications
+#   - Interne monitoring: health checks
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - rhdemo-stagingkub: scrape métriques (rhdemo-app:9000, postgres:9187)
+#   - monitoring: scrape interne (node-exporter, kube-state-metrics, etc.)
+#   - kube-system: métriques API server, kubelet
+#   - loki-stack: scrape Grafana, Loki
+#   - nginx-gateway: scrape NGF metrics
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Grafana depuis loki-stack (requêtes PromQL)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 9090
+    # AlertManager et composants internes
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Scrape vers rhdemo-stagingkub (rhdemo-app, postgresql)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rhdemo-stagingkub
+      ports:
+        - protocol: TCP
+          port: 9000   # rhdemo-app actuator
+        - protocol: TCP
+          port: 9187   # postgres_exporter
+    # Scrape interne monitoring (node-exporter, kube-state-metrics, alertmanager)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090   # prometheus
+        - protocol: TCP
+          port: 9093   # alertmanager
+        - protocol: TCP
+          port: 9094   # alertmanager-cluster
+        - protocol: TCP
+          port: 9100   # node-exporter
+        - protocol: TCP
+          port: 8080   # kube-state-metrics
+        - protocol: TCP
+          port: 8443   # prometheus-operator
+        - protocol: TCP
+          port: 10250  # kubelet metrics
+    # Scrape kube-system (API server, kubelet, CoreDNS, etc.)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 10250  # kubelet
+        - protocol: TCP
+          port: 10255  # kubelet read-only
+        - protocol: TCP
+          port: 9153   # coredns metrics
+    # Scrape loki-stack (Grafana, Loki)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+      ports:
+        - protocol: TCP
+          port: 3100   # loki
+        - protocol: TCP
+          port: 80     # grafana
+    # Scrape nginx-gateway (NGF metrics)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nginx-gateway
+      ports:
+        - protocol: TCP
+          port: 9113   # nginx metrics
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# AlertManager
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Prometheus: push alertes
+#   - Interne (cluster HA)
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - DNS uniquement (pas de webhooks externes configurés)
+#   - Interne (cluster HA)
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus (push alertes)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9093
+    # Cluster HA (mesh interne)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+      ports:
+        - protocol: TCP
+          port: 9094
+        - protocol: UDP
+          port: 9094
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 9093
+  egress:
+    # Cluster HA (mesh interne)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+      ports:
+        - protocol: TCP
+          port: 9094
+        - protocol: UDP
+          port: 9094
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Prometheus Operator
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - API Server: gestion CRDs (ServiceMonitors, etc.)
+#   - DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-operator-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus-operator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Health checks kubelet et métriques internes
+    - ports:
+        - protocol: TCP
+          port: 8443
+  egress:
+    # API Server (gestion CRDs)
+    # Note: L'API server est accessible via le service kubernetes.default
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+      ports:
+        - protocol: TCP
+          port: 443
+    # Alternative: accès direct à l'IP de l'API server
+    # Pour KinD, l'API server est généralement sur le réseau host
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Bloquer les plages privées sauf celle du cluster
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 6443
+    # Accès à tous les pods monitoring (pour la gestion)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Node Exporter (DaemonSet)
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Prometheus: scraping métriques
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - DNS uniquement
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-exporter-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: node-exporter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9100
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 9100
+  egress:
+    # DNS uniquement
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Kube State Metrics
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Prometheus: scraping métriques
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - API Server: lecture état cluster
+#   - DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-netpol
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+  egress:
+    # API Server (lecture état cluster)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# CiliumNetworkPolicy: Accès API Server pour Prometheus Operator
+# ═══════════════════════════════════════════════════════════════
+# IMPORTANT: Avec Cilium, l'API Server sur le node est vu comme
+# l'entité "host" et non comme un CIDR externe. Les règles ipBlock
+# standard ne fonctionnent pas pour atteindre le node host.
+#
+# Cette CiliumNetworkPolicy autorise l'egress vers:
+#   - host: le node Kubernetes (où tourne l'API Server)
+#   - kube-apiserver: entité spéciale pour l'API Server
+# ═══════════════════════════════════════════════════════════════
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-prometheus-operator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# ═══════════════════════════════════════════════════════════════
+# CiliumNetworkPolicy: Accès API Server pour Kube State Metrics
+# ═══════════════════════════════════════════════════════════════
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-kube-state-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

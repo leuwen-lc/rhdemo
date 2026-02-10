@@ -1,14 +1,15 @@
 # ═══════════════════════════════════════════════════════════════════
 # Dockerfile pour l'application RHDemo API
-# Image de base : Eclipse Temurin 21 (OpenJDK)
+# Image de base : Eclipse Temurin 25 LTS (OpenJDK)
 # Build multi-stage pour optimiser la taille de l'image finale
+# Version Java : 25.0.2+10-LTS (Temurin)
 # ═══════════════════════════════════════════════════════════════════
 
 # ───────────────────────────────────────────────────────────────────
 # STAGE 1 : BUILD
-# Construction de l'application avec Maven
+# Construction de l'application avec Maven et Java 25
 # ───────────────────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-21-jammy AS builder
+FROM maven:3.9-eclipse-temurin-25-noble AS builder
 
 LABEL stage=builder
 
@@ -36,9 +37,9 @@ RUN ls -lh /build/target/*.jar
 
 # ───────────────────────────────────────────────────────────────────
 # STAGE 2 : RUNTIME
-# Image finale légère avec uniquement le JRE et l'application
+# Image finale légère avec uniquement le JRE 25 et l'application
 # ───────────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-noble
 
 # Arguments de build (optionnels, fournis par Jenkins)
 ARG BUILD_DATE
@@ -58,7 +59,7 @@ WORKDIR /app
 # SÉCURITÉ : Créer un utilisateur non-root
 # ───────────────────────────────────────────────────────────────────
 RUN groupadd -r spring && \
-    useradd -r -g spring -u 1000 spring && \
+    useradd -r -g spring spring && \
     chown -R spring:spring /app
 
 # ───────────────────────────────────────────────────────────────────
@@ -67,11 +68,12 @@ RUN groupadd -r spring && \
 COPY --from=builder --chown=spring:spring /build/target/*.jar app.jar
 
 # ───────────────────────────────────────────────────────────────────
-# CONFIGURATION JVM
+# CONFIGURATION JVM (Java 25)
 # ───────────────────────────────────────────────────────────────────
 # UseContainerSupport : Détecte les limites de mémoire du container
 # MaxRAMPercentage : Utilise max 75% de la RAM disponible pour la heap
-# UseG1GC : Garbage Collector G1 (recommandé pour Java 21)
+# UseG1GC : Garbage Collector G1 (default, production-ready)
+# Alternative : UseZGC pour faible latence (production-ready en Java 25)
 # +ExitOnOutOfMemoryError : Arrêter proprement en cas d'OOM
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
@@ -99,7 +101,7 @@ USER spring:spring
 # HEALTHCHECK
 # ───────────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+    CMD bash -c 'echo > /dev/tcp/localhost/8080' || exit 1
 
 # ───────────────────────────────────────────────────────────────────
 # POINT D'ENTRÉE

@@ -5,7 +5,7 @@
 # Règles réseau pour le serveur d'authentification Keycloak
 #
 # INGRESS autorisé depuis:
-#   - ingress-nginx (interface admin)
+#   - nginx-gateway (interface admin via NGINX Gateway Fabric)
 #   - rhdemo-app (OAuth2/OIDC)
 #   - kubelet (health checks)
 #
@@ -33,11 +33,11 @@ spec:
     - Egress
 
   ingress:
-    # Règle 1: Trafic utilisateur/admin via nginx-ingress
+    # Règle 1: Trafic utilisateur/admin via NGINX Gateway Fabric
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+              kubernetes.io/metadata.name: nginx-gateway
       ports:
         - protocol: TCP
           port: {{ .Values.keycloak.service.port }}

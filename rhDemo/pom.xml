@@ -5,12 +5,12 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.8</version>
+		<version>4.0.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
 	<artifactId>rhdemoAPI</artifactId>
-	<version>1.1.4-RELEASE</version>
+	<version>1.1.5-RELEASE</version>
 	<name>rhdemo</name>
 	<description>demo API appli rh avec Spring Boot</description>
 	<url/>
@@ -27,9 +27,11 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>21</java.version>
-		<!-- Version Mockito gérée par Spring Boot 3.5.7 -->
-		<mockito.version>5.17.0</mockito.version>
+		<java.version>25</java.version>
+		<!-- Override Mockito pour Java 25 (ByteBuddy 1.17.8+) - Spring Boot 4.0.2 gère 5.20.0 -->
+		<mockito.version>5.21.0</mockito.version>
+		<!-- SpringDoc OpenAPI compatible Spring Boot 4 / Jackson 3 -->
+		<springdoc-openapi.version>3.0.1</springdoc-openapi.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->
@@ -74,9 +76,9 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 		<dependency>
-			 <groupId>org.springdoc</groupId>
-  			  <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
- 			   <version>2.8.14</version>  <!-- Upgrade 2.8.5 → 2.8.14 (fix CVE-2025-26791 DOMPurify) -->
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc-openapi.version}</version>  <!-- Spring Boot 4 / Jackson 3 compatible -->
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -105,16 +107,17 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>org.springframework.security</groupId>
-			<artifactId>spring-security-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<!--        Aide à la migration des propriétés-->
+		<!-- Spring Boot 4 modularisation : MockMvc nécessite un starter dédié -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-properties-migrator</artifactId>
-			<scope>runtime</scope>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Spring Boot 4 modularisation : @WithMockUser nécessite un starter sécurité dédié -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-test</artifactId>
+			<scope>test</scope>
 		</dependency>
 		<!--Utilisé pour le décodage json des jetons JWT-->
 		<dependency>
@@ -132,7 +135,7 @@
 						<name>rhdemo-api:${project.version}</name>
 						<builder>paketobuildpacks/builder-jammy-base:latest</builder>
 						<env>
-							<BP_JVM_VERSION>21</BP_JVM_VERSION>
+							<BP_JVM_VERSION>25</BP_JVM_VERSION>
 						</env>
 					</image>
 				</configuration>
@@ -183,7 +186,7 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.12</version>
+				<version>0.8.14</version>
 				<executions>
 					<!-- Prepare agent for unit tests -->
 					<execution>
@@ -251,7 +254,7 @@
 			<plugin>
             <groupId>com.github.eirslett</groupId>
             <artifactId>frontend-maven-plugin</artifactId>
-            <version>1.12.0</version>
+            <version>2.0.0</version>
             <configuration>
                 <workingDirectory>frontend</workingDirectory>
             </configuration>
@@ -316,7 +319,7 @@
 			<plugin>
 				<groupId>org.sonarsource.scanner.maven</groupId>
 				<artifactId>sonar-maven-plugin</artifactId>
-				<version>4.0.0.4121</version>
+				<version>5.5.0.6356</version>
 			</plugin>
 
 			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités
@@ -328,7 +331,7 @@
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
-				<version>12.1.9</version>
+				<version>12.2.0</version>
 				<configuration>
 					<!-- La clé API NVD est passée via -DnvdApiKey en ligne de commande -->
 					<!-- Échouer le build si des vulnérabilités sont détectées -->

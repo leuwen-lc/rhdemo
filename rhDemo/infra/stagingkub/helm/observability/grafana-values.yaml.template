@@ -6,10 +6,11 @@
 # Admin (À CONFIGURER AVANT INSTALLATION)
 ###########################################
 adminUser: admin
-# ⚠️ SÉCURITÉ: Définir un mot de passe fort avant installation
+# ⚠️ SÉCURITÉ: Copier grafana-values.yaml.template en grafana-values.yaml
+# Définir un mot de passe fort avant installation
 # adminPassword doit être défini avec un mot de passe sécurisé
 # Exemple: openssl rand -base64 32
-adminPassword: "admin123"  # TODO: Renseigner un mot de passe fort
+adminPassword: ""  # TODO: Renseigner un mot de passe fort
 
 ###########################################
 # Resources
@@ -29,20 +30,12 @@ persistence:
   enabled: false
 
 ###########################################
-# Ingress
+# Ingress (désactivé - utilisation de Gateway API)
 ###########################################
+# NOTE: Depuis la migration vers NGINX Gateway Fabric, on utilise
+# Gateway + HTTPRoute au lieu de Ingress. Voir grafana-gateway.yaml
 ingress:
-  enabled: true
-  ingressClassName: nginx
-  hosts:
-    - grafana-stagingkub.intra.leuwen-lc.fr
-  tls:
-    # Secret contenant le certificat TLS :
-    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
-    # - Auto-signé : grafana-tls-cert (généré manuellement)
-    - secretName: intra-wildcard-tls
-      hosts:
-        - grafana-stagingkub.intra.leuwen-lc.fr
+  enabled: false
 
 ###########################################
 # Datasources

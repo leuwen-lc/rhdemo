@@ -26,7 +26,7 @@ postgresql-rhdemo:
   enabled: true
   image:
     repository: postgres
-    tag: "16-alpine"
+    tag: "18-alpine"
     pullPolicy: IfNotPresent
 
   database:
@@ -79,7 +79,7 @@ postgresql-keycloak:
   enabled: true
   image:
     repository: postgres
-    tag: "16-alpine"
+    tag: "18-alpine"
     pullPolicy: IfNotPresent
 
   database:
@@ -116,7 +116,7 @@ keycloak:
   enabled: true
   image:
     repository: quay.io/keycloak/keycloak
-    tag: "26.4.2"
+    tag: "26.5.0"
     pullPolicy: IfNotPresent
 
   replicaCount: 1
@@ -256,70 +256,64 @@ rhdemo:
     failureThreshold: 3
 
 # ═══════════════════════════════════════════════════════════════
-# Ingress - Exposition HTTPS
+# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.4.0)
 # ═══════════════════════════════════════════════════════════════
-ingress:
+# Utilise le shared-gateway créé par init-stagingkub.sh.
+# Les HTTPRoutes s'attachent au Gateway partagé via parentRefs cross-namespace.
+# Les headers X-Forwarded-* sont configurés automatiquement par NGF.
+#
+# Documentation: https://docs.nginx.com/nginx-gateway-fabric/
+# ═══════════════════════════════════════════════════════════════
+gateway:
   enabled: true
-  className: nginx
 
-  hosts:
-    - host: rhdemo-stagingkub.intra.leuwen-lc.fr
-      paths:
+  # Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
+  # Gère le certificat TLS wildcard et le NodePort (32616)
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Nom du listener dans shared-gateway.yaml
+
+  # Routes HTTP vers les services backend
+  routes:
+    - name: rhdemo-route
+      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      rules:
         - path: /
-          pathType: Prefix
+          pathType: PathPrefix
           serviceName: rhdemo-app
           servicePort: 9000
 
-    - host: keycloak-stagingkub.intra.leuwen-lc.fr
-      paths:
+    - name: keycloak-route
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      rules:
         - path: /
-          pathType: Prefix
+          pathType: PathPrefix
           serviceName: keycloak
           servicePort: 8080
 
-  tls:
+  # ProxySettingsPolicy : buffers proxy pour Keycloak (NGF 2.4+)
+  # Les gros cookies OAuth2 nécessitent des buffers plus grands
+  # Cible l'HTTPRoute keycloak-route directement (pas besoin de SnippetsFilter)
+  proxySettings:
     enabled: true
-    # Secret contenant le certificat TLS :
-    # - Let's Encrypt (cert-manager) : intra-wildcard-tls (généré automatiquement)
-    # - Auto-signé : rhdemo-tls-cert (généré par init-stagingkub.sh)
-    secretName: intra-wildcard-tls
-
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    # Configuration pour Keycloak derrière proxy
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # Headers X-Forwarded-* sont gérés automatiquement par nginx-ingress
-    # en combinaison avec forward-headers-strategy: framework dans Spring Boot
+    bufferSize: "128k"
+    buffersNumber: 4
+    busyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# Nginx Ingress Controller
+# NGINX Gateway Fabric 2.4.0 (référence)
 # ═══════════════════════════════════════════════════════════════
-nginx-ingress:
-  enabled: true
-  # Si false, suppose que nginx-ingress est déjà installé dans le cluster
-  install: true
+# NGF est installé par init-stagingkub.sh dans le namespace nginx-gateway.
+# Cette section documente la configuration utilisée (non appliquée par Helm).
+# ═══════════════════════════════════════════════════════════════
+nginx-gateway-fabric:
+  enabled: false  # Installé par init-stagingkub.sh, pas par ce chart
 
-  controller:
-    service:
-      type: NodePort
-      nodePorts:
-        http: 30080
-        https: 30443
-
-    # Configuration pour masquer la version nginx (protection Trivy/ZAP)
-    config:
-      server-tokens: "false"
-
-    resources:
-      requests:
-        memory: "128Mi"
-        cpu: "100m"
-      limits:
-        memory: "256Mi"
-        cpu: "200m"
+  # Référence: configuration utilisée par init-stagingkub.sh
+  # - service.type: NodePort
+  # - NodePort 32616 → listener 443 (HTTPS)
+  # - ProxySettingsPolicy pour les proxy buffers (remplace SnippetsFilter)
 
 # ═══════════════════════════════════════════════════════════════
 # Network Policies - Sécurité réseau

@@ -19,6 +19,16 @@
 
 L'environnement **stagingkub** est un environnement de staging Kubernetes basé sur **KinD** (Kubernetes in Docker). Il reproduit l'architecture de l'environnement ephemere Docker Compose dans un cluster Kubernetes local, permettant de tester les déploiements Kubernetes avant la production.
 
+### Stack technique
+
+| Composant | Version | Description |
+|-----------|---------|-------------|
+| **KinD** | 0.30+ | Cluster Kubernetes local |
+| **Cilium** | 1.18.6 | CNI avec kube-proxy replacement (eBPF) |
+| **NGINX Gateway Fabric** | 2.3.0 | Gateway API (remplace nginx-ingress) |
+| **PostgreSQL** | 16-alpine | Base de données |
+| **Keycloak** | 26.4.2 | IAM / OAuth2 |
+
 ### Différences avec ephemere (Docker Compose)
 
 | Aspect | ephemere (Docker Compose) | stagingkub (Kubernetes/KinD) |
@@ -26,9 +36,9 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 | **Orchestration** | Docker Compose | Kubernetes (KinD) |
 | **Package** | docker-compose.yml | Helm Chart |
 | **Secrets** | Variables d'env + docker cp | Kubernetes Secrets |
-| **Réseau** | Docker network bridge | Kubernetes Services + Ingress |
+| **Réseau** | Docker network bridge | Cilium CNI + Gateway API |
 | **Volumes** | Docker volumes | PersistentVolumeClaims |
-| **Exposition** | Port mapping direct | Ingress Controller (NodePort) |
+| **Exposition** | Port mapping direct | NGINX Gateway Fabric (NodePort) |
 | **Healthchecks** | Docker healthcheck | Liveness/Readiness probes |
 | **Use case** | Tests rapides, dev local | Tests Kubernetes, pré-prod |
 
@@ -53,7 +63,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    helm version
    ```
 
-4. **KinD** (version 0.20+)
+4. **KinD** (version 0.30+)
    ```bash
    kind version
    ```
@@ -61,7 +71,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    Installation KinD :
    ```bash
    # Linux
-   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64
    chmod +x ./kind
    sudo mv ./kind /usr/local/bin/kind
 
@@ -73,6 +83,21 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    ```bash
    sops --version
    ```
+
+### Configuration système (Cilium)
+
+Cilium nécessite des limites inotify élevées :
+
+```bash
+# Vérifier les valeurs actuelles
+cat /proc/sys/fs/inotify/max_user_watches   # minimum: 524288
+cat /proc/sys/fs/inotify/max_user_instances # minimum: 512
+
+# Configurer (permanent)
+echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.d/99-cilium.conf
+echo 'fs.inotify.max_user_instances=512' | sudo tee -a /etc/sysctl.d/99-cilium.conf
+sudo sysctl --system
+```
 
 ### Configuration requise
 
@@ -88,84 +113,95 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Cluster KinD "rhdemo"                     │
+│                    Cluster KinD "rhdemo"                    │
+│                    CNI: Cilium 1.18 (eBPF)                  │
 ├─────────────────────────────────────────────────────────────┤
-│  Namespace: rhdemo-stagingkub                                   │
-│                                                              │
+│  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ Nginx Ingress Controller                              │  │
-│  │ • Port 30443 (HTTPS) → 443 (host)                    │  │
-│  │ • Port 30080 (HTTP) → 80 (host)                      │  │
+│  │ NGINX Gateway Fabric 2.3.0                           │  │
+│  │ • NodePort 32616 (HTTPS) → 443 (host)                │  │
+│  │ • GatewayClass: nginx                                │  │
+│  │                                                      │  │
+│  │ Gateway: shared-gateway (point d'entrée unique)      │  │
+│  │ • Listener: https (*.intra.leuwen-lc.fr)            │  │
+│  │ • TLS: shared-tls-cert (auto-signé)                 │  │
+│  │ • allowedRoutes: All namespaces                      │  │
 │  └────────────┬─────────────────────────────────────────┘  │
-│               │                                              │
-│  ┌────────────▼──────────┐    ┌────────────────────────┐   │
-│  │ Ingress                │    │ Ingress                │   │
-│  │ rhdemo-stagingkub.intra.leuwen-lc.fr   │    │ keycloak-stagingkub.intra.leuwen-lc.fr │   │
-│  └────────────┬───────────┘    └────────────┬───────────┘   │
-│               │                               │              │
-│  ┌────────────▼───────────┐    ┌─────────────▼──────────┐  │
-│  │ Service: rhdemo-app    │    │ Service: keycloak      │  │
-│  │ ClusterIP:9000         │    │ ClusterIP:8080         │  │
-│  └────────────┬───────────┘    └────────────┬───────────┘  │
-│               │                               │              │
-│  ┌────────────▼───────────┐    ┌─────────────▼──────────┐  │
-│  │ Deployment: rhdemo-app │    │ Deployment: keycloak   │  │
-│  │ • Image: rhdemo-api    │    │ • Image: keycloak      │  │
-│  │ • Replicas: 1          │    │ • Replicas: 1          │  │
-│  │ • Port: 9000           │    │ • Port: 8080           │  │
-│  └────────────┬───────────┘    └────────────┬───────────┘  │
-│               │                               │              │
-│  ┌────────────▼──────────────┐ ┌─────────────▼───────────┐ │
-│  │ Service: postgresql-rhdemo│ │ Service: postgresql-    │ │
-│  │ Headless ClusterIP:5432   │ │ keycloak                │ │
-│  └────────────┬──────────────┘ │ Headless ClusterIP:5432 │ │
-│               │                 └─────────────┬───────────┘ │
-│  ┌────────────▼──────────────┐ ┌─────────────▼───────────┐ │
-│  │ StatefulSet:              │ │ StatefulSet:            │ │
-│  │ postgresql-rhdemo         │ │ postgresql-keycloak     │ │
-│  │ • Image: postgres:16      │ │ • Image: postgres:16    │ │
-│  │ • PVC: 2Gi                │ │ • PVC: 2Gi              │ │
-│  └───────────────────────────┘ └─────────────────────────┘ │
+│               │                                             │
+├───────────────┼─────────────────────────────────────────────┤
+│  Namespace: rhdemo-stagingkub                               │
+│               │                                             │
+│  ┌────────────┴─────────────────────────────────────────┐  │
+│  │ HTTPRoutes (attachées au shared-gateway)             │  │
+│  │ • rhdemo-route → rhdemo-app:9000                     │  │
+│  │ • keycloak-route → keycloak:8080                     │  │
+│  └────────────┬────────────────────────┬────────────────┘  │
+│               │                        │                    │
+│  ┌────────────▼───────────┐ ┌──────────▼────────────────┐  │
+│  │ Deployment: rhdemo-app │ │ Deployment: keycloak      │  │
+│  │ • Image: rhdemo-api    │ │ • Image: keycloak         │  │
+│  │ • Replicas: 1          │ │ • Replicas: 1             │  │
+│  │ • Port: 9000           │ │ • Port: 8080              │  │
+│  └────────────┬───────────┘ └──────────┬────────────────┘  │
+│               │                        │                    │
+│  ┌────────────▼───────────┐ ┌──────────▼────────────────┐  │
+│  │ StatefulSet:           │ │ StatefulSet:              │  │
+│  │ postgresql-rhdemo      │ │ postgresql-keycloak       │  │
+│  │ • Image: postgres:16   │ │ • Image: postgres:16      │  │
+│  │ • PVC: 2Gi             │ │ • PVC: 2Gi                │  │
+│  └────────────────────────┘ └───────────────────────────┘  │
+├─────────────────────────────────────────────────────────────┤
+│  Namespace: loki-stack                                      │
+│               │                                             │
+│  ┌────────────┴─────────────────────────────────────────┐  │
+│  │ HTTPRoute: grafana-route (attachée au shared-gateway)│  │
+│  │ • grafana-stagingkub.intra.leuwen-lc.fr → grafana:80│  │
+│  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Ressources Kubernetes créées
 
+**Infrastructure (par init-stagingkub.sh) :**
+
+- **Cilium** : CNI avec kube-proxy replacement
+- **NGINX Gateway Fabric** : Gateway API implementation
+- **GatewayClass** : `nginx`
+- **shared-gateway** : Gateway partagé dans `nginx-gateway` (point d'entrée unique)
+- **shared-tls-cert** : Certificat TLS auto-signé dans `nginx-gateway`
+
+**Application (par Helm chart) :**
+
 - **1 Namespace** : `rhdemo-stagingkub`
-- **5 Deployments/StatefulSets** :
+- **4 Deployments/StatefulSets** :
   - `postgresql-rhdemo` (StatefulSet)
   - `postgresql-keycloak` (StatefulSet)
   - `keycloak` (Deployment)
   - `rhdemo-app` (Deployment)
-- **5 Services** :
+- **4 Services** :
   - `postgresql-rhdemo` (Headless)
   - `postgresql-keycloak` (Headless)
   - `keycloak` (ClusterIP)
   - `rhdemo-app` (ClusterIP)
-- **1 Ingress** : `rhdemo-ingress` (routes pour rhdemo + keycloak)
+- **Gateway API resources** :
+  - `rhdemo-route` (HTTPRoute → shared-gateway)
+  - `keycloak-route` (HTTPRoute → shared-gateway)
+  - `keycloak-proxy-buffers` (SnippetsFilter)
 - **4 Secrets** :
   - `rhdemo-db-secret` (mot de passe PostgreSQL rhdemo)
   - `keycloak-db-secret` (mot de passe PostgreSQL keycloak)
   - `keycloak-admin-secret` (mot de passe admin Keycloak)
   - `rhdemo-app-secrets` (secrets-rhdemo.yml)
-  - `rhdemo-tls-cert` (certificats SSL)
-- **2 PersistentVolumes statiques** (hostPath) :
-  - `postgresql-rhdemo-pv` → `/mnt/data/postgresql-rhdemo`
-  - `postgresql-keycloak-pv` → `/mnt/data/postgresql-keycloak`
-- **2 PersistentVolumeClaims** :
-  - `postgresql-data-postgresql-rhdemo-0`
-  - `postgresql-data-postgresql-keycloak-0`
-- **2 CronJobs** (backups PostgreSQL) :
-  - `postgresql-rhdemo-backup` (2h du matin)
-  - `postgresql-keycloak-backup` (3h du matin)
-- **1 ConfigMap** :
-  - `postgresql-rhdemo-init` (scripts d'initialisation DB)
+- **2 PersistentVolumes statiques** (hostPath)
+- **2 PersistentVolumeClaims**
+- **2 CronJobs** (backups PostgreSQL)
+- **Network Policies** (Zero Trust)
 
 ---
 
 ## 🚀 Installation initiale
 
-### 1. Créer le cluster KinD (si nécessaire)
+### 1. Créer le cluster KinD
 
 ```bash
 cd rhDemo/infra/stagingkub
@@ -174,12 +210,14 @@ cd rhDemo/infra/stagingkub
 
 Ce script :
 
-- ✅ Crée le cluster KinD `rhdemo` avec configuration `kind-config.yaml`
-- ✅ Configure les port mappings (80, 443)
-- ✅ Configure les extraMounts pour persistance des données sur l'hôte
-- ✅ Installe Nginx Ingress Controller
+- ✅ Vérifie les prérequis système (limites inotify)
+- ✅ Configure le registry Docker local
+- ✅ Crée le cluster KinD `rhdemo` avec `kind-config.yaml`
+- ✅ Installe **Cilium 1.18** (CNI avec kube-proxy replacement)
+- ✅ Installe **NGINX Gateway Fabric 2.3.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)
+- ✅ Configure le RBAC pour Jenkins
 - ✅ Génère les certificats SSL
 - ✅ Ajoute les entrées DNS à `/etc/hosts`
 
@@ -192,59 +230,69 @@ kubectl cluster-info --context kind-rhdemo
 # Vérifier les nodes
 kubectl get nodes
 
-# Vérifier Nginx Ingress
-kubectl get pods -n ingress-nginx
+# Vérifier Cilium
+kubectl get pods -n kube-system -l k8s-app=cilium
+
+# Vérifier NGINX Gateway Fabric
+kubectl get pods -n nginx-gateway
+kubectl get gatewayclass nginx
 
 # Vérifier le namespace
 kubectl get ns rhdemo-stagingkub
+
+# Validation complète
+./scripts/validate-stagingkub.sh
 ```
 
 ---
 
 ## 📦 Déploiement
 
-### Méthode 1 : Déploiement via Jenkins
+### Méthode 1 : Déploiement via Jenkins (recommandé)
 
-1. Ouvrir le pipeline Jenkins CD
+1. Ouvrir le pipeline Jenkins CD (`Jenkinsfile-CD`)
 2. Cliquer sur "Build with Parameters"
-3. Sélectionner `DEPLOY_ENV = stagingkub`
+3. Entrer la version à déployer
 4. Lancer le build
 
 Le pipeline exécutera automatiquement :
-- Lecture de la version Maven
-- Build de l'image Docker
-- Chargement de l'image dans KinD
+- Récupération de l'image depuis le registry
 - Mise à jour des secrets Kubernetes
 - Déploiement Helm
 - Attente de la disponibilité des services
 
-### Méthode 2 : Déploiement manuel
+### Méthode 2 : Déploiement Helm direct
 
 ```bash
-cd rhDemo/infra/stagingkub
+# 1. Construire l'image Docker (depuis rhDemo/)
+./mvnw clean package -DskipTests
+docker build -t rhdemo-api:1.1.4-SNAPSHOT .
 
-# 1. Construire l'image Docker (depuis la racine du projet)
-cd ../..
-./mvnw clean spring-boot:build-image -Dspring-boot.build-image.imageName=rhdemo-api:1.1.0-SNAPSHOT
+# 2. Tagger et pousser vers le registry local
+docker tag rhdemo-api:1.1.4-SNAPSHOT localhost:5000/rhdemo-api:1.1.4-SNAPSHOT
+docker push localhost:5000/rhdemo-api:1.1.4-SNAPSHOT
 
-# 2. Déployer avec le script
+# 3. Déployer avec Helm
 cd infra/stagingkub
-./scripts/deploy.sh 1.1.0-SNAPSHOT
-```
-
-### Méthode 3 : Déploiement Helm direct
-
-```bash
-# 1. Charger l'image dans KinD
-kind load docker-image rhdemo-api:1.1.0-SNAPSHOT --name rhdemo
-
-# 2. Déployer avec Helm
 helm upgrade --install rhdemo ./helm/rhdemo \
   --namespace rhdemo-stagingkub \
   --create-namespace \
-  --set rhdemo.image.tag=1.1.0-SNAPSHOT \
+  --set rhdemo.image.tag=1.1.4-SNAPSHOT \
   --wait \
   --timeout 10m
+```
+
+### Vérifier le déploiement
+
+```bash
+# Pods
+kubectl get pods -n rhdemo-stagingkub
+
+# Gateway et routes
+kubectl get gateway,httproute -n rhdemo-stagingkub
+
+# Tester l'accès (ignorer le certificat self-signed)
+curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 ```
 
 ---
@@ -255,36 +303,49 @@ helm upgrade --install rhdemo ./helm/rhdemo \
 
 | Fichier | Description |
 |---------|-------------|
+| `kind-config.yaml` | Configuration du cluster KinD |
 | `helm/rhdemo/Chart.yaml` | Métadonnées du chart Helm |
 | `helm/rhdemo/values.yaml` | Configuration par défaut |
 | `helm/rhdemo/templates/` | Templates Kubernetes |
 | `scripts/init-stagingkub.sh` | Script d'initialisation |
-| `scripts/deploy.sh` | Script de déploiement |
+| `rbac/` | Configuration RBAC Jenkins |
 
-### Personnalisation de la configuration
+### Configuration Gateway API (values.yaml)
 
-Vous pouvez personnaliser le déploiement en créant un fichier `values-custom.yaml` :
+Le chart utilise le **shared-gateway** créé par `init-stagingkub.sh` :
 
 ```yaml
-# values-custom.yaml
-rhdemo:
-  replicaCount: 2  # Augmenter le nombre de réplicas
-  resources:
-    requests:
-      memory: "1Gi"
-      cpu: "1000m"
+gateway:
+  enabled: true
 
-keycloak:
-  replicaCount: 2
-```
+  # Shared Gateway (créé par init-stagingkub.sh dans nginx-gateway)
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Listener dans shared-gateway.yaml
 
-Puis déployer avec :
+  # Routes HTTP vers les services backend
+  routes:
+    - name: rhdemo-route
+      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      rules:
+        - path: /
+          pathType: PathPrefix
+          serviceName: rhdemo-app
+          servicePort: 9000
 
-```bash
-helm upgrade --install rhdemo ./helm/rhdemo \
-  --namespace rhdemo-stagingkub \
-  --values ./helm/rhdemo/values.yaml \
-  --values values-custom.yaml
+    - name: keycloak-route
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      rules:
+        - path: /
+          pathType: PathPrefix
+          serviceName: keycloak
+          servicePort: 8080
+
+  # Proxy buffers pour Keycloak (gros cookies OAuth2)
+  snippetsFilter:
+    enabled: true
+    proxyBufferSize: "128k"
 ```
 
 ### Secrets
@@ -313,7 +374,7 @@ kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 
 ### Architecture de persistance
 
-Les données PostgreSQL sont persistées sur l'hôte via des **extraMounts KinD** et des **PersistentVolumes statiques** :
+Les données PostgreSQL sont persistées sur l'hôte via des **extraMounts KinD** :
 
 ```text
 Hôte Linux                              KinD Container                    Pod PostgreSQL
@@ -327,31 +388,13 @@ Hôte Linux                              KinD Container                    Pod P
             └─ keycloak/                 └─ keycloak/ ◄─────────────────── CronJob backup
 ```
 
-### Configuration KinD (kind-config.yaml)
-
-```yaml
-extraMounts:
-  # Données PostgreSQL RHDemo
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo
-    containerPath: /mnt/data/postgresql-rhdemo
-  # Données PostgreSQL Keycloak
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-keycloak
-    containerPath: /mnt/data/postgresql-keycloak
-  # Backups PostgreSQL
-  - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/backups
-    containerPath: /mnt/backups
-```
-
 ### Avantages
 
 - ✅ **Survie aux recréations de cluster** : Les données restent sur l'hôte
 - ✅ **Realm Keycloak préservé** : Pas besoin de reconfigurer après redémarrage
 - ✅ **Backups accessibles** : Fichiers `.sql.gz` directement sur l'hôte
-- ✅ **PV statiques avec Retain** : Protection contre la suppression accidentelle
 
 ### Backups automatiques (CronJobs)
-
-Deux CronJobs effectuent des sauvegardes quotidiennes :
 
 | CronJob                      | Schedule     | Rétention | Chemin backup              |
 |------------------------------|--------------|-----------|----------------------------|
@@ -386,9 +429,6 @@ kubectl logs -f -n rhdemo-stagingkub -l app=keycloak
 
 # Logs de PostgreSQL (rhdemo)
 kubectl logs -f -n rhdemo-stagingkub -l app=postgresql-rhdemo
-
-# Logs de tous les pods
-kubectl logs -f -n rhdemo-stagingkub --all-containers=true
 ```
 
 ### Vérifier le statut
@@ -397,20 +437,20 @@ kubectl logs -f -n rhdemo-stagingkub --all-containers=true
 # Statut des pods
 kubectl get pods -n rhdemo-stagingkub
 
-# Statut détaillé d'un pod
-kubectl describe pod <pod-name> -n rhdemo-stagingkub
+# Statut Gateway API
+kubectl get gateway,httproute -n rhdemo-stagingkub
 
 # Statut des services
 kubectl get svc -n rhdemo-stagingkub
 
-# Statut de l'ingress
-kubectl get ingress -n rhdemo-stagingkub
+# Network Policies
+kubectl get networkpolicies -n rhdemo-stagingkub
 ```
 
 ### Accéder aux services
 
 ```bash
-# Port-forward vers l'application (alternative à Ingress)
+# Port-forward vers l'application (alternative à Gateway)
 kubectl port-forward -n rhdemo-stagingkub svc/rhdemo-app 9000:9000
 
 # Port-forward vers Keycloak
@@ -423,16 +463,11 @@ kubectl port-forward -n rhdemo-stagingkub svc/postgresql-rhdemo 5432:5432
 ### Mettre à jour l'application
 
 ```bash
-# Méthode 1 : Via Helm
+# Via Helm
 helm upgrade rhdemo ./helm/rhdemo \
   --namespace rhdemo-stagingkub \
   --set rhdemo.image.tag=1.2.0-SNAPSHOT \
   --wait
-
-# Méthode 2 : Via kubectl (patch)
-kubectl set image deployment/rhdemo-app \
-  rhdemo-app=rhdemo-api:1.2.0-SNAPSHOT \
-  -n rhdemo-stagingkub
 ```
 
 ### Redémarrer un service
@@ -443,9 +478,6 @@ kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 
 # Redémarrer Keycloak
 kubectl rollout restart deployment/keycloak -n rhdemo-stagingkub
-
-# Redémarrer PostgreSQL (attention : va recréer le pod)
-kubectl rollout restart statefulset/postgresql-rhdemo -n rhdemo-stagingkub
 ```
 
 ### Nettoyer l'environnement
@@ -491,27 +523,55 @@ kubectl run -it --rm debug --image=postgres:16-alpine --restart=Never -n rhdemo-
 kubectl get secret rhdemo-db-secret -n rhdemo-stagingkub -o yaml
 ```
 
-### Ingress ne fonctionne pas
+### Gateway ne fonctionne pas
 
 ```bash
-# Vérifier que Nginx Ingress Controller est actif
-kubectl get pods -n ingress-nginx
+# Vérifier NGINX Gateway Fabric
+kubectl get pods -n nginx-gateway
+kubectl logs -n nginx-gateway -l app.kubernetes.io/name=nginx-gateway-fabric
 
-# Vérifier l'ingress
-kubectl describe ingress rhdemo-ingress -n rhdemo-stagingkub
+# Vérifier le GatewayClass
+kubectl get gatewayclass nginx
+
+# Vérifier le Gateway partagé et son service
+kubectl describe gateway shared-gateway -n nginx-gateway
+kubectl get svc shared-gateway-nginx -n nginx-gateway
+
+# Vérifier que le NodePort est correct (doit être 32616)
+kubectl get svc shared-gateway-nginx -n nginx-gateway -o jsonpath='{.spec.ports[0].nodePort}'
+
+# Vérifier les HTTPRoutes
+kubectl describe httproute rhdemo-route -n rhdemo-stagingkub
+kubectl describe httproute keycloak-route -n rhdemo-stagingkub
 
 # Vérifier les certificats TLS
-kubectl get secret rhdemo-tls-cert -n rhdemo-stagingkub
+kubectl get secret shared-tls-cert -n nginx-gateway
 
 # Tester avec curl (ignorer le certificat self-signed)
-curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr
+curl -vk https://rhdemo-stagingkub.intra.leuwen-lc.fr
+```
+
+### Erreur SSL_ERROR_UNRECOGNIZED_NAME_ALERT
+
+Cette erreur indique que le Gateway ne reconnaît pas le hostname demandé :
+
+```bash
+# Vérifier que les HTTPRoutes sont attachées au Gateway
+kubectl get httproute -A
+
+# Vérifier le statut des HTTPRoutes (doit être "Accepted: True")
+kubectl get httproute rhdemo-route -n rhdemo-stagingkub -o jsonpath='{.status.parents[0].conditions}'
+
+# Si le NodePort est incorrect, le patcher
+kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
+    -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
 ```
 
 ### /etc/hosts non configuré
 
 ```bash
 # Vérifier /etc/hosts
-cat /etc/hosts | grep ephemere.local
+cat /etc/hosts | grep stagingkub
 
 # Ajouter manuellement si nécessaire
 echo "127.0.0.1 rhdemo-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
@@ -521,11 +581,21 @@ echo "127.0.0.1 keycloak-stagingkub.intra.leuwen-lc.fr" | sudo tee -a /etc/hosts
 ### Image Docker non trouvée
 
 ```bash
-# Vérifier les images dans KinD
-docker exec -it rhdemo-control-plane crictl images | grep rhdemo-api
+# Vérifier les images dans le registry
+curl -s http://localhost:5000/v2/rhdemo-api/tags/list
 
-# Recharger l'image
-kind load docker-image rhdemo-api:VERSION --name rhdemo
+# Vérifier la connectivité registry → KinD
+kubectl get configmap local-registry-hosting -n kube-public -o yaml
+```
+
+### Network Policies bloquent le trafic
+
+```bash
+# Tester les Network Policies
+./scripts/test-network-policies.sh
+
+# Vérifier les policies actives
+kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 ```
 
 ---
@@ -546,9 +616,9 @@ kind load docker-image rhdemo-api:VERSION --name rhdemo
 ✅ Valider les manifests Kubernetes (Helm charts)
 ✅ Tester les rolling updates
 ✅ Valider les readiness/liveness probes
-✅ Tester l'Ingress Controller
+✅ Tester Gateway API
+✅ Valider les Network Policies
 ✅ Se familiariser avec kubectl et Helm
-✅ Tests de montée en charge (scaling horizontal)
 
 ---
 
@@ -557,21 +627,29 @@ kind load docker-image rhdemo-api:VERSION --name rhdemo
 - [Documentation KinD](https://kind.sigs.k8s.io/)
 - [Documentation Helm](https://helm.sh/docs/)
 - [Documentation Kubernetes](https://kubernetes.io/docs/)
-- [Nginx Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
+- [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/)
+- [Cilium Documentation](https://docs.cilium.io/)
+- [Gateway API](https://gateway-api.sigs.k8s.io/)
 
 ---
 
 ## ✅ Checklist de déploiement
 
+- [ ] Limites inotify configurées pour Cilium
 - [ ] KinD installé et cluster créé
 - [ ] kubectl configuré avec contexte `kind-rhdemo`
 - [ ] Helm installé (version 3.12+)
-- [ ] Nginx Ingress Controller déployé
+- [ ] Cilium CNI opérationnel
+- [ ] NGINX Gateway Fabric déployé
+- [ ] GatewayClass `nginx` disponible
+- [ ] shared-gateway créé dans `nginx-gateway` (par init-stagingkub.sh)
+- [ ] NodePort 32616 configuré sur `shared-gateway-nginx`
+- [ ] Certificat TLS `shared-tls-cert` créé
 - [ ] Secrets créés dans le namespace `rhdemo-stagingkub`
-- [ ] Certificats SSL générés
 - [ ] `/etc/hosts` mis à jour
-- [ ] Image Docker construite
-- [ ] Image chargée dans KinD
+- [ ] Image Docker construite et poussée vers le registry
 - [ ] Helm chart déployé
 - [ ] Tous les pods en status `Running`
-- [ ] Ingress accessible via https://rhdemo-stagingkub.intra.leuwen-lc.fr
+- [ ] HTTPRoutes attachées au shared-gateway
+- [ ] Application accessible via `https://rhdemo-stagingkub.intra.leuwen-lc.fr`
+- [ ] Keycloak accessible via `https://keycloak-stagingkub.intra.leuwen-lc.fr`

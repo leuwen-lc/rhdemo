@@ -1,0 +1,161 @@
+FROM jenkins/inbound-agent:latest-jdk21
+
+# Passer en root pour installer les dépendances
+USER root
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION DES DÉPENDANCES SYSTÈME
+# ═══════════════════════════════════════════════════════════════════
+
+RUN apt-get update && apt-get install -y \
+    # Docker CLI (pour docker-compose)
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    # Outils utiles
+    vim \
+    git \
+    wget \
+    unzip \
+    jq \
+    # Node.js pour build frontend
+    nodejs \
+    npm \
+    # Firefox + dépendances pour tests Selenium headless
+    firefox-esr \
+    # Bibliothèques X11 et graphiques pour Firefox headless
+    xvfb \
+    libgtk-3-0 \
+    libdbus-glib-1-2 \
+    libxt6 \
+    libpci3 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION DOCKER COMPOSE
+# ═══════════════════════════════════════════════════════════════════
+
+RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+    -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose && \
+    docker-compose --version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION MAVEN
+# ═══════════════════════════════════════════════════════════════════
+
+ENV MAVEN_VERSION=3.9.12
+ENV MAVEN_HOME=/opt/maven
+
+RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    tar -xzf apache-maven-${MAVEN_VERSION}-bin.tar.gz -C /opt && \
+    mv /opt/apache-maven-${MAVEN_VERSION} ${MAVEN_HOME} && \
+    rm apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
+    ln -s ${MAVEN_HOME}/bin/mvn /usr/local/bin/mvn
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION SOPS (pour déchiffrement secrets)
+# ═══════════════════════════════════════════════════════════════════
+
+ENV SOPS_VERSION=3.11.0
+
+RUN wget -q https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /usr/local/bin/sops && \
+    chmod +x /usr/local/bin/sops && \
+    sops --version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION YQ (pour parser YAML)
+# ═══════════════════════════════════════════════════════════════════
+
+RUN wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq && \
+    yq --version
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION TRIVY (scanner de vulnérabilités pour images Docker)
+# ═══════════════════════════════════════════════════════════════
+
+RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" > /etc/apt/sources.list.d/trivy.list && \
+    apt-get update && \
+    apt-get install -y trivy && \
+    rm -rf /var/lib/apt/lists/* && \
+    trivy --version
+
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION KUBECTL (client Kubernetes)
+# ═══════════════════════════════════════════════════════════════
+
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/kubectl && \
+    kubectl version --client
+
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION HELM (gestionnaire de packages Kubernetes)
+# ═══════════════════════════════════════════════════════════════
+
+ENV HELM_VERSION=3.20.0
+
+RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
+    tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
+    mv linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf helm-v${HELM_VERSION}-linux-amd64.tar.gz linux-amd64 && \
+    helm version
+
+# ═══════════════════════════════════════════════════════════════
+# KIND NON INSTALLÉ - SÉCURITÉ RBAC
+# ═══════════════════════════════════════════════════════════════
+# NOTE: kind n'est PAS installé volontairement pour des raisons de sécurité.
+# Jenkins utilise un kubeconfig RBAC pré-provisionné avec des permissions
+# limitées au namespace rhdemo-stagingkub.
+#
+# Pour gérer le cluster KinD, utilisez la machine hôte (pas Jenkins).
+# Voir: rhDemo/infra/stagingkub/rbac/README.md
+# ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+# INSTALLATION COSIGN (signature d'images de conteneur)
+# ═══════════════════════════════════════════════════════════════
+
+ENV COSIGN_VERSION=3.0.4
+
+RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64 -O /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign && \
+    cosign version
+
+# ═══════════════════════════════════════════════════════════════════
+# INSTALLATION JDK 25 (Eclipse Temurin - pour builds Maven)
+# ═══════════════════════════════════════════════════════════════════
+# L'image de base fournit JDK 21 pour le runtime de l'agent.
+# JDK 25 est nécessaire pour compiler le projet (migration Java 25).
+
+ENV TEMURIN_25_VERSION=25.0.2+10
+
+RUN wget -q "https://api.adoptium.net/v3/binary/version/jdk-${TEMURIN_25_VERSION}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -O /tmp/temurin-25.tar.gz && \
+    mkdir -p /opt/java/temurin-25 && \
+    tar -xzf /tmp/temurin-25.tar.gz -C /opt/java/temurin-25 --strip-components=1 && \
+    rm /tmp/temurin-25.tar.gz && \
+    /opt/java/temurin-25/bin/java --version
+
+# JAVA_HOME pointe vers JDK 25 pour les builds Maven
+ENV JAVA_HOME=/opt/java/temurin-25
+ENV PATH="${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+
+# ═══════════════════════════════════════════════════════════════════
+# PERMISSIONS DOCKER
+# ═══════════════════════════════════════════════════════════════════
+
+# Ajouter l'utilisateur jenkins au groupe docker pour accéder au socket Docker
+# Le GID 984 correspond au groupe docker sur l'hôte
+# Si le GID existe déjà, on ajoute simplement jenkins au groupe existant
+RUN (groupadd -g 984 docker || groupadd docker) && \
+    usermod -aG docker jenkins
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIGURATION FINALE
+# ═══════════════════════════════════════════════════════════════════
+
+# Retour à l'utilisateur jenkins
+USER jenkins

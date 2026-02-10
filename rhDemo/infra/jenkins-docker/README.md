@@ -1,6 +1,6 @@
 # 🚀 Jenkins CI/CD pour RHDemo
 
-Infrastructure Jenkins complète avec support Docker-in-Docker et tous les plugins nécessaires pour exécuter le pipeline RHDemo.
+Infrastructure Jenkins complète avec architecture master/agent dédiée et tous les outils nécessaires pour exécuter les pipelines CI/CD RHDemo.
 
 
 ## 📋 Table des matières
@@ -30,51 +30,53 @@ docker info
 
 ## 🏗️ Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────────┐
-│                          PLATEFORME CI/CD RHDEMO                                     │
-├──────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────────┐      ┌──────────────────────────┐                    │
-│  │       JENKINS            │      │      SONARQUBE           │                    │
-│  │   (Port 8080, 50000)     │◄────►│     (Port 9020)          │                    │
-│  │                          │      │                          │                    │
-│  │ • JDK 21                 │      │ • Community Edition 10   │                    │
-│  │ • Maven 3.9.6            │      │ • Analyse qualité code   │                    │
-│  │ • Docker CLI             │      │ • Couverture tests       │                    │
-│  │ • Node.js/npm            │      │ • Security hotspots      │                    │
-│  │ • Firefox ESR (Selenium) │      │ • Code smells            │                    │
-│  │ • Trivy (scan CVE)       │      │                          │                    │
-│  │ • yq (YAML parser)       │      └──────────┬───────────────┘                    │
-│  │                          │                 │                                    │
-│  │ Plugins:                 │                 ▼                                    │
-│  │ • Pipeline & Git         │      ┌──────────────────────────┐                    │
-│  │ • SonarQube Scanner      │      │   PostgreSQL 16          │                    │
-│  │ • Docker Workflow        │      │   (sonarqube-db)         │                    │
-│  │ • JaCoCo                 │      │                          │                    │
-│  │ • OWASP Dep-Check        │      │ • Base de données        │                    │
-│  │ • Email                  │      │   SonarQube              │                    │
-│  │ • BlueOcean UI           │      │ • Volume persistant      │                    │
-│  └──────────┬───────────────┘      └──────────────────────────┘                    │
-│             │                                                                       │
-│             ▼                                                                       │
-│  ┌──────────────────────────┐      ┌────────────────────────────────────────────┐  │
-│  │    DOCKER SOCKET         │      │       OWASP ZAP (CI/CD uniquement)         │  │
-│  │  /var/run/docker.sock    │      │       rhdemo-jenkins-zap                   │  │
-│  │                          │      │       (Port 8090 - API + Proxy)            │  │
-│  │ • Docker-in-Docker (DinD)│      │                                            │  │
-│  │ • Lance conteneurs       │      │ • Proxy de sécurité pour tests Selenium    │  │
-│  │ • Build images           │      │ • Détection XSS, CSRF, SQLi, etc.          │  │
-│  │ • Deploy ephemere         │      │ • Analyse passive + Spider + Active Scan   │  │
-│  │ • Démarrage ZAP          │      │ • Rapports HTML/JSON                       │  │
-│  └──────────────────────────┘      │                                            │  │
-│                                    │ Réseau: rhdemo-jenkins-network             │  │
-│                                    │ (accès ephemere via Jenkins multi-réseau)   │  │
-│  Services optionnels:              └────────────────────────────────────────────┘  │
-│  • jenkins-agent (agents distribués)                                              │
-│  • kind-registry:5000 (Docker Registry local - nom standardisé)                   │
-│                                                                                   │
-└───────────────────────────────────────────────────────────────────────────────────┘
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                          PLATEFORME CI/CD RHDEMO                                    │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│  ┌───────────────────────────┐     ┌──────────────────────────────────────────────┐ │
+│  │  JENKINS CONTROLLER       │     │  JENKINS AGENT (builder)                     │ │
+│  │  (Port 8080, 50000)       │◄───►│  rhdemo-jenkins-agent                       │ │
+│  │  rhdemo-jenkins           │     │                                              │ │
+│  │                           │     │  Outils de build :                           │ │
+│  │  Pilotage uniquement :    │     │  • JDK 25 (Eclipse Temurin)                  │ │
+│  │  • numExecutors: 0        │     │  • Maven 3.9.12                              │ │
+│  │  • Orchestration pipelines│     │  • Docker CLI + Docker Compose               │ │
+│  │  • Interface web          │     │  • Node.js/npm (build frontend)              │ │
+│  │  • Gestion credentials    │     │  • Firefox ESR + Xvfb (Selenium headless)    │ │
+│  │  • JCasC                  │     │  • SOPS, yq (secrets & YAML)                 │ │
+│  │                           │     │  • Trivy (scan CVE images Docker)            │ │
+│  │  Plugins :                │     │  • kubectl, Helm (déploiement K8s)           │ │
+│  │  • Pipeline & Git         │     │  • Cosign (signature images)                 │ │
+│  │  • SonarQube Scanner      │     │                                              │ │
+│  │  • Docker Workflow        │     │  Connexion : WebSocket (JNLP)                │ │
+│  │  • Coverage               │     │  Docker-in-Docker via socket monté            │ │
+│  │  • OWASP Dep-Check        │     └──────────────────────────────────────────────┘ │
+│  │  • Email, BlueOcean       │                                                      │
+│  └───────────────────────────┘     ┌──────────────────────────┐                     │
+│                                    │      SONARQUBE           │                     │
+│                                    │     (Port 9020)          │                     │
+│                                    │                          │                     │
+│                                    │ • Community Edition      │                     │
+│                                    │ • Analyse qualité code   │                     │
+│                                    │ • Couverture tests       │                     │
+│                                    │ • Security hotspots      │                     │
+│                                    └──────────┬───────────────┘                     │
+│                                               │                                     │
+│                                               ▼                                     │
+│                                    ┌──────────────────────────┐                     │
+│                                    │   PostgreSQL 16          │                     │
+│                                    │   (sonarqube-db)         │                     │
+│                                    │ • Base de données        │                     │
+│                                    │   SonarQube              │                     │
+│                                    └──────────────────────────┘                     │
+│                                                                                     │
+│  Autres services :                                                                  │
+│  • kind-registry:5000 (Docker Registry local HTTPS)                                 │
+│  • OWASP ZAP (CI/CD uniquement, docker-compose.zap.yml)                             │
+│                                                                                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
                     ┌───────────────────────────────┐
@@ -82,11 +84,11 @@ docker info
                     │   rhdemo-jenkins-network      │
                     └───────────┬───────────────────┘
                                 │
-                                │ Connexion externe
+                                │ Connexion dynamique (agent)
                                 ▼
                     ┌───────────────────────────────┐
                     │   Réseau Staging (externe)    │
-                    │   rhdemo-ephemere-network      │
+                    │   rhdemo-ephemere-network     │
                     │                               │
                     │ • Nginx (443)                 │
                     │ • RHDemo App (9000)           │
@@ -99,9 +101,9 @@ docker info
 
 | Volume | Usage | Taille estimée |
 |--------|-------|----------------|
-| `rhdemo-jenkins-home` | Configuration et jobs Jenkins | ~2 GB |
-| `rhdemo-jenkins-home/dependency-check-data` | Cache NVD OWASP (dans jenkins-home) | ~2-3 GB |
-| `rhdemo-maven-repository` | Cache Maven (.m2) | ~1 GB |
+| `rhdemo-jenkins-home` | Configuration et jobs Jenkins (controller) | ~2 GB |
+| `rhdemo-jenkins-agent-workspace` | Workspace de l'agent (builds) | ~2 GB |
+| `rhdemo-maven-repository` | Cache Maven (.m2) sur l'agent | ~1 GB |
 | `rhdemo-sonarqube-data` | Données SonarQube | ~500 MB |
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
@@ -116,35 +118,45 @@ docker info
 
 | Service | Description | Port | Fichier |
 |---------|-------------|------|---------|
-| `jenkins` | Serveur Jenkins principal | 8080, 50000 | docker-compose.yml |
+| `jenkins` | Controller Jenkins (pilotage uniquement) | 8080, 50000 | docker-compose.yml |
+| `jenkins-agent` | Agent de build (exécute tous les pipelines) | - | docker-compose.yml |
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
-| `jenkins-agent` | Agent Jenkins (optionnel - builds distribués) | - | docker-compose.yml |
 | `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
 
-### 🤖 Agent Jenkins (désactivé par défaut)
+### 🤖 Architecture Master/Agent
 
-⚠️ **L'agent Jenkins est désactivé** car l'image standard `jenkins/inbound-agent` ne contient pas les outils nécessaires pour exécuter les pipelines RHDemo.
+Le master Jenkins (controller) ne fait que du **pilotage** : orchestration des pipelines, gestion des credentials, interface web et JCasC. Tous les builds sont délégués à l'agent dédié **"builder"** pour des raisons de sécurité (réduction de la surface d'attaque du master).
 
-**Outils manquants dans l'agent standard :**
-- Maven 3.9.6 (build Java)
-- Docker Compose (environnement ephemere)
-- Firefox ESR (tests Selenium)
-- SOPS (déchiffrement secrets)
-- Node.js/npm (build frontend)
-- kubectl, Helm, kind (déploiement Kubernetes)
-- Trivy, yq (sécurité et parsing)
+**Controller (`Dockerfile.jenkins`)** :
 
-**Configuration actuelle :**
-- ✅ Le master Jenkins exécute tous les jobs
-- ✅ Le master a tous les outils nécessaires (voir [Dockerfile.jenkins](Dockerfile.jenkins))
-- ✅ `numExecutors: 2` permet d'exécuter 2 jobs en parallèle
-- ✅ `mode: NORMAL` permet au master d'exécuter n'importe quel job
+- `numExecutors: 0` — n'exécute aucun build
+- `mode: EXCLUSIVE` — ne peut pas recevoir de jobs
+- Contient uniquement les plugins et la configuration JCasC
 
-**Pour activer un agent distribué :**
+**Agent "builder" (`Dockerfile.agent`)** :
 
-Il faudrait créer une image personnalisée basée sur [Dockerfile.jenkins](Dockerfile.jenkins) avec tous les outils. Voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) pour plus de détails.
+- Image personnalisée basée sur `jenkins/inbound-agent:latest-jdk21`
+- Connexion WebSocket (JNLP) au controller
+- `numExecutors: 2` — exécute 2 jobs en parallèle
+- Contient tous les outils de build :
+  - JDK 25 (Eclipse Temurin) + Maven 3.9.12
+  - Docker CLI + Docker Compose (DinD via socket)
+  - Firefox ESR + Xvfb (tests Selenium headless)
+  - SOPS, yq (secrets et parsing YAML)
+  - Trivy (scan CVE images Docker)
+  - kubectl, Helm (déploiement Kubernetes)
+  - Cosign (signature d'images)
+  - Node.js/npm (build frontend)
+
+**Configuration du secret agent :**
+
+1. Démarrer le master seul : `docker-compose up -d jenkins`
+2. Aller dans Jenkins > Manage Jenkins > Nodes > builder
+3. Copier le secret affiché
+4. Mettre à jour `JENKINS_SECRET` dans `.env`
+5. Démarrer l'agent : `docker-compose up -d jenkins-agent`
 
 ## ⚡ Installation rapide
 
@@ -195,10 +207,11 @@ Ouvrez votre navigateur : **http://localhost:8080**
 
 ### Fichiers de configuration
 
-```
+```text
 jenkins-docker/
-├── docker-compose.yml          # Configuration des services
-├── Dockerfile.jenkins          # Image Jenkins personnalisée
+├── docker-compose.yml          # Configuration des services (controller + agent)
+├── Dockerfile.jenkins          # Image controller (pilotage uniquement)
+├── Dockerfile.agent            # Image agent (tous les outils de build)
 ├── plugins.txt                 # Liste des plugins à installer
 ├── jenkins-casc.yaml          # Configuration as Code (JCasC)
 ├── .env.example               # Template des variables d'environnement
@@ -236,10 +249,11 @@ jenkins-docker/
 
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
-- ✅ Outils (JDK21, Maven3, Git, OWASP Dependency-Check)
-- ✅ Credentials
+- ✅ Controller en mode pilotage (`numExecutors: 0`, `mode: EXCLUSIVE`)
+- ✅ Agent permanent "builder" (2 executors, WebSocket JNLP)
+- ✅ Outils (JDK25, Maven3, Git, OWASP Dependency-Check)
 - ✅ Intégrations (SonarQube)
-- ✅ Jobs pipeline
+- ✅ Jobs pipeline (CI + CD)
 
 Pour modifier la configuration :
 ```bash
@@ -267,11 +281,14 @@ docker-compose up -d
 # Tous les services
 docker-compose logs -f
 
-# Jenkins uniquement
+# Controller uniquement
 docker-compose logs -f jenkins
 
+# Agent de build
+docker-compose logs -f jenkins-agent
+
 # Dernières 100 lignes
-docker-compose logs --tail=100 jenkins
+docker-compose logs --tail=100 jenkins-agent
 ```
 
 ### Arrêter Jenkins
@@ -293,10 +310,14 @@ docker-compose down -v
 docker-compose restart jenkins
 ```
 
-### Accéder au conteneur Jenkins
+### Accéder aux conteneurs
 
 ```bash
+# Controller (pilotage)
 docker-compose exec jenkins bash
+
+# Agent (builds)
+docker-compose exec jenkins-agent bash
 ```
 
 ## 🔌 Plugins installés
@@ -314,7 +335,7 @@ docker-compose exec jenkins bash
 
 ### Qualité du code
 - SonarQube Scanner
-- JaCoCo
+- Coverage (remplace JaCoCo, supporte JaCoCo parser)
 - Warnings NG
 - Checkstyle, PMD, FindBugs
 
@@ -358,20 +379,21 @@ Les pipelines sont créés automatiquement au démarrage dans la section `jobs:`
 
 ## 🐳 Docker-in-Docker (DinD)
 
-Jenkins peut exécuter des commandes Docker et docker-compose grâce au montage du socket Docker :
+L'**agent Jenkins** (pas le controller) peut exécuter des commandes Docker et docker-compose grâce au montage du socket Docker :
 
 ```yaml
+# Dans le service jenkins-agent
 volumes:
   - /var/run/docker.sock:/var/run/docker.sock
   - /usr/bin/docker:/usr/bin/docker
 ```
 
-### Vérifier Docker dans Jenkins
+### Vérifier Docker dans l'agent
 
 ```bash
-docker-compose exec jenkins docker --version
-docker-compose exec jenkins docker-compose --version
-docker-compose exec jenkins docker ps
+docker-compose exec jenkins-agent docker --version
+docker-compose exec jenkins-agent docker-compose --version
+docker-compose exec jenkins-agent docker ps
 ```
 
 ## 📊 Intégrations
@@ -452,15 +474,6 @@ curl -k https://localhost:5000/v2/
 openssl s_client -connect localhost:5000 -servername localhost < /dev/null 2>/dev/null | openssl x509 -noout -dates
 ```
 
-## 🐳 Docker-in-Docker (DinD)
-
-Jenkins peut exécuter des commandes Docker et docker-compose grâce au montage du socket Docker :
-
-```yaml
-volumes:
-  - /var/run/docker.sock:/
-- `rhdemo-sonarqube-db` : Base de données PostgreSQL
-
 ### Email
 
 Configuration dans `.env` :
@@ -530,14 +543,14 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
 OWASP ZAP (Zed Attack Proxy) est un proxy de sécurité qui intercepte le trafic HTTP/HTTPS entre les tests Selenium et l'application RHDemo pour détecter automatiquement les vulnérabilités web.
 
 **Architecture :**
-```
-Jenkins (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-ephemere) → RHDemo App
-                           ↓
-                    Analyse passive
-                    + Spider
-                    + Active Scan
-                           ↓
-                    Rapport HTML/JSON
+```text
+Agent builder (Firefox) → ZAP Proxy (8090) → Nginx (rhdemo-ephemere) → RHDemo App
+                                 ↓
+                          Analyse passive
+                          + Spider
+                          + Active Scan
+                                 ↓
+                          Rapport HTML/JSON
 ```
 
 **Démarrage automatique :**
@@ -546,15 +559,15 @@ ZAP démarre automatiquement lors du stage `🔒 Démarrage OWASP ZAP Proxy` dan
 
 **Architecture réseau dynamique :**
 
-Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsfile :
+L'agent Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsfile :
 
-**Jenkins :**
+**Agent Jenkins (builder) :**
 1. **Réseau permanent** : `rhdemo-jenkins-network`
    - Défini dans docker-compose.yml
-   - Communication avec SonarQube, Registry, Jenkins Agent
+   - Communication avec le controller, SonarQube, Registry
 
 2. **Réseau temporaire** : `rhdemo-ephemere-network`
-   - Connecté lors du stage `📦 Déploiement ${params.DEPLOY_ENV}` (ligne 699)
+   - L'agent se connecte dynamiquement via `$(hostname)`
    - Permet l'accès aux alias DNS ephemere pour orchestration
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
@@ -569,11 +582,11 @@ Jenkins et ZAP utilisent une connexion réseau dynamique gérée par le Jenkinsf
    - Déconnecté après les tests Selenium (bloc `post: always`)
 
 **Cycle de vie réseau :**
-```
-Stage "Déploiement"        : Jenkins connecté à rhdemo-ephemere-network
+```text
+Stage "Déploiement"        : Agent connecté à rhdemo-ephemere-network
 Stage "Démarrage ZAP"      : ZAP connecté à rhdemo-ephemere-network
-Stage "Tests Selenium"     : Jenkins + ZAP ont accès au réseau ephemere
-Post "Tests Selenium"      : ZAP déconnecté + Jenkins déconnecté
+Stage "Tests Selenium"     : Agent + ZAP ont accès au réseau ephemere
+Post "Tests Selenium"      : ZAP déconnecté + Agent déconnecté
 ```
 
 Cette approche offre :
@@ -685,13 +698,13 @@ docker-compose up -d --force-recreate jenkins
 # Sur l'hôte
 ls -la /var/run/docker.sock
 
-# Doit être accessible au groupe docker (999)
+# Doit être accessible au groupe docker (984)
 sudo chmod 666 /var/run/docker.sock
 ```
 
-**Dans le conteneur :**
+**Dans le conteneur agent :**
 ```bash
-docker-compose exec jenkins docker ps
+docker-compose exec jenkins-agent docker ps
 ```
 
 ### Réinitialiser complètement Jenkins
@@ -712,15 +725,23 @@ docker volume rm rhdemo-maven-repository
 
 **Symptôme :** Logs montrant "Secret is required for inbound agents"
 
+**Cause :** Le secret de l'agent n'est pas configuré dans `.env`.
+
 **Solution :**
 
-L'agent Jenkins est désactivé par défaut car il ne contient pas les outils nécessaires (Maven, Docker Compose, Firefox, SOPS, etc.).
+1. Vérifier que le master est démarré et sain : `docker-compose ps jenkins`
+2. Aller dans Jenkins > Manage Jenkins > Nodes > builder
+3. Copier le secret affiché sur la page du noeud
+4. Mettre à jour `JENKINS_SECRET=<secret>` dans `.env`
+5. Redémarrer l'agent : `docker-compose up -d jenkins-agent`
 
-Si vous avez décommenté le service jenkins-agent dans docker-compose.yml :
-1. Re-commentez le service dans docker-compose.yml
-2. Redémarrez : `docker compose up -d`
+**Vérification :**
+```bash
+# Logs de l'agent
+docker-compose logs -f jenkins-agent
 
-Pour activer un agent fonctionnel, voir [JENKINS_AGENT_SETUP.md](JENKINS_AGENT_SETUP.md) (nécessite la création d'une image personnalisée).
+# Doit afficher : "INFO: Connected"
+```
 
 ## 📈 Monitoring
 

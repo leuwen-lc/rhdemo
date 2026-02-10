@@ -8,14 +8,40 @@ jenkins:
   # CONFIGURATION SYSTÈME
   # ────────────────────────────────────────────────────────────────
   systemMessage: |
-    🚀 Jenkins RHDemo - Serveur CI/CD
+    🚀 Jenkins RHDemo - Serveur CI/CD (Controller)
     Configuré automatiquement avec Jenkins Configuration as Code
-    
-  numExecutors: 2
-  mode: NORMAL
-  
+    Le master ne fait que du pilotage. Les builds sont exécutés sur l'agent "builder".
+
+  # Le master ne doit pas exécuter de builds (sécurité)
+  numExecutors: 0
+  mode: EXCLUSIVE
+
   quietPeriod: 5
   scmCheckoutRetryCount: 3
+
+  # ────────────────────────────────────────────────────────────────
+  # AGENT DE BUILD
+  # ────────────────────────────────────────────────────────────────
+  nodes:
+    - permanent:
+        name: "builder"
+        labelString: "builder"
+        numExecutors: 2
+        mode: NORMAL
+        remoteFS: "/home/jenkins/agent"
+        retentionStrategy: "always"
+        launcher:
+          inbound:
+            webSocket: true
+        nodeProperties:
+          - envVars:
+              env:
+                - key: "JAVA_HOME"
+                  value: "/opt/java/temurin-25"
+                - key: "MAVEN_HOME"
+                  value: "/opt/maven"
+                - key: "PATH+EXTRA"
+                  value: "/opt/java/temurin-25/bin:/opt/maven/bin"
   
   # ────────────────────────────────────────────────────────────────
   # SÉCURITÉ
@@ -34,17 +60,11 @@ jenkins:
       allowAnonymousRead: false
   
   # ────────────────────────────────────────────────────────────────
-  # OUTILS GLOBAUX
+  # VARIABLES GLOBALES (héritées par tous les noeuds)
   # ────────────────────────────────────────────────────────────────
   globalNodeProperties:
     - envVars:
         env:
-          - key: "JAVA_HOME"
-            value: "/opt/java/openjdk"
-          - key: "MAVEN_HOME"
-            value: "/opt/maven"
-          - key: "PATH+EXTRA"
-            value: "/opt/java/openjdk/bin:/opt/maven/bin"
           - key: "NOTIFICATION_EMAIL"
             value: "${SMTP_USER}"
 
@@ -52,11 +72,11 @@ jenkins:
 # CONFIGURATION DES OUTILS (JDK, Maven, etc.)
 # ═══════════════════════════════════════════════════════════════════
 tool:
-  # JDK 21 (déjà installé dans l'image Docker)
+  # JDK 25 (Eclipse Temurin, installé dans l'image Docker)
   jdk:
     installations:
-      - name: "JDK21"
-        home: "/opt/java/openjdk"
+      - name: "JDK25"
+        home: "/opt/java/temurin-25"
   
   # Maven (déjà installé dans l'image Docker)
   maven:

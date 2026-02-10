@@ -1,0 +1,332 @@
+# ═══════════════════════════════════════════════════════════════
+# Network Policies pour le namespace loki-stack
+# ═══════════════════════════════════════════════════════════════
+# Ce fichier contient les Network Policies pour sécuriser la stack
+# de logging (Loki + Promtail + Grafana) dans le namespace loki-stack.
+#
+# Stratégie: Zero Trust / Default Deny
+#   1. Tout trafic bloqué par défaut
+#   2. Whitelist explicite pour chaque flux légitime
+#
+# Application:
+#   kubectl apply -f loki-stack-networkpolicies.yaml
+#
+# Composants protégés:
+#   - Loki (agrégation logs)
+#   - Promtail (collecte logs, DaemonSet)
+#   - Grafana (visualisation)
+# ═══════════════════════════════════════════════════════════════
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  # Appliquer à TOUS les pods du namespace
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # Aucune règle = tout est bloqué
+  ingress: []
+  egress: []
+---
+# ═══════════════════════════════════════════════════════════════
+# DNS: Autoriser tous les pods à résoudre les noms DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Loki (Agrégateur de logs)
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - Promtail: push des logs
+#   - Grafana: requêtes LogQL
+#   - Prometheus (monitoring): scrape métriques
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - DNS uniquement (stockage local, pas de S3/GCS)
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-netpol
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loki
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Promtail (push logs)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: promtail
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Grafana (requêtes LogQL)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Prometheus scraping (monitoring namespace)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 3100
+  egress:
+    # DNS uniquement (pas de stockage externe)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# Promtail (Collecteur de logs - DaemonSet)
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - Loki: push des logs
+#   - API Server Kubernetes: découverte des pods (kubernetes_sd_configs)
+#   - DNS
+#
+# Note: Promtail lit les logs via hostPath, pas de flux réseau
+# vers les pods sources.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: promtail-netpol
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: promtail
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 3101  # Promtail metrics/health
+  egress:
+    # Push logs vers Loki
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - protocol: TCP
+          port: 3100
+    # API Server Kubernetes: voir CiliumNetworkPolicy allow-apiserver-promtail
+    # (ipBlock standard ne fonctionne pas avec Cilium pour l'identité host)
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ═══════════════════════════════════════════════════════════════
+# CiliumNetworkPolicy: Accès API Server pour Promtail
+# ═══════════════════════════════════════════════════════════════
+# IMPORTANT: Avec Cilium (kubeProxyReplacement=true), l'API Server
+# sur le node est vu comme l'entité "host" et non comme un CIDR.
+# Les règles ipBlock standard ne fonctionnent pas pour atteindre
+# le node host. Cette CiliumNetworkPolicy est requise pour que
+# Promtail puisse découvrir les pods via kubernetes_sd_configs.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-promtail
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: promtail
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# ═══════════════════════════════════════════════════════════════
+# Grafana (Visualisation)
+# ═══════════════════════════════════════════════════════════════
+# INGRESS:
+#   - nginx-gateway: trafic utilisateur (HTTPRoute)
+#   - Prometheus (monitoring): scrape métriques Grafana
+#   - kubelet: health checks
+#
+# EGRESS:
+#   - Loki: requêtes LogQL
+#   - Prometheus (monitoring): requêtes PromQL
+#   - DNS
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-netpol
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Trafic utilisateur via NGINX Gateway Fabric
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: nginx-gateway
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 3000
+    # Prometheus scraping (métriques Grafana)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 3000
+    # Health checks kubelet
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 3000
+  egress:
+    # Requêtes vers Loki (LogQL)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - protocol: TCP
+          port: 3100
+    # Requêtes vers Prometheus (PromQL)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

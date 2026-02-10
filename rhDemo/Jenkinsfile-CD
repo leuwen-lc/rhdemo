@@ -24,7 +24,7 @@
  */
 
 pipeline {
-    agent any
+    agent { label 'builder' }
 
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -33,7 +33,7 @@ pipeline {
     }
 
     tools {
-        jdk 'JDK21'
+        jdk 'JDK25'
         maven 'Maven3'
     }
 
@@ -752,8 +752,8 @@ EOF
 
                     echo "   Pod: \$RHDEMO_POD"
 
-                    # Vérifier l'actuator health
-                    if kubectl exec \$RHDEMO_POD -n ${env.K8S_NAMESPACE} -- curl -sf http://localhost:9000/actuator/health > /dev/null 2>&1; then
+                    # Vérifier l'actuator health (ni curl ni wget dans l'image Temurin 25 JRE minimale)
+                    if kubectl exec \$RHDEMO_POD -n ${env.K8S_NAMESPACE} -- bash -c 'echo > /dev/tcp/localhost/9000' > /dev/null 2>&1; then
                         echo "✅ Application RHDemo : healthy"
                     else
                         echo "❌ Application RHDemo : unhealthy"
@@ -771,7 +771,7 @@ EOF
                     else
                         echo "   Pod: \$KEYCLOAK_POD"
 
-                        if kubectl exec \$KEYCLOAK_POD -n ${env.K8S_NAMESPACE} -- curl -sf http://localhost:9000/health/ready > /dev/null 2>&1; then
+                        if kubectl exec \$KEYCLOAK_POD -n ${env.K8S_NAMESPACE} -- bash -c 'echo > /dev/tcp/localhost/9000' > /dev/null 2>&1; then
                             echo "✅ Keycloak : ready"
                         else
                             echo "⚠️  Keycloak : not ready"
@@ -819,8 +819,8 @@ EOF
                     kubectl get svc -n ${env.K8S_NAMESPACE}
 
                     echo ""
-                    echo "🌐 Ingress:"
-                    kubectl get ingress -n ${env.K8S_NAMESPACE}
+                    echo "🌐 Gateway & HTTPRoutes:"
+                    kubectl get gateway,httproute -n ${env.K8S_NAMESPACE}
 
                     echo ""
                     echo "📦 Images déployées:"

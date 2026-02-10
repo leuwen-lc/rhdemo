@@ -101,12 +101,44 @@ rules:
 
   # === Networking API (networking.k8s.io/v1) ===
 
-  # Ingress : Helm crée/modifie l'Ingress
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
   # NetworkPolicies : Helm crée les NetworkPolicies
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # === Gateway API (gateway.networking.k8s.io/v1) ===
+  # NGINX Gateway Fabric utilise Gateway API (remplace Ingress)
+
+  # Gateway : point d'entrée du trafic externe
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "gateways/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # HTTPRoute : règles de routage HTTP/HTTPS
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes", "httproutes/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # ReferenceGrant : autorisations cross-namespace (si utilisé)
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["referencegrants"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # === NGINX Gateway Fabric Policies (gateway.nginx.org) ===
+  # CRDs spécifiques à NGINX Gateway Fabric
+
+  # ClientSettingsPolicy : configuration client (body size, timeouts)
+  - apiGroups: ["gateway.nginx.org"]
+    resources: ["clientsettingspolicies", "clientsettingspolicies/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # ProxySettingsPolicy : configuration proxy buffers (NGF 2.4+)
+  # CRITIQUE pour les proxy buffers Keycloak (gros cookies OAuth2)
+  - apiGroups: ["gateway.nginx.org"]
+    resources: ["proxysettingspolicies", "proxysettingspolicies/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # ObservabilityPolicy : métriques et traces (optionnel)
+  - apiGroups: ["gateway.nginx.org"]
+    resources: ["observabilitypolicies", "observabilitypolicies/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

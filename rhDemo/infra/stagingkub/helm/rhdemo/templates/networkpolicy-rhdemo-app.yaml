@@ -5,7 +5,7 @@
 # Règles réseau pour l'application Spring Boot rhdemo-app
 #
 # INGRESS autorisé depuis:
-#   - ingress-nginx (trafic utilisateur)
+#   - nginx-gateway (trafic utilisateur via NGINX Gateway Fabric)
 #   - monitoring (Prometheus scraping)
 #   - rhdemo-stagingkub (communication interne)
 #   - kubelet (health checks)
@@ -32,11 +32,11 @@ spec:
     - Egress
 
   ingress:
-    # Règle 1: Trafic utilisateur via nginx-ingress
+    # Règle 1: Trafic utilisateur via NGINX Gateway Fabric
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
+              kubernetes.io/metadata.name: nginx-gateway
       ports:
         - protocol: TCP
           port: {{ .Values.rhdemo.serverPort }}

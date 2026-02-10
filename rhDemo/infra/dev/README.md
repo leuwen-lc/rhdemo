@@ -62,7 +62,7 @@ docker compose logs -f
 docker compose ps
 ```
 
-### 3. Initialiser Keycloak (première utilisation)
+### 3. Initialiser Keycloak (après chaque démarrage du container car pas de BDD)
 
 Une fois Keycloak démarré, vous devez créer le realm et les clients:
 
@@ -93,9 +93,9 @@ cd monCheminGit/rhDemoInitKeycloak
 
 ### 4. Initialiser la base de données (schéma + jeu de données fictif)
 
+Exécuté automatiquement dans le docker compose si base vide
 
-# Exécuter les scripts SQL d'initialisation
-
+Si besoin d'exécution manuelle
 ```bash
 cd monCheminGit/rhDemo
 # Créer le schéma (tables + index)
@@ -145,7 +145,7 @@ cd monCheminGit/rhDemoAPITestIHM
 Le test cherche Firefox sous divers emplacements (Snap, apt, installations manuelle)
 Pour une raison non complétement élucidée, la version snap(lié à ubuntu) n'était pas pilotable par les tests Selenium quand je l'ai essayée.
 
-La solution testée nécessite d'installer manuellement Firefox (téléchargement direct sur le site FF) sous mon répertoire home ~/firefox
+La solution validée sur Ubuntu 24/04 nécessite d'installer manuellement Firefox (téléchargement direct sur le site FF) sous mon répertoire home ~/firefox
 
 ### Arrêter les services
 
@@ -153,13 +153,13 @@ La solution testée nécessite d'installer manuellement Firefox (téléchargemen
 cd infra/dev
 
 # Arrêter sans supprimer les volumes
-docker-compose stop
+docker compose stop
 
 # Arrêter et supprimer les containers (conserve les volumes/données)
-docker-compose down
+docker compose down
 
 # Arrêter et supprimer TOUT (y compris les données PostgreSQL)
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Accès aux services
@@ -198,7 +198,7 @@ docker exec -it rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo
 docker exec -it keycloak-dev bash
 
 # Vérifier l'état de santé
-docker-compose ps
+docker compose ps
 ```
 
 ## Nettoyage complet
@@ -207,13 +207,13 @@ Si vous voulez repartir de zéro:
 
 ```bash
 # Arrêter et tout supprimer
-docker-compose down -v
+docker compose down -v
 
 # Supprimer les volumes manuellement si nécessaire
 docker volume rm rhdemo-dev-db-data
 
 # Redémarrer
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Notes

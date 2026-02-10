@@ -2,3 +2,7 @@
 
 # Fichier de configuration Claude Code (reste en local car peut être vecteur d'injections)
 CLAUDE.md
+.claude/
+
+# VSCode
+.vscode/

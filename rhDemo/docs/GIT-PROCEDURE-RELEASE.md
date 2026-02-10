@@ -1,20 +1,22 @@
 # Procédure standard : PR `evolutions-post-1.1.4` -> `master`, release `1.1.5-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte :
-- Branche source : `evolutions-post-1.1.4` (testée)
+- Branche source (exemple) : `evolutions-post-1.1.4` 
 - Branche cible : `master`
-- Tag Git : `1.1.5-RELEASE`
+- Tag Git (exemple) : `1.1.5-RELEASE`
 - Après la release, `master` repasse en `-SNAPSHOT`
 
-> Remplace `origin` par le nom de ton remote si différent.
 
----
+## Prérequis 
+- chaine CI/CD complète au vert avec options sonarqube et selenium
+- README.md racine mis à jour en particulier la section changelog pour la nouvelle version
 
-## 1) Synchroniser ton repo local avec le distant
+
+## 1) Synchroniser le repo local avec le distant
 
 ```bash
 git fetch origin
-# Récupère toutes les dernières références (branches/tags) depuis le remote, sans modifier ta branche courante.
+# Récupère toutes les dernières références (branches/tags) depuis le remote, sans modifier la branche courante.
 ```
 
 ```bash
@@ -24,12 +26,12 @@ git checkout evolutions-post-1.1.4
 
 ```bash
 git pull --rebase origin evolutions-post-1.1.4
-# Met à jour ta branche avec le distant en rejouant tes commits au-dessus (historique plus propre qu’un merge).
+# Met à jour la branche avec le distant en rejouant les commits au-dessus (historique plus propre qu’un merge).
 ```
 
 ---
 
-## 2) Ré-aligner la branche avec `master` (recommandé)
+## 2) Ré-aligner la branche avec `master`
 
 ```bash
 git fetch origin
@@ -38,32 +40,32 @@ git fetch origin
 
 ```bash
 git rebase origin/master
-# Rejoue les commits de ta branche au-dessus de master pour minimiser les surprises au moment du merge de la PR.
+# Rejoue les commits de la branche au-dessus de master pour minimiser les surprises au moment du merge de la PR.
 ```
 
 > Si conflits : les résoudre, puis faire `git add ...` et `git rebase --continue` (répéter jusqu’à fin du rebase).
 
 ---
 
-## 3) Passer la version Maven en `1.1.5-RELEASE` (dans le(s) POM)
+## 3) Passer la version Maven en `1.1.5-RELEASE` (dans les POM)
 
-1. Modifie le(s) `pom.xml` (parent + modules si besoin) :
-   - Remplace par exemple `1.1.5-SNAPSHOT` par `1.1.5-RELEASE`.
+1. Modifie les `pom.xml` (3 modules) :
+   - Remplacer par exemple `1.1.5-SNAPSHOT` par `1.1.5-RELEASE`.
 
 Puis :
 
 ```bash
 git status
-# Affiche les fichiers modifiés pour vérifier que seuls les POM attendus ont changé.
+# Afficher les fichiers modifiés pour vérifier que seuls les POM attendus ont changé.
 ```
 
 ```bash
-git add pom.xml **/pom.xml
+git add **/pom.xml
 # Ajoute à l’index les POM (racine + modules) pour préparer le commit de version.
 ```
 
 ```bash
-git commit -m "chore(release): set version to 1.1.5-RELEASE"
+git commit -m "chore(release): passage à la version 1.1.5-RELEASE"
 # Crée un commit traçable qui fige la version release dans les POM.
 ```
 
@@ -72,7 +74,7 @@ git push origin evolutions-post-1.1.4
 # Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
 ```
 
-> Si tu as dû rebase et que Git refuse le push :  
+> Si rebase et que Git refuse le push :  
 > `git push --force-with-lease origin evolutions-post-1.1.4`  
 > (réécrit la branche distante de façon “sécurisée” en vérifiant qu’elle n’a pas bougé côté remote).
 
@@ -81,14 +83,13 @@ git push origin evolutions-post-1.1.4
 ## 4) Ouvrir et merger la Pull Request sur GitHub
 
 Sur GitHub :
-- Créer une PR :
+- (Demandeur) Créer une PR :
   - **base** : `master`
   - **compare** : `evolutions-post-1.1.4`
-- Vérifier que la CI est verte et que la PR est conforme (checks, conventions, etc.).
-- Comme tu es demandeur et validateur : tu merges la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
+- Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
+- Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
 
-> Stratégie de merge : celle imposée par le repo (Squash/Merge commit/Rebase). L’important est que `master` contienne le commit “version release”.
-
+> Stratégie de merge : Squash/Merge 
 ---
 
 ## 5) Tagger la release sur le commit de `master` (après merge)
@@ -100,7 +101,7 @@ git fetch origin
 
 ```bash
 git checkout master
-# Bascule sur la branche master en local.
+# Basculer sur la branche master en local.
 ```
 
 ```bash
@@ -122,11 +123,11 @@ git push origin 1.1.5-RELEASE
 
 ## 6) Repasser `master` en `-SNAPSHOT` après la release
 
-Décide de la version de développement suivante (exemples courants) :
-- `1.1.6-SNAPSHOT` (souvent)
-- ou une autre selon votre versioning.
+Décide de la version de développement suivante :
+- `1.1.6-SNAPSHOT` (exemple)
 
-1. Modifie le(s) `pom.xml` pour mettre la prochaine version `-SNAPSHOT`.
+
+1. Modifier les `pom.xml` pour mettre la prochaine version `-SNAPSHOT`.
 
 Puis :
 
@@ -136,28 +137,20 @@ git status
 ```
 
 ```bash
-git add pom.xml **/pom.xml
+git add **/pom.xml
 # Ajoute les POM modifiés à l’index (préparation du commit “back to snapshot”).
 ```
 
 ```bash
-git commit -m "chore: back to <NEXT_VERSION>-SNAPSHOT after 1.1.5-RELEASE"
+git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.5-RELEASE"
 # Committe le retour en version de développement pour éviter que master reste bloqué en version release.
 ```
 
 ```bash
 git push origin master
-# Publie le commit “back to snapshot” sur master.
+# Publie le commit sur master.
 ```
 
-> Remplace `<NEXT_VERSION>` par la valeur réelle (ex: `1.1.6`).
 
----
 
-## Checklist rapide
 
-- [ ] `evolutions-post-1.1.4` à jour et rebase sur `origin/master` fait (ou stratégie équivalente)
-- [ ] POM en `1.1.5-RELEASE` committé sur la branche
-- [ ] PR ouverte vers `master` + CI verte + merge effectué
-- [ ] Tag `1.1.5-RELEASE` créé **sur master après merge** et poussé
-- [ ] `master` repassé en `<NEXT_VERSION>-SNAPSHOT` et poussé

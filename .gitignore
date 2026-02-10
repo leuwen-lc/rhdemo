@@ -1,8 +1,4 @@
-# Fichiers de credentials de test
-rhDemoAPITestIHM/src/test/resources/test-credentials.yml
-
-# Répertoire d'initialisation Keycloak (peut contenir des secrets)
-rhDemoInitKeycloak/
+# Voir .gitignore dans les modules
 
 # Fichier de configuration Claude Code (reste en local car peut être vecteur d'injections)
 CLAUDE.md

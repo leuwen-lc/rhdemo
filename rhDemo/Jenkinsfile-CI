@@ -1159,16 +1159,16 @@ YMLEOF
 
                     echo "⏳ Attente du démarrage de ZAP (60s max)..."
                     echo "   (ZAP doit charger ses add-ons, créer le certificat CA, etc.)"
-                    timeout=60
+                    timeout=120
                     attempt=0
                     while [ \$timeout -gt 0 ]; do
                         attempt=\$((attempt + 1))
                         if docker exec rhdemo-jenkins-zap curl -f http://localhost:8090/JSON/core/view/version/?apikey=${env.ZAP_API_KEY} >/dev/null 2>&1; then
-                            echo "✅ ZAP démarré et accessible (après \$((60 - timeout))s)"
+                            echo "✅ ZAP démarré et accessible (après \$((120 - timeout))s)"
                             break
                         fi
                         if [ \$((attempt % 5)) -eq 0 ]; then
-                            echo "   Attente... (\$((60 - timeout))s écoulées, reste \${timeout}s)"
+                            echo "   Attente... (\$((120 - timeout))s écoulées, reste \${timeout}s)"
                         fi
                         sleep 2
                         timeout=\$((timeout - 2))

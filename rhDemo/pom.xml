@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.example</groupId>
 	<artifactId>rhdemoAPI</artifactId>
-	<version>1.1.5-SNAPSHOT</version>
+	<version>1.1.5-RELEASE</version>
 	<name>rhdemo</name>
 	<description>demo API appli rh avec Spring Boot</description>
 	<url/>

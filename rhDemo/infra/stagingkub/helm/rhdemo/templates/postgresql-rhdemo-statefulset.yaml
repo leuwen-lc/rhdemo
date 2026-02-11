@@ -40,7 +40,7 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
-            add: ["CHOWN"]
+            add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
       containers:
       - name: postgresql
         image: "{{ (index .Values "postgresql-rhdemo").image.repository }}:{{ (index .Values "postgresql-rhdemo").image.tag }}"

@@ -38,7 +38,7 @@ spec:
               allowPrivilegeEscalation: false
               capabilities:
                 drop: ["ALL"]
-                add: ["CHOWN"]
+                add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
             image: postgres:16-alpine
@@ -165,7 +165,7 @@ spec:
               allowPrivilegeEscalation: false
               capabilities:
                 drop: ["ALL"]
-                add: ["CHOWN"]
+                add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
             image: postgres:16-alpine

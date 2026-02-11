@@ -19,6 +19,28 @@ spec:
         app: postgresql-rhdemo
         {{- include "postgresql-rhdemo.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: fix-permissions
+        image: busybox:1.36
+        command: ['sh', '-c', 'chown -R 70:70 /var/lib/postgresql']
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+            add: ["CHOWN"]
       containers:
       - name: postgresql
         image: "{{ (index .Values "postgresql-rhdemo").image.repository }}:{{ (index .Values "postgresql-rhdemo").image.tag }}"
@@ -76,6 +98,10 @@ spec:
           failureThreshold: 5
         resources:
           {{- toYaml (index .Values "postgresql-rhdemo").resources | nindent 10 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
       {{- if and (index .Values "postgresql-rhdemo").metrics (index .Values "postgresql-rhdemo").metrics.enabled }}
       # Sidecar postgres_exporter pour métriques Prometheus
       # Utilise uniquement les collecteurs intégrés (pas de extend-query-path déprécié)
@@ -120,6 +146,10 @@ spec:
             port: metrics
           initialDelaySeconds: 10
           periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
       {{- end }}
       volumes:
       - name: init-scripts

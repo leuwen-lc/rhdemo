@@ -1,16 +1,12 @@
 package fr.leuwen.rhdemo.tests.pages;
 
-import org.apache.commons.io.FileUtils;
 import org.openqa.selenium.By;
-import org.openqa.selenium.OutputType;
-import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.time.Duration;
 
 /**
@@ -32,18 +28,7 @@ public class EmployeAddPage {
     private final By errorAlert = By.cssSelector("[data-testid='employe-error-alert']");
     
     private static final Logger logger = LoggerFactory.getLogger(EmployeAddPage.class);
-    
-    private void takeScreenshot(String fileName) {
-        try {
-            File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-            File target = new File("screenshots/" + fileName);
-            FileUtils.copyFile(scrFile, target);
-        } catch (Exception e) {
-            logger.error("Screenshot error: " + e.getMessage());
-        }
-    }
-    
-    
+
     public EmployeAddPage(WebDriver driver) {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(15));
@@ -127,7 +112,6 @@ public class EmployeAddPage {
                 logger.error("   → VÉRIFIER: logs Keycloak archivés dans debug-logs/keycloak.log");
             }
 
-            takeScreenshot("error-page-keycloak.png");
             throw e;
         }
         

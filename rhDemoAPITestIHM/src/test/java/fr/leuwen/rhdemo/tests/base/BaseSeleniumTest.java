@@ -4,6 +4,9 @@ import fr.leuwen.rhdemo.tests.config.TestConfig;
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.TestWatcher;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
@@ -19,7 +22,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -33,6 +40,12 @@ public abstract class BaseSeleniumTest {
     
     protected static WebDriver driver;
     protected static WebDriverWait wait;
+
+    private static final String SCREENSHOTS_DIR = "target/screenshots";
+    private static final DateTimeFormatter TIMESTAMP_FMT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+
+    @RegisterExtension
+    static FailureDiagnosticsExtension diagnostics = new FailureDiagnosticsExtension();
 
     // Credentials chargés depuis TestConfig unifié
     // Priorité: Maven properties > env vars > YAML files
@@ -217,16 +230,9 @@ public abstract class BaseSeleniumTest {
                     log.error("   HTML complet de la page (500 premiers caractères):");
                     log.error("{}", pageSource.substring(0, Math.min(500, pageSource.length())));
 
-                    // Prendre un screenshot
-                    try {
-                        File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-                        File target = new File("target/screenshots/keycloak-page-vide.png");
-                        target.getParentFile().mkdirs();
-                        org.apache.commons.io.FileUtils.copyFile(scrFile, target);
-                        log.info("   Screenshot sauvegardé: target/screenshots/keycloak-page-vide.png");
-                    } catch (Exception e) {
-                        log.warn("   Impossible de prendre un screenshot: {}", e.getMessage());
-                    }
+                    // Prendre un screenshot et sauvegarder le DOM
+                    captureScreenshot("keycloak-page-vide");
+                    capturePageSource("keycloak-page-vide");
                 }
 
                 // Attendre que le formulaire soit visible
@@ -373,6 +379,109 @@ public abstract class BaseSeleniumTest {
             Thread.sleep(seconds * 1000L);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    // ==================== Diagnostics automatiques ====================
+
+    /**
+     * Prend un screenshot PNG et le sauvegarde dans target/screenshots/
+     */
+    protected static void captureScreenshot(String name) {
+        try {
+            if (driver == null) {
+                log.warn("captureScreenshot: driver est null, impossible de capturer");
+                return;
+            }
+            File scrFile = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+            Path targetDir = Path.of(SCREENSHOTS_DIR);
+            Files.createDirectories(targetDir);
+            Path target = targetDir.resolve(name + ".png");
+            Files.copy(scrFile.toPath(), target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            log.info("Screenshot sauvegarde: {}", target);
+        } catch (Exception e) {
+            log.warn("Impossible de prendre un screenshot '{}': {}", name, e.getMessage());
+        }
+    }
+
+    /**
+     * Sauvegarde le HTML complet de la page dans target/screenshots/
+     */
+    protected static void capturePageSource(String name) {
+        try {
+            if (driver == null) {
+                log.warn("capturePageSource: driver est null, impossible de capturer");
+                return;
+            }
+            String pageSource = driver.getPageSource();
+            Path targetDir = Path.of(SCREENSHOTS_DIR);
+            Files.createDirectories(targetDir);
+            Path target = targetDir.resolve(name + ".html");
+            Files.writeString(target, pageSource);
+            log.info("DOM sauvegarde: {}", target);
+        } catch (Exception e) {
+            log.warn("Impossible de sauvegarder le DOM '{}': {}", name, e.getMessage());
+        }
+    }
+
+    /**
+     * Retourne un resume du contexte courant du navigateur pour enrichir les messages d'assertion.
+     * URL courante, titre de la page, et les 200 premiers caracteres du texte visible.
+     */
+    protected static String contextInfo() {
+        try {
+            if (driver == null) {
+                return " [driver null]";
+            }
+            String url = driver.getCurrentUrl();
+            String title = driver.getTitle();
+            String bodyText = "";
+            try {
+                bodyText = driver.findElement(By.tagName("body")).getText();
+                if (bodyText.length() > 200) {
+                    bodyText = bodyText.substring(0, 200) + "...";
+                }
+            } catch (Exception ignored) {
+                bodyText = "(inaccessible)";
+            }
+            return String.format(" [URL=%s | Titre=%s | Texte=%s]", url, title, bodyText);
+        } catch (Exception e) {
+            return " [contextInfo error: " + e.getMessage() + "]";
+        }
+    }
+
+    /**
+     * Extension JUnit 5 qui capture automatiquement un screenshot et le DOM
+     * de la page en cas d'echec d'un test.
+     */
+    static class FailureDiagnosticsExtension implements TestWatcher {
+
+        private static final Logger extLog = LoggerFactory.getLogger(FailureDiagnosticsExtension.class);
+
+        @Override
+        public void testFailed(ExtensionContext context, Throwable cause) {
+            String testName = context.getDisplayName();
+            String timestamp = LocalDateTime.now().format(TIMESTAMP_FMT);
+            String baseName = "FAILED-" + sanitizeFileName(testName) + "-" + timestamp;
+
+            extLog.error("Test echoue: {} - Capture des diagnostics...", testName);
+
+            captureScreenshot(baseName);
+            capturePageSource(baseName);
+
+            // Log un resume des diagnostics
+            try {
+                if (driver != null) {
+                    extLog.error("  URL courante: {}", driver.getCurrentUrl());
+                    extLog.error("  Titre de page: {}", driver.getTitle());
+                }
+            } catch (Exception e) {
+                extLog.warn("  Impossible de collecter les infos de page: {}", e.getMessage());
+            }
+        }
+
+        private static String sanitizeFileName(String name) {
+            return name.replaceAll("[^a-zA-Z0-9._-]", "_");
         }
     }
 }

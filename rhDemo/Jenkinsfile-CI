@@ -1319,8 +1319,8 @@ YMLEOF
                         // Archiver les rapports de tests
                         junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
 
-                        // Archiver les screenshots en cas d'échec
-                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+                        // Archiver les screenshots et DOM dumps en cas d'échec
+                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*", allowEmptyArchive: true
 
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'

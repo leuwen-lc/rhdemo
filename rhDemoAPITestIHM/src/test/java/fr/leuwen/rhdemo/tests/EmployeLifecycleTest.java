@@ -54,12 +54,12 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         
         // Vérifier que le message de succès s'affiche
         assertThat(addPage.isSuccessMessageDisplayed())
-            .as("Le message de succès devrait être affiché")
+            .as("Le message de succès devrait être affiché" + contextInfo())
             .isTrue();
-        
+
         String successMessage = addPage.getSuccessMessage();
         assertThat(successMessage)
-            .as("Le message devrait confirmer l'ajout")
+            .as("Le message devrait confirmer l'ajout" + contextInfo())
             .containsIgnoringCase("succès");
         
         // Attendre la redirection vers la liste
@@ -82,7 +82,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         
         // Vérifier que la page est bien chargée
         assertThat(listPage.isPageLoaded())
-            .as("La page de liste devrait être chargée")
+            .as("La page de liste devrait être chargée" + contextInfo())
             .isTrue();
         
         // Vérifier si la pagination est présente
@@ -96,7 +96,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
             
             // Vérifier que l'employé est présent sur la dernière page
             assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
-                .as("L'employé devrait être présent sur la dernière page")
+                .as("L'employé devrait être présent sur la dernière page" + contextInfo())
                 .isTrue();
             
             // Récupérer l'ID sur cette page
@@ -104,14 +104,14 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         } else {
             // Sans pagination: recherche simple
             assertThat(listPage.isEmployePresentByEmail(TEST_EMAIL))
-                .as("L'employé devrait être présent dans la liste")
+                .as("L'employé devrait être présent dans la liste" + contextInfo())
                 .isTrue();
             
             employeId = listPage.getEmployeIdByEmail(TEST_EMAIL);
         }
         
         assertThat(employeId)
-            .as("L'ID de l'employé devrait être récupéré")
+            .as("L'ID de l'employé devrait être récupéré" + contextInfo())
             .isNotNull()
             .isNotEmpty();
         
@@ -120,7 +120,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         // Vérifier que les données complètes sont présentes
         String employeData = listPage.getEmployeDataByEmail(TEST_EMAIL);
         assertThat(employeData)
-            .as("Les données de l'employé devraient contenir toutes les informations")
+            .as("Les données de l'employé devraient contenir toutes les informations" + contextInfo())
             .contains(TEST_PRENOM, TEST_NOM, TEST_EMAIL);
         
         System.out.println("✅ Toutes les données de l'employé sont correctes");
@@ -138,7 +138,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
             listPage.waitForTableToLoad();
             employeId = listPage.getEmployeIdByEmail(TEST_EMAIL);
             assertThat(employeId)
-                .as("L'ID de l'employé doit être disponible pour la suppression")
+                .as("L'ID de l'employé doit être disponible pour la suppression" + contextInfo())
                 .isNotNull()
                 .isNotEmpty();
         }
@@ -153,18 +153,18 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         
         // Vérifier que les détails sont affichés
         assertThat(deletePage.areEmployeDetailsDisplayed())
-            .as("Les détails de l'employé devraient être affichés")
+            .as("Les détails de l'employé devraient être affichés" + contextInfo())
             .isTrue();
-        
+
         // Vérifier que les détails contiennent les bonnes informations
         assertThat(deletePage.detailsContain(TEST_PRENOM))
-            .as("Les détails devraient contenir le prénom")
+            .as("Les détails devraient contenir le prénom" + contextInfo())
             .isTrue();
         assertThat(deletePage.detailsContain(TEST_NOM))
-            .as("Les détails devraient contenir le nom")
+            .as("Les détails devraient contenir le nom" + contextInfo())
             .isTrue();
         assertThat(deletePage.detailsContain(TEST_EMAIL))
-            .as("Les détails devraient contenir l'email")
+            .as("Les détails devraient contenir l'email" + contextInfo())
             .isTrue();
         
         System.out.println("✅ Employé trouvé, lancement de la suppression...");
@@ -175,7 +175,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         
         // Vérifier le message de succès
         assertThat(deletePage.isSuccessMessageDisplayed())
-            .as("Le message de succès de suppression devrait être affiché")
+            .as("Le message de succès de suppression devrait être affiché" + contextInfo())
             .isTrue();
         
         System.out.println("✅ Employé supprimé avec succès");
@@ -208,7 +208,7 @@ public class EmployeLifecycleTest extends BaseSeleniumTest {
         
         // Vérifier que l'employé n'est plus présent
         assertThat(employeStillPresent)
-            .as("L'employé ne devrait plus être présent dans la liste")
+            .as("L'employé ne devrait plus être présent dans la liste" + contextInfo())
             .isFalse();
         
         System.out.println("✅ Employé bien supprimé de la liste");

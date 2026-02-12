@@ -124,6 +124,7 @@ spec:
         resources:
           {{- toYaml .Values.rhdemo.resources | nindent 10 }}
         securityContext:
+          runAsUser: 1000
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]

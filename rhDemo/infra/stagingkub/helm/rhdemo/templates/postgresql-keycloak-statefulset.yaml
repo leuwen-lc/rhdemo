@@ -21,7 +21,6 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
-        runAsNonRoot: true
         runAsUser: 70
         runAsGroup: 70
         fsGroup: 70
@@ -86,6 +85,7 @@ spec:
         resources:
           {{- toYaml (index .Values "postgresql-keycloak").resources | nindent 10 }}
         securityContext:
+          runAsNonRoot: true
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]

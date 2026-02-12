@@ -225,15 +225,21 @@ Point de vigilance : Keycloak est membre du groupe `root` (GID 0) pour compatibi
 Si des fichiers internes dépendent de cette appartenance au GID 0, un `drop: ALL` combiné avec
 un `supplementalGroupsPolicy: Strict` pourrait poser problème (voir section dédiée).
 
-#### rhdemo-app (Eclipse Temurin 25) — RISQUE FAIBLE
+#### rhdemo-app (Eclipse Temurin 25) — RISQUE FAIBLE (corrigé)
 
 Le Dockerfile définit `USER spring:spring` (non-root). L'utilisateur est créé via `useradd -r`
-(system user), ce qui attribue un UID dans la plage 100-999 (non prédictible). `runAsNonRoot: true`,
-`allowPrivilegeEscalation: false` et `drop: ALL` devraient fonctionner sans régression.
+(system user) sans UID explicite. Avec `runAsNonRoot: true` au niveau pod, Kubernetes ne peut pas
+vérifier que l'utilisateur `spring` (déclaré par nom, non numérique) n'est pas root, et rejette le
+container avec l'erreur `CreateContainerConfigError` :
 
-Point de vigilance : si un `runAsUser` explicite est nécessaire dans le pod spec, il faut vérifier
-le UID réel avec `docker run --rm rhdemo-api:1.1.0-SNAPSHOT id`. Idéalement, fixer le UID dans le
-Dockerfile (`useradd -r -u 1000 -g spring spring`) pour le rendre prédictible.
+> *container has runAsNonRoot and image has non-numeric user (spring), cannot verify user is non-root*
+
+**Solution appliquée** : ajout de `runAsUser: 1000` dans le `securityContext` du container
+`rhdemo-app`. Cela fournit à Kubernetes un UID numérique vérifiable, résolvant l'erreur.
+`allowPrivilegeEscalation: false` et `drop: ALL` fonctionnent sans régression.
+
+> **Recommandation** : fixer le UID dans le Dockerfile (`useradd -r -u 1000 -g spring spring`) pour
+> garantir la cohérence entre l'UID de l'image et le `runAsUser` du manifest Kubernetes.
 
 #### postgres-exporter v0.15.0 — RISQUE FAIBLE
 
@@ -440,10 +446,10 @@ L'ordre d'application le plus sûr pour éviter les régressions :
 
 | Fichier | Pod securityContext | Container securityContext | initContainer ajouté | automountServiceAccountToken |
 | --- | --- | --- | --- | --- |
-| `rhdemo-app-deployment.yaml` | `runAsNonRoot`, `seccompProfile: RuntimeDefault` | `allowPrivilegeEscalation: false`, `drop: ALL` | Non (déjà présent : wait-for-db, wait-for-keycloak en UID 65534) | `false` |
+| `rhdemo-app-deployment.yaml` | `runAsNonRoot`, `seccompProfile: RuntimeDefault` | `runAsUser: 1000`, `allowPrivilegeEscalation: false`, `drop: ALL` | Non (déjà présent : wait-for-db, wait-for-keycloak en UID 65534) | `false` |
 | `keycloak-deployment.yaml` | `runAsNonRoot`, `seccompProfile: RuntimeDefault` | `runAsUser: 1000`, `allowPrivilegeEscalation: false`, `drop: ALL` | Non (déjà présent : wait-for-db en UID 65534) | `false` |
-| `postgresql-rhdemo-statefulset.yaml` | `runAsNonRoot`, `runAsUser: 70`, `runAsGroup: 70`, `fsGroup: 70`, `seccompProfile: RuntimeDefault` | `allowPrivilegeEscalation: false`, `drop: ALL` (postgresql + postgres-exporter) | `fix-permissions` (chown 70:70) | `false` |
-| `postgresql-keycloak-statefulset.yaml` | `runAsNonRoot`, `runAsUser: 70`, `runAsGroup: 70`, `fsGroup: 70`, `seccompProfile: RuntimeDefault` | `allowPrivilegeEscalation: false`, `drop: ALL` | `fix-permissions` (chown 70:70) | `false` |
+| `postgresql-rhdemo-statefulset.yaml` | `runAsUser: 70`, `runAsGroup: 70`, `fsGroup: 70`, `seccompProfile: RuntimeDefault` | `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, `drop: ALL` (postgresql + postgres-exporter) | `fix-permissions` (chown 70:70) | `false` |
+| `postgresql-keycloak-statefulset.yaml` | `runAsUser: 70`, `runAsGroup: 70`, `fsGroup: 70`, `seccompProfile: RuntimeDefault` | `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, `drop: ALL` | `fix-permissions` (chown 70:70) | `false` |
 | `postgresql-backup-cronjob.yaml` (x2) | `seccompProfile: RuntimeDefault` | `runAsNonRoot`, `runAsUser: 70`, `runAsGroup: 70`, `allowPrivilegeEscalation: false`, `drop: ALL` | `fix-permissions` (chown 70:70 /backups) | `false` |
 
 #### Contournement PostgreSQL — gosu et UID 70
@@ -468,8 +474,15 @@ root (UID 0). Avec `runAsUser: 70`, PostgreSQL ne peut plus lire ses propres fic
 le volume de données avant le démarrage du container principal. Ce container :
 
 - Tourne en root (`runAsUser: 0`, `runAsNonRoot: false`)
-- Ne dispose que de la capability `CAP_CHOWN` (toutes les autres sont supprimées)
+- Dispose des capabilities `CAP_CHOWN`, `CAP_DAC_READ_SEARCH` et `CAP_FOWNER` (toutes les autres sont supprimées)
 - `allowPrivilegeEscalation: false` reste actif
+
+> **Note importante** : `runAsNonRoot: true` est défini au niveau **container** (et non au niveau
+> pod) pour les containers principaux. Cela évite un conflit avec l'initContainer `fix-permissions`
+> qui doit tourner en root (UID 0). Certaines versions de kubelet ou politiques d'admission
+> peuvent rejeter un pod qui déclare `runAsNonRoot: true` au niveau pod alors qu'un initContainer
+> a `runAsUser: 0`, provoquant une erreur "stream closed: EOF". Les CronJobs de backup utilisent
+> déjà cette approche (pas de `runAsNonRoot` au niveau pod).
 
 ```yaml
 initContainers:
@@ -485,8 +498,15 @@ initContainers:
     allowPrivilegeEscalation: false
     capabilities:
       drop: ["ALL"]
-      add: ["CHOWN"]
+      add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
 ```
+
+Les capabilities supplémentaires sont nécessaires pour que `chown -R` puisse traverser et modifier
+l'arborescence complète du volume :
+
+- `CHOWN` : changer le propriétaire des fichiers
+- `DAC_READ_SEARCH` : traverser les répertoires sans vérification des permissions read/execute
+- `FOWNER` : bypasser les vérifications de propriétaire sur les opérations fichier
 
 Pour les CronJobs de backup, le même pattern est appliqué sur le hostPath `/backups`.
 
@@ -494,12 +514,12 @@ Pour les CronJobs de backup, le même pattern est appliqué sur le hostPath `/ba
 
 | Workload | UID | GID | Utilisateur |
 | --- | --- | --- | --- |
-| rhdemo-app | défini dans l'image (`spring`) | défini dans l'image | `runAsNonRoot: true` sans UID explicite |
+| rhdemo-app | 1000 | 1000 | `spring` (Eclipse Temurin) — `runAsUser: 1000` explicite requis car l'image déclare l'utilisateur par nom |
 | Keycloak | 1000 | — | UID fixé dans l'image officielle |
 | PostgreSQL (x2) | 70 | 70 | `postgres` sur Alpine |
 | postgres-exporter | 70 (hérité du pod) | 70 (hérité du pod) | non-root |
 | busybox (init wait-for-*) | 65534 | — | `nobody` |
-| busybox (init fix-permissions) | 0 | — | `root` (CAP_CHOWN uniquement) |
+| busybox (init fix-permissions) | 0 | — | `root` (CAP_CHOWN, CAP_DAC_READ_SEARCH, CAP_FOWNER) |
 | Backup CronJobs (x2) | 70 | 70 | `postgres` sur Alpine |
 
 #### Validation post-déploiement

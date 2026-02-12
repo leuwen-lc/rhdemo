@@ -113,11 +113,20 @@ def generateTrivyReport(String image, String reportName) {
         # --skip-db-update : DB déjà copiée depuis le cache partagé
         # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
+        # --ignorefile : Exclut les CVE documentées comme faux positifs (voir SECURITY_ADVISORIES.md)
+        TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore"
+        IGNOREFILE_OPT=""
+        if [ -f "\${TRIVYIGNORE}" ]; then
+            IGNOREFILE_OPT="--ignorefile \${TRIVYIGNORE}"
+            echo "📋 Utilisation de .trivyignore (\$(grep -c '^CVE-' "\${TRIVYIGNORE}") CVE exclues)"
+        fi
+
         timeout 5m trivy image \\
             --skip-db-update \\
             --skip-java-db-update \\
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
+            \${IGNOREFILE_OPT} \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
             "\${IMAGE}" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
@@ -133,6 +142,7 @@ def generateTrivyReport(String image, String reportName) {
             --skip-java-db-update \\
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
+            \${IGNOREFILE_OPT} \\
             --format table \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
             "\${IMAGE}" 2>&1 || echo "⚠️  Scan table timeout ou erreur pour \${NAME}"

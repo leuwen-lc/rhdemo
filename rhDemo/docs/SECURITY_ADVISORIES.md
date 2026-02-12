@@ -134,7 +134,7 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 
 ---
 
-**Dernière mise à jour** : 2025-11-27
+**Dernière mise à jour** : 2026-02-12
 
 ---
 
@@ -194,3 +194,80 @@ Cette situation démontre l'importance du **scan continu** avec Trivy :
 - 🔄 La mise à jour vers la dernière version stable (1.29.3) devrait résoudre ces nouvelles CVE
 
 **Action de suivi** : Vérifier le prochain scan Trivy après déploiement de nginx:1.29.3-alpine
+
+---
+
+## CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass (gosu)
+
+### Détection
+- **Date de détection** : 2026-02-12
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL
+- **Composant affecté** : `usr/local/bin/gosu` dans `postgres:18-alpine`
+
+### Description
+
+CVE-2025-68121 est une vulnérabilité dans le package `crypto/tls` de la bibliothèque standard Go. Lors d'une reprise de session TLS, si les champs `ClientCAs` ou `RootCAs` de la configuration sont modifiés entre le handshake initial et la reprise, la session peut être rétablie alors qu'elle aurait dû échouer. Cela permet un contournement potentiel des restrictions de certificats.
+
+**Versions Go affectées** : Go < 1.24.13 et Go 1.25.0 à 1.25.6
+
+L'outil `gosu` (v1.19), utilisé par l'image officielle PostgreSQL pour changer d'utilisateur au démarrage du conteneur, est compilé avec **Go 1.24.6** et embarque donc le code vulnérable de `crypto/tls`.
+
+### Analyse de risque
+
+**Risque réel : NUL (faux positif fonctionnel)**
+
+`gosu` est un utilitaire de type `setuid+setgid+exec` dont le rôle unique est de changer d'utilisateur Unix puis d'exécuter une commande. Il **n'effectue aucune connexion réseau** et **n'utilise jamais** le package `crypto/tls` à l'exécution. Le code vulnérable est inclus dans le binaire Go par le compilateur mais n'est jamais appelé.
+
+Cette position est confirmée par :
+- Le mainteneur de gosu via [`govulncheck`](https://github.com/tianon/gosu/issues/144) qui vérifie que les chemins de code vulnérables ne sont pas atteignables
+- La discussion upstream [docker-library/postgres#1324](https://github.com/docker-library/postgres/issues/1324)
+
+### Images affectées
+
+| Image | Composant | Status |
+|-------|-----------|--------|
+| postgres:18-alpine | gosu 1.19 (Go 1.24.6) | ⚠️ CVE présente mais non exploitable |
+| rhdemo-api | N/A | ✅ Non affecté |
+| nginx | N/A | ✅ Non affecté |
+| keycloak | N/A | ✅ Non affecté |
+
+### Remédiation appliquée
+
+**Action** : Exclusion de la CVE dans Trivy via `.trivyignore` (risque accepté - faux positif fonctionnel)
+
+**Fichier créé** : `rhDemo/.trivyignore`
+```
+# CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
+# Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine
+# Risque réel : NUL - gosu n'effectue aucune connexion TLS
+CVE-2025-68121
+```
+
+**Fichier modifié** : `rhDemo/vars/rhDemoLib.groovy`
+- Ajout de `--ignorefile rhDemo/.trivyignore` aux commandes `trivy image` (scans JSON et table)
+
+### Condition de retrait de l'exclusion
+
+L'exclusion dans `.trivyignore` devra être **retirée** lorsque l'une de ces conditions sera remplie :
+- Nouvelle release de gosu compilée avec Go >= 1.24.13 ou >= 1.25.7
+- Mise à jour de l'image `postgres:18-alpine` intégrant un gosu corrigé
+
+### Validation
+
+```bash
+# Vérifier que Trivy ignore bien la CVE
+trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL postgres:18-alpine
+
+# Vérifier que gosu n'utilise pas crypto/tls (nécessite govulncheck)
+# govulncheck -mode binary /usr/local/bin/gosu
+```
+
+### Références
+
+- [NVD - CVE-2025-68121](https://nvd.nist.gov/vuln/detail/CVE-2025-68121)
+- [SentinelOne - CVE-2025-68121](https://www.sentinelone.com/vulnerability-database/cve-2025-68121/)
+- [docker-library/postgres#1324 - gosu CVE discussion](https://github.com/docker-library/postgres/issues/1324)
+- [gosu security policy](https://github.com/tianon/gosu/issues/144)
+- [gosu releases](https://github.com/tianon/gosu/releases) - v1.19 (Go 1.24.6)
+- [Go 1.24.13 release notes](https://go.dev/doc/devel/release) - inclut le fix crypto/tls

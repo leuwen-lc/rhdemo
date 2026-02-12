@@ -17,7 +17,7 @@ Le système utilise une architecture en 3 couches :
 ### Endpoint de pagination
 
 ```
-GET /api/employes/page?page=0&size=20&sort=nom&order=ASC
+GET /api/employes/page?page=0&size=20&sort=nom&order=ASC&filterNom=Martin
 ```
 
 **Paramètres :**
@@ -25,6 +25,10 @@ GET /api/employes/page?page=0&size=20&sort=nom&order=ASC
 - `size` : Nombre d'éléments par page, défaut : 20
 - `sort` : Nom de la colonne pour le tri (prenom, nom, mail, adresse), optionnel
 - `order` : Direction du tri (`ASC` ou `DESC`), défaut : ASC
+- `filterPrenom` : Filtre sur le prénom (recherche partielle, insensible à la casse), optionnel
+- `filterNom` : Filtre sur le nom (recherche partielle, insensible à la casse), optionnel
+- `filterMail` : Filtre sur l'email (recherche partielle, insensible à la casse), optionnel
+- `filterAdresse` : Filtre sur l'adresse (recherche partielle, insensible à la casse), optionnel
 
 ### Format de réponse (PagedModel - VIA_DTO)
 
@@ -87,13 +91,35 @@ Le système de tri permet de trier l'ensemble de la table (pas seulement la page
 GET /api/employes/page?page=0&size=20&sort=nom&order=ASC
 ```
 
+### Filtres par colonne
+
+Le système de filtrage permet de rechercher des employés sur l'ensemble de la base de données (pas seulement la page en cours) :
+
+- **Colonnes filtrables** : Prénom, Nom, Email, Adresse
+- **Filtrage côté serveur** : Exécuté via JPA Specification (`LOWER(champ) LIKE '%terme%'`)
+- **Recherche partielle** : Le terme saisi peut apparaître n'importe où dans la valeur du champ (CONTAINS)
+- **Insensible à la casse** : "martin" trouve "Martin", "MARTIN", etc.
+- **Filtres combinables** : Plusieurs filtres actifs simultanément sont combinés en AND (intersection)
+- **Déclenchement** : Touche Entrée pour valider, bouton croix (clear) pour réinitialiser un filtre
+- **Compatible avec le tri** : Les filtres fonctionnent conjointement avec le tri des colonnes
+- **Pagination cohérente** : Le total affiché reflète le nombre d'employés filtrés
+
+**Exemples de requêtes :**
+```
+GET /api/employes/page?filterNom=Martin              → Employés dont le nom contient "Martin"
+GET /api/employes/page?filterPrenom=So&filterNom=Du   → Filtres combinés (AND)
+GET /api/employes/page?filterMail=example&size=10     → Filtre + pagination
+GET /api/employes/page?filterNom=Du&sort=prenom&order=ASC → Filtre + tri
+```
+
 ### Comportement
 
 - Retour automatique à la page 1 lors d'un changement de taille de page
 - Retour automatique à la page 1 lors d'un changement de tri
+- Retour automatique à la page 1 lors d'un changement de filtre
 - Indicateur de chargement pendant les requêtes
-- Affichage du nombre total d'éléments
-- Gestion des cas limites (0 employé, 1 seul employé)
+- Affichage du nombre total d'éléments (tenant compte des filtres actifs)
+- Gestion des cas limites (0 employé, 1 seul employé, aucun résultat de filtre)
 
 ## Sécurité
 
@@ -112,7 +138,11 @@ public Page<Employe> getEmployesPage(
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
         @RequestParam(required = false) String sort,
-        @RequestParam(defaultValue = "ASC") String order) {
+        @RequestParam(defaultValue = "ASC") String order,
+        @RequestParam(required = false) String filterPrenom,
+        @RequestParam(required = false) String filterNom,
+        @RequestParam(required = false) String filterMail,
+        @RequestParam(required = false) String filterAdresse) {
 
     Pageable pageable;
     if (sort != null && !sort.isEmpty()) {
@@ -124,34 +154,75 @@ public Page<Employe> getEmployesPage(
         pageable = PageRequest.of(page, size);
     }
 
-    return employeservice.getEmployesPage(pageable);
+    Specification<Employe> spec = EmployeSpecification.withFilters(
+        filterPrenom, filterNom, filterMail, filterAdresse);
+    return employeservice.getEmployesPage(spec, pageable);
 }
 ```
 
+### Filtrage dynamique (EmployeSpecification.java)
+
+```java
+public static Specification<Employe> withFilters(
+        String prenom, String nom, String mail, String adresse) {
+    return (root, query, cb) -> {
+        List<Predicate> predicates = new ArrayList<>();
+        if (prenom != null && !prenom.isBlank()) {
+            predicates.add(cb.like(cb.lower(root.get("prenom")),
+                "%" + prenom.toLowerCase() + "%"));
+        }
+        // idem pour nom, mail, adresse...
+        return cb.and(predicates.toArray(new Predicate[0]));
+    };
+}
+```
+
+Les valeurs sont passées en paramètres JPA Criteria (pas de concaténation SQL) → **aucun risque d'injection SQL**. Les wildcards `%` sont ajoutées côté backend, le frontend envoie le terme brut.
+
 ### Frontend (EmployeList.vue)
 
-**Configuration du tableau :**
+**Configuration du tableau avec filtres :**
 ```vue
 <el-table
   :data="employes"
   @sort-change="handleSort"
 >
-  <el-table-column prop="prenom" label="Prénom" sortable="custom" />
-  <el-table-column prop="nom" label="Nom" sortable="custom" />
-  <el-table-column prop="mail" label="Email" sortable="custom" />
-  <el-table-column prop="adresse" label="Adresse" sortable="custom" />
+  <el-table-column prop="prenom" sortable="custom">
+    <template #header>
+      <div>Prénom</div>
+      <el-input
+        v-model="filterPrenom"
+        size="small"
+        clearable
+        placeholder="Filtrer..."
+        data-testid="filter-prenom"
+        @keyup.enter="applyFilters"
+        @clear="applyFilters"
+        @click.stop
+      />
+    </template>
+  </el-table-column>
+  <!-- idem pour nom, mail, adresse -->
 </el-table>
 ```
 
-**Gestion du tri :**
+**Gestion du tri et des filtres :**
 ```javascript
 data() {
   return {
     sortField: null,
-    sortOrder: 'ASC'
+    sortOrder: 'ASC',
+    filterPrenom: '',
+    filterNom: '',
+    filterMail: '',
+    filterAdresse: ''
   };
 },
 methods: {
+  applyFilters() {
+    this.currentPage = 1;
+    this.fetchEmployes();
+  },
   handleSort({ prop, order }) {
     if (order) {
       this.sortField = prop;
@@ -169,21 +240,36 @@ methods: {
 ### API Service (api.js)
 
 ```javascript
-export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC') {
+export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC', filters = {}) {
   const params = { page, size };
   if (sort) {
     params.sort = sort;
     params.order = order;
   }
+  if (filters.prenom) params.filterPrenom = filters.prenom;
+  if (filters.nom) params.filterNom = filters.nom;
+  if (filters.mail) params.filterMail = filters.mail;
+  if (filters.adresse) params.filterAdresse = filters.adresse;
   return api.get('/employes/page', { params });
 }
 ```
 
-## Évolutions futures
+## Choix techniques
 
-### Filtres de recherche
+### Pourquoi JpaSpecificationExecutor ?
 
-Implémentation future de filtres combinés avec la pagination pour rechercher des employés par nom, prénom ou email.
+- **Standard Spring Data JPA** pour le filtrage dynamique avec pagination
+- S'intègre nativement avec `Pageable` (pagination + tri préservés)
+- Gère naturellement les combinaisons de filtres optionnels (0 à 4 filtres actifs)
+- Les paramètres sont injectés via l'API Criteria de JPA → **aucun risque d'injection SQL**
+- Aucune dépendance Maven supplémentaire (déjà inclus dans `spring-boot-starter-data-jpa`)
+
+### Pourquoi déclenchement sur Entrée (et pas debounce sur saisie) ?
+
+- Plus prévisible pour l'utilisateur : la requête part quand il valide
+- Moins de requêtes serveur inutiles (pas de requête à chaque frappe)
+- Cohérent avec le pattern Element Plus des filtres de tableau
+- Le bouton `clearable` de l'`el-input` déclenche aussi la recherche (via `@clear`) pour réinitialiser le filtre
 
 ## Bonnes pratiques
 
@@ -219,25 +305,29 @@ Implémentation future de filtres combinés avec la pagination pour rechercher d
 - ✅ Suppression des warnings dans les logs
 - ✅ Meilleure séparation entre contenu et métadonnées
 
-### Fichiers impactés
+### Fichiers impactés (pagination, tri, filtres)
 
 - **Backend** :
   - `RhdemoApplication.java` - Annotation `@EnableSpringDataWebSupport`
-  - `EmployeController.java` - Paramètres `sort` et `order`
+  - `EmployeController.java` - Paramètres `sort`, `order` et filtres
+  - `EmployeService.java` - Surcharge `getEmployesPage(Specification, Pageable)`
+  - `EmployeRepository.java` - Extension `JpaSpecificationExecutor<Employe>`
+  - `EmployeSpecification.java` - Construction dynamique des filtres JPA
 - **Frontend** :
-  - `EmployeList.vue` - Accès aux métadonnées de pagination et gestion du tri
-  - `api.js` - Paramètres de tri dans `getEmployesPage()`
+  - `EmployeList.vue` - Pagination, tri et filtres par colonne
+  - `api.js` - Paramètres de tri et filtres dans `getEmployesPage()`
 - **Tests** :
-  - `EmployeControllerIT.java` - Assertions JSON mises à jour + tests de tri
+  - `EmployeControllerIT.java` - Tests pagination, tri et filtres
+  - `EmployeServiceTest.java` - Test unitaire `getEmployesPage(Specification, Pageable)`
 
 ## Dépendances techniques
 
 ### Backend
-- Spring Data JPA (inclus dans `spring-boot-starter-data-jpa`)
+- Spring Data JPA (inclus dans `spring-boot-starter-data-jpa`) — fournit `Pageable`, `Page`, `JpaSpecificationExecutor`, `Specification`
 - Spring Data Web Support pour PagedModel
 
 ### Frontend
-- Element Plus (composant `el-pagination`)
+- Element Plus (composants `el-pagination`, `el-table`, `el-input`)
 - Axios pour les requêtes HTTP
 
 ## Références
@@ -248,6 +338,31 @@ Implémentation future de filtres combinés avec la pagination pour rechercher d
 - [REST API Best Practices - Pagination](https://www.moesif.com/blog/technical/api-design/REST-API-Design-Filtering-Sorting-and-Pagination/)
 
 ## Historique des modifications
+
+### Version 3.0.0 - Filtres par colonne côté serveur (12 février 2026)
+
+**Ajout :** Filtres de recherche par colonne sur Prénom, Nom, Email, Adresse
+
+**Nouveautés :**
+- Filtrage côté serveur via JPA `Specification` et Criteria API (`LIKE '%terme%'` insensible à la casse)
+- Champs de saisie `el-input` dans l'entête de chaque colonne filtrable
+- Déclenchement sur touche Entrée et sur bouton clear
+- Filtres combinables en AND (intersection des critères)
+- Compatible avec la pagination et le tri existants (rétrocompatibilité totale)
+- Attributs `data-testid` pour les tests Selenium : `filter-prenom`, `filter-nom`, `filter-mail`, `filter-adresse`
+- Sécurité : paramètres injectés via JPA Criteria (pas d'injection SQL)
+
+**Fichiers créés :**
+- `EmployeSpecification.java` : Construction dynamique des `Specification<Employe>`
+
+**Fichiers modifiés :**
+- `EmployeRepository.java` : Ajout de `JpaSpecificationExecutor<Employe>`
+- `EmployeService.java` : Surcharge `getEmployesPage(Specification, Pageable)`
+- `EmployeController.java` : 4 nouveaux `@RequestParam` optionnels (filtres)
+- `api.js` : Paramètre `filters` dans `getEmployesPage()`
+- `EmployeList.vue` : Champs de filtre dans les entêtes de colonnes
+- `EmployeControllerIT.java` : 9 nouveaux tests d'intégration (filtres)
+- `EmployeServiceTest.java` : 1 nouveau test unitaire (filtrage avec Specification)
 
 ### Version 2.1.0 - Tri côté serveur (8 décembre 2025)
 
@@ -274,5 +389,5 @@ Implémentation future de filtres combinés avec la pagination pour rechercher d
 
 ---
 
-**Dernière mise à jour** : 8 décembre 2025
-**Version** : 2.1.0 (Tri côté serveur)
+**Dernière mise à jour** : 12 février 2026
+**Version** : 3.0.0 (Filtres par colonne côté serveur)

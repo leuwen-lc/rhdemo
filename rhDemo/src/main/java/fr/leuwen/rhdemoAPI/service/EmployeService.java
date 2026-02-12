@@ -2,6 +2,7 @@ package fr.leuwen.rhdemoAPI.service;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import fr.leuwen.rhdemoAPI.exception.EmployeNotFoundException;
@@ -29,6 +30,10 @@ public class EmployeService {
 
     public Page<Employe> getEmployesPage(Pageable pageable) {
         return employerepository.findAll(pageable);
+    }
+
+    public Page<Employe> getEmployesPage(Specification<Employe> spec, Pageable pageable) {
+        return employerepository.findAll(spec, pageable);
     }
 
     public void deleteEmploye(final Long id) {

@@ -54,10 +54,66 @@
             @sort-change="handleSort"
           >
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="prenom" label="Prénom" sortable="custom" />
-            <el-table-column prop="nom" label="Nom" sortable="custom" />
-            <el-table-column prop="mail" label="Email" sortable="custom" />
-            <el-table-column prop="adresse" label="Adresse" sortable="custom" />
+            <el-table-column prop="prenom" sortable="custom">
+              <template #header>
+                <div>Prénom</div>
+                <el-input
+                  v-model="filterPrenom"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-prenom"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="nom" sortable="custom">
+              <template #header>
+                <div>Nom</div>
+                <el-input
+                  v-model="filterNom"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-nom"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="mail" sortable="custom">
+              <template #header>
+                <div>Email</div>
+                <el-input
+                  v-model="filterMail"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-mail"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="adresse" sortable="custom">
+              <template #header>
+                <div>Adresse</div>
+                <el-input
+                  v-model="filterAdresse"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-adresse"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="Actions" width="300">
               <template #default="scope">
                 <el-space>
@@ -153,7 +209,11 @@ export default {
       pageSize: 20,
       totalElements: 0,
       sortField: null,
-      sortOrder: 'ASC'
+      sortOrder: 'ASC',
+      filterPrenom: '',
+      filterNom: '',
+      filterMail: '',
+      filterAdresse: ''
     };
   },
   methods: {
@@ -165,7 +225,13 @@ export default {
           this.currentPage - 1,
           this.pageSize,
           this.sortField,
-          this.sortOrder
+          this.sortOrder,
+          {
+            prenom: this.filterPrenom,
+            nom: this.filterNom,
+            mail: this.filterMail,
+            adresse: this.filterAdresse
+          }
         );
         this.employes = res.data.content;
         // Structure PagedModel (VIA_DTO) : les métadonnées sont dans res.data.page
@@ -193,6 +259,10 @@ export default {
     },
     handleSizeChange(size) {
       this.pageSize = size;
+      this.currentPage = 1;
+      this.fetchEmployes();
+    },
+    applyFilters() {
       this.currentPage = 1;
       this.fetchEmployes();
     },

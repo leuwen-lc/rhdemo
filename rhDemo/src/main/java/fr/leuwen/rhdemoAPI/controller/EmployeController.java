@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import fr.leuwen.rhdemoAPI.model.Employe;
+import fr.leuwen.rhdemoAPI.repository.EmployeSpecification;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
 import jakarta.validation.Valid;
 
@@ -38,12 +40,16 @@ public class EmployeController {
 	}
 	
 	/**
-	 * Récupère une page d'employés avec pagination et tri optionnel.
+	 * Récupère une page d'employés avec pagination, tri optionnel et filtres optionnels.
 	 *
 	 * @param page Numéro de la page à récupérer (commence à 0). Par défaut : 0 (première page)
 	 * @param size Nombre d'éléments par page. Par défaut : 20.
 	 * @param sort Nom de la colonne pour le tri (prenom, nom, mail, adresse). Optionnel.
 	 * @param order Direction du tri : ASC (ascendant) ou DESC (descendant). Par défaut : ASC.
+	 * @param filterPrenom Filtre sur le prénom (recherche partielle insensible à la casse). Optionnel.
+	 * @param filterNom Filtre sur le nom (recherche partielle insensible à la casse). Optionnel.
+	 * @param filterMail Filtre sur l'email (recherche partielle insensible à la casse). Optionnel.
+	 * @param filterAdresse Filtre sur l'adresse (recherche partielle insensible à la casse). Optionnel.
 	 * @return Page<Employe> Objet contenant la liste des employés de la page demandée ainsi que
 	 *         les métadonnées de pagination (totalElements, totalPages, etc.)
 	 *
@@ -53,6 +59,8 @@ public class EmployeController {
 	 * - GET /api/employes/page?page=2&size=50            → Troisième page avec 50 éléments, sans tri
 	 * - GET /api/employes/page?sort=nom&order=ASC        → Première page triée par nom ascendant
 	 * - GET /api/employes/page?sort=prenom&order=DESC    → Première page triée par prénom descendant
+	 * - GET /api/employes/page?filterNom=Martin          → Employés dont le nom contient "Martin"
+	 * - GET /api/employes/page?filterPrenom=So&filterNom=Du → Filtres combinés (AND)
 	 */
 	@GetMapping("/api/employes/page")
 	@PreAuthorize("hasRole('consult')")
@@ -60,7 +68,11 @@ public class EmployeController {
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size,
 			@RequestParam(required = false) String sort,
-			@RequestParam(defaultValue = "ASC") String order) {
+			@RequestParam(defaultValue = "ASC") String order,
+			@RequestParam(required = false) String filterPrenom,
+			@RequestParam(required = false) String filterNom,
+			@RequestParam(required = false) String filterMail,
+			@RequestParam(required = false) String filterAdresse) {
 
 		Pageable pageable;
 		if (sort != null && !sort.isEmpty()) {
@@ -70,7 +82,8 @@ public class EmployeController {
 			pageable = PageRequest.of(page, size);
 		}
 
-		return employeservice.getEmployesPage(pageable);
+		Specification<Employe> spec = EmployeSpecification.withFilters(filterPrenom, filterNom, filterMail, filterAdresse);
+		return employeservice.getEmployesPage(spec, pageable);
 	}
 	
 	@GetMapping("/api/employe")

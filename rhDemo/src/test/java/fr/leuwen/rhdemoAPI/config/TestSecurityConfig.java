@@ -35,7 +35,7 @@ public class TestSecurityConfig {
             .csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .csrfTokenRequestHandler(new TestSpaCsrfTokenRequestHandler())
-                .ignoringRequestMatchers("/who", "/error*", "/api-docs", "/actuator/**")
+                .ignoringRequestMatchers("/error*", "/api-docs", "/actuator/**")
             )
             // Configure les headers de sécurité (comme en production)
             .headers(headers -> headers
@@ -45,7 +45,7 @@ public class TestSecurityConfig {
                 )
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/who", "/error*", "/logout", "/api-docs").permitAll()
+                .requestMatchers("/error*", "/logout", "/api-docs").permitAll()
                 .requestMatchers("/front").hasAnyRole("consult", "MAJ")
                 .requestMatchers("/actuator/**").hasRole("admin")
                 .anyRequest().authenticated()

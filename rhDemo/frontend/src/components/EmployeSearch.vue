@@ -59,13 +59,20 @@
                 >
                   Voir les détails
                 </el-button>
-                <el-button 
-                  type="warning" 
-                  :icon="Edit"
-                  @click="$router.push(`/front/edition/${employe.id}`)"
+                <el-tooltip
+                  :disabled="canEdit"
+                  content="Droits insuffisants"
+                  placement="top"
                 >
-                  Modifier
-                </el-button>
+                  <el-button
+                    type="warning"
+                    :icon="Edit"
+                    :disabled="!canEdit"
+                    @click="$router.push(`/front/edition/${employe.id}`)"
+                  >
+                    Modifier
+                  </el-button>
+                </el-tooltip>
               </el-space>
             </div>
           </el-card>
@@ -88,6 +95,7 @@
 <script>
 import { getEmploye } from '../services/api';
 import { View, Edit, ArrowLeft } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   name: 'EmployeSearch',
@@ -95,6 +103,11 @@ export default {
     View,
     Edit,
     ArrowLeft
+  },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
   },
   data() {
     return {

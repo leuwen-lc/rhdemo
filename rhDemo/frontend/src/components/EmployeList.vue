@@ -15,14 +15,21 @@
               >
                 Retour au menu
               </el-button>
-              <el-button 
-                type="primary" 
-                :icon="Plus" 
-                @click="$router.push('/front/ajout')"
-                data-testid="add-employe-button"
+              <el-tooltip
+                :disabled="canEdit"
+                content="Droits insuffisants"
+                placement="top"
               >
-                Ajouter un employé
-              </el-button>
+                <el-button
+                  type="primary"
+                  :icon="Plus"
+                  :disabled="!canEdit"
+                  @click="$router.push('/front/ajout')"
+                  data-testid="add-employe-button"
+                >
+                  Ajouter un employé
+                </el-button>
+              </el-tooltip>
               <el-button 
                 type="info" 
                 :icon="Refresh" 
@@ -126,30 +133,44 @@
                   >
                     Voir
                   </el-button>
-                  <el-button 
-                    size="small" 
-                    type="warning" 
-                    :icon="Edit"
-                    @click="edit(scope.row.id)"
-                    :data-testid="`edit-button-${scope.row.id}`"
+                  <el-tooltip
+                    :disabled="canEdit"
+                    content="Droits insuffisants"
+                    placement="top"
                   >
-                    Editer
-                  </el-button>
-                  <el-popconfirm
-                    title="Êtes-vous sûr de vouloir supprimer cet employé ?"
-                    @confirm="del(scope.row.id)"
+                    <el-button
+                      size="small"
+                      type="warning"
+                      :icon="Edit"
+                      :disabled="!canEdit"
+                      @click="edit(scope.row.id)"
+                      :data-testid="`edit-button-${scope.row.id}`"
+                    >
+                      Editer
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip
+                    :disabled="canEdit"
+                    content="Droits insuffisants"
+                    placement="top"
                   >
-                    <template #reference>
-                      <el-button 
-                        size="small" 
-                        type="danger" 
-                        :icon="Delete"
-                        :data-testid="`delete-button-${scope.row.id}`"
-                      >
-                        Supprimer
-                      </el-button>
-                    </template>
-                  </el-popconfirm>
+                    <el-popconfirm
+                      title="Êtes-vous sûr de vouloir supprimer cet employé ?"
+                      @confirm="del(scope.row.id)"
+                    >
+                      <template #reference>
+                        <el-button
+                          size="small"
+                          type="danger"
+                          :icon="Delete"
+                          :disabled="!canEdit"
+                          :data-testid="`delete-button-${scope.row.id}`"
+                        >
+                          Supprimer
+                        </el-button>
+                      </template>
+                    </el-popconfirm>
+                  </el-tooltip>
                 </el-space>
               </template>
             </el-table-column>
@@ -174,9 +195,10 @@
             v-else-if="!loading && !error"
             description="Aucun employé trouvé"
           >
-            <el-button 
-              type="primary" 
+            <el-button
+              type="primary"
               :icon="Plus"
+              :disabled="!canEdit"
               @click="$router.push('/front/ajout')"
             >
               Ajouter le premier employé
@@ -190,6 +212,7 @@
 <script>
 import { getEmployesPage, deleteEmploye } from '../services/api';
 import { Plus, Refresh, View, Edit, Delete, HomeFilled } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   components: {
@@ -199,6 +222,11 @@ export default {
     Edit,
     Delete,
     HomeFilled
+  },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
   },
   data() {
     return {

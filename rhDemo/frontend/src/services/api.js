@@ -83,3 +83,7 @@ export function testSaveEmploye(employe) {
 export function deleteEmploye(id) {
   return api.delete('/employe', { params: { id } });
 }
+
+export function getUserInfo() {
+  return api.get('/userinfo');
+}

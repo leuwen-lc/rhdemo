@@ -57,14 +57,21 @@
                 <el-row justify="center">
                   <el-col :span="24" style="text-align: center;">
                     <el-space>
-                      <el-button 
-                        type="primary" 
-                        :loading="saving"
-                        @click="submit"
-                        data-testid="employe-submit-button"
+                      <el-tooltip
+                        :disabled="canEdit"
+                        content="Droits insuffisants"
+                        placement="top"
                       >
-                        {{ saving ? 'Sauvegarde...' : (isEditing ? 'Modifier' : 'Ajouter') }}
-                      </el-button>
+                        <el-button
+                          type="primary"
+                          :loading="saving"
+                          :disabled="!canEdit"
+                          @click="submit"
+                          data-testid="employe-submit-button"
+                        >
+                          {{ saving ? 'Sauvegarde...' : (isEditing ? 'Modifier' : 'Ajouter') }}
+                        </el-button>
+                      </el-tooltip>
                       <el-button 
                         @click="cancel"
                         data-testid="employe-cancel-button"
@@ -102,6 +109,7 @@
 </template>
 <script>
 import { getEmploye, saveEmploye } from '../services/api';
+import { hasRole } from '../stores/userStore';
 
 export default {
   name: 'EmployeForm',
@@ -136,6 +144,9 @@ export default {
   computed: {
     isEditing() {
       return !!this.$route.params.id;
+    },
+    canEdit() {
+      return hasRole('MAJ');
     }
   },
   async created() {

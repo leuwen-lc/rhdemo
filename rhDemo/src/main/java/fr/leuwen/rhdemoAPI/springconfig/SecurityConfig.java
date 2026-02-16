@@ -159,7 +159,7 @@ public class SecurityConfig {
 	    .csrfTokenRepository(createCsrfTokenRepository()) //NOSONAR - Ce cookie doit être lu par le js pour qu'il puisse renvoyer le token attendu par le serveur
 	    .csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler())
 	    // Ignorer CSRF pour les endpoints publics et actuator
-	    .ignoringRequestMatchers("/who", "/error*", "/api-docs", "/actuator/**") //NOSONAR - désactivation CSRF pour pages spécifiques peu sensibles ou modules annexes prets à l'emploi
+	    .ignoringRequestMatchers("/error*", "/api-docs", "/actuator/**") //NOSONAR - désactivation CSRF pour pages spécifiques peu sensibles ou modules annexes prets à l'emploi
 	)
 	// Configuration des headers de sécurité
 	.headers(headers -> headers
@@ -173,7 +173,7 @@ public class SecurityConfig {
 	    )
 	)
 	.authorizeHttpRequests(auth -> ( auth
-            .requestMatchers("/who","/error*","/logout","/api-docs").permitAll()
+            .requestMatchers("/error*","/logout","/api-docs").permitAll()
             // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
                     .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
             // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)

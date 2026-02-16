@@ -28,13 +28,20 @@
             
             <div style="margin-top: 20px; text-align: center;">
               <el-space>
-                <el-button 
-                  type="warning" 
-                  :icon="Edit"
-                  @click="$router.push(`/front/edition/${employe.id}`)"
+                <el-tooltip
+                  :disabled="canEdit"
+                  content="Droits insuffisants"
+                  placement="top"
                 >
-                  Modifier
-                </el-button>
+                  <el-button
+                    type="warning"
+                    :icon="Edit"
+                    :disabled="!canEdit"
+                    @click="$router.push(`/front/edition/${employe.id}`)"
+                  >
+                    Modifier
+                  </el-button>
+                </el-tooltip>
                 <el-button 
                   type="success" 
                   :icon="ArrowLeft"
@@ -53,11 +60,17 @@
 <script>
 import { getEmploye } from '../services/api';
 import { Edit, ArrowLeft } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   components: {
     Edit,
     ArrowLeft
+  },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
   },
   data() {
     return {

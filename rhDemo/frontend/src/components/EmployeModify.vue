@@ -60,13 +60,20 @@
             
             <div style="margin-top: 20px; text-align: center;">
               <el-space>
-                <el-button 
-                  type="primary" 
-                  :icon="Edit"
-                  @click="$router.push(`/front/edition/${employe.id}`)"
+                <el-tooltip
+                  :disabled="canEdit"
+                  content="Droits insuffisants"
+                  placement="top"
                 >
-                  Modifier cet employé
-                </el-button>
+                  <el-button
+                    type="primary"
+                    :icon="Edit"
+                    :disabled="!canEdit"
+                    @click="$router.push(`/front/edition/${employe.id}`)"
+                  >
+                    Modifier cet employé
+                  </el-button>
+                </el-tooltip>
                 <el-button 
                   type="info" 
                   :icon="View"
@@ -105,6 +112,7 @@
 <script>
 import { getEmploye } from '../services/api';
 import { Edit, View, ArrowLeft, List } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   name: 'EmployeModify',
@@ -113,6 +121,11 @@ export default {
     View,
     ArrowLeft,
     List
+  },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
   },
   data() {
     return {

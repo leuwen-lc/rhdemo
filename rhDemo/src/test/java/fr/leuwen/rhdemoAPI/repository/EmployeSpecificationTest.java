@@ -3,9 +3,13 @@ package fr.leuwen.rhdemoAPI.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.data.jpa.domain.Specification;
@@ -81,75 +85,34 @@ class EmployeSpecificationTest {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests avec un seul filtre actif
+    // Tests avec filtre unique, recherche partielle et insensible à la casse
     // ════════════════════════════════════════════════════════════════
 
-    @Test
-    void withFilters_ByPrenom_ShouldReturnMatchingEmployes() {
-        Specification<Employe> spec = EmployeSpecification.withFilters("Laurent", null, null, null);
-
-        List<Employe> result = employeRepository.findAll(spec);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getPrenom()).isEqualTo("Laurent");
+    static Stream<Arguments> singleFilterTestCases() {
+        return Stream.of(
+            Arguments.of("Par prénom", "Laurent", null, null, null, "Laurent", "Martin"),
+            Arguments.of("Par nom", null, "Martin", null, null, "Laurent", "Martin"),
+            Arguments.of("Par mail", null, null, "sophie", null, "Sophie", "Dubois"),
+            Arguments.of("Par adresse", null, null, null, "Paris", "Laurent", "Martin"),
+            Arguments.of("Insensible à la casse", "LAURENT", null, null, null, "Laurent", "Martin"),
+            Arguments.of("Recherche partielle", null, "ub", null, null, "Sophie", "Dubois")
+        );
     }
 
-    @Test
-    void withFilters_ByNom_ShouldReturnMatchingEmployes() {
-        Specification<Employe> spec = EmployeSpecification.withFilters(null, "Martin", null, null);
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("singleFilterTestCases")
+    void withFilters_SingleFilter_ShouldReturnMatchingEmploye(
+            String scenario, String prenom, String nom, String mail, String adresse,
+            String expectedPrenom, String expectedNom) {
+        Specification<Employe> spec = EmployeSpecification.withFilters(prenom, nom, mail, adresse);
 
         List<Employe> result = employeRepository.findAll(spec);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getNom()).isEqualTo("Martin");
-    }
-
-    @Test
-    void withFilters_ByMail_ShouldReturnMatchingEmployes() {
-        Specification<Employe> spec = EmployeSpecification.withFilters(null, null, "sophie", null);
-
-        List<Employe> result = employeRepository.findAll(spec);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getMail()).isEqualTo("sophie.dubois@example.com");
-    }
-
-    @Test
-    void withFilters_ByAdresse_ShouldReturnMatchingEmployes() {
-        Specification<Employe> spec = EmployeSpecification.withFilters(null, null, null, "Paris");
-
-        List<Employe> result = employeRepository.findAll(spec);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getAdresse()).contains("Paris");
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // Tests de recherche insensible à la casse
-    // ════════════════════════════════════════════════════════════════
-
-    @Test
-    void withFilters_CaseInsensitive_ShouldMatch() {
-        Specification<Employe> spec = EmployeSpecification.withFilters("LAURENT", null, null, null);
-
-        List<Employe> result = employeRepository.findAll(spec);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getPrenom()).isEqualTo("Laurent");
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // Tests de recherche partielle
-    // ════════════════════════════════════════════════════════════════
-
-    @Test
-    void withFilters_PartialMatch_ShouldReturnMatchingEmployes() {
-        Specification<Employe> spec = EmployeSpecification.withFilters(null, "ub", null, null);
-
-        List<Employe> result = employeRepository.findAll(spec);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getNom()).isEqualTo("Dubois");
+        assertThat(result)
+            .as("Scénario: %s", scenario)
+            .hasSize(1);
+        assertThat(result.get(0).getPrenom()).isEqualTo(expectedPrenom);
+        assertThat(result.get(0).getNom()).isEqualTo(expectedNom);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -209,6 +172,7 @@ class EmployeSpecificationTest {
         List<Employe> result = employeRepository.findAll(spec);
 
         assertThat(result).hasSize(1);
+        assertThat(result.get(0).getPrenom()).isEqualTo("Pierre");
         assertThat(result.get(0).getNom()).isEqualTo("Bernard");
     }
 }

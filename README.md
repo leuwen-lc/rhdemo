@@ -66,6 +66,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
    Pattern Backend For Front-end (BFF) :
   - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
   - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
+- Le Back-end fait à la fois BFF et traite directement les différents appels d'API. On pourrait imaginer une évolution avec une délagation du traitement des API à d'autres Back-end partagés au niveau SI. Pour accéder à ces back-end on pourrait se baser sur l'access token JWT signé de keycloak.
 - Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
 - Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
 - Deux chaines CI/CD séparées :
@@ -97,7 +98,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Par contre par nature ce projet n'est pas pret pour la production.
   - Il faut bien sur faire le travail spécifique de conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
   - Mais il reste aussi un travail de configuration sur certains composants applicatifs en cible production :
-    - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) qui serait fait probablement dans le cadre d'un projet IAM séparé.
+    - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) qui serait fait probablement dans le cadre d'un projet IAM séparé. Il faudrait aussi réserver l'accès à l'interface d'admin via un réseau dédié.
     - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins avec ajout d'une instance dédiee production.
     - permettre la mise en place les mécanismes de scalabilité (Redis, etc...)
   -  Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :

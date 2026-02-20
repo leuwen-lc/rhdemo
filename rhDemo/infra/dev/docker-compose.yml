@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo (dev local)
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db-dev:
-    image: postgres:18-alpine
+    image: postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599
     container_name: rhdemo-dev-db
     restart: unless-stopped
     ports:
@@ -32,7 +32,7 @@ services:
   # Keycloak - Serveur d'authentification (dev local avec H2)
   # ═══════════════════════════════════════════════════════════════
   keycloak-dev:
-    image: quay.io/keycloak/keycloak:26.5.0
+    image: quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f
     container_name: keycloak-dev
     restart: unless-stopped
     ports:

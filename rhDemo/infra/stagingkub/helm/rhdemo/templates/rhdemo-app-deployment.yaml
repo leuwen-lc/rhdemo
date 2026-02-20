@@ -25,7 +25,7 @@ spec:
           type: RuntimeDefault
       initContainers:
       - name: wait-for-db
-        image: busybox:1.36
+        image: {{ .Values.global.images.busybox }}
         command: ['sh', '-c', 'until nc -z {{ .Values.rhdemo.database.host }} {{ .Values.rhdemo.database.port }}; do echo waiting for postgresql-rhdemo; sleep 2; done;']
         securityContext:
           runAsNonRoot: true
@@ -34,7 +34,7 @@ spec:
           capabilities:
             drop: ["ALL"]
       - name: wait-for-keycloak
-        image: busybox:1.36
+        image: {{ .Values.global.images.busybox }}
         command: ['sh', '-c', 'until nc -z keycloak {{ .Values.keycloak.service.port }}; do echo waiting for keycloak; sleep 2; done;']
         securityContext:
           runAsNonRoot: true

@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db:
-    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599}
     container_name: rhdemo-ephemere-db
     restart: unless-stopped
     environment:
@@ -28,7 +28,7 @@ services:
   # Base de données PostgreSQL pour Keycloak
   # ═══════════════════════════════════════════════════════════════
   keycloak-db:
-    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
+    image: ${POSTGRES_IMAGE:-postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599}
     container_name: keycloak-ephemere-db
     restart: unless-stopped
     environment:
@@ -51,7 +51,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.5.0}
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f}
     container_name: keycloak-ephemere
     restart: unless-stopped
     command:
@@ -148,7 +148,7 @@ services:
   # Nginx - Reverse Proxy avec HTTPS
   # ═══════════════════════════════════════════════════════════════
   nginx:
-    image: ${NGINX_IMAGE:-nginx:1.29.4-alpine}
+    image: ${NGINX_IMAGE:-nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47}
     container_name: rhdemo-ephemere-nginx
     restart: unless-stopped
     ports:

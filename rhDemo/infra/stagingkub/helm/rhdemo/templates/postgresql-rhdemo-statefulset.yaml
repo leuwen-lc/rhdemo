@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       initContainers:
       - name: fix-permissions
-        image: busybox:1.36
+        image: {{ .Values.global.images.busybox }}
         command: ['sh', '-c', 'chown -R 70:70 /var/lib/postgresql']
         volumeMounts:
         - name: postgresql-data
@@ -42,8 +42,8 @@ spec:
             add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
       containers:
       - name: postgresql
-        image: "{{ (index .Values "postgresql-rhdemo").image.repository }}:{{ (index .Values "postgresql-rhdemo").image.tag }}"
-        imagePullPolicy: {{ (index .Values "postgresql-rhdemo").image.pullPolicy }}
+        image: {{ .Values.global.images.postgres }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
         - name: postgresql
           containerPort: {{ (index .Values "postgresql-rhdemo").service.port }}
@@ -106,8 +106,8 @@ spec:
       # Sidecar postgres_exporter pour métriques Prometheus
       # Utilise uniquement les collecteurs intégrés (pas de extend-query-path déprécié)
       - name: postgres-exporter
-        image: "{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.repository }}:{{ (index .Values "postgresql-rhdemo").metrics.exporter.image.tag }}"
-        imagePullPolicy: {{ (index .Values "postgresql-rhdemo").metrics.exporter.image.pullPolicy | default "IfNotPresent" }}
+        image: {{ .Values.global.images.postgresExporter }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         args:
         # Activer les collecteurs désactivés par défaut mais utiles pour notre monitoring
         - "--collector.stat_statements"

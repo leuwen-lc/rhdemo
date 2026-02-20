@@ -27,7 +27,7 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: fix-permissions
-            image: busybox:1.36
+            image: {{ .Values.global.images.busybox }}
             command: ['sh', '-c', 'chown -R 70:70 /backups']
             volumeMounts:
             - name: backup-storage
@@ -41,7 +41,7 @@ spec:
                 add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
-            image: postgres:16-alpine
+            image: {{ .Values.global.images.postgres }}
             securityContext:
               runAsNonRoot: true
               runAsUser: 70
@@ -154,7 +154,7 @@ spec:
           restartPolicy: OnFailure
           initContainers:
           - name: fix-permissions
-            image: busybox:1.36
+            image: {{ .Values.global.images.busybox }}
             command: ['sh', '-c', 'chown -R 70:70 /backups']
             volumeMounts:
             - name: backup-storage
@@ -168,7 +168,7 @@ spec:
                 add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
-            image: postgres:16-alpine
+            image: {{ .Values.global.images.postgres }}
             securityContext:
               runAsNonRoot: true
               runAsUser: 70

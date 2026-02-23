@@ -28,7 +28,7 @@
 
 ---
 
-## ALERTE : Aucun `securityContext` n'est configuré
+## ALERTE : Aucun `securityContext` n' était configuré 
 
 Après vérification de **tous les manifests**, **aucun** deployment, statefulset ou cronjob ne définit de `securityContext`. Cela signifie :
 
@@ -55,7 +55,7 @@ Après vérification de **tous les manifests**, **aucun** deployment, statefulse
 
 ## Améliorations de sécurité pour se rapprocher de la production
 
-### 1. Ajouter les `securityContext` sur tous les workloads (CRITIQUE)
+### 1. Ajouter les `securityContext` sur tous les workloads (CRITIQUE) (FAIT)
 
 Le minimum requis pour chaque container :
 
@@ -78,7 +78,7 @@ spec:
     fsGroup: 1000
 ```
 
-### 2. Activer Pod Security Admission (CRITIQUE)
+### 2. Activer Pod Security Admission (CRITIQUE) (FAIT en warn/audit pas en enforce)
 
 Appliquer le label sur le namespace pour enforcer le profil `restricted` :
 
@@ -90,11 +90,11 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
 ```
 
-### 3. Keycloak en mode production (IMPORTANT)
+### 3. Keycloak en mode production (IMPORTANT) 
 
 Actuellement en `start-dev` (`keycloak-deployment.yaml:30`), qui désactive des protections de sécurité. Pour un staging représentatif, utiliser `start` avec un build optimisé.
 
-### 4. Ajouter `readOnlyRootFilesystem: true` (RECOMMANDE)
+### 4. Ajouter `readOnlyRootFilesystem: true` (RECOMMANDE) 
 
 Empêche les containers d'écrire sur le filesystem racine, limitant l'impact d'une compromission. Nécessite des `emptyDir` pour les répertoires temp.
 
@@ -143,7 +143,7 @@ Le cluster tourne déjà en **v1.35.0**. Voici les fonctionnalités de sécurit�
 | **Pod Certificates** (beta) | Utilisable | Provisionnement X.509 simplifié pour les workloads |
 | **Cgroup v2** obligatoire | Breaking change | Vérifier que la machine hôte est bien en cgroup v2 |
 
-### Recommandation immédiate pour K8s 1.35
+### Recommandation pour K8s 1.35
 
 Activer les **User Namespaces** pour que même sans `securityContext` parfait, un container root soit isolé de l'hôte :
 
@@ -366,7 +366,7 @@ securityContext:
   readOnlyRootFilesystem: true
 volumeMounts:
   - name: data
-    mountPath: /var/lib/postgresql
+    mountPath: /var/lib/postgresql 
   - name: run
     mountPath: /run/postgresql
   - name: tmp
@@ -421,12 +421,12 @@ intermittents difficiles à corréler avec cette policy.
 
 L'ordre d'application le plus sûr pour éviter les régressions :
 
-1. **Phase 1 — securityContext** : appliquer `runAsUser`/`runAsGroup` spécifiques par workload
+1. ✅ **Phase 1 — securityContext** : appliquer `runAsUser`/`runAsGroup` spécifiques par workload
    (PostgreSQL: 70, Keycloak: 1000, rhdemo-app: UID `spring` à vérifier, busybox: 65534) + migrer les permissions
-   des données existantes sur l'hôte
-2. **Phase 2 — Tester** : valider que tous les pods démarrent, que les données sont accessibles,
-   que les backups fonctionnent
-3. **Phase 3 — PSA warn/audit** : activer Pod Security Admission en mode warning uniquement
+   des données existantes sur l'hôte — **appliqué le 2026-02-11**
+2. ✅ **Phase 2 — Tester** : valider que tous les pods démarrent, que les données sont accessibles,
+   que les backups fonctionnent — **validé**
+3. ✅ **Phase 3 — PSA warn/audit** : activer Pod Security Admission en mode warning uniquement — **appliqué le 2026-02-23**
 4. **Phase 4 — readOnlyRootFilesystem** : ajouter les `emptyDir` nécessaires et activer
 5. **Phase 5 — PSA enforce** : passer en enforcement une fois tout validé
 6. **Phase 6 — User Namespaces** : activer `hostUsers: false` après avoir résolu les permissions
@@ -548,6 +548,78 @@ kubectl logs job/test-backup-rhdemo -n rhdemo -f
 # Nettoyer le job de test
 kubectl delete job test-backup-rhdemo -n rhdemo
 ```
+
+### Phase 3 — PSA warn/audit (appliquée)
+
+> Date d'application : 2026-02-23
+
+#### Modification apportée
+
+Ajout de 4 labels PSA sur le namespace `rhdemo-stagingkub` dans `scripts/init-stagingkub.sh` :
+
+```yaml
+pod-security.kubernetes.io/audit: restricted
+pod-security.kubernetes.io/audit-version: latest
+pod-security.kubernetes.io/warn: restricted
+pod-security.kubernetes.io/warn-version: latest
+```
+
+**Mode choisi** : `warn` + `audit`, niveau `restricted`. Pas d'`enforce` à ce stade.
+
+- `warn` : Kubernetes retourne un header HTTP `Warning` dans la réponse kubectl lors du `apply` ou du démarrage de pod non conforme. Visible directement dans le terminal.
+- `audit` : les violations sont enregistrées dans l'audit log de l'API server. Permet une analyse a posteriori.
+- `version: latest` : utilise les règles de la version courante du cluster (1.35).
+
+Pour appliquer sans recréer le cluster :
+
+```bash
+kubectl label namespace rhdemo-stagingkub \
+  pod-security.kubernetes.io/audit=restricted \
+  pod-security.kubernetes.io/audit-version=latest \
+  pod-security.kubernetes.io/warn=restricted \
+  pod-security.kubernetes.io/warn-version=latest
+```
+
+#### Violations identifiées (niveau `restricted`)
+
+Les 4 initContainers `fix-permissions` (postgresql-rhdemo, postgresql-keycloak, backup-rhdemo, backup-keycloak) génèrent des warnings car ils violent plusieurs règles `restricted` :
+
+| Règle PSA `restricted` | Violation | Justification métier |
+|---|---|---|
+| `runAsNonRoot: true` requis | `runAsUser: 0` / `runAsNonRoot: false` | Doit tourner en root pour `chown -R` |
+| Aucune capability ajoutée | `add: [CHOWN, DAC_READ_SEARCH, FOWNER]` | Nécessaire pour traverser et modifier l'arborescence du hostPath |
+
+Note : `DAC_READ_SEARCH` n'est pas non plus dans la liste des capabilities autorisées par `baseline`. Ces initContainers constituent l'unique exception justifiée et documentée (voir Phase 1).
+
+#### Workloads conformes `restricted`
+
+| Workload | Conformité `restricted` |
+|---|---|
+| `rhdemo-app` | ✅ Conforme |
+| `keycloak` | ✅ Conforme |
+| `postgresql-rhdemo` (container principal) | ✅ Conforme |
+| `postgresql-keycloak` (container principal) | ✅ Conforme |
+| `postgres-exporter` sidecar | ✅ Conforme |
+| `busybox` initContainers wait-for-* | ✅ Conforme |
+| `fix-permissions` initContainers (×4) | ❌ Non conforme (documenté, accepté en warn/audit) |
+
+#### Exemple de warning kubectl attendu
+
+Lors d'un `helm upgrade` ou `kubectl apply`, le terminal affichera :
+
+```
+Warning: would violate PodSecurity "restricted:latest":
+  allowPrivilegeEscalation != false (container "fix-permissions" must set
+  securityContext.allowPrivilegeEscalation=false),
+  unrestricted capabilities (container "fix-permissions" must set
+  securityContext.capabilities.drop=["ALL"]; container "fix-permissions" must
+  not include "CHOWN", "DAC_READ_SEARCH", "FOWNER" in
+  securityContext.capabilities.add),
+  runAsNonRoot != true (pod or container "fix-permissions" must set
+  securityContext.runAsNonRoot=true)
+```
+
+Ces warnings sont **attendus et documentés**. Ils n'ont pas d'impact sur le déploiement.
 
 ---
 

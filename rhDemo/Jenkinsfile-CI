@@ -45,9 +45,9 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.29.4-alpine"
-        POSTGRES_IMAGE = "postgres:18-alpine"
-        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0"
+        NGINX_IMAGE = "nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47"
+        POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -1319,8 +1319,8 @@ YMLEOF
                         // Archiver les rapports de tests
                         junit allowEmptyResults: true, testResults: "${env.TEST_PROJECT_PATH}/target/surefire-reports/*.xml"
 
-                        // Archiver les screenshots en cas d'échec
-                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*.png", allowEmptyArchive: true
+                        // Archiver les screenshots et DOM dumps en cas d'échec
+                        archiveArtifacts artifacts: "${env.TEST_PROJECT_PATH}/target/screenshots/**/*", allowEmptyArchive: true
 
                         // Génération du rapport OWASP ZAP avant déconnexion
                         echo '📊 Génération du rapport OWASP ZAP...'

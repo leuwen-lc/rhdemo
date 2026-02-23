@@ -20,10 +20,35 @@ spec:
           labels:
             app: postgresql-rhdemo-backup
         spec:
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           restartPolicy: OnFailure
+          initContainers:
+          - name: fix-permissions
+            image: {{ .Values.global.images.busybox }}
+            command: ['sh', '-c', 'chown -R 70:70 /backups']
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            securityContext:
+              runAsUser: 0
+              runAsNonRoot: false
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+                add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
-            image: postgres:16-alpine
+            image: {{ .Values.global.images.postgres }}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 70
+              runAsGroup: 70
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
             env:
             - name: PGHOST
               value: {{ (index .Values "postgresql-rhdemo").service.name }}
@@ -122,10 +147,35 @@ spec:
           labels:
             app: postgresql-keycloak-backup
         spec:
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           restartPolicy: OnFailure
+          initContainers:
+          - name: fix-permissions
+            image: {{ .Values.global.images.busybox }}
+            command: ['sh', '-c', 'chown -R 70:70 /backups']
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            securityContext:
+              runAsUser: 0
+              runAsNonRoot: false
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+                add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
           containers:
           - name: backup
-            image: postgres:16-alpine
+            image: {{ .Values.global.images.postgres }}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 70
+              runAsGroup: 70
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
             env:
             - name: PGHOST
               value: {{ .Values.keycloak.database.host }}

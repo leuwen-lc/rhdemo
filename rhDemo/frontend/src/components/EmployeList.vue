@@ -15,14 +15,21 @@
               >
                 Retour au menu
               </el-button>
-              <el-button 
-                type="primary" 
-                :icon="Plus" 
-                @click="$router.push('/front/ajout')"
-                data-testid="add-employe-button"
+              <el-tooltip
+                :disabled="canEdit"
+                content="Droits insuffisants"
+                placement="top"
               >
-                Ajouter un employé
-              </el-button>
+                <el-button
+                  type="primary"
+                  :icon="Plus"
+                  :disabled="!canEdit"
+                  @click="$router.push('/front/ajout')"
+                  data-testid="add-employe-button"
+                >
+                  Ajouter un employé
+                </el-button>
+              </el-tooltip>
               <el-button 
                 type="info" 
                 :icon="Refresh" 
@@ -54,10 +61,66 @@
             @sort-change="handleSort"
           >
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column prop="prenom" label="Prénom" sortable="custom" />
-            <el-table-column prop="nom" label="Nom" sortable="custom" />
-            <el-table-column prop="mail" label="Email" sortable="custom" />
-            <el-table-column prop="adresse" label="Adresse" sortable="custom" />
+            <el-table-column prop="prenom" sortable="custom">
+              <template #header>
+                <div>Prénom</div>
+                <el-input
+                  v-model="filterPrenom"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-prenom"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="nom" sortable="custom">
+              <template #header>
+                <div>Nom</div>
+                <el-input
+                  v-model="filterNom"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-nom"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="mail" sortable="custom">
+              <template #header>
+                <div>Email</div>
+                <el-input
+                  v-model="filterMail"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-mail"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
+            <el-table-column prop="adresse" sortable="custom">
+              <template #header>
+                <div>Adresse</div>
+                <el-input
+                  v-model="filterAdresse"
+                  size="small"
+                  clearable
+                  placeholder="Filtrer..."
+                  data-testid="filter-adresse"
+                  @keyup.enter="applyFilters"
+                  @clear="applyFilters"
+                  @click.stop
+                />
+              </template>
+            </el-table-column>
             <el-table-column label="Actions" width="300">
               <template #default="scope">
                 <el-space>
@@ -70,30 +133,44 @@
                   >
                     Voir
                   </el-button>
-                  <el-button 
-                    size="small" 
-                    type="warning" 
-                    :icon="Edit"
-                    @click="edit(scope.row.id)"
-                    :data-testid="`edit-button-${scope.row.id}`"
+                  <el-tooltip
+                    :disabled="canEdit"
+                    content="Droits insuffisants"
+                    placement="top"
                   >
-                    Editer
-                  </el-button>
-                  <el-popconfirm
-                    title="Êtes-vous sûr de vouloir supprimer cet employé ?"
-                    @confirm="del(scope.row.id)"
+                    <el-button
+                      size="small"
+                      type="warning"
+                      :icon="Edit"
+                      :disabled="!canEdit"
+                      @click="edit(scope.row.id)"
+                      :data-testid="`edit-button-${scope.row.id}`"
+                    >
+                      Editer
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip
+                    :disabled="canEdit"
+                    content="Droits insuffisants"
+                    placement="top"
                   >
-                    <template #reference>
-                      <el-button 
-                        size="small" 
-                        type="danger" 
-                        :icon="Delete"
-                        :data-testid="`delete-button-${scope.row.id}`"
-                      >
-                        Supprimer
-                      </el-button>
-                    </template>
-                  </el-popconfirm>
+                    <el-popconfirm
+                      title="Êtes-vous sûr de vouloir supprimer cet employé ?"
+                      @confirm="del(scope.row.id)"
+                    >
+                      <template #reference>
+                        <el-button
+                          size="small"
+                          type="danger"
+                          :icon="Delete"
+                          :disabled="!canEdit"
+                          :data-testid="`delete-button-${scope.row.id}`"
+                        >
+                          Supprimer
+                        </el-button>
+                      </template>
+                    </el-popconfirm>
+                  </el-tooltip>
                 </el-space>
               </template>
             </el-table-column>
@@ -118,9 +195,10 @@
             v-else-if="!loading && !error"
             description="Aucun employé trouvé"
           >
-            <el-button 
-              type="primary" 
+            <el-button
+              type="primary"
               :icon="Plus"
+              :disabled="!canEdit"
               @click="$router.push('/front/ajout')"
             >
               Ajouter le premier employé
@@ -134,6 +212,7 @@
 <script>
 import { getEmployesPage, deleteEmploye } from '../services/api';
 import { Plus, Refresh, View, Edit, Delete, HomeFilled } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   components: {
@@ -144,6 +223,11 @@ export default {
     Delete,
     HomeFilled
   },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
+  },
   data() {
     return {
       employes: [],
@@ -153,7 +237,11 @@ export default {
       pageSize: 20,
       totalElements: 0,
       sortField: null,
-      sortOrder: 'ASC'
+      sortOrder: 'ASC',
+      filterPrenom: '',
+      filterNom: '',
+      filterMail: '',
+      filterAdresse: ''
     };
   },
   methods: {
@@ -165,7 +253,13 @@ export default {
           this.currentPage - 1,
           this.pageSize,
           this.sortField,
-          this.sortOrder
+          this.sortOrder,
+          {
+            prenom: this.filterPrenom,
+            nom: this.filterNom,
+            mail: this.filterMail,
+            adresse: this.filterAdresse
+          }
         );
         this.employes = res.data.content;
         // Structure PagedModel (VIA_DTO) : les métadonnées sont dans res.data.page
@@ -193,6 +287,10 @@ export default {
     },
     handleSizeChange(size) {
       this.pageSize = size;
+      this.currentPage = 1;
+      this.fetchEmployes();
+    },
+    applyFilters() {
       this.currentPage = 1;
       this.fetchEmployes();
     },

@@ -1,0 +1,9 @@
+# Fichier d'exclusion Trivy pour les faux positifs fonctionnels
+# Voir rhDemo/docs/SECURITY_ADVISORIES.md pour la justification de chaque exclusion
+
+# CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
+# Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine
+# Risque réel : NUL - gosu n'effectue aucune connexion TLS (setuid/setgid uniquement)
+# Suivi upstream : https://github.com/docker-library/postgres/issues/1324
+# À retirer quand : gosu est recompilé avec Go >= 1.24.13 (nouvelle release postgres:18-alpine)
+CVE-2025-68121

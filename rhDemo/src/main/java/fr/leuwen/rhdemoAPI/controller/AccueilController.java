@@ -1,27 +1,24 @@
 package fr.leuwen.rhdemoAPI.controller;
 
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class AccueilController {
 
-	@GetMapping("/who")
-    public String getUserInfo() {
-	StringBuffer userInfo=new StringBuffer();
-	Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-	if (auth!=null) {
-		userInfo.append("Principal <br>");
-		userInfo.append(auth.getPrincipal()+"<br><br>");
-		userInfo.append("Authorities <br>");
-		userInfo.append(auth.getAuthorities());
-	} else {
-		userInfo.append("Erreur de lecture du SecurityContextHolder");
+	@GetMapping("/api/userinfo")
+	public Map<String, Object> getUserInfo(Authentication auth) {
+		String username = auth.getName();
+		List<String> roles = auth.getAuthorities().stream()
+				.map(GrantedAuthority::getAuthority)
+				.toList();
+		return Map.of("username", username, "roles", roles);
 	}
-	return userInfo.toString();
-    }
 
 	@GetMapping("/")
 	public String getInfo() {
@@ -36,8 +33,7 @@ public class AccueilController {
 		info.append(
 				"<br>Documentation Swagger UI sur /api-docs/swagger-ui/index.html (dispo en dev local uniquement)<br>");
 		info.append("Documentation OpenAPI sur /api-docs/docs (dispo en dev local uniquement)<br>");
-		info.append("<br>Info utilisateurs sur /who<br>");
-		info.append("Logout sur /logout");
+		info.append("<br>Logout sur /logout");
 		return info.toString();
 	}
 

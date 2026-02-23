@@ -6,6 +6,16 @@ global:
   environment: stagingkub
   domain: stagingkub.intra.leuwen-lc.fr
 
+  # ── Images externes épinglées par digest (sha256) ──
+  # Source unique pour toutes les images tierces du chart.
+  # Format : image:tag@sha256:digest (tag conservé pour lisibilité)
+  images:
+    postgres: "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
+    keycloak: "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
+    busybox: "busybox:1.36@sha256:0ad610868746fa822202c2052bb37f61272524ff4a4a3921edeeec7cd0a88c10"
+    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.19.0@sha256:e8a170b85eab07c75c2b0f3aa2806be5c2fe5bba46fd0336914e1f36572cde08"
+  imagePullPolicy: IfNotPresent
+
 # ═══════════════════════════════════════════════════════════════
 # Backups PostgreSQL (CronJobs)
 # ═══════════════════════════════════════════════════════════════
@@ -24,10 +34,6 @@ postgresqlBackup:
 # ═══════════════════════════════════════════════════════════════
 postgresql-rhdemo:
   enabled: true
-  image:
-    repository: postgres
-    tag: "18-alpine"
-    pullPolicy: IfNotPresent
 
   database:
     name: rhdemo
@@ -61,11 +67,6 @@ postgresql-rhdemo:
   # Expose les métriques pg_stat_statements pour identifier les requêtes lentes
   metrics:
     enabled: true
-    exporter:
-      image:
-        repository: quay.io/prometheuscommunity/postgres-exporter
-        tag: "v0.15.0"
-        pullPolicy: IfNotPresent
     serviceMonitor:
       enabled: true
       namespace: monitoring
@@ -77,10 +78,6 @@ postgresql-rhdemo:
 # ═══════════════════════════════════════════════════════════════
 postgresql-keycloak:
   enabled: true
-  image:
-    repository: postgres
-    tag: "18-alpine"
-    pullPolicy: IfNotPresent
 
   database:
     name: keycloak
@@ -114,10 +111,6 @@ postgresql-keycloak:
 # ═══════════════════════════════════════════════════════════════
 keycloak:
   enabled: true
-  image:
-    repository: quay.io/keycloak/keycloak
-    tag: "26.5.0"
-    pullPolicy: IfNotPresent
 
   replicaCount: 1
 

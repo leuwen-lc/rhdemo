@@ -108,10 +108,10 @@ public class ClientService {
     // Flow configuration
     client.setStandardFlowEnabled(true);
     client.setImplicitFlowEnabled(false);
-    client.setDirectAccessGrantsEnabled(true);
+    client.setDirectAccessGrantsEnabled(false);
     client.setServiceAccountsEnabled(false);
     client.setPublicClient(false);
-    client.setFrontchannelLogout(true);
+    client.setFrontchannelLogout(false);
         
         // Protocol et autres paramètres
         client.setProtocol("openid-connect");
@@ -122,8 +122,9 @@ public class ClientService {
         
         // Attributs additionnels
         Map<String, String> attributes = new HashMap<>();
+        attributes.put("pkce.code.challenge.method", "S256");
         attributes.put("oidc.ciba.grant.enabled", "false");
-        attributes.put("backchannel.logout.session.required", "true");
+        attributes.put("backchannel.logout.session.required", "false");
         attributes.put("login_theme", "base");
         attributes.put("display.on.consent.screen", "false");
         attributes.put("oauth2.device.authorization.grant.enabled", "false");

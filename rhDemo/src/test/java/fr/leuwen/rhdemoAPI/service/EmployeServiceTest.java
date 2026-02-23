@@ -2,6 +2,7 @@ package fr.leuwen.rhdemoAPI.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.util.Arrays;
@@ -17,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import fr.leuwen.rhdemoAPI.exception.EmployeNotFoundException;
 import fr.leuwen.rhdemoAPI.model.Employe;
@@ -141,6 +143,30 @@ public class EmployeServiceTest {
         assertEquals(2, result.getContent().size());
         assertEquals(2, result.getTotalElements());
         verify(employeRepository, times(1)).findAll(pageable);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Tests getEmployesPage(specification, pageable)
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testGetEmployesPageWithSpecification_ShouldReturnFilteredPage() {
+        // Arrange
+        Pageable pageable = PageRequest.of(0, 10);
+        Specification<Employe> spec = mock(Specification.class);
+        Page<Employe> expectedPage = new PageImpl<>(Arrays.asList(employe1));
+        when(employeRepository.findAll(eq(spec), eq(pageable))).thenReturn(expectedPage);
+
+        // Act
+        Page<Employe> result = employeService.getEmployesPage(spec, pageable);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals(1, result.getTotalElements());
+        assertEquals("Jean", result.getContent().get(0).getPrenom());
+        verify(employeRepository, times(1)).findAll(eq(spec), eq(pageable));
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -259,7 +259,17 @@ fi
 echo ""
 echo "🚀 Démarrage des conteneurs Docker..."
 
-docker compose up -d
+# Le registry kind-registry est partagé entre KinD (stagingkub) et Jenkins.
+# Si le conteneur existe déjà (créé par KinD), on démarre tout sauf le registry
+# puis on connecte le registry existant au réseau Jenkins.
+if docker ps -q -f name=^/kind-registry$ | grep -q .; then
+    echo "ℹ️  Registry kind-registry déjà actif (partagé avec KinD), réutilisation..."
+    docker compose up -d --no-deps jenkins sonarqube sonarqube-db jenkins-agent
+    # S'assurer que le registry existant est connecté au réseau Jenkins
+    docker network connect rhdemo-jenkins-network kind-registry 2>/dev/null || true
+else
+    docker compose up -d
+fi
 
 echo ""
 echo "⏳ Attente du démarrage de Jenkins (peut prendre 1-2 minutes)..."

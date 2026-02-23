@@ -19,10 +19,31 @@ spec:
         app: postgresql-keycloak
         {{- include "postgresql-keycloak.labels" . | nindent 8 }}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: fix-permissions
+        image: {{ .Values.global.images.busybox }}
+        command: ['sh', '-c', 'chown -R 70:70 /var/lib/postgresql']
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+            add: ["CHOWN", "DAC_READ_SEARCH", "FOWNER"]
       containers:
       - name: postgresql
-        image: "{{ (index .Values "postgresql-keycloak").image.repository }}:{{ (index .Values "postgresql-keycloak").image.tag }}"
-        imagePullPolicy: {{ (index .Values "postgresql-keycloak").image.pullPolicy }}
+        image: {{ .Values.global.images.postgres }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         ports:
         - name: postgresql
           containerPort: {{ (index .Values "postgresql-keycloak").service.port }}
@@ -63,6 +84,11 @@ spec:
           failureThreshold: 5
         resources:
           {{- toYaml (index .Values "postgresql-keycloak").resources | nindent 10 }}
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
   volumeClaimTemplates:
   - metadata:
       name: postgresql-data

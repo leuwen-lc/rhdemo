@@ -129,6 +129,109 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
+    // Tests GET /api/employes/page avec filtres
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterByNom_ShouldReturnMatchingEmployes() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterNom", "Martin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].nom").value("Martin"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterByPrenom_ShouldReturnMatchingEmployes() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterPrenom", "Sophie"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].prenom").value("Sophie"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterCombined_ShouldReturnIntersection() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterPrenom", "Sophie")
+                        .param("filterNom", "Dubois"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].prenom").value("Sophie"))
+                .andExpect(jsonPath("$.content[0].nom").value("Dubois"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterNoResult_ShouldReturnEmptyPage() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterNom", "Inexistant"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(0))
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterCaseInsensitive_ShouldMatch() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterNom", "martin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].nom").value("Martin"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterWithPagination_ShouldRespectPageSize() throws Exception {
+        // filterMail="example" matches all 4 employees, but size=1 should return only 1
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterMail", "example")
+                        .param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(4))
+                .andExpect(jsonPath("$.page.totalPages").value(4));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterWithSort_ShouldFilterAndSort() throws Exception {
+        // filterNom with "D" matches Dubois and Durand, sorted by prenom ASC → Marie, Sophie
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterNom", "Du")
+                        .param("sort", "prenom")
+                        .param("order", "ASC"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].prenom").value("Marie"))
+                .andExpect(jsonPath("$.content[1].prenom").value("Sophie"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_NoFilters_ShouldReturnAllEmployes() throws Exception {
+        // Retrocompatibility: no filter params should return all employees
+        mockMvc.perform(get("/api/employes/page"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(4));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_FilterByAdresse_ShouldReturnMatchingEmployes() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("filterAdresse", "Paris"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].adresse", is("1 Rue de la Paix, Paris")));
+    }
+
+    // ════════════════════════════════════════════════════════════════
     // Tests GET /api/employe?id=X (récupération)
     // ════════════════════════════════════════════════════════════════
 

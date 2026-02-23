@@ -53,12 +53,16 @@ export function getEmployes() {
   return api.get('/employes');
 }
 
-export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC') {
+export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC', filters = {}) {
   const params = { page, size };
   if (sort) {
     params.sort = sort;
     params.order = order;
   }
+  if (filters.prenom) params.filterPrenom = filters.prenom;
+  if (filters.nom) params.filterNom = filters.nom;
+  if (filters.mail) params.filterMail = filters.mail;
+  if (filters.adresse) params.filterAdresse = filters.adresse;
   return api.get('/employes/page', { params });
 }
 
@@ -78,4 +82,8 @@ export function testSaveEmploye(employe) {
 
 export function deleteEmploye(id) {
   return api.delete('/employe', { params: { id } });
+}
+
+export function getUserInfo() {
+  return api.get('/userinfo');
 }

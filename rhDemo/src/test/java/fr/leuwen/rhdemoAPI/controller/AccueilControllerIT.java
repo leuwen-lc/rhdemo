@@ -13,7 +13,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Tests d'intégration pour AccueilController
+ * Tests d'integration pour AccueilController
  * Teste les endpoints d'information et d'accueil
  */
 @SpringBootTest
@@ -38,22 +38,28 @@ public class AccueilControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests GET /who (informations utilisateur)
+    // Tests GET /api/userinfo (informations utilisateur JSON)
     // ════════════════════════════════════════════════════════════════
 
     @Test
     @WithMockUser(username = "testuser", roles = {"consult"})
-    public void testWho_WithAuthenticatedUser_ShouldReturnUserInfo() throws Exception {
-        mockMvc.perform(get("/who"))
+    public void testUserInfo_WithConsultRole_ShouldReturnUsernameAndRoles() throws Exception {
+        mockMvc.perform(get("/api/userinfo"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("testuser")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("ROLE_consult")));
+                .andExpect(content().contentType("application/json"))
+                .andExpect(jsonPath("$.username").value("testuser"))
+                .andExpect(jsonPath("$.roles").isArray())
+                .andExpect(jsonPath("$.roles[0]").value("ROLE_consult"));
     }
 
     @Test
-    public void testWho_WithoutAuthentication_ShouldReturnAnonymousInfo() throws Exception {
-        mockMvc.perform(get("/who"))
+    @WithMockUser(username = "madjid", roles = {"consult", "MAJ"})
+    public void testUserInfo_WithMultipleRoles_ShouldReturnAllRoles() throws Exception {
+        mockMvc.perform(get("/api/userinfo"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("anonymousUser")));
+                .andExpect(content().contentType("application/json"))
+                .andExpect(jsonPath("$.username").value("madjid"))
+                .andExpect(jsonPath("$.roles").isArray())
+                .andExpect(jsonPath("$.roles.length()").value(2));
     }
 }

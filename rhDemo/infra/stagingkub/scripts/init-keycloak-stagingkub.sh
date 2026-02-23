@@ -176,8 +176,12 @@ echo ""
 
 echo -e "${YELLOW}▶ Configuration du port-forward vers Keycloak...${NC}"
 
-# Trouver un port local disponible (on utilise 6090 comme dans la config par défaut)
+# Trouver un port local disponible (on essaie 6090, puis 6091, 6092...)
 LOCAL_PORT=6090
+while ss -tln | grep -q ":${LOCAL_PORT} "; do
+    echo -e "${YELLOW}  Port ${LOCAL_PORT} déjà utilisé, essai du suivant...${NC}"
+    LOCAL_PORT=$((LOCAL_PORT + 1))
+done
 
 # Tuer tout port-forward existant sur ce port
 pkill -f "kubectl.*port-forward.*keycloak.*${LOCAL_PORT}" 2>/dev/null || true

@@ -439,7 +439,7 @@ fi
 
 
 
-# Créer le namespace si nécessaire avec les labels Helm
+# Créer le namespace si nécessaire avec les labels Helm et Pod Security Admission
 echo -e "${YELLOW}▶ Création du namespace rhdemo-stagingkub...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -448,11 +448,19 @@ metadata:
   name: rhdemo-stagingkub
   labels:
     app.kubernetes.io/managed-by: Helm
+    # Pod Security Admission - mode warn/audit uniquement (pas d'enforce)
+    # Les violations sont journalisées dans l'audit log et affichées comme warnings
+    # sans bloquer les déploiements. Permet d'identifier les non-conformités
+    # avant de passer au mode enforce (Phase 5).
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
   annotations:
     meta.helm.sh/release-name: rhdemo
     meta.helm.sh/release-namespace: rhdemo-stagingkub
 EOF
-echo -e "${GREEN}✅ Namespace créé avec labels Helm${NC}"
+echo -e "${GREEN}✅ Namespace créé avec labels Helm et PSA warn/audit restricted${NC}"
 
 # Créer les secrets Kubernetes
 echo -e "${YELLOW}▶ Création des secrets Kubernetes...${NC}"

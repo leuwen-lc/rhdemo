@@ -97,9 +97,10 @@
                   @confirm="confirmDelete"
                 >
                   <template #reference>
-                    <el-button 
-                      type="danger" 
+                    <el-button
+                      type="danger"
                       :loading="deleting"
+                      :disabled="!canEdit"
                       :icon="Delete"
                       data-testid="confirm-delete-button"
                     >
@@ -144,6 +145,7 @@
 <script>
 import { getEmploye, deleteEmploye } from '../services/api';
 import { Delete, ArrowLeft, List } from '@element-plus/icons-vue';
+import { hasRole } from '../stores/userStore';
 
 export default {
   name: 'EmployeDelete',
@@ -151,6 +153,11 @@ export default {
     Delete,
     ArrowLeft,
     List
+  },
+  computed: {
+    canEdit() {
+      return hasRole('MAJ');
+    }
   },
   data() {
     return {

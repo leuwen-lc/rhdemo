@@ -12,7 +12,7 @@
 | **rhdemo-app** | `rhdemo-api:1.1.0-SNAPSHOT` | Application Spring Boot |
 | **Keycloak 26.5.0** | `quay.io/keycloak/keycloak:26.5.0` | IAM / OAuth2 |
 | **PostgreSQL 18** | `postgres:18-alpine` | 2 instances (rhdemo + keycloak) |
-| **postgres-exporter** | `v0.15.0` | Métriques Prometheus |
+| **postgres-exporter** | `v0.19.0` | Métriques Prometheus |
 | **Backups CronJob** | `postgres:16-alpine` | Sauvegardes quotidiennes (2h/3h) |
 
 ## Points forts
@@ -241,7 +241,7 @@ container avec l'erreur `CreateContainerConfigError` :
 > **Recommandation** : fixer le UID dans le Dockerfile (`useradd -r -u 1000 -g spring spring`) pour
 > garantir la cohérence entre l'UID de l'image et le `runAsUser` du manifest Kubernetes.
 
-#### postgres-exporter v0.15.0 — RISQUE FAIBLE
+#### postgres-exporter v0.19.0 — RISQUE FAIBLE
 
 L'image communautaire Prometheus tourne en non-root. À vérifier au déploiement.
 
@@ -582,14 +582,24 @@ kubectl label namespace rhdemo-stagingkub \
 
 #### Violations identifiées (niveau `restricted`)
 
-Les 4 initContainers `fix-permissions` (postgresql-rhdemo, postgresql-keycloak, backup-rhdemo, backup-keycloak) génèrent des warnings car ils violent plusieurs règles `restricted` :
+Les 4 initContainers `fix-permissions` génèrent des warnings. Le contenu du warning permet d'identifier le workload :
 
-| Règle PSA `restricted` | Violation | Justification métier |
+| Warning | Violations spécifiques | Workload identifié |
 |---|---|---|
-| `runAsNonRoot: true` requis | `runAsUser: 0` / `runAsNonRoot: false` | Doit tourner en root pour `chown -R` |
-| Aucune capability ajoutée | `add: [CHOWN, DAC_READ_SEARCH, FOWNER]` | Nécessaire pour traverser et modifier l'arborescence du hostPath |
+| #1 | capabilities + runAsUser=0 | `postgresql-rhdemo` StatefulSet |
+| #2 | capabilities + runAsUser=0 | `postgresql-keycloak` StatefulSet |
+| #3 | capabilities + runAsUser=0 + **hostPath** | `postgresql-rhdemo-backup` CronJob |
+| #4 | capabilities + runAsUser=0 + **hostPath** | `postgresql-keycloak-backup` CronJob |
 
-Note : `DAC_READ_SEARCH` n'est pas non plus dans la liste des capabilities autorisées par `baseline`. Ces initContainers constituent l'unique exception justifiée et documentée (voir Phase 1).
+Les StatefulSets utilisent des PVC (pas de `hostPath` direct) — les CronJobs utilisent un `hostPath` pour `/mnt/backups`, ce qui ajoute une violation supplémentaire de type `restricted volume types`.
+
+| Règle PSA `restricted` | Violation | Workloads concernés | Justification métier |
+|---|---|---|---|
+| `runAsNonRoot: true` requis | `runAsUser: 0` / `runAsNonRoot: false` | StatefulSets + CronJobs (×4) | Doit tourner en root pour `chown -R` |
+| Aucune capability ajoutée | `add: [CHOWN, DAC_READ_SEARCH, FOWNER]` | StatefulSets + CronJobs (×4) | Nécessaire pour traverser et modifier l'arborescence |
+| Volume type restreint | `hostPath` interdit | CronJobs backup (×2) | Accès au répertoire de backup sur le nœud KinD |
+
+Note : `DAC_READ_SEARCH` n'est pas non plus dans la liste des capabilities autorisées par `baseline`. Ces violations constituent l'unique exception justifiée et documentée (voir Phase 1).
 
 #### Workloads conformes `restricted`
 
@@ -601,7 +611,8 @@ Note : `DAC_READ_SEARCH` n'est pas non plus dans la liste des capabilities autor
 | `postgresql-keycloak` (container principal) | ✅ Conforme |
 | `postgres-exporter` sidecar | ✅ Conforme |
 | `busybox` initContainers wait-for-* | ✅ Conforme |
-| `fix-permissions` initContainers (×4) | ❌ Non conforme (documenté, accepté en warn/audit) |
+| `fix-permissions` initContainers StatefulSets (×2) | ❌ 2 violations (capabilities, runAsUser=0) |
+| `fix-permissions` initContainers CronJobs (×2) | ❌ 3 violations (capabilities, runAsUser=0, hostPath) |
 
 #### Exemple de warning kubectl attendu
 

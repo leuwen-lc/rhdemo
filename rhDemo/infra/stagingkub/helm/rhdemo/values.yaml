@@ -13,7 +13,7 @@ global:
     postgres: "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
     keycloak: "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
     busybox: "busybox:1.36@sha256:0ad610868746fa822202c2052bb37f61272524ff4a4a3921edeeec7cd0a88c10"
-    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.15.0@sha256:31bdf410910646a05c7edde8d95ab771c9d78fbfbc26b50a52548707496c284d"
+    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.19.0@sha256:e8a170b85eab07c75c2b0f3aa2806be5c2fe5bba46fd0336914e1f36572cde08"
   imagePullPolicy: IfNotPresent
 
 # ═══════════════════════════════════════════════════════════════

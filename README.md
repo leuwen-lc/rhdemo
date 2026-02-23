@@ -6,22 +6,22 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 - Expérimenter des outils et méthodes standards et largement adoptés.
 - Intégrer de nombreuses considérations de sécurité dès le début du projet (DevSecOps).
-- Utiliser des agents IA (Copilot Chat et Claude Code dans VS Code) pour améliorer la productivité et la qualité du code.
+- Utiliser des agents IA (Copilot Chat / Claude Code / Gemini Code Assist dans VS Code) pour améliorer la productivité et la qualité du code.
 - S'appuyer sur Spring Boot et son écosystème pour le back‑end.
 - Fournir une IHM riche côté client avec Vue.js et le design system Element Plus.
-- Mettre en place une structure solide et évolutive même si le projet reste simple (layers, API, client riche, OIDC, gestion des rôles).
-- Inclure une chaine CI/CD évoluée avec test-automatisés, déploiement en containers,....
+- Mettre en place une structure solide et évolutive même si le projet reste simple (couches, API, client riche, OIDC, gestion des rôles).
+- Inclure une chaine CI/CD évoluée avec nombreux controles qualité/sécurité, test-automatisés, déploiement en containers,....
 - Basé à 100% sur du logiciel libre, indépendance maximale avec les grandes plateformes gitlab/github et leurs solutions intégrées.
-- Pour garder le coté preuve de concept facile à déployer, tout, y compris l'environnement ephemere, la chaine CI/CD et le cluster Kind doivent pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
+- Pour garder le coté preuve de concept facile à déployer, tout, y compris l'environnement ephemere, la chaine CI/CD et le cluster kubernetes KinD doivent pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
 
 ## Quelques orientations
 
 - Favoriser l'utilisation des composants fournis (Element Plus) plutôt que de sur‑spécifier l'IHM.
 - Rendre les tests IHM robustes (usage de marqueurs `data-testid`), tout en vérifiant l'accessibilité d'Element Plus dans le contexte de l'application.
-- Mettre en place une solutions éprouvée pour l'authentification et la gestion des identités. La gestion des identités par l'applicatif n'est plus acceptable même sur des petits projets.
-- Séparer les responsabilités : Backend For Frontend (BFF), c'est le backend qui obtiens les jetons auprès du fournisseur d'identité et les stocke pour sécuriser les flows d'authentification.
+- Mettre en place une solution éprouvée pour l'authentification et la gestion des identités. La gestion des identités par l'applicatif n'est plus acceptable même sur des petits projets.
+- Séparer les responsabilités : Backend For Frontend (BFF), c'est le backend qui obtient les jetons auprès du fournisseur d'identité et les stocke pour sécuriser les flows d'authentification.
 - Montrer le déploiement sur un cluster Kubernetes léger (KinD)
-- Mettre en place de l'observabilité avec Loki/Grafana et quelques dashboard (consolidation des logs, métriques Spring Actuator, métriques PostgreSQL) sur l'environnement KinD
+- Mettre en place de l'observabilité avec Loki/Prometheus/Grafana et quelques dashboard (consolidation des logs, métriques Spring Actuator, métriques PostgreSQL) sur l'environnement KinD
 
 
 ## Accent mis sur le DevSecOps
@@ -40,18 +40,23 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - Dépendances : Scan par OWASP Dependency‑Check, échec de la chaine si CVSS >=7.
   - Scans des images docker utilisées dans l'environnement CI ephemere avec Trivy
   - Génération d'un SBOM (inventaires des composants) au format CycloneDX dans les artefacts du pipeline;
-  - Sonar avec quality gate. Profil plus léger que le standard sauf sur la sécurité (couverture de test >=50%, code Smell uniquement de niveau medium et haut, sécurité toute faille potentielle doit être revue).
+  - SonarQube avec quality gate plus léger que le standard :
+      - couverture de test >=50%,
+      - code Smell uniquement de niveau medium ou supérieur,
+      - sécurité toute faille potentielle doit être revue.
   - Activation d'un proxy ZAP pour analyse dynamique intégrée durant le stage de tests en Selenium (analyse fournie dans un artefact du pipeline).
   - Publication du container applicatif dans un registry local en TLS (auto-signé pour l'instant)
   - Signature du container avec Cosign
 - CD
   - Utilisation des secrets Kubernetes (chargement des secrets après décodage SOPS)
-  - Déploiement basé sur la lecture du digest du container constuit lors du dernier build CI réussi (pas de tag dangereux "Latest)
+  - Déploiement basé sur la lecture du digest du container constuit lors du dernier build CI réussi (pas de tag dangereux "Latest")
   - Vérification de signature Cosign
-- TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé). Certificats autosignés ou Let's Encrypt (sur mon domaine intra.leuwen-lc.fr).
-- Logging / monitoring fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana : succès/échecs d'authentification, erreurs applicatives.
-- Compte de service et Role RBAC pour limiter les droits de Jenkins sur Stagingkub.
-- Tester des network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement Kind grace à l'ajout de Cilium.
+- TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé).
+  --> Certificats autosignés ou Let's Encrypt sur stagingkub (généré via DNS01 uniquement si administrateur DNS du domaine leuwen-lc.fr).
+- Logging / monitoring de base fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana.
+- Compte de service et Role RBAC pour limiter les droits de Jenkins sur stagingkub.
+- Network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement KinD.
+  --> ajout de Cilium sur l'environnement KinD pour appliquer ces policies.
 
 ## Fonctionnalités
 
@@ -62,13 +67,13 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 ## Architecture applicative
 
 - Back‑end : Spring Boot, Spring Security
-  - Architecture logicielle classique en 3 couches (évolutive en cas de besoin vers DTO ou clean architecture).
+  - Architecture logicielle classique en 3 couches (facilement évolutive en cas de besoin vers DTO ou clean architecture).
    Pattern Backend For Front-end (BFF) :
   - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
   - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
 - Le Back-end fait à la fois BFF et traite directement les différents appels d'API. On pourrait imaginer une évolution avec une délagation du traitement des API à d'autres Back-end partagés au niveau SI. Pour accéder à ces back-end on pourrait se baser sur l'access token JWT signé de keycloak.
 - Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
-- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend. Option possible : remplacer par Cypress selon compétences disponibles sur l'automatisation des tests.
+- Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend.
 - Deux chaines CI/CD séparées :
   - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
   - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
@@ -83,28 +88,30 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 - Git
 - Java 25+
-- Pour édition/lancement mode dev :
+- Pour édition/modifications/mode debug :
   - VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue.
   - Possibilité d'utiliser également Spring Tool Suite (Eclipse)
-- Pour env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
+- Pour exécution en env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
 - Pour chaine CI/CD  Jenkins 2.541.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
-- Pour déploiement env de ephemere : Docker Compose avec un réseau dédié.
-- Pour déploiement env staginkub : KinD 0.31 ou +
+- Pour déploiement env de ephemere (CI) : Docker Compose avec un réseau dédié.
+- Pour déploiement env staginkub (CD) : KinD 0.31+, Helm 3.19.2+, Kubectl v1.31+
 
 ## Limites
 
 - Le fait de déployer via CI/CD dans un premier environnement ephemere puis sur un mini-cluster kubernetes permet de démontrer la portabilité de l'application
 
-- Par contre par nature ce projet n'est pas pret pour la production.
-  - Il faut bien sur faire le travail spécifique de conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
-  - Mais il reste aussi un travail de configuration sur certains composants applicatifs en cible production :
-    - passage en mode production et durcissement de la configuration Keycloak activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) qui serait fait probablement dans le cadre d'un projet IAM séparé. Il faudrait aussi réserver l'accès à l'interface d'admin via un réseau dédié.
-    - durcissement de la configuration des logiciels de CI/CD, en particulier Jenkins avec ajout d'une instance dédiee production.
-    - permettre la mise en place les mécanismes de scalabilité (Redis, etc...)
-  -  Ce n'était pas le but mais fonctionnellement le projet même pour du simple n'est absolument pas viable :
-  - manque énormément d'informations sur les employes,
-  - l'adresse est dans un seul champ, elle devrait être dans une table à part et répondre aux normes internationales,
-  - (etc ...)
+- Ce qu'il faudrait faire pour atteindre un niveau production .
+  - conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
+  - configuration sur certains composants applicatifs en cible production :
+      - passage en mode production et durcissement de la configuration Keycloak qui serait fait probablement dans le cadre d'un projet IAM transverse :
+            - interface avec un logiciel RH pour gérer les arrivées/départ    
+            - activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) .
+      - durcissement de la configuration des logiciels de CI/CD, gestion fine des utilisateurs/droits, ajout d'une instance dédiee production.
+      - mise en place les mécanismes de scalabilité (Redis, etc...)
+  - fonctionnellement le projet n'est pas du tout viable en l'état (ce n'était pas le but) :
+      - manque énormément d'informations/transactions de gestion sur les employes,
+      - l'adresse est dans un seul champ, el devrait être dans une table à part et répondre aux normes internationales,
+  - ...
 
 ## Utiliser le projet
 
@@ -128,7 +135,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 ### Utliser la chaine CD et déployer dans l'environnement stagingkub
 
 - Installez et utilisez la chaine CI (ci-dessus)
-- Installez Kind 0.30 et supérieur et des versions récentes kubectl et helm
+- Installez Kind 0.31 et supérieur et des versions récentes kubectl et helm
 - Suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
 - Lancez le pipelne rhDemo/Jenkinsfile-CD
 

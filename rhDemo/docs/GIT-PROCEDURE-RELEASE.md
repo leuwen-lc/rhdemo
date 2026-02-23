@@ -1,9 +1,9 @@
-# Procédure standard : PR `evolutions-post-1.1.4` -> `master`, release `1.1.5-RELEASE`, tag, puis retour en `-SNAPSHOT`
+# Procédure standard : PR `evolutions-post-1.1.5` -> `master`, release `1.1.6-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte :
-- Branche source (exemple) : `evolutions-post-1.1.4` 
+- Branche source (exemple) : `evolutions-post-1.1.5` 
 - Branche cible : `master`
-- Tag Git (exemple) : `1.1.5-RELEASE`
+- Tag Git (exemple) : `1.1.6-RELEASE`
 - Après la release, `master` repasse en `-SNAPSHOT`
 
 
@@ -20,12 +20,12 @@ git fetch origin
 ```
 
 ```bash
-git checkout evolutions-post-1.1.4
+git checkout evolutions-post-1.1.5
 # Bascule sur la branche de travail à livrer.
 ```
 
 ```bash
-git pull --rebase origin evolutions-post-1.1.4
+git pull --rebase origin evolutions-post-1.1.5
 # Met à jour la branche avec le distant en rejouant les commits au-dessus (historique plus propre qu’un merge).
 ```
 
@@ -47,10 +47,10 @@ git rebase origin/master
 
 ---
 
-## 3) Passer la version Maven en `1.1.5-RELEASE` (dans les POM)
+## 3) Passer la version Maven en `1.1.6-RELEASE` (dans les POM)
 
 1. Modifie les `pom.xml` (3 modules) :
-   - Remplacer par exemple `1.1.5-SNAPSHOT` par `1.1.5-RELEASE`.
+   - Remplacer par exemple `1.1.6-SNAPSHOT` par `1.1.6-RELEASE`.
 
 Puis :
 
@@ -65,17 +65,17 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore(release): passage à la version 1.1.5-RELEASE"
+git commit -m "chore(release): passage à la version 1.1.6-RELEASE"
 # Crée un commit traçable qui fige la version release dans les POM.
 ```
 
 ```bash
-git push origin evolutions-post-1.1.4
+git push origin evolutions-post-1.1.5
 # Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
 ```
 
 > Si rebase et que Git refuse le push :  
-> `git push --force-with-lease origin evolutions-post-1.1.4`  
+> `git push --force-with-lease origin evolutions-post-1.1.5`  
 > (réécrit la branche distante de façon “sécurisée” en vérifiant qu’elle n’a pas bougé côté remote).
 
 ---
@@ -85,7 +85,7 @@ git push origin evolutions-post-1.1.4
 Sur GitHub :
 - (Demandeur) Créer une PR :
   - **base** : `master`
-  - **compare** : `evolutions-post-1.1.4`
+  - **compare** : `evolutions-post-1.1.5`
 - Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
 - Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
 
@@ -110,12 +110,12 @@ git pull origin master
 ```
 
 ```bash
-git tag -a 1.1.5-RELEASE -m "Release 1.1.5-RELEASE"
+git tag -a 1.1.6-RELEASE -m "Release 1.1.6-RELEASE"
 # Crée un tag annoté sur le commit courant (celui de master) pour marquer officiellement la release.
 ```
 
 ```bash
-git push origin 1.1.5-RELEASE
+git push origin 1.1.6-RELEASE
 # Publie le tag vers le remote pour le rendre visible à tous (et déclencher d’éventuels pipelines de release).
 ```
 
@@ -142,7 +142,7 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.5-RELEASE"
+git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.6-RELEASE"
 # Committe le retour en version de développement pour éviter que master reste bloqué en version release.
 ```
 

@@ -134,6 +134,28 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
+### Version 1.1.6
+
+Fonctionnalités front :
+- Ajout d'un bouton de logout OIDC (déjà implémenté sur /logout)
+- Ajout de champs filtres sur la liste des employés, interfacé avec la pagination coté back 
+- Transmission et application des roles sur le front : boutons de maj grisés si profil consult (avant : erreur coté back uniquement)
+
+Sécurité rhDemo :
+- Ajout de security context sur les déploiement helm (runAsNonRoot: true) contournement pour Postgres qui nécessite un démarrage root
+- Ajout de Pod Security Admission en mode audit/warn (enforce difficile avec Postgres)
+- Activation de PKCE S256 (paramétrage Keycloak) pour sécuriser le dialogue OIDC (recommandé même en BFF)
+
+Seleniumn amélioration des diagnostics 
+- Screenshot en cas d'erreur
+- retry "flaky" une fois en cas d'echec sur timeout
+- assertions enrichies avec des éléments de contexte
+
+Versions 
+- Passage à PostgreSQL 18.2 (CVE) et Postgres_exporter en 0.19.0 (Compat)
+- généralisation du suffixage des versions de container avec le digest sha256 (pinning)
+
+
 ### Version 1.1.5
 
 Outillage CI-CD (infra/jenkins-docker)
@@ -227,14 +249,13 @@ Sécurité applicative
   
 ## Feuille de route
 
-- Ajouter un champ de recherche dans chaque colonne de la liste des employes
 - Evaluer d'autres outils dans la chaine CI :
   - Snyk (sécurité des dépendances coté front-end)
   - Une alternative à Owasp Dependency-check qui a un fonctionnement contraignant (timeouts, clés API..)
 - Faire une revue des pipeline CI et CD selon le top10 risques de sécurité owasp <https://owasp.org/www-project-top-10-ci-cd-security-risks/>
 - Ajouter un mécanisme de mise à jour du schéma basé sur Liquibase
 - Ajouter Redis pour gérer les sessions partagées
-- Tester des outils de sécuritation Kubernetes : Kube-Bench, Falco, Kyverno sur stagingkub.
+- Tester des outils de sécuritation Kubernetes : Kube-Bench, Falco, Kyverno, Popeye sur stagingkub.
 
 ## Contribuer
 

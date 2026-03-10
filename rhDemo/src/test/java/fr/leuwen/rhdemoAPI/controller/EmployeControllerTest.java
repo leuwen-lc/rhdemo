@@ -2,6 +2,7 @@ package fr.leuwen.rhdemoAPI.controller;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.util.Arrays;
@@ -19,12 +20,14 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
+import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
+import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
 import fr.leuwen.rhdemoAPI.model.Employe;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
 
 /**
  * Tests unitaires pour EmployeController.
- * Teste la logique du contrôleur (tri, pagination, filtres) sans contexte Spring.
+ * Teste la logique du contrôleur (tri, pagination, filtres, DTOs) sans contexte Spring.
  */
 @ExtendWith(MockitoExtension.class)
 class EmployeControllerTest {
@@ -36,6 +39,7 @@ class EmployeControllerTest {
     private EmployeController controller;
 
     private Employe employe1;
+    private EmployeRequestDTO requestDto;
 
     @BeforeEach
     void setUp() {
@@ -45,6 +49,8 @@ class EmployeControllerTest {
         employe1.setNom("Dupont");
         employe1.setMail("jean.dupont@example.com");
         employe1.setAdresse("123 Rue de Paris");
+
+        requestDto = new EmployeRequestDTO("Jean", "Dupont", "jean.dupont@example.com", "123 Rue de Paris");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -58,7 +64,7 @@ class EmployeControllerTest {
         when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
-        Page<Employe> result = controller.getEmployesPage(0, 20, "nom", "ASC",
+        Page<EmployeResponseDTO> result = controller.getEmployesPage(0, 20, "nom", "ASC",
                 null, null, null, null);
 
         assertNotNull(result);
@@ -112,9 +118,11 @@ class EmployeControllerTest {
     void getEmployes_ShouldDelegateToService() {
         when(employeService.getEmployes()).thenReturn(Arrays.asList(employe1));
 
-        Iterable<Employe> result = controller.getEmployes();
+        List<EmployeResponseDTO> result = controller.getEmployes();
 
         assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals(1L, result.get(0).id());
         verify(employeService).getEmployes();
     }
 
@@ -126,9 +134,10 @@ class EmployeControllerTest {
     void getEmploye_ShouldDelegateToService() {
         when(employeService.getEmploye(1L)).thenReturn(employe1);
 
-        Employe result = controller.getEmploye(1L);
+        EmployeResponseDTO result = controller.getEmploye(1L);
 
-        assertEquals(1L, result.getId());
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
         verify(employeService).getEmploye(1L);
     }
 
@@ -138,12 +147,13 @@ class EmployeControllerTest {
 
     @Test
     void createEmploye_ShouldDelegateToService() {
-        when(employeService.createEmploye(employe1)).thenReturn(employe1);
+        when(employeService.createEmploye(any(Employe.class))).thenReturn(employe1);
 
-        Employe result = controller.createEmploye(employe1);
+        EmployeResponseDTO result = controller.createEmploye(requestDto);
 
-        assertEquals(1L, result.getId());
-        verify(employeService).createEmploye(employe1);
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
+        verify(employeService).createEmploye(any(Employe.class));
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -152,12 +162,13 @@ class EmployeControllerTest {
 
     @Test
     void updateEmploye_ShouldDelegateToService() {
-        when(employeService.updateEmploye(1L, employe1)).thenReturn(employe1);
+        when(employeService.updateEmploye(eq(1L), any(Employe.class))).thenReturn(employe1);
 
-        Employe result = controller.updateEmploye(1L, employe1);
+        EmployeResponseDTO result = controller.updateEmploye(1L, requestDto);
 
-        assertEquals(1L, result.getId());
-        verify(employeService).updateEmploye(1L, employe1);
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
+        verify(employeService).updateEmploye(eq(1L), any(Employe.class));
     }
 
     // ════════════════════════════════════════════════════════════════

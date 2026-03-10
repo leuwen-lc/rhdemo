@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import fr.leuwen.rhdemoAPI.exception.EmployeNotFoundException;
 import fr.leuwen.rhdemoAPI.model.Employe;
 import fr.leuwen.rhdemoAPI.repository.EmployeRepository;
+import fr.leuwen.rhdemoAPI.repository.EmployeSpecification;
 
 @Service
 public class EmployeService {
@@ -32,7 +33,8 @@ public class EmployeService {
         return employerepository.findAll(pageable);
     }
 
-    public Page<Employe> getEmployesPage(Specification<Employe> spec, Pageable pageable) {
+    public Page<Employe> getEmployesPage(String filterPrenom, String filterNom, String filterMail, String filterAdresse, Pageable pageable) {
+        Specification<Employe> spec = EmployeSpecification.withFilters(filterPrenom, filterNom, filterMail, filterAdresse);
         return employerepository.findAll(spec, pageable);
     }
 

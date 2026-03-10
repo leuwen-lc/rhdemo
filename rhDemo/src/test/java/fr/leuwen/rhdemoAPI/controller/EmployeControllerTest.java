@@ -3,6 +3,7 @@ package fr.leuwen.rhdemoAPI.controller;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.*;
 
 import java.util.Arrays;
@@ -18,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 
 import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
 import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
@@ -58,10 +58,10 @@ class EmployeControllerTest {
     // ════════════════════════════════════════════════════════════════
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithSort_ShouldCreateSortedPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
         Page<EmployeResponseDTO> result = controller.getEmployesPage(0, 20, "nom", "ASC",
@@ -71,7 +71,8 @@ class EmployeControllerTest {
         assertEquals(1, result.getTotalElements());
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().isSorted());
         assertEquals("nom", captured.getSort().iterator().next().getProperty());
@@ -79,33 +80,35 @@ class EmployeControllerTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithSortDesc_ShouldCreateDescendingPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
         controller.getEmployesPage(0, 10, "prenom", "DESC",
                 null, null, null, null);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().iterator().next().isDescending());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithoutSort_ShouldCreateUnsortedPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
         controller.getEmployesPage(0, 20, null, "ASC",
                 null, null, null, null);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().isUnsorted());
     }

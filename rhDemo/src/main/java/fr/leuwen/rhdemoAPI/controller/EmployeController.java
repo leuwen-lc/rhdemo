@@ -9,7 +9,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,8 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
 import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
-import fr.leuwen.rhdemoAPI.model.Employe;
-import fr.leuwen.rhdemoAPI.repository.EmployeSpecification;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
 import jakarta.validation.Valid;
 
@@ -93,8 +90,7 @@ public class EmployeController {
 			pageable = PageRequest.of(page, size);
 		}
 
-		Specification<Employe> spec = EmployeSpecification.withFilters(filterPrenom, filterNom, filterMail, filterAdresse);
-		return employeservice.getEmployesPage(spec, pageable).map(EmployeResponseDTO::from);
+		return employeservice.getEmployesPage(filterPrenom, filterNom, filterMail, filterAdresse, pageable).map(EmployeResponseDTO::from);
 	}
 
 	@GetMapping("/api/employe")

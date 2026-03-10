@@ -610,6 +610,16 @@ EOF
                         echo "ℹ️  Version RELEASE fixe : imagePullPolicy=IfNotPresent"
                     fi
 
+                    # Détecter la présence des CRDs Prometheus Operator (ServiceMonitor)
+                    # kubectl api-resources ne nécessite pas de permission spéciale sur les CRDs
+                    MONITORING_ENABLED="false"
+                    if kubectl api-resources --api-group=monitoring.coreos.com 2>/dev/null | grep -q ServiceMonitor; then
+                        MONITORING_ENABLED="true"
+                        echo "✅ Prometheus Operator détecté : ServiceMonitors activés"
+                    else
+                        echo "ℹ️  Prometheus Operator absent : ServiceMonitors désactivés (déploiement sans monitoring)"
+                    fi
+
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
                     # Note: --create-namespace crée automatiquement le namespace s'il n'existe pas
@@ -620,6 +630,8 @@ EOF
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
                       --set rhdemo.image.pullPolicy=\${PULL_POLICY} \\
+                      --set rhdemo.metrics.serviceMonitor.enabled=\${MONITORING_ENABLED} \\
+                      --set "postgresql-rhdemo.metrics.serviceMonitor.enabled=\${MONITORING_ENABLED}" \\
                       --wait \\
                       --timeout 15m \\
                       --debug

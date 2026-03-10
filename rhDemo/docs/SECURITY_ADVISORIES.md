@@ -7,6 +7,7 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 ## CVE-2025-49794 & CVE-2025-49796 - Vulnérabilités libxml2
 
 ### Détection
+
 - **Date de détection** : 2025-11-27
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : CRITICAL (Score CVSS: 9.1)
@@ -16,11 +17,13 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 Deux vulnérabilités critiques découvertes dans la bibliothèque libxml2 par Nikita Sveshnikov (Positive Technologies) :
 
 **CVE-2025-49794** - Use-After-Free et Type Confusion
+
 - **Impact** : Corruption mémoire lors du parsing XPath avec XML schematron
 - **Vecteur d'attaque** : Fichier XML malveillant
 - **Conséquences** : Déni de service (crash), exécution de code potentielle
 
 **CVE-2025-49796** - Type Confusion dans module Schematron
+
 - **Impact** : Corruption mémoire lors du traitement d'éléments sch:name
 - **Vecteur d'attaque** : Fichier XML malveillant
 - **Conséquences** : Déni de service, comportement indéfini
@@ -28,7 +31,7 @@ Deux vulnérabilités critiques découvertes dans la bibliothèque libxml2 par N
 ### Images affectées
 
 | Image | Version vulnérable | Status |
-|-------|-------------------|--------|
+| --- | --- | --- |
 | nginx | 1.27-alpine (Alpine 3.20) | ❌ VULNÉRABLE |
 | postgres | 16-alpine (Alpine 3.20) | ✅ Non affecté |
 | keycloak | 26.4.2 | ✅ Non affecté |
@@ -41,6 +44,7 @@ Deux vulnérabilités critiques découvertes dans la bibliothèque libxml2 par N
 **Action** : Mise à jour de l'image Nginx vers une version avec Alpine 3.21
 
 **Changements** :
+
 ```yaml
 # Avant (vulnérable)
 nginx:
@@ -52,16 +56,19 @@ nginx:
 ```
 
 **Fichiers modifiés** :
+
 - `infra/ephemere/docker-compose.yml` (ligne 148)
 - `Jenkinsfile` (lignes 1078, 1129) - Mise à jour du stage Trivy
 
 **Version du correctif** :
+
 - Alpine Linux 3.21 inclut libxml2 2.13.6 qui corrige CVE-2025-49794 et CVE-2025-49796
 - Nginx 1.27.3 (dernière version stable au 2025-11-27)
 
 ### Validation
 
 **Test de non-régression** :
+
 ```bash
 # Vérifier que la nouvelle image fonctionne
 docker pull nginx:1.27.3-alpine3.21
@@ -76,7 +83,7 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 ### Timeline
 
 | Date | Action |
-|------|--------|
+| --- | --- |
 | 2025-06-03 | Découverte des CVE par Positive Technologies |
 | 2025-06-11 | Attribution des numéros CVE officiels |
 | 2025-11-12 | Alpine 3.21.2 publiée avec correctif libxml2 |
@@ -104,16 +111,18 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 - [ ] Mettre en place des alertes automatiques pour les nouvelles CVE (GitHub Dependabot)
 - [ ] Considérer l'utilisation d'images distroless pour réduire la surface d'attaque
 
+---
 
-
-## 2025-11-28 : Nouvelles CVE CRITICAL détectées dans nginx:1.27.3-alpine3.21
+## 2025-11-28 — Nouvelles CVE CRITICAL détectées dans nginx:1.27.3-alpine3.21
 
 ### Détection supplémentaire
+
 - **Date** : 2025-11-28
 - **Contexte** : Après migration vers nginx:1.27.3-alpine3.21, Trivy détecte encore 2 CVE CRITICAL
 
 **Résultats du scan** :
-```
+
+```text
 🔍 Scan: nginx:1.27.3-alpine3.21
    ├─ CRITICAL:   2
    ├─ HIGH:       4
@@ -125,6 +134,7 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 **Action** : Mise à jour vers Nginx 1.29.3 (dernière version stable au 2025-11-28)
 
 **Changements** :
+
 ```yaml
 # Version précédente (encore vulnérable)
 nginx:
@@ -136,10 +146,12 @@ nginx:
 ```
 
 **Fichiers modifiés** :
+
 - `infra/ephemere/docker-compose.yml` (ligne 148)
 - `Jenkinsfile` (lignes 1081, 1143)
 
 **Justification** :
+
 - Nginx 1.29.3 publié le 19 novembre 2025
 - Inclut Alpine Linux avec les derniers correctifs de sécurité
 - Contient libxml2 >= 2.13.6 et autres packages à jour
@@ -149,7 +161,7 @@ nginx:
 ### Timeline mise à jour
 
 | Date | Action |
-|------|--------|
+| --- | --- |
 | 2025-11-27 | Première migration : nginx:1.27-alpine → nginx:1.27.3-alpine3.21 |
 | 2025-11-28 | Détection de 2 CVE CRITICAL supplémentaires |
 | 2025-11-28 | Seconde migration : nginx:1.27.3-alpine3.21 → nginx:1.29.3-alpine |
@@ -157,6 +169,7 @@ nginx:
 ### Note importante
 
 Cette situation démontre l'importance du **scan continu** avec Trivy :
+
 - ✅ Les CVE libxml2 (CVE-2025-49794, CVE-2025-49796) ont été corrigées
 - ⚠️ De **nouvelles** vulnérabilités ont été détectées dans d'autres packages
 - 🔄 La mise à jour vers la dernière version stable (1.29.3) devrait résoudre ces nouvelles CVE
@@ -168,6 +181,7 @@ Cette situation démontre l'importance du **scan continu** avec Trivy :
 ## CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass (gosu)
 
 ### Détection
+
 - **Date de détection** : 2026-02-12
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : CRITICAL
@@ -183,18 +197,19 @@ L'outil `gosu` (v1.19), utilisé par l'image officielle PostgreSQL pour changer 
 
 ### Analyse de risque
 
-**Risque réel : NUL (faux positif fonctionnel)**
+#### Risque réel — NUL (faux positif fonctionnel)
 
 `gosu` est un utilitaire de type `setuid+setgid+exec` dont le rôle unique est de changer d'utilisateur Unix puis d'exécuter une commande. Il **n'effectue aucune connexion réseau** et **n'utilise jamais** le package `crypto/tls` à l'exécution. Le code vulnérable est inclus dans le binaire Go par le compilateur mais n'est jamais appelé.
 
 Cette position est confirmée par :
+
 - Le mainteneur de gosu via [`govulncheck`](https://github.com/tianon/gosu/issues/144) qui vérifie que les chemins de code vulnérables ne sont pas atteignables
 - La discussion upstream [docker-library/postgres#1324](https://github.com/docker-library/postgres/issues/1324)
 
 ### Images affectées
 
 | Image | Composant | Status |
-|-------|-----------|--------|
+| --- | --- | --- |
 | postgres:18-alpine | gosu 1.19 (Go 1.24.6) | ⚠️ CVE présente mais non exploitable |
 | rhdemo-api | N/A | ✅ Non affecté |
 | nginx | N/A | ✅ Non affecté |
@@ -205,7 +220,8 @@ Cette position est confirmée par :
 **Action** : Exclusion de la CVE dans Trivy via `.trivyignore` (risque accepté - faux positif fonctionnel)
 
 **Fichier créé** : `rhDemo/.trivyignore`
-```
+
+```text
 # CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
 # Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine
 # Risque réel : NUL - gosu n'effectue aucune connexion TLS
@@ -213,11 +229,13 @@ CVE-2025-68121
 ```
 
 **Fichier modifié** : `rhDemo/vars/rhDemoLib.groovy`
+
 - Ajout de `--ignorefile rhDemo/.trivyignore` aux commandes `trivy image` (scans JSON et table)
 
 ### Condition de retrait de l'exclusion
 
 L'exclusion dans `.trivyignore` devra être **retirée** lorsque l'une de ces conditions sera remplie :
+
 - Nouvelle release de gosu compilée avec Go >= 1.24.13 ou >= 1.25.7
 - Mise à jour de l'image `postgres:18-alpine` intégrant un gosu corrigé
 
@@ -240,48 +258,61 @@ trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL postgres:18-alp
 - [gosu releases](https://github.com/tianon/gosu/releases) - v1.19 (Go 1.24.6)
 - [Go 1.24.13 release notes](https://go.dev/doc/devel/release) - inclut le fix crypto/tls
 
+---
 
 ## CVE-2026-24400
 
 ### Détection
+
 - **Date** : 2026-03-10
 - **Outil** : OWASP
-- **Sévérité** : HIGH 
+- **Sévérité** : HIGH
 
-### Description : Starting in version 1.4.0 and prior to version 3.27.7, an XML External Entity (XXE) vulnerability exists in `org.assertj.core.util.xml.XmlStringPrettyFormatter`: the `toXmlDocument(String)` method initializes `DocumentBuilderFactory` with default settings, without disabling DTDs or external entities. 
+### Description
+
+Starting in version 1.4.0 and prior to version 3.27.7, an XML External Entity (XXE) vulnerability exists in `org.assertj.core.util.xml.XmlStringPrettyFormatter`: the `toXmlDocument(String)` method initializes `DocumentBuilderFactory` with default settings, without disabling DTDs or external entities.
 
 ### Images affectées
+
 POM uniquement
 
 ### Remédiation
+
 Passage à la version Spring Boot 4.03
 
+---
 
 ## CVE-2026-0540
 
 ### Détection
+
 - **Date** : 2026-03-10
 - **Outil** : OWASP
-- **Sévérité** : MEDIUM (faux positif) ?
+- **Sévérité** : MEDIUM (faux positif)
 
-### Description : DOMPurify 3.1.3 through 3.3.1 and 2.5.3 through 2.5.8, fixed in commit 729097f, contain a cross-site scripting vulnerability that allows attackers to bypass attribute sanitization by exploiting five missing rawtext elements (noscript, xmp, noembed, noframes, iframe) in the SAFE_FOR_XML regex.
+### Description
+
+DOMPurify 3.1.3 through 3.3.1 and 2.5.3 through 2.5.8, fixed in commit 729097f, contain a cross-site scripting vulnerability that allows attackers to bypass attribute sanitization by exploiting five missing rawtext elements (noscript, xmp, noembed, noframes, iframe) in the SAFE_FOR_XML regex.
 
 ### Images affectées
+
 POM uniquement
 
 ### Remédiation
+
 Passage à la version springdoc-openapi 3.0.1
 
 ---
 
-## CVE-2026-22184 — zlib untgz buffer overflow (nginx:1.29.4-alpine)
+## CVE-2026-22184 — zlib untgz buffer overflow (nginx alpine)
 
 ### Détection
 
 - **Date** : 2026-03-10
 - **Outil** : Trivy Security Scanner
-- **Sévérité** : CRITICAL (CVSS v3.1 : 9.8)
-- **Composant affecté** : `zlib` (utilitaire `contrib/untgz`) embarqué dans `nginx:1.29.4-alpine`
+- **Sévérité** : CRITICAL (CVSS v3.1 : 9.8) / MEDIUM (CVSS v4.0 : 4.6)
+- **Composant affecté** : `zlib-1.3.1-r2` (paquet Alpine) — utilitaire `contrib/untgz`
+- **Statut** : Risque accepté — exclusion `.trivyignore` en attente de patch Alpine
 
 ### Description
 
@@ -291,70 +322,78 @@ Cette fonction copie un nom d'archive fourni en ligne de commande dans un buffer
 de 1024 octets via `strcpy()` sans validation de longueur.
 
 **Point important** : la vulnérabilité est dans un utilitaire de démonstration autonome
-(`untgz`) **non utilisé par nginx en tant que serveur web**. Le code vulnérable est
-présent dans le binaire zlib mais le vecteur d'exploitation nécessite une exécution locale
-avec un argument contrôlé par l'attaquant. Malgré ce contexte, Trivy signale la CVE comme
-CRITICAL car le score CVSS v3.1 (9.8) a été calculé sur la base d'un vecteur réseau
-(`AV:N`) avant que le contexte d'utilisation réel soit précisé dans CVSS v4.0 (score : 4.6
-MEDIUM, vecteur local).
+(`untgz`) **non utilisé par nginx en tant que serveur web**. Le vecteur d'exploitation
+nécessite une exécution locale avec un argument contrôlé par l'attaquant. Trivy signale
+CRITICAL car le score CVSS v3.1 (9.8) utilisait un vecteur réseau (`AV:N`) surévalué —
+CVSS v4.0 corrige à 4.6 MEDIUM avec vecteur local.
 
 ### Analyse de risque
 
 | Critère | Valeur |
 | --- | --- |
 | Vecteur d'exploitation | Local (argument ligne de commande) |
-| nginx exposé ? | Non — `untgz` n'est pas exécuté par nginx |
+| nginx exposé ? | Non — `untgz` n'est pas exécuté par nginx web server |
 | Risque réel en production | Faible |
-| Décision | Correction préventive par mise à jour nginx |
+| Patch upstream disponible ? | Non — Alpine 3.23.3 livre toujours `zlib-1.3.1-r2` |
+| Décision | Risque accepté + exclusion `.trivyignore` documentée |
 
-La correction préventive est appliquée car :
+### Chronologie de la remédiation
 
-- La politique du projet impose le passage de tout scan Trivy CRITICAL.
-- `nginx:1.29.5-alpine` corrige la CVE et intègre également la correction de
-  CVE-2026-1642 (Medium — nginx versions 1.3.0–1.29.4, fixed in 1.29.5+).
+**Phase 1 — 2026-03-10** : mise à jour `nginx:1.29.4-alpine` → `nginx:1.29.5-alpine`.
 
-### Remédiation appliquée
+Cette action a corrigé CVE-2026-1642 (Medium, nginx versions 1.3.0–1.29.4). En revanche
+CVE-2026-22184 persiste car les deux images embarquent le même paquet Alpine `zlib-1.3.1-r2`
+(Alpine 3.23.3) non encore patché par Alpine.
 
-**Action** : Mise à jour de l'image nginx de `1.29.4-alpine` vers `1.29.5-alpine`.
-
-```yaml
-# Avant (vulnérable)
-nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47
-
-# Après (corrigé)
-nginx:1.29.5-alpine@sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba
+```text
+nginx:1.29.4-alpine  →  Alpine 3.22   zlib-1.3.1-r2  ← CVE-2026-22184 présente
+nginx:1.29.5-alpine  →  Alpine 3.23.3 zlib-1.3.1-r2  ← CVE-2026-22184 toujours présente
+nginx:stable-alpine  →  Alpine 3.23.3 zlib-1.3.1-r2  ← idem (nginx 1.28.2)
 ```
 
-**Fichiers modifiés** :
+Aucune image nginx:alpine disponible ne contient un `zlib` patché à la date du 2026-03-10.
 
-- `Jenkinsfile-CI` (variable `NGINX_IMAGE`)
-- `infra/ephemere/docker-compose.yml` (valeur de repli de la variable `NGINX_IMAGE`)
+**Phase 2 — 2026-03-10** : exclusion Trivy documentée dans `.trivyignore`.
+
+### Fichiers modifiés
+
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, phase 1)
+- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`, phase 1)
+- `.trivyignore` (exclusion CVE-2026-22184 avec justification, phase 2)
 
 ### Validation
 
 ```bash
-# Vérifier le digest de l'image
-docker pull nginx:1.29.5-alpine
-# Digest attendu : sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba
+# Confirmer la version zlib dans l'image courante
+docker run --rm --entrypoint sh nginx:1.29.5-alpine \
+  -c "apk info zlib | head -1 && cat /etc/alpine-release"
+# Résultat : zlib-1.3.1-r2 / 3.23.3
 
-# Scanner avec Trivy
-trivy image --severity CRITICAL nginx:1.29.5-alpine
-# Résultat attendu : 0 vulnérabilité CRITICAL
+# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
+trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL nginx:1.29.5-alpine
 ```
+
+### Condition de clôture
+
+Retirer `CVE-2026-22184` du `.trivyignore` quand Alpine publie `zlib-1.3.1-r3` ou
+supérieur avec le correctif intégré, et qu'une image `nginx:*-alpine` basée sur ce paquet
+est disponible.
 
 ### Timeline
 
 | Date | Action |
 | --- | --- |
 | 2026-01-07 | Publication CVE-2026-22184 (NVD) |
-| 2026-03-10 | Détection par Trivy dans le pipeline CI |
-| 2026-03-10 | Mise à jour nginx:1.29.4-alpine → nginx:1.29.5-alpine |
+| 2026-03-10 | Détection par Trivy dans le pipeline CI (nginx:1.29.4-alpine) |
+| 2026-03-10 | Mise à jour nginx:1.29.4 → 1.29.5 (corrige CVE-2026-1642, pas CVE-2026-22184) |
+| 2026-03-10 | Analyse : Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2` non patché |
+| 2026-03-10 | Exclusion `.trivyignore` avec justification documentée |
 
 ### Références
 
 - [NVD — CVE-2026-22184](https://nvd.nist.gov/vuln/detail/CVE-2026-22184)
 - [nginx security advisories](https://nginx.org/en/security_advisories.html)
-- [Docker Hub — nginx tags](https://hub.docker.com/_/nginx/tags)
+- [Alpine Linux security tracker](https://security.alpinelinux.org/)
 
 ---
 
@@ -364,28 +403,32 @@ trivy image --severity CRITICAL nginx:1.29.5-alpine
 ## CVE-XXXX-XXXXX - Titre de la vulnérabilité
 
 ### Détection
+
 - **Date** : AAAA-MM-JJ
 - **Outil** : Trivy / OWASP / Autre
 - **Sévérité** : CRITICAL / HIGH / MEDIUM
 
 ### Description
+
 [Description de la vulnérabilité]
 
 ### Images affectées
+
 [Liste des images et versions]
 
 ### Remédiation
+
 [Action prise pour corriger]
 
 ### Validation
+
 [Tests effectués]
 
 ### Références
+
 [Liens vers CVE, advisories]
 ```
 
 ---
 
 **Dernière mise à jour** : 2026-03-10
-
----

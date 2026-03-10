@@ -9,7 +9,7 @@ import jakarta.persistence.Table;
 
 /**
  * Entité JPA Employe.
- * Les contraintes métier (NotBlank, Email, Size) sont dans EmployeRequestDTO.
+ * Les contraintes de forme (NotBlank, Email, Size) sont dans EmployeRequestDTO.
  * Les contraintes @Column garantissent l'intégrité au niveau base de données.
  */
 @Entity

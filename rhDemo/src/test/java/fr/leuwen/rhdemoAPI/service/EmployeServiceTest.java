@@ -204,11 +204,11 @@ public class EmployeServiceTest {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests saveEmploye(employe)
+    // Tests createEmploye(employe)
     // ════════════════════════════════════════════════════════════════
 
     @Test
-    public void testSaveEmploye_WithNewEmploye_ShouldSaveSuccessfully() {
+    public void testCreateEmploye_ShouldSaveSuccessfully() {
         // Arrange
         Employe newEmploye = new Employe();
         newEmploye.setPrenom("Paul");
@@ -226,7 +226,7 @@ public class EmployeServiceTest {
         when(employeRepository.save(newEmploye)).thenReturn(savedEmploye);
 
         // Act
-        Employe result = employeService.saveEmploye(newEmploye);
+        Employe result = employeService.createEmploye(newEmploye);
 
         // Assert
         assertNotNull(result);
@@ -236,18 +236,85 @@ public class EmployeServiceTest {
     }
 
     @Test
-    public void testSaveEmploye_WithExistingEmploye_ShouldUpdateSuccessfully() {
+    public void testCreateEmploye_ShouldIgnoreIdInBody() {
+        // Arrange — le client envoie un id arbitraire dans le corps
+        Employe employeWithId = new Employe();
+        employeWithId.setId(99L);
+        employeWithId.setPrenom("Paul");
+        employeWithId.setNom("Durand");
+        employeWithId.setMail("paul.durand@example.com");
+
+        Employe savedEmploye = new Employe();
+        savedEmploye.setId(3L);
+        savedEmploye.setPrenom("Paul");
+        savedEmploye.setNom("Durand");
+        savedEmploye.setMail("paul.durand@example.com");
+
+        when(employeRepository.save(any(Employe.class))).thenReturn(savedEmploye);
+
+        // Act
+        employeService.createEmploye(employeWithId);
+
+        // Assert — l'id a été nullifié avant le save
+        assertNull(employeWithId.getId());
+        verify(employeRepository, times(1)).save(employeWithId);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Tests updateEmploye(id, employe)
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    public void testUpdateEmploye_WithValidId_ShouldUpdateSuccessfully() {
         // Arrange
         employe1.setPrenom("Jean-Updated");
+        when(employeRepository.existsById(1L)).thenReturn(true);
         when(employeRepository.save(employe1)).thenReturn(employe1);
 
         // Act
-        Employe result = employeService.saveEmploye(employe1);
+        Employe result = employeService.updateEmploye(1L, employe1);
 
         // Assert
         assertNotNull(result);
         assertEquals(1L, result.getId());
         assertEquals("Jean-Updated", result.getPrenom());
+        verify(employeRepository, times(1)).existsById(1L);
         verify(employeRepository, times(1)).save(employe1);
+    }
+
+    @Test
+    public void testUpdateEmploye_ShouldUseIdFromPath() {
+        // Arrange — le corps contient un id différent du path : le path gagne
+        Employe employeWithWrongId = new Employe();
+        employeWithWrongId.setId(99L);
+        employeWithWrongId.setPrenom("Jean");
+        employeWithWrongId.setNom("Dupont");
+        employeWithWrongId.setMail("jean.dupont@example.com");
+
+        when(employeRepository.existsById(1L)).thenReturn(true);
+        when(employeRepository.save(employeWithWrongId)).thenReturn(employeWithWrongId);
+
+        // Act
+        employeService.updateEmploye(1L, employeWithWrongId);
+
+        // Assert — l'id a été écrasé par celui du path
+        assertEquals(1L, employeWithWrongId.getId());
+        verify(employeRepository, times(1)).save(employeWithWrongId);
+    }
+
+    @Test
+    public void testUpdateEmploye_WithInvalidId_ShouldThrowException() {
+        // Arrange
+        when(employeRepository.existsById(999L)).thenReturn(false);
+
+        // Act & Assert
+        EmployeNotFoundException exception = assertThrows(
+                EmployeNotFoundException.class,
+                () -> employeService.updateEmploye(999L, employe1)
+        );
+
+        assertTrue(exception.getMessage().contains("999"));
+        verify(employeRepository, times(1)).existsById(999L);
+        verify(employeRepository, never()).save(any());
     }
 }

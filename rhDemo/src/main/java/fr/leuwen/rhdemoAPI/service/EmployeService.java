@@ -44,8 +44,16 @@ public class EmployeService {
         employerepository.deleteById(id);
     }
 
-    public Employe saveEmploye(Employe employe) {
-        Employe savedEmploye = employerepository.save(employe);
-        return savedEmploye;
+    public Employe createEmploye(Employe employe) {
+        employe.setId(null);
+        return employerepository.save(employe);
+    }
+
+    public Employe updateEmploye(Long id, Employe employe) {
+        if (!employerepository.existsById(id)) {
+            throw new EmployeNotFoundException(id);
+        }
+        employe.setId(id);
+        return employerepository.save(employe);
     }
 }

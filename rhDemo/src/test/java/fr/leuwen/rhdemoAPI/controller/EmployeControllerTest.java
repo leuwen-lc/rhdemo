@@ -133,17 +133,31 @@ class EmployeControllerTest {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests saveEmploye
+    // Tests createEmploye
     // ════════════════════════════════════════════════════════════════
 
     @Test
-    void saveEmploye_ShouldDelegateToService() {
-        when(employeService.saveEmploye(employe1)).thenReturn(employe1);
+    void createEmploye_ShouldDelegateToService() {
+        when(employeService.createEmploye(employe1)).thenReturn(employe1);
 
-        Employe result = controller.saveEmploye(employe1);
+        Employe result = controller.createEmploye(employe1);
 
         assertEquals(1L, result.getId());
-        verify(employeService).saveEmploye(employe1);
+        verify(employeService).createEmploye(employe1);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Tests updateEmploye
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    void updateEmploye_ShouldDelegateToService() {
+        when(employeService.updateEmploye(1L, employe1)).thenReturn(employe1);
+
+        Employe result = controller.updateEmploye(1L, employe1);
+
+        assertEquals(1L, result.getId());
+        verify(employeService).updateEmploye(1L, employe1);
     }
 
     // ════════════════════════════════════════════════════════════════

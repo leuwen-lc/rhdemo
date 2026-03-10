@@ -70,18 +70,18 @@ export function getEmploye(id) {
   return api.get('/employe', { params: { id } });
 }
 
-export function saveEmploye(employe) {
-  console.log('Données envoyées au backend:', employe);
-  return api.post('/employe', employe);
+export function createEmploye(employe) {
+  const { id, ...data } = employe;
+  return api.post('/employe', data);
 }
 
-export function testSaveEmploye(employe) {
-  console.log('TEST - Données envoyées au backend:', employe);
-  return api.post('/test-employe', employe);
+export function updateEmploye(id, employe) {
+  const { id: _, ...data } = employe;
+  return api.put(`/employe/${id}`, data);
 }
 
 export function deleteEmploye(id) {
-  return api.delete('/employe', { params: { id } });
+  return api.delete(`/employe/${id}`);
 }
 
 export function getUserInfo() {

@@ -8,11 +8,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import fr.leuwen.rhdemoAPI.model.Employe;
@@ -92,27 +96,32 @@ public class EmployeController {
 		return employeservice.getEmploye(id);
 	}
 	
-	@DeleteMapping("/api/employe")
+	@DeleteMapping("/api/employe/{id}")
 	@PreAuthorize("hasRole('MAJ')")
-	public void deleteEmploye(@RequestParam final Long id) {
-	      employeservice.deleteEmploye(id);
-	     
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteEmploye(@PathVariable final Long id) {
+		employeservice.deleteEmploye(id);
 	}
-	
-	@PostMapping ("/api/employe")
+
+	@PostMapping("/api/employe")
 	@PreAuthorize("hasRole('MAJ')")
-	public Employe saveEmploye(@Valid @RequestBody Employe employe) {
-	      logger.debug("=== RÉCEPTION DONNÉES EMPLOYE ===");
-	      logger.debug("ID reçu: {}", employe.getId());
-	      logger.debug("Prénom reçu: {}", employe.getPrenom());
-	      logger.debug("Nom reçu: {}", employe.getNom());
-	      logger.debug("Mail reçu: {}", employe.getMail());
-	      logger.debug("Adresse reçue: {}", employe.getAdresse());
-	      logger.info("Données employé validées, sauvegarde en cours...");
-	      
-	      Employe savedEmploye = employeservice.saveEmploye(employe);
-	      logger.info("Employé sauvegardé avec succès - ID: {}", savedEmploye.getId());
-	      return savedEmploye;
-	}	
+	@ResponseStatus(HttpStatus.CREATED)
+	public Employe createEmploye(@Valid @RequestBody Employe employe) {
+		logger.debug("Création employé - prénom: {}, nom: {}", employe.getPrenom(), employe.getNom());
+		logger.info("Données employé validées, création en cours...");
+		Employe created = employeservice.createEmploye(employe);
+		logger.info("Employé créé avec succès - ID: {}", created.getId());
+		return created;
+	}
+
+	@PutMapping("/api/employe/{id}")
+	@PreAuthorize("hasRole('MAJ')")
+	public Employe updateEmploye(@PathVariable final Long id, @Valid @RequestBody Employe employe) {
+		logger.debug("Mise à jour employé ID: {} - prénom: {}, nom: {}", id, employe.getPrenom(), employe.getNom());
+		logger.info("Données employé validées, mise à jour en cours...");
+		Employe updated = employeservice.updateEmploye(id, employe);
+		logger.info("Employé mis à jour avec succès - ID: {}", updated.getId());
+		return updated;
+	}
 
 }

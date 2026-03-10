@@ -2,6 +2,7 @@ package fr.leuwen.rhdemoAPI.controller;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -269,12 +270,12 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests POST /api/employe (création/modification)
+    // Tests POST /api/employe (création)
     // ════════════════════════════════════════════════════════════════
 
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
-    public void testSaveEmploye_WithValidData_ShouldReturn200() throws Exception {
+    public void testCreateEmploye_WithValidData_ShouldReturn201() throws Exception {
         String validEmployeJson = """
                 {
                     "prenom": "Jean",
@@ -288,7 +289,7 @@ public class EmployeControllerIT {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.prenom").value("Jean"))
                 .andExpect(jsonPath("$.nom").value("Dupont"))
@@ -297,7 +298,7 @@ public class EmployeControllerIT {
 
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
-    public void testSaveEmploye_WithInvalidEmail_ShouldReturn400() throws Exception {
+    public void testCreateEmploye_WithInvalidEmail_ShouldReturn400() throws Exception {
         String invalidEmployeJson = """
                 {
                     "prenom": "Jean",
@@ -318,7 +319,7 @@ public class EmployeControllerIT {
 
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
-    public void testSaveEmploye_WithMissingFields_ShouldReturn400() throws Exception {
+    public void testCreateEmploye_WithMissingFields_ShouldReturn400() throws Exception {
         String invalidEmployeJson = """
                 {
                     "prenom": "",
@@ -339,7 +340,7 @@ public class EmployeControllerIT {
 
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
-    public void testSaveEmploye_WithConsultRole_ShouldReturn403() throws Exception {
+    public void testCreateEmploye_WithConsultRole_ShouldReturn403() throws Exception {
         String validEmployeJson = """
                 {
                     "prenom": "Jean",
@@ -357,14 +358,122 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests DELETE /api/employe?id=X (suppression)
+    // Tests PUT /api/employe/{id} (mise à jour)
     // ════════════════════════════════════════════════════════════════
 
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
     @DirtiesContext
-    public void testDeleteEmploye_WithValidId_ShouldReturn200() throws Exception {
-        // D'abord créer un employé à supprimer
+    public void testUpdateEmploye_WithValidId_ShouldReturn200() throws Exception {
+        // Créer un employé pour la mise à jour
+        String newEmployeJson = """
+                {
+                    "prenom": "ToUpdate",
+                    "nom": "Test",
+                    "mail": "toupdate@example.com",
+                    "adresse": "123 Test Street"
+                }
+                """;
+
+        String createResponse = mockMvc.perform(post("/api/employe")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(newEmployeJson))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long id = Long.parseLong(createResponse.split("\"id\":")[1].split(",")[0].trim());
+
+        String updatedJson = """
+                {
+                    "prenom": "Updated",
+                    "nom": "Test",
+                    "mail": "updated@example.com",
+                    "adresse": "456 Updated Street"
+                }
+                """;
+
+        mockMvc.perform(put("/api/employe/{id}", id)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatedJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.prenom").value("Updated"))
+                .andExpect(jsonPath("$.mail").value("updated@example.com"));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"MAJ"})
+    public void testUpdateEmploye_WithInvalidId_ShouldReturn404() throws Exception {
+        String validJson = """
+                {
+                    "prenom": "Jean",
+                    "nom": "Dupont",
+                    "mail": "jean.dupont999@example.com",
+                    "adresse": "123 Rue de Paris"
+                }
+                """;
+
+        mockMvc.perform(put("/api/employe/{id}", 999L)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validJson))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testUpdateEmploye_WithConsultRole_ShouldReturn403() throws Exception {
+        String validJson = """
+                {
+                    "prenom": "Jean",
+                    "nom": "Dupont",
+                    "mail": "jean.dupont@example.com",
+                    "adresse": "123 Rue de Paris"
+                }
+                """;
+
+        mockMvc.perform(put("/api/employe/{id}", 1L)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validJson))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"MAJ"})
+    public void testUpdateEmploye_WithInvalidData_ShouldReturn400() throws Exception {
+        String invalidJson = """
+                {
+                    "prenom": "",
+                    "nom": "",
+                    "mail": "invalid",
+                    "adresse": ""
+                }
+                """;
+
+        mockMvc.perform(put("/api/employe/{id}", 1L)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Erreur de validation des données"))
+                .andExpect(jsonPath("$.errors").exists());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Tests DELETE /api/employe/{id} (suppression)
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    @WithMockUser(username = "user", roles = {"MAJ"})
+    @DirtiesContext
+    public void testDeleteEmploye_WithValidId_ShouldReturn204() throws Exception {
+        // Créer un employé à supprimer
         String newEmployeJson = """
                 {
                     "prenom": "ToDelete",
@@ -378,33 +487,30 @@ public class EmployeControllerIT {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(newEmployeJson))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
-        // Extraire l'ID de la réponse (simple parsing)
-        String id = createResponse.split("\"id\":")[1].split(",")[0];
+        long id = Long.parseLong(createResponse.split("\"id\":")[1].split(",")[0].trim());
 
         // Supprimer l'employé
-        mockMvc.perform(delete("/api/employe")
-                        .with(csrf())
-                        .param("id", id))
-                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/employe/{id}", id)
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
 
-        // Vérifier que l'employé n'existe plus (avec authentification)
+        // Vérifier que l'employé n'existe plus
         mockMvc.perform(get("/api/employe")
-                        .param("id", id)
-                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("user").roles("consult")))
+                        .param("id", String.valueOf(id))
+                        .with(user("user").roles("consult")))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
     public void testDeleteEmploye_WithInvalidId_ShouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/employe")
-                        .with(csrf())
-                        .param("id", "999"))
+        mockMvc.perform(delete("/api/employe/{id}", 999L)
+                        .with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
     }
@@ -412,9 +518,8 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testDeleteEmploye_WithConsultRole_ShouldReturn403() throws Exception {
-        mockMvc.perform(delete("/api/employe")
-                        .with(csrf())
-                        .param("id", "1"))
+        mockMvc.perform(delete("/api/employe/{id}", 1L)
+                        .with(csrf()))
                 .andExpect(status().isForbidden());
     }
 }

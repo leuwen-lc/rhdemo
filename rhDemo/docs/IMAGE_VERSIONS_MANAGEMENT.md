@@ -23,10 +23,11 @@ Le tag est conservé pour la lisibilité ; le digest assure l'intégrité.
 ## Images externes utilisées
 
 | Image | Usage | Environnements |
-|---|---|---|
+| --- | --- | --- |
 | `postgres:18.2-alpine3.22` | BDD rhdemo + keycloak, backups | dev, ephemere, stagingkub |
 | `quay.io/keycloak/keycloak:26.5.0` | Serveur d'authentification | dev, ephemere, stagingkub |
-| `nginx:1.29.4-alpine` | Reverse proxy HTTPS | ephemere, Jenkinsfile-CI |
+| `nginx:1.29.5-alpine` | Reverse proxy HTTPS | ephemere, Jenkinsfile-CI |
+| `ghcr.io/nginx/nginx-gateway-fabric:2.4.0` | API Gateway / Ingress Kubernetes | stagingkub, Jenkinsfile-CI (scan Trivy) |
 | `busybox:1.36` | Init containers (fix-permissions, wait-for) | stagingkub |
 | `quay.io/prometheuscommunity/postgres-exporter:v0.15.0` | Métriques PostgreSQL | stagingkub |
 
@@ -41,6 +42,7 @@ Le tag est conservé pour la lisibilité ; le digest assure l'intégrité.
 Les images sont référencées directement dans les fichiers Docker Compose avec le digest en suffixe.
 
 **Fichiers** :
+
 - [`infra/dev/docker-compose.yml`](../infra/dev/docker-compose.yml) : postgres, keycloak
 - [`infra/ephemere/docker-compose.yml`](../infra/ephemere/docker-compose.yml) : postgres, keycloak, nginx
 
@@ -54,17 +56,22 @@ image: ${POSTGRES_IMAGE:-postgres:18.2-alpine3.22@sha256:198c...}
 
 Les images sont définies dans les variables d'environnement du pipeline.
 
-**Fichier** : [`Jenkinsfile-CI`](../Jenkinsfile-CI) (variables `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE`)
+**Fichier** : [`Jenkinsfile-CI`](../Jenkinsfile-CI) (variables `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE`, `NGF_IMAGE`)
 
 ```groovy
 environment {
-    NGINX_IMAGE = "nginx:1.29.4-alpine@sha256:a60a..."
-    POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c..."
-    KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:2489..."
+    NGINX_IMAGE = "nginx:1.29.5-alpine@sha256:1d13701a..."
+    POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924a..."
+    KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb..."
+    // NGINX Gateway Fabric — scanné en CI sans être déployé par ce pipeline
+    NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.0@sha256:5c40d574..."
 }
 ```
 
-Ces variables sont exportées vers Docker Compose lors du déploiement ephemere et utilisées par le scan Trivy.
+`NGINX_IMAGE`, `POSTGRES_IMAGE` et `KEYCLOAK_IMAGE` sont exportées vers Docker Compose lors du
+déploiement ephemere. `NGF_IMAGE` est utilisée **uniquement par le scan Trivy** — NGF n'est pas
+déployé par le pipeline CI (il est installé via Helm dans `init-stagingkub.sh`). Ce scan en CI
+évite une dépendance Trivy sur le pipeline CD.
 
 ### Helm / Kubernetes (stagingkub)
 
@@ -85,7 +92,7 @@ global:
 **Templates consommateurs** (via `{{ .Values.global.images.<nom> }}`) :
 
 | Template | Images utilisées |
-|---|---|
+| --- | --- |
 | `postgresql-rhdemo-statefulset.yaml` | postgres, postgresExporter, busybox |
 | `postgresql-keycloak-statefulset.yaml` | postgres, busybox |
 | `keycloak-deployment.yaml` | keycloak, busybox |
@@ -97,10 +104,10 @@ global:
 ### Différence architecturale ephemere vs stagingkub
 
 | Composant | Ephemere | Stagingkub |
-|-----------|----------|------------|
+| --- | --- | --- |
 | PostgreSQL | `postgres:18.2-alpine3.22` (conteneur) | `postgres:18.2-alpine3.22` (StatefulSet) |
 | Keycloak | `quay.io/keycloak/keycloak:26.5.0` | idem |
-| Nginx | `nginx:1.29.4-alpine` (reverse proxy) | NGINX Gateway Fabric (composant K8s) |
+| Nginx | `nginx:1.29.5-alpine` (reverse proxy) | NGINX Gateway Fabric 2.4.0 (Helm, namespace `nginx-gateway`) |
 
 ---
 
@@ -123,14 +130,16 @@ for d in m.get('manifests', []):
 
 ### 2. Mettre à jour les fichiers
 
-| Scope | Fichier à modifier |
-|---|---|
-| **Helm (stagingkub)** | `values.yaml` → `global.images.<nom>` |
-| **Docker Compose dev** | `infra/dev/docker-compose.yml` |
-| **Docker Compose ephemere** | `infra/ephemere/docker-compose.yml` |
-| **Pipeline CI** | `Jenkinsfile-CI` (variables d'environnement) |
+| Image | Fichier(s) à modifier |
+| --- | --- |
+| `postgres`, `keycloak` | `values.yaml` → `global.images.<nom>` · `infra/dev/docker-compose.yml` · `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` |
+| `nginx` (reverse proxy ephemere) | `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` (`NGINX_IMAGE`) |
+| `nginx-gateway-fabric` (stagingkub) | `infra/stagingkub/scripts/init-stagingkub.sh` (`NGF_VERSION` + `NGF_IMAGE_DIGEST`) · `Jenkinsfile-CI` (`NGF_IMAGE`) |
+| `busybox`, `postgres-exporter` | `values.yaml` → `global.images.<nom>` |
 
-> **Important** : pour que les versions soient cohérentes entre environnements, modifier **tous** les fichiers concernés.
+> **Important** : pour `nginx-gateway-fabric`, mettre à jour `NGF_VERSION` / `NGF_IMAGE_DIGEST` dans
+> `init-stagingkub.sh` **et** `NGF_IMAGE` dans `Jenkinsfile-CI` de façon cohérente.
+> Le digest doit être récupéré par `docker pull ghcr.io/nginx/nginx-gateway-fabric:<nouvelle-version>`.
 
 ### 3. Vérifier
 
@@ -194,6 +203,7 @@ stage('Lecture Version Maven') {
 ### Complémentarité tag + digest
 
 Le format `image:tag@sha256:digest` combine les avantages :
+
 - Le **tag** donne la lisibilité (on voit la version)
 - Le **digest** donne la sécurité (on garantit le contenu)
 - Si le registry retourne un contenu différent du digest, le pull échoue
@@ -208,4 +218,4 @@ Le format `image:tag@sha256:digest` combine les avantages :
 
 ---
 
-**Dernière mise à jour** : 19 février 2026
+**Dernière mise à jour** : 10 mars 2026

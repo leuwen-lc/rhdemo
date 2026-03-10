@@ -152,6 +152,65 @@ Tests intégration :  56 tests, 0 échec
 
 ---
 
+## Évolution 3 — Encapsulation de `Specification<Employe>` dans le service
+
+### Contexte
+
+Après l'introduction des DTOs, le contrôleur conservait une dépendance résiduelle sur
+l'entité JPA `Employe` : la ligne
+
+```java
+Specification<Employe> spec = EmployeSpecification.withFilters(...);
+```
+
+construisait un objet JPA dans la couche HTTP. La `Specification` est une abstraction de
+requête qui appartient à la couche d'accès aux données, pas au contrat HTTP.
+
+### Architecture après modification
+
+Le contrôleur passe les filtres bruts au service, qui construit la spec en interne :
+
+```text
+Client → EmployeRequestDTO → Controller(filtres String) → Service → Specification<Employe> → Repository
+```
+
+La méthode du service devient :
+
+```java
+public Page<Employe> getEmployesPage(
+    String filterPrenom, String filterNom, String filterMail, String filterAdresse,
+    Pageable pageable) {
+    Specification<Employe> spec = EmployeSpecification.withFilters(filterPrenom, filterNom, filterMail, filterAdresse);
+    return employerepository.findAll(spec, pageable);
+}
+```
+
+### Imports supprimés du contrôleur
+
+- `fr.leuwen.rhdemoAPI.model.Employe`
+- `fr.leuwen.rhdemoAPI.repository.EmployeSpecification`
+- `org.springframework.data.jpa.domain.Specification`
+
+`EmployeController` ne dépend plus d'aucune classe du package `model` ou `repository`.
+
+### Fichiers modifiés
+
+| Fichier | Nature du changement |
+| --- | --- |
+| `service/EmployeService.java` | `getEmployesPage(Specification, Pageable)` → `getEmployesPage(String×4, Pageable)` + import `EmployeSpecification` |
+| `controller/EmployeController.java` | 3 imports JPA supprimés, appel service mis à jour |
+| `test/service/EmployeServiceTest.java` | `testGetEmployesPageWithSpecification` → `testGetEmployesPageWithFilters` |
+| `test/controller/EmployeControllerTest.java` | Import `Specification` supprimé, stubs passent de `any(Specification.class)` à `nullable(String.class)×4` |
+
+### Résultats des tests
+
+```text
+Tests unitaires   : 120 tests, 0 échec
+Tests intégration :  56 tests, 0 échec
+```
+
+---
+
 ## Écart restant — plan de normalisation complet
 
 ### Priorité 1 — Cohérence singulier/pluriel et GET par path variable
@@ -221,5 +280,6 @@ que les constructeurs — aucune modification nécessaire.
 | Séparation endpoints create/update | Appliqué | — | Sécurité |
 | Correction DELETE path variable + 204 | Appliqué | — | Conformité REST |
 | DTOs immutables (records) | Appliqué | — | Sécurité + architecture |
+| Encapsulation `Specification` dans le service | Appliqué | — | Isolation des couches |
 | GET path variable + pluriel URLs | Restant | Faible | Cohérence API |
 | `ErrorResponse` → record | Restant | Très faible | Qualité code |

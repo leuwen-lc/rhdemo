@@ -270,7 +270,91 @@ Passage à la version Spring Boot 4.03
 POM uniquement
 
 ### Remédiation
-Passage à la version srpingdoc-openapi 3.0.1
+Passage à la version springdoc-openapi 3.0.1
+
+---
+
+## CVE-2026-22184 — zlib untgz buffer overflow (nginx:1.29.4-alpine)
+
+### Détection
+
+- **Date** : 2026-03-10
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL (CVSS v3.1 : 9.8)
+- **Composant affecté** : `zlib` (utilitaire `contrib/untgz`) embarqué dans `nginx:1.29.4-alpine`
+
+### Description
+
+CVE-2026-22184 est un dépassement de buffer global (`CWE-787 — Out-of-bounds Write`) dans
+la fonction `TGZfname()` de l'utilitaire `contrib/untgz` de zlib (versions ≤ 1.3.1.2).
+Cette fonction copie un nom d'archive fourni en ligne de commande dans un buffer statique
+de 1024 octets via `strcpy()` sans validation de longueur.
+
+**Point important** : la vulnérabilité est dans un utilitaire de démonstration autonome
+(`untgz`) **non utilisé par nginx en tant que serveur web**. Le code vulnérable est
+présent dans le binaire zlib mais le vecteur d'exploitation nécessite une exécution locale
+avec un argument contrôlé par l'attaquant. Malgré ce contexte, Trivy signale la CVE comme
+CRITICAL car le score CVSS v3.1 (9.8) a été calculé sur la base d'un vecteur réseau
+(`AV:N`) avant que le contexte d'utilisation réel soit précisé dans CVSS v4.0 (score : 4.6
+MEDIUM, vecteur local).
+
+### Analyse de risque
+
+| Critère | Valeur |
+| --- | --- |
+| Vecteur d'exploitation | Local (argument ligne de commande) |
+| nginx exposé ? | Non — `untgz` n'est pas exécuté par nginx |
+| Risque réel en production | Faible |
+| Décision | Correction préventive par mise à jour nginx |
+
+La correction préventive est appliquée car :
+
+- La politique du projet impose le passage de tout scan Trivy CRITICAL.
+- `nginx:1.29.5-alpine` corrige la CVE et intègre également la correction de
+  CVE-2026-1642 (Medium — nginx versions 1.3.0–1.29.4, fixed in 1.29.5+).
+
+### Remédiation appliquée
+
+**Action** : Mise à jour de l'image nginx de `1.29.4-alpine` vers `1.29.5-alpine`.
+
+```yaml
+# Avant (vulnérable)
+nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47
+
+# Après (corrigé)
+nginx:1.29.5-alpine@sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba
+```
+
+**Fichiers modifiés** :
+
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`)
+- `infra/ephemere/docker-compose.yml` (valeur de repli de la variable `NGINX_IMAGE`)
+
+### Validation
+
+```bash
+# Vérifier le digest de l'image
+docker pull nginx:1.29.5-alpine
+# Digest attendu : sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba
+
+# Scanner avec Trivy
+trivy image --severity CRITICAL nginx:1.29.5-alpine
+# Résultat attendu : 0 vulnérabilité CRITICAL
+```
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-01-07 | Publication CVE-2026-22184 (NVD) |
+| 2026-03-10 | Détection par Trivy dans le pipeline CI |
+| 2026-03-10 | Mise à jour nginx:1.29.4-alpine → nginx:1.29.5-alpine |
+
+### Références
+
+- [NVD — CVE-2026-22184](https://nvd.nist.gov/vuln/detail/CVE-2026-22184)
+- [nginx security advisories](https://nginx.org/en/security_advisories.html)
+- [Docker Hub — nginx tags](https://hub.docker.com/_/nginx/tags)
 
 ---
 

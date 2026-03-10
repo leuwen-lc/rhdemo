@@ -45,9 +45,11 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47"
+        NGINX_IMAGE = "nginx:1.29.5-alpine@sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba"
         POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
+        // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
+        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.0@sha256:5c40d574639b655deea77ea521032e88cc3ee19dbea0be21f8cda3368e5d9f39"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -1030,6 +1032,7 @@ YMLEOF
                         [image: env.POSTGRES_IMAGE, name: 'postgres'],
                         [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
                         [image: env.NGINX_IMAGE, name: 'nginx'],
+                        [image: env.NGF_IMAGE, name: 'nginx-gateway-fabric'],
                         [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
                     ]
 
@@ -1392,6 +1395,7 @@ YMLEOF
                         ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
                         ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
                         ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
+                        ['trivy-reports', 'nginx-gateway-fabric.html', 'Trivy - NGF'],
                         ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
                         ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
                         ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']

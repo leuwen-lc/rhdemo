@@ -320,6 +320,8 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 # ═══════════════════════════════════════════════════════════════
 
 NGF_VERSION="2.4.0"
+# Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
+NGF_IMAGE_DIGEST="sha256:5c40d574639b655deea77ea521032e88cc3ee19dbea0be21f8cda3368e5d9f39"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"

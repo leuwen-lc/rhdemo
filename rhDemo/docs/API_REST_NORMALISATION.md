@@ -211,52 +211,48 @@ Tests intégration :  56 tests, 0 échec
 
 ---
 
-## Écart restant — plan de normalisation complet
+## Évolution 4 — URLs plurielles, GET par path variable, `ErrorResponse` en record
 
-### Priorité 1 — Cohérence singulier/pluriel et GET par path variable
+### Contexte
 
-**État actuel :**
+Les priorités restantes du plan de normalisation ont été appliquées en un seul commit :
 
-```text
-GET    /api/employes          ← pluriel (correct)
-GET    /api/employes/page     ← pluriel (correct)
-GET    /api/employe?id=X      ← singulier + query param  ← à corriger
-POST   /api/employe           ← singulier                ← à corriger
-PUT    /api/employe/{id}      ← singulier                ← à corriger
-DELETE /api/employe/{id}      ← singulier                ← à corriger
-```
+- **Priorité 1** : cohérence singulier → pluriel sur tous les endpoints, et remplacement du
+  query param `?id=X` par un path variable `/{id}` sur le GET unitaire.
+- **Priorité 2** : `ErrorResponse` convertie en record immuable.
 
-**Forme cible REST standard :**
+### État final de l'API
 
 ```text
-GET    /api/employes
-GET    /api/employes/page
-GET    /api/employes/{id}
-POST   /api/employes
-PUT    /api/employes/{id}
-DELETE /api/employes/{id}
+GET    /api/employes            ← liste complète
+GET    /api/employes/page       ← pagination + filtres
+GET    /api/employes/{id}       ← récupération unitaire (était ?id=X)
+POST   /api/employes            ← création
+PUT    /api/employes/{id}       ← mise à jour
+DELETE /api/employes/{id}       ← suppression
 ```
 
-Ces deux corrections (singulier → pluriel et query param → path variable sur le GET)
-peuvent être réalisées dans le même commit.
+### Changements Priorité 1
 
-**Fichiers impactés :**
+**`EmployeController.java`** :
 
-- `EmployeController.java` : changer `@RequestParam` en `@PathVariable` sur `getEmploye()`,
-  renommer tous les mappings `/api/employe` → `/api/employes`
-- `api.js` : `` api.get(`/employes/${id}`) `` au lieu de `api.get('/employe', { params: { id } })`
-- `EmployeControllerIT.java` : URLs dans les tests
-- `EmployeDelete.vue`, `EmployeModify.vue` : aucun changement (appellent `getEmploye(id)`)
-- Tests Selenium : aucun changement (pilotent le navigateur, pas les URLs HTTP)
+- `@GetMapping("/api/employe")` + `@RequestParam Long id` →
+  `@GetMapping("/api/employes/{id}")` + `@PathVariable Long id`
+- `@PostMapping`, `@PutMapping`, `@DeleteMapping` : `/api/employe` → `/api/employes`
 
----
+**`frontend/src/services/api.js`** :
 
-### Priorité 2 — `ErrorResponse` en record
+- `getEmploye(id)` : `api.get('/employe', { params: { id } })` → `api.get(\`/employes/${id}\`)`
+- `createEmploye` : `api.post('/employe', ...)` → `api.post('/employes', ...)`
+- `updateEmploye` : `api.put(\`/employe/${id}\`, ...)` → `api.put(\`/employes/${id}\`, ...)`
+- `deleteEmploye` : `api.delete(\`/employe/${id}\`)` → `api.delete(\`/employes/${id}\`)`
 
-**Problème :** `ErrorResponse` est un POJO mutable avec 4 setters jamais utilisés
-(seuls les constructeurs sont appelés dans `GlobalExceptionHandler`).
+**`test/controller/EmployeControllerIT.java`** : 18 URLs mises à jour + 4 commentaires de section.
 
-**Forme cible :**
+### Changements Priorité 2
+
+**`exception/ErrorResponse.java`** : POJO (2 constructeurs + 4 getters + 4 setters) remplacé
+par un record :
 
 ```java
 public record ErrorResponse(
@@ -268,8 +264,24 @@ public record ErrorResponse(
 }
 ```
 
-**Fichiers impactés :** `ErrorResponse.java` uniquement. `GlobalExceptionHandler` n'utilise
-que les constructeurs — aucune modification nécessaire.
+`GlobalExceptionHandler.java` : aucune modification — n'utilise que les constructeurs.
+La sérialisation Jackson produit un JSON identique (mêmes noms de champs).
+
+### Fichiers modifiés
+
+| Fichier | Nature du changement |
+| --- | --- |
+| `controller/EmployeController.java` | 4 mappings `/api/employe` → `/api/employes`, `@RequestParam` → `@PathVariable` |
+| `frontend/src/services/api.js` | 4 fonctions mises à jour |
+| `test/controller/EmployeControllerIT.java` | 18 URLs + 4 commentaires de section |
+| `exception/ErrorResponse.java` | Remplacement complet par record immuable |
+
+### Résultats des tests
+
+```text
+Tests unitaires   : 120 tests, 0 échec
+Tests intégration :  56 tests, 0 échec
+```
 
 ---
 
@@ -281,5 +293,5 @@ que les constructeurs — aucune modification nécessaire.
 | Correction DELETE path variable + 204 | Appliqué | — | Conformité REST |
 | DTOs immutables (records) | Appliqué | — | Sécurité + architecture |
 | Encapsulation `Specification` dans le service | Appliqué | — | Isolation des couches |
-| GET path variable + pluriel URLs | Restant | Faible | Cohérence API |
-| `ErrorResponse` → record | Restant | Très faible | Qualité code |
+| GET path variable + pluriel URLs | Appliqué | — | Cohérence API |
+| `ErrorResponse` → record | Appliqué | — | Qualité code |

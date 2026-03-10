@@ -233,13 +233,13 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests GET /api/employe?id=X (récupération)
+    // Tests GET /api/employes/{id} (récupération)
     // ════════════════════════════════════════════════════════════════
 
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testGetEmploye_WithValidId_ShouldReturnEmploye() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "1"))
+        mockMvc.perform(get("/api/employes/{id}", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.prenom").exists())
@@ -249,7 +249,7 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testGetEmploye_WithInvalidId_ShouldReturn404() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "999"))
+        mockMvc.perform(get("/api/employes/{id}", 999L))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
     }
@@ -257,20 +257,20 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"BadRole"})
     public void testGetEmploye_WithWrongRole_ShouldReturn403() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "1"))
+        mockMvc.perform(get("/api/employes/{id}", 1L))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testGetEmploye_WithInvalidIdType_ShouldReturn400() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "invalid"))
+        mockMvc.perform(get("/api/employes/invalid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").exists());
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests POST /api/employe (création)
+    // Tests POST /api/employes (création)
     // ════════════════════════════════════════════════════════════════
 
     @Test
@@ -285,7 +285,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
@@ -308,7 +308,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
@@ -329,7 +329,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidEmployeJson))
@@ -350,7 +350,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validEmployeJson))
@@ -358,7 +358,7 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests PUT /api/employe/{id} (mise à jour)
+    // Tests PUT /api/employes/{id} (mise à jour)
     // ════════════════════════════════════════════════════════════════
 
     @Test
@@ -375,7 +375,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        String createResponse = mockMvc.perform(post("/api/employe")
+        String createResponse = mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(newEmployeJson))
@@ -395,7 +395,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(put("/api/employe/{id}", id)
+        mockMvc.perform(put("/api/employes/{id}", id)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(updatedJson))
@@ -417,7 +417,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(put("/api/employe/{id}", 999L)
+        mockMvc.perform(put("/api/employes/{id}", 999L)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validJson))
@@ -437,7 +437,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(put("/api/employe/{id}", 1L)
+        mockMvc.perform(put("/api/employes/{id}", 1L)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validJson))
@@ -456,7 +456,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        mockMvc.perform(put("/api/employe/{id}", 1L)
+        mockMvc.perform(put("/api/employes/{id}", 1L)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
@@ -466,7 +466,7 @@ public class EmployeControllerIT {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests DELETE /api/employe/{id} (suppression)
+    // Tests DELETE /api/employes/{id} (suppression)
     // ════════════════════════════════════════════════════════════════
 
     @Test
@@ -483,7 +483,7 @@ public class EmployeControllerIT {
                 }
                 """;
 
-        String createResponse = mockMvc.perform(post("/api/employe")
+        String createResponse = mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(newEmployeJson))
@@ -495,13 +495,12 @@ public class EmployeControllerIT {
         long id = Long.parseLong(createResponse.split("\"id\":")[1].split(",")[0].trim());
 
         // Supprimer l'employé
-        mockMvc.perform(delete("/api/employe/{id}", id)
+        mockMvc.perform(delete("/api/employes/{id}", id)
                         .with(csrf()))
                 .andExpect(status().isNoContent());
 
         // Vérifier que l'employé n'existe plus
-        mockMvc.perform(get("/api/employe")
-                        .param("id", String.valueOf(id))
+        mockMvc.perform(get("/api/employes/{id}", id)
                         .with(user("user").roles("consult")))
                 .andExpect(status().isNotFound());
     }
@@ -509,7 +508,7 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"MAJ"})
     public void testDeleteEmploye_WithInvalidId_ShouldReturn404() throws Exception {
-        mockMvc.perform(delete("/api/employe/{id}", 999L)
+        mockMvc.perform(delete("/api/employes/{id}", 999L)
                         .with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").exists());
@@ -518,7 +517,7 @@ public class EmployeControllerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testDeleteEmploye_WithConsultRole_ShouldReturn403() throws Exception {
-        mockMvc.perform(delete("/api/employe/{id}", 1L)
+        mockMvc.perform(delete("/api/employes/{id}", 1L)
                         .with(csrf()))
                 .andExpect(status().isForbidden());
     }

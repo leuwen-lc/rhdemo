@@ -58,7 +58,7 @@ public class EmployeController {
 	 * @param filterNom Filtre sur le nom (recherche partielle insensible à la casse). Optionnel.
 	 * @param filterMail Filtre sur l'email (recherche partielle insensible à la casse). Optionnel.
 	 * @param filterAdresse Filtre sur l'adresse (recherche partielle insensible à la casse). Optionnel.
-	 * @return Page<Employe> Objet contenant la liste des employés de la page demandée ainsi que
+	 * @return Page<EmployeResponseDTO> Objet contenant la liste des employés de la page demandée ainsi que
 	 *         les métadonnées de pagination (totalElements, totalPages, etc.)
 	 *
 	 * Exemple d'utilisation :
@@ -93,35 +93,35 @@ public class EmployeController {
 		return employeservice.getEmployesPage(filterPrenom, filterNom, filterMail, filterAdresse, pageable).map(EmployeResponseDTO::from);
 	}
 
-	@GetMapping("/api/employe")
+	@GetMapping("/api/employes/{id}")
 	@PreAuthorize("hasRole('consult')")
-	public EmployeResponseDTO getEmploye(@RequestParam final Long id) {
+	public EmployeResponseDTO getEmploye(@PathVariable final Long id) {
 		return EmployeResponseDTO.from(employeservice.getEmploye(id));
 	}
 	
-	@DeleteMapping("/api/employe/{id}")
+	@DeleteMapping("/api/employes/{id}")
 	@PreAuthorize("hasRole('MAJ')")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void deleteEmploye(@PathVariable final Long id) {
+		logger.debug("Suppression employé - ID: {}", id);
 		employeservice.deleteEmploye(id);
+		logger.info("Employé supprimé avec succès - ID: {}", id);
 	}
 
-	@PostMapping("/api/employe")
+	@PostMapping("/api/employes")
 	@PreAuthorize("hasRole('MAJ')")
 	@ResponseStatus(HttpStatus.CREATED)
 	public EmployeResponseDTO createEmploye(@Valid @RequestBody EmployeRequestDTO dto) {
 		logger.debug("Création employé - prénom: {}, nom: {}", dto.prenom(), dto.nom());
-		logger.info("Données employé validées, création en cours...");
 		EmployeResponseDTO result = EmployeResponseDTO.from(employeservice.createEmploye(dto.toEmploye()));
 		logger.info("Employé créé avec succès - ID: {}", result.id());
 		return result;
 	}
 
-	@PutMapping("/api/employe/{id}")
+	@PutMapping("/api/employes/{id}")
 	@PreAuthorize("hasRole('MAJ')")
 	public EmployeResponseDTO updateEmploye(@PathVariable final Long id, @Valid @RequestBody EmployeRequestDTO dto) {
 		logger.debug("Mise à jour employé ID: {} - prénom: {}, nom: {}", id, dto.prenom(), dto.nom());
-		logger.info("Données employé validées, mise à jour en cours...");
 		EmployeResponseDTO result = EmployeResponseDTO.from(employeservice.updateEmploye(id, dto.toEmploye()));
 		logger.info("Employé mis à jour avec succès - ID: {}", result.id());
 		return result;

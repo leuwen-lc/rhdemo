@@ -67,21 +67,21 @@ export function getEmployesPage(page = 0, size = 20, sort = null, order = 'ASC',
 }
 
 export function getEmploye(id) {
-  return api.get('/employe', { params: { id } });
+  return api.get(`/employes/${id}`);
 }
 
 export function createEmploye(employe) {
   const { id, ...data } = employe;
-  return api.post('/employe', data);
+  return api.post('/employes', data);
 }
 
 export function updateEmploye(id, employe) {
   const { id: _, ...data } = employe;
-  return api.put(`/employe/${id}`, data);
+  return api.put(`/employes/${id}`, data);
 }
 
 export function deleteEmploye(id) {
-  return api.delete(`/employe/${id}`);
+  return api.delete(`/employes/${id}`);
 }
 
 export function getUserInfo() {

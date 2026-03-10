@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.2</version>
+		<version>4.0.3</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
@@ -31,7 +31,7 @@
 		<!-- Override Mockito pour Java 25 (ByteBuddy 1.17.8+) - Spring Boot 4.0.2 gère 5.20.0 -->
 		<mockito.version>5.21.0</mockito.version>
 		<!-- SpringDoc OpenAPI compatible Spring Boot 4 / Jackson 3 -->
-		<springdoc-openapi.version>3.0.1</springdoc-openapi.version>
+		<springdoc-openapi.version>3.0.2</springdoc-openapi.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->

@@ -104,39 +104,7 @@ trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
 - [ ] Mettre en place des alertes automatiques pour les nouvelles CVE (GitHub Dependabot)
 - [ ] Considérer l'utilisation d'images distroless pour réduire la surface d'attaque
 
----
 
-## Template pour futures vulnérabilités
-
-```markdown
-## CVE-XXXX-XXXXX - Titre de la vulnérabilité
-
-### Détection
-- **Date** : AAAA-MM-JJ
-- **Outil** : Trivy / OWASP / Autre
-- **Sévérité** : CRITICAL / HIGH / MEDIUM
-
-### Description
-[Description de la vulnérabilité]
-
-### Images affectées
-[Liste des images et versions]
-
-### Remédiation
-[Action prise pour corriger]
-
-### Validation
-[Tests effectués]
-
-### Références
-[Liens vers CVE, advisories]
-```
-
----
-
-**Dernière mise à jour** : 2026-02-12
-
----
 
 ## 2025-11-28 : Nouvelles CVE CRITICAL détectées dans nginx:1.27.3-alpine3.21
 
@@ -271,3 +239,69 @@ trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL postgres:18-alp
 - [gosu security policy](https://github.com/tianon/gosu/issues/144)
 - [gosu releases](https://github.com/tianon/gosu/releases) - v1.19 (Go 1.24.6)
 - [Go 1.24.13 release notes](https://go.dev/doc/devel/release) - inclut le fix crypto/tls
+
+
+## CVE-2026-24400
+
+### Détection
+- **Date** : 2026-03-10
+- **Outil** : OWASP
+- **Sévérité** : HIGH 
+
+### Description : Starting in version 1.4.0 and prior to version 3.27.7, an XML External Entity (XXE) vulnerability exists in `org.assertj.core.util.xml.XmlStringPrettyFormatter`: the `toXmlDocument(String)` method initializes `DocumentBuilderFactory` with default settings, without disabling DTDs or external entities. 
+
+### Images affectées
+POM uniquement
+
+### Remédiation
+Passage à la version Spring Boot 4.03
+
+
+## CVE-2026-0540
+
+### Détection
+- **Date** : 2026-03-10
+- **Outil** : OWASP
+- **Sévérité** : MEDIUM (faux positif) ?
+
+### Description : DOMPurify 3.1.3 through 3.3.1 and 2.5.3 through 2.5.8, fixed in commit 729097f, contain a cross-site scripting vulnerability that allows attackers to bypass attribute sanitization by exploiting five missing rawtext elements (noscript, xmp, noembed, noframes, iframe) in the SAFE_FOR_XML regex.
+
+### Images affectées
+POM uniquement
+
+### Remédiation
+Passage à la version srpingdoc-openapi 3.0.1
+
+---
+
+## Template pour futures vulnérabilités
+
+```markdown
+## CVE-XXXX-XXXXX - Titre de la vulnérabilité
+
+### Détection
+- **Date** : AAAA-MM-JJ
+- **Outil** : Trivy / OWASP / Autre
+- **Sévérité** : CRITICAL / HIGH / MEDIUM
+
+### Description
+[Description de la vulnérabilité]
+
+### Images affectées
+[Liste des images et versions]
+
+### Remédiation
+[Action prise pour corriger]
+
+### Validation
+[Tests effectués]
+
+### Références
+[Liens vers CVE, advisories]
+```
+
+---
+
+**Dernière mise à jour** : 2026-03-10
+
+---

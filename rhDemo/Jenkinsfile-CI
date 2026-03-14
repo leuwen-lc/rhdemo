@@ -929,42 +929,88 @@ YMLEOF
             }
         }
 
-        stage('📋 Copie Secrets vers Container App') {
+        stage('📋 Injection Secrets dans Container App') {
             steps {
                 script {
-                    echo "▶ Copie du fichier de secrets dans le container applicatif..."
-                }
-
-                sh """
-                    # Créer le répertoire secrets dans le container
-                    # Ces commandes fonctionnent même si le container est en restart loop
-                    docker exec --user root ${env.CONTAINER_APP} mkdir -p /workspace/secrets
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
-
-                    # Copier le fichier de secrets
-                    docker cp ${env.SECRETS_RHDEMO} ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
-
-                    # Définir les permissions (user spring:spring)
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets/secrets-rhdemo.yml
-                    docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
-
-                    echo "✅ Secrets copiés dans le container"
-                """
-            }
-        }
-
-        stage('🔄 Redémarrage Application') {
-            steps {
-                script {
-                    echo "▶ Redémarrage du container applicatif pour charger les secrets..."
+                    echo "▶ Injection des secrets dans le container applicatif..."
+                    echo "   (Le container est probablement en restart loop : secrets absents au 1er démarrage)"
                 }
 
                 dir(env.EPHEMERE_INFRA_PATH) {
                     sh """
-                        # Redémarrer via docker-compose pour charger les secrets
-                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} restart rhdemo-app
-                        echo "⏳ Attente du redémarrage (30s)..."
+                        # Arrêter le container avant injection
+                        # docker exec échoue sur un container en restart loop → on l'arrête d'abord
+                        echo "▶ Arrêt du container avant injection des secrets..."
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} stop rhdemo-app
+
+                        # Attendre l'arrêt complet (status exited)
+                        TIMEOUT=30
+                        while [ "\$(docker inspect --format='{{.State.Status}}' ${env.CONTAINER_APP} 2>/dev/null)" != "exited" ] && [ \$TIMEOUT -gt 0 ]; do
+                            sleep 1
+                            TIMEOUT=\$((TIMEOUT - 1))
+                        done
+                        echo "✅ Container arrêté (status: \$(docker inspect --format='{{.State.Status}}' ${env.CONTAINER_APP}))"
+
+                        # Préparer un répertoire de staging avec la structure /workspace/secrets/
+                        # docker cp nécessite que les répertoires parents existent dans le container
+                        # Un flux tar crée les répertoires manquants et fonctionne sur container arrêté
+                        STAGE_DIR=\$(mktemp -d)
+                        mkdir -p "\${STAGE_DIR}/workspace/secrets"
+                        cp ${env.SECRETS_RHDEMO} "\${STAGE_DIR}/workspace/secrets/secrets-rhdemo.yml"
+                        # 644 temporaire : permet la lecture par l'utilisateur spring après démarrage
+                        # Sera restreint à 400 via docker exec une fois le container démarré
+                        chmod 644 "\${STAGE_DIR}/workspace/secrets/secrets-rhdemo.yml"
+
+                        # Injection via flux tar (fonctionne sur container arrêté, crée /workspace/secrets/)
+                        tar -C "\${STAGE_DIR}" -cf - workspace | docker cp - ${env.CONTAINER_APP}:/
+                        rm -rf "\${STAGE_DIR}"
+
+                        echo "✅ Secrets injectés dans le container arrêté"
+                    """
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "❌ Échec de l'injection des secrets — Logs du container applicatif :"
+                        docker logs --tail 100 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+                        echo ""
+                        echo "État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}"
+                    """
+                }
+            }
+        }
+
+        stage('🔄 Démarrage Application avec Secrets') {
+            steps {
+                script {
+                    echo "▶ Démarrage du container applicatif avec les secrets injectés..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        # Démarrer (pas restart) : le container a été arrêté par le stage précédent
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} start rhdemo-app
+                        echo "⏳ Attente du démarrage (30s)..."
                         sleep 30
+
+                        # Container démarré : définir les permissions définitives sur le fichier de secrets
+                        docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets /workspace/secrets/secrets-rhdemo.yml
+                        docker exec --user root ${env.CONTAINER_APP} chmod 700 /workspace/secrets
+                        docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
+                        echo "✅ Permissions définitives appliquées sur les secrets"
+                    """
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "❌ Échec du démarrage — Logs du container applicatif :"
+                        docker logs --tail 150 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+                        echo ""
+                        echo "État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}"
                     """
                 }
             }

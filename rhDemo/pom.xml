@@ -43,24 +43,25 @@
 				<artifactId>commons-lang3</artifactId>
 				<version>3.18.0</version>
 			</dependency>
-			<!-- Force jackson-core 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
-			<!-- Jackson 3.x a migré vers le groupId tools.jackson.core (ancien: com.fasterxml.jackson.core) -->
+			<!--
+			  Upgrade Jackson BOM 3.0.4 → 3.1.0 pour corriger alerte sécurité.
+			  IMPORTANT : forcer les 3 artefacts core individuellement (jackson-core,
+			  jackson-databind, jackson-annotations) est INSUFFISANT.
+			  jackson-databind:3.1.0 nécessite @JsonSerializeAs (nouveau dans 3.1.0)
+			  provenant de jackson-annotations, mais aussi une version cohérente de
+			  jackson-dataformat-yaml (utilisé par Spring Boot pour parser application.yml),
+			  jackson-datatype-jsr310, jackson-module-parameter-names, etc.
+			  Un mélange de versions entre modules Jackson provoque un
+			  NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs au démarrage.
+			  → Solution : importer le Jackson BOM complet, qui aligne TOUS les modules.
+			  L'entrée du child POM prend priorité sur le BOM importé par spring-boot-starter-parent.
+			-->
 			<dependency>
-				<groupId>tools.jackson.core</groupId>
-				<artifactId>jackson-core</artifactId>
+				<groupId>tools.jackson</groupId>
+				<artifactId>jackson-bom</artifactId>
 				<version>3.1.0</version>
-			</dependency>
-			<!-- Force jackson-databind 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
-			<dependency>
-				<groupId>tools.jackson.core</groupId>
-				<artifactId>jackson-databind</artifactId>
-				<version>3.1.0</version>
-			</dependency>
-			<!-- Force jackson-annotations 3.1.0 pour cohérence de version dans le trio Jackson -->
-			<dependency>
-				<groupId>tools.jackson.core</groupId>
-				<artifactId>jackson-annotations</artifactId>
-				<version>3.1.0</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>

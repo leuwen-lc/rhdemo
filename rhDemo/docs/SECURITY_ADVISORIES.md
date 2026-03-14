@@ -424,30 +424,39 @@ Alerte de sécurité détectée sur les artefacts Jackson 3.0.4, dépendances tr
 
 ### Remédiation appliquée
 
-**Action** : Forçage de version via `<dependencyManagement>` dans `pom.xml`
+**Action** : Import du Jackson BOM 3.1.0 dans `<dependencyManagement>` du `pom.xml`
 
-Spring Boot 4.0.3 (version parent utilisée) ne propose pas de version plus récente que 3.0.4 pour Jackson. La version 3.1.0 est imposée explicitement en tant que BOM enfant, qui prend la priorité sur le BOM parent de Spring Boot.
+Spring Boot 4.0.3 importe `tools.jackson:jackson-bom:3.0.4` via son parent POM. L'entrée
+`dependencyManagement` du projet enfant prend priorité sur celle du parent, ce qui permet
+d'imposer une version différente du BOM Jackson.
+
+**Approche initiale (abandonnée)** : forcer les 3 artefacts core individuellement
+(`jackson-core`, `jackson-databind`, `jackson-annotations`). Cette approche a provoqué un
+crash au démarrage :
+```
+NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs
+```
+`jackson-databind:3.1.0` requiert `@JsonSerializeAs` (nouvelle dans `jackson-annotations:3.1.0`),
+mais aussi une version cohérente de `jackson-dataformat-yaml` (utilisé par Spring Boot pour
+parser `application.yml`), `jackson-datatype-jsr310`, `jackson-module-parameter-names`, etc.
+Un mélange de versions entre modules Jackson est fatal au démarrage.
+
+**Approche correcte** : importer le Jackson BOM complet qui aligne TOUS les modules à 3.1.0 :
 
 ```xml
 <dependencyManagement>
   <dependencies>
-    <!-- Force jackson-core 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
+    <!--
+      Upgrade Jackson BOM 3.0.4 → 3.1.0.
+      Le child POM prend priorité sur le BOM de spring-boot-starter-parent.
+      Aligne tous les modules Jackson simultanément.
+    -->
     <dependency>
-      <groupId>tools.jackson.core</groupId>
-      <artifactId>jackson-core</artifactId>
+      <groupId>tools.jackson</groupId>
+      <artifactId>jackson-bom</artifactId>
       <version>3.1.0</version>
-    </dependency>
-    <!-- Force jackson-databind 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
-    <dependency>
-      <groupId>tools.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-      <version>3.1.0</version>
-    </dependency>
-    <!-- Force jackson-annotations 3.1.0 pour cohérence de version dans le trio Jackson -->
-    <dependency>
-      <groupId>tools.jackson.core</groupId>
-      <artifactId>jackson-annotations</artifactId>
-      <version>3.1.0</version>
+      <type>pom</type>
+      <scope>import</scope>
     </dependency>
   </dependencies>
 </dependencyManagement>
@@ -458,13 +467,16 @@ Spring Boot 4.0.3 (version parent utilisée) ne propose pas de version plus réc
 ### Validation
 
 ```bash
-# Vérifier les versions résolues par Maven
+# Vérifier les versions résolues par Maven (tous les modules Jackson doivent être 3.1.0)
 cd rhDemo && ./mvnw dependency:tree | grep tools.jackson
 
-# Résultat attendu : toutes les entrées Jackson en 3.1.0
+# Résultat attendu : TOUS les modules Jackson en 3.1.0
 # tools.jackson.core:jackson-core:jar:3.1.0
 # tools.jackson.core:jackson-databind:jar:3.1.0
 # tools.jackson.core:jackson-annotations:jar:3.1.0
+# tools.jackson.dataformat:jackson-dataformat-yaml:jar:3.1.0
+# tools.jackson.datatype:jackson-datatype-jsr310:jar:3.1.0
+# tools.jackson.module:jackson-module-parameter-names:jar:3.1.0
 
 # Relancer le scan OWASP pour confirmer la disparition de l'alerte
 ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY

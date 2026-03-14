@@ -813,14 +813,14 @@ YMLEOF
             }
         }
 
-        stage('⏳ Attente Services Staging') {
+        stage('⏳ Attente DB Services Staging') {
             steps {
                 script {
-                    echo "▶ Attente du démarrage complet des services..."
+                    echo "▶ Attente du démarrage complet des services DB..."
                 }
 
                 sh """
-                    echo "▶ Attente PostgreSQL..."
+                    echo "▶ Attente DB RhDemo..."
                     timeout 120 bash -c 'until docker exec ${env.CONTAINER_DB} pg_isready -U rhdemo > /dev/null 2>&1; do sleep 2; done'
                     echo "✓ PostgreSQL prêt"
 
@@ -829,7 +829,6 @@ YMLEOF
                     echo "✓ Keycloak DB prêt"
 
                     echo "✅ Bases de données prêtes"
-                    echo "   Note: Le healthcheck Keycloak sera fait dans un stage dédié ultérieur"
                 """
             }
         }

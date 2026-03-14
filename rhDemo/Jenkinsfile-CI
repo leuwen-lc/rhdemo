@@ -57,9 +57,13 @@ pipeline {
 
         // Fichiers de secrets SOPS
         SECRETS_FILE = 'rhDemo/secrets/secrets-ephemere.yml'
-        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
-        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
-        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+        // Répertoire isolé hors workspace pour les secrets déchiffrés (sécurité)
+        SECRETS_TMP_DIR   = "/tmp/rhdemo-secrets-${BUILD_NUMBER}"
+        SECRETS_DECRYPTED = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-decrypted.yml"
+        SECRETS_ENV_VARS  = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/env-vars.sh"
+        SECRETS_RHDEMO    = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-rhdemo.yml"
+        // Config Keycloak générée hors sources (ne jamais écrire dans rhDemoInitKeycloak/src/)
+        KEYCLOAK_CONFIG_TMP = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/application-ephemere.yml"
 
         // Configuration environnement ephemere (Docker Compose)
         EPHEMERE_INFRA_PATH = 'rhDemo/infra/ephemere'
@@ -209,12 +213,14 @@ pipeline {
                 // Utiliser le credential sops-age-key de manière sécurisée
                 withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
                     sh '''
-                        # Créer le répertoire secrets s'il n'existe pas
-                        mkdir -p rhDemo/secrets
+                        # Créer le répertoire temporaire isolé hors workspace (permissions strictes)
+                        mkdir -p ${SECRETS_TMP_DIR}
+                        chmod 700 ${SECRETS_TMP_DIR}
 
                         # Déchiffrer le fichier de secrets
                         echo "Déchiffrement de ${SECRETS_FILE}..."
                         sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                        chmod 600 ${SECRETS_DECRYPTED}
 
                         # Vérifier que le fichier a été déchiffré
                         if [ ! -f ${SECRETS_DECRYPTED} ]; then
@@ -262,13 +268,14 @@ pipeline {
                             if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
                                 echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
                             fi
-                        } > rhDemo/secrets/env-vars.sh 2>&1
+                        } > ${SECRETS_ENV_VARS} 2>&1
+                        chmod 600 ${SECRETS_ENV_VARS}
 
                         # Réactiver l'écho des commandes
                         set -x
 
                         # Afficher (sans montrer les valeurs)
-                        echo "✅ Variables d'environnement préparées"
+                        echo "✅ Variables d'environnement préparées dans ${SECRETS_ENV_VARS}"
                     '''
                 }
             }
@@ -292,12 +299,12 @@ pipeline {
                     # SÉCURITÉ: Désactiver l'écho des commandes
                     set +x
 
-                    # Source les secrets
-                    . rhDemo/secrets/env-vars.sh
+                    # Source les secrets (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
                     # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
                     # Ce fichier sera monté dans le container Docker de rhDemo
-                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+                    cat > ${SECRETS_RHDEMO} <<EOF
 
 rhdemo:
   datasource:
@@ -311,10 +318,12 @@ rhdemo:
           secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
 EOF
 
+                    chmod 600 ${SECRETS_RHDEMO}
+
                     # Réactiver l'écho
                     set -x
 
-                    echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
+                    echo "✅ Fichier ${SECRETS_RHDEMO} créé hors workspace (secrets limités à rhDemo uniquement)"
                 '''
             }
         }
@@ -334,12 +343,12 @@ EOF
                     # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
                     set +x
 
-                    # Source les secrets déchiffrés
-                    . rhDemo/secrets/env-vars.sh
+                    # Source les secrets déchiffrés (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
-                    # Générer application-ephemere.yml (sera utilisé directement par Maven)
+                    # Générer application-ephemere.yml dans /tmp (hors sources du projet)
                     # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
-                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
+                    CONFIG_FILE="${KEYCLOAK_CONFIG_TMP}"
 
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
                     cat > "${CONFIG_FILE}" << YMLEOF
@@ -430,11 +439,13 @@ keycloak:
         - ROLE_MAJ
 YMLEOF
 
+                    chmod 600 "${CONFIG_FILE}"
+
                     # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
                     set -x
 
-                    echo "✅ Fichier de configuration Keycloak généré: ${CONFIG_FILE}"
-                    echo "   Ce fichier sera utilisé par rhDemoInitKeycloak pour initialiser Keycloak"
+                    echo "✅ Fichier de configuration Keycloak généré hors workspace: ${CONFIG_FILE}"
+                    echo "   Ce fichier sera passé à rhDemoInitKeycloak via spring.config.additional-location"
                     echo "   Redirect URIs configurés pour:"
                     echo "     - https://${TEST_DOMAIN}:58443/*"
                     echo "     - https://rhdemo.ephemere.local:58443/* (pour Selenium/ZAP)"
@@ -457,8 +468,8 @@ YMLEOF
                 }
 
                 sh '''
-                    # Charger les secrets
-                    . rhDemo/secrets/env-vars.sh
+                    # Charger les secrets (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
                     echo "Java version:"
                     java -version
@@ -704,9 +715,9 @@ YMLEOF
 
                 dir(env.EPHEMERE_INFRA_PATH) {
                     sh """
-                        # Source les secrets
+                        # Source les secrets (depuis /tmp, hors workspace)
                         set +x
-                        . ../../secrets/env-vars.sh
+                        . ${SECRETS_ENV_VARS}
 
                         # Exporter les variables d'environnement nécessaires pour docker-compose
                         # Mapping des noms de variables entre secrets et docker-compose
@@ -889,13 +900,18 @@ YMLEOF
                 }
 
                 dir(env.KEYCLOAK_INIT_PATH) {
-                    sh '''
+                    sh """
                         # Exécuter l'initialisation avec Maven
-                        echo "▶ Exécution de rhDemoInitKeycloak..."
-                        ../rhDemo/mvnw spring-boot:run -Dspring-boot.run.profiles=ephemere
+                        # La config application-ephemere.yml est dans /tmp (hors workspace)
+                        # spring.config.additional-location indique à Spring Boot où chercher
+                        # les fichiers de config par profil (application-ephemere.yml)
+                        echo "▶ Exécution de rhDemoInitKeycloak (config depuis ${env.SECRETS_TMP_DIR}/)..."
+                        ../rhDemo/mvnw spring-boot:run \\
+                            -Dspring-boot.run.profiles=ephemere \\
+                            -Dspring.config.additional-location=file:${env.SECRETS_TMP_DIR}/
 
                         echo "✅ Keycloak initialisé avec succès"
-                    '''
+                    """
                 }
             }
         }
@@ -1212,9 +1228,9 @@ YMLEOF
 
                 dir(env.TEST_PROJECT_PATH) {
                     sh """
-                        # Source les secrets pour les tests
+                        # Source les secrets pour les tests (depuis /tmp, hors workspace)
                         set +x
-                        . ../rhDemo/secrets/env-vars.sh
+                        . ${SECRETS_ENV_VARS}
 
                         # URLs via nginx avec HTTPS
                         # Depuis que nginx écoute aussi sur le port 58443 en interne (réseau Docker),
@@ -1750,8 +1766,11 @@ YMLEOF
                 lib.cleanupSecrets([
                     env.SECRETS_DECRYPTED,
                     env.SECRETS_ENV_VARS,
-                    env.SECRETS_RHDEMO
+                    env.SECRETS_RHDEMO,
+                    env.KEYCLOAK_CONFIG_TMP
                 ])
+                // Supprimer le répertoire temporaire isolé
+                sh "rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true"
 
                 echo "✅ Nettoyage terminé"
             }

@@ -1,6 +1,6 @@
 # Procédure standard : PR `evolutions-post-1.1.5` -> `master`, release `1.1.6-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
-Contexte :
+Contexte (modifier les versions par remplacement global):
 - Branche source (exemple) : `evolutions-post-1.1.5` 
 - Branche cible : `master`
 - Tag Git (exemple) : `1.1.6-RELEASE`
@@ -39,11 +39,12 @@ git fetch origin
 ```
 
 ```bash
-git rebase origin/master
-# Rejoue les commits de la branche au-dessus de master pour minimiser les surprises au moment du merge de la PR.
+git merge origin/master
+# Merge les commits de master pour minimiser les surprises au moment du merge de la PR.
+# Pas de rebase pour éviter de devoir donner un droit git force sur la branche 
 ```
 
-> Si conflits : les résoudre, puis faire `git add ...` et `git rebase --continue` (répéter jusqu’à fin du rebase).
+> Si conflits : les résoudre, puis faire `git add ...` 
 
 ---
 
@@ -73,10 +74,6 @@ git commit -m "chore(release): passage à la version 1.1.6-RELEASE"
 git push origin evolutions-post-1.1.5
 # Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
 ```
-
-> Si rebase et que Git refuse le push :  
-> `git push --force-with-lease origin evolutions-post-1.1.5`  
-> (réécrit la branche distante de façon “sécurisée” en vérifiant qu’elle n’a pas bougé côté remote).
 
 ---
 

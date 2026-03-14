@@ -1026,13 +1026,35 @@ YMLEOF
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Healthcheck Application RHDemo depuis Jenkins (connecté au réseau ephemere)
+                    // container: active docker logs --tail=150 dans waitForHealthcheck en cas de timeout
                     lib.waitForHealthcheck([
                         name: 'RHDemo App',
                         url: "http://${env.CONTAINER_APP}:9000/front/",
                         timeout: 90,
-                        acceptedCodes: [200, 301, 302]
-                        // Pas de container: test depuis Jenkins, pas docker exec
+                        acceptedCodes: [200, 301, 302],
+                        container: env.CONTAINER_APP
                     ])
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "════════════════════════════════════════════════════"
+                        echo "❌ DIAGNOSTIC ÉCHEC HEALTHCHECK RHDEMO APP"
+                        echo "════════════════════════════════════════════════════"
+
+                        echo "\\n📦 État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.RestartCount}}"
+
+                        echo "\\n📋 Logs complets ${env.CONTAINER_APP} (200 dernières lignes) :"
+                        docker logs --tail 200 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+
+                        echo "\\n🔍 Inspect état container :"
+                        docker inspect --format='État: {{.State.Status}} | Redémarrages: {{.State.RestartCount}} | Erreur: {{.State.Error}}' ${env.CONTAINER_APP} 2>/dev/null || true
+
+                        echo "\\n🔍 Secrets présents dans le container :"
+                        docker exec ${env.CONTAINER_APP} ls -la /workspace/secrets/ 2>/dev/null || echo "Répertoire /workspace/secrets absent ou container arrêté"
+                    """
                 }
             }
         }

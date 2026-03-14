@@ -74,7 +74,7 @@ def waitForHealthcheck(Map config) {
         done
 
         echo "❌ ${name} timeout après ${timeout}s"
-        ${config.container ? "docker logs --tail=20 ${config.container} || true" : ''}
+        ${config.container ? "docker logs --tail=150 ${config.container} 2>&1 || true" : ''}
         exit 1
     """
 }

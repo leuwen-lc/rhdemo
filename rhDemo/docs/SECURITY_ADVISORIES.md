@@ -397,6 +397,92 @@ est disponible.
 
 ---
 
+## Alerte sécurité Jackson — tools.jackson.core 3.0.4 → 3.1.0
+
+### Détection
+
+- **Date** : 2026-03-14
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH
+- **Composants affectés** :
+  - `tools.jackson.core:jackson-core:3.0.4`
+  - `tools.jackson.core:jackson-databind:3.0.4`
+
+### Description
+
+Alerte de sécurité détectée sur les artefacts Jackson 3.0.4, dépendances transitives de Spring Boot 4.0.3. La version 3.1.0 corrige les vulnérabilités signalées.
+
+**Note sur le groupId** : Jackson 3.x a migré le groupId de `com.fasterxml.jackson.core` vers `tools.jackson.core`.
+
+### Composants affectés
+
+| Composant | Version vulnérable | Version corrective |
+| --- | --- | --- |
+| `tools.jackson.core:jackson-core` | 3.0.4 | 3.1.0 |
+| `tools.jackson.core:jackson-databind` | 3.0.4 | 3.1.0 |
+| `tools.jackson.core:jackson-annotations` | 3.0.4 | 3.1.0 |
+
+### Remédiation appliquée
+
+**Action** : Forçage de version via `<dependencyManagement>` dans `pom.xml`
+
+Spring Boot 4.0.3 (version parent utilisée) ne propose pas de version plus récente que 3.0.4 pour Jackson. La version 3.1.0 est imposée explicitement en tant que BOM enfant, qui prend la priorité sur le BOM parent de Spring Boot.
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <!-- Force jackson-core 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>3.1.0</version>
+    </dependency>
+    <!-- Force jackson-databind 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>3.1.0</version>
+    </dependency>
+    <!-- Force jackson-annotations 3.1.0 pour cohérence de version dans le trio Jackson -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <version>3.1.0</version>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+```
+
+**Fichier modifié** : `pom.xml` (section `<dependencyManagement>`)
+
+### Validation
+
+```bash
+# Vérifier les versions résolues par Maven
+cd rhDemo && ./mvnw dependency:tree | grep tools.jackson
+
+# Résultat attendu : toutes les entrées Jackson en 3.1.0
+# tools.jackson.core:jackson-core:jar:3.1.0
+# tools.jackson.core:jackson-databind:jar:3.1.0
+# tools.jackson.core:jackson-annotations:jar:3.1.0
+
+# Relancer le scan OWASP pour confirmer la disparition de l'alerte
+./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+```
+
+### Condition de clôture
+
+Retirer les entrées `dependencyManagement` pour Jackson lorsque Spring Boot intègre nativement Jackson >= 3.1.0 dans son BOM (mise à jour de `spring-boot-starter-parent`).
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-14 | Détection par OWASP Dependency-Check dans le pipeline CI |
+| 2026-03-14 | Forçage de jackson-core, jackson-databind, jackson-annotations à 3.1.0 via `dependencyManagement` |
+
+---
+
 ## Template pour futures vulnérabilités
 
 ```markdown
@@ -431,4 +517,4 @@ est disponible.
 
 ---
 
-**Dernière mise à jour** : 2026-03-10
+**Dernière mise à jour** : 2026-03-14

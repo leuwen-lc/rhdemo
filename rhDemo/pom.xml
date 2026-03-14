@@ -43,6 +43,25 @@
 				<artifactId>commons-lang3</artifactId>
 				<version>3.18.0</version>
 			</dependency>
+			<!-- Force jackson-core 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
+			<!-- Jackson 3.x a migré vers le groupId tools.jackson.core (ancien: com.fasterxml.jackson.core) -->
+			<dependency>
+				<groupId>tools.jackson.core</groupId>
+				<artifactId>jackson-core</artifactId>
+				<version>3.1.0</version>
+			</dependency>
+			<!-- Force jackson-databind 3.1.0 pour corriger alerte sécurité sur 3.0.4 -->
+			<dependency>
+				<groupId>tools.jackson.core</groupId>
+				<artifactId>jackson-databind</artifactId>
+				<version>3.1.0</version>
+			</dependency>
+			<!-- Force jackson-annotations 3.1.0 pour cohérence de version dans le trio Jackson -->
+			<dependency>
+				<groupId>tools.jackson.core</groupId>
+				<artifactId>jackson-annotations</artifactId>
+				<version>3.1.0</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 

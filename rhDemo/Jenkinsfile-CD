@@ -108,6 +108,12 @@ pipeline {
 
                 // Checkout du code
                 checkout scm
+
+                // Purge des résidus de l'ancienne convention (secrets écrits dans le workspace)
+                sh '''
+                    rm -rf rhDemo/secrets/ 2>/dev/null || true
+                    echo "✅ Résidus de secrets workspace nettoyés"
+                '''
             }
         }
 

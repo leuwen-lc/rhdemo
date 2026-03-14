@@ -116,6 +116,15 @@ pipeline {
                 checkout scm
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
 
+                // Purge des résidus de l'ancienne convention (secrets écrits dans le workspace)
+                // Évite que des fichiers shredés (remplis de null bytes) soient trouvés par Spring Boot
+                // via optional:file:./secrets/secrets-rhdemo.yml et causent une erreur YAML (0x0)
+                sh '''
+                    rm -rf rhDemo/secrets/ 2>/dev/null || true
+                    rm -f rhDemoInitKeycloak/src/main/resources/application-ephemere.yml 2>/dev/null || true
+                    echo "✅ Résidus de secrets workspace nettoyés"
+                '''
+
                 script {
                     echo '▶ Vérification des projets dans le workspace...'
                     // rhDemoInitKeycloak et rhDemoAPITestIHM sont dans le MÊME repo que rhDemo

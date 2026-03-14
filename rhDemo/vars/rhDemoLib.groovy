@@ -282,7 +282,10 @@ def cleanupSecrets(List files) {
     files.each { file ->
         sh """
             if [ -f "${file}" ]; then
-                shred -vfz -n 3 ${file} 2>/dev/null || rm -f ${file}
+                # -u : unlink (supprime le fichier après écrasement) - OBLIGATOIRE pour réellement effacer
+                # -z : passe finale à zéro (masque l'écrasement)
+                # -n 3 : 3 passes d'écrasement
+                shred -vfzu -n 3 ${file} 2>/dev/null || rm -f ${file}
                 echo "✅ ${file} supprimé de manière sécurisée"
             fi
         """

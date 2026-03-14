@@ -109,9 +109,12 @@ pipeline {
                 // Checkout du code
                 checkout scm
 
-                // Purge des résidus de l'ancienne convention (secrets écrits dans le workspace)
+                // Purge des résidus de l'ancienne convention (fichiers générés dans le workspace)
+                // Cible uniquement les fichiers générés, PAS les fichiers SOPS chiffrés versionnés
                 sh '''
-                    rm -rf rhDemo/secrets/ 2>/dev/null || true
+                    rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
                     echo "✅ Résidus de secrets workspace nettoyés"
                 '''
             }

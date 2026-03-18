@@ -1,5 +1,9 @@
 package fr.leuwen.rhdemoAPI.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -23,10 +27,14 @@ import java.nio.charset.StandardCharsets;
 @RestController
 public class FrontendController {
 
+    private static final Logger log = LoggerFactory.getLogger(FrontendController.class);
     private static final Resource INDEX_HTML = new ClassPathResource("static/index.html");
 
     @GetMapping({"/front", "/front/**"})
-    public ResponseEntity<Resource> serveIndex() {
+    public ResponseEntity<Resource> serveIndex(HttpServletRequest request, HttpServletResponse response) {
+        log.debug("FrontendController.serveIndex chemin={} query={}", request.getRequestURI(), request.getQueryString());
+        log.debug("Type du wrapper de réponse : {}", response.getClass().getName());
+        log.debug("Header CSP à l'entrée du contrôleur : {}", response.getHeader("Content-Security-Policy"));
         return ResponseEntity.ok()
                 .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
                 .body(INDEX_HTML);

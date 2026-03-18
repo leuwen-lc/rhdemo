@@ -510,19 +510,20 @@ YMLEOF
             }
         }
 
-        stage('✅ Tests Unitaires') {
+        stage('✅ Tests Unitaires et Intégration') {
             steps {
                 script {
-                    echo "▶ Exécution des tests unitaires..."
+                    echo "▶ Exécution des tests unitaires et d'intégration..."
                 }
 
                 dir('rhDemo') {
-                    sh './mvnw test'
+                    sh './mvnw verify'
                 }
             }
             post {
                 always {
                     junit 'rhDemo/target/surefire-reports/*.xml'
+                    junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                 }
             }
         }
@@ -556,18 +557,6 @@ YMLEOF
                     }
                 }
             }
-
-        stage('📦 Build Maven') {
-            steps {
-                script {
-                    echo "▶ Build du projet (création du JAR)..."
-                }
-
-                dir('rhDemo') {
-                    sh './mvnw package -DskipTests'
-                }
-            }
-        }
 
         stage('📊 Analyse SonarQube') {
             when {

@@ -180,7 +180,7 @@ public class SecurityConfig {
 	    // Le mode eager écrit les headers avant la chaîne de filtres, contournant ce bug.
 	    // Corrigé dans Spring Security 7.0.4 (spring-security#18798).
 	    // TODO : supprimer ce workaround lors du passage à Spring Boot 4.0.4+
-	    .withObjectPostProcessor(new org.springframework.security.config.annotation.ObjectPostProcessor<HeaderWriterFilter>() {
+	    .withObjectPostProcessor(new ObjectPostProcessor<HeaderWriterFilter>() {
 	        @Override
 	        public HeaderWriterFilter postProcess(HeaderWriterFilter filter) {
 	            filter.setShouldWriteHeadersEagerly(true);

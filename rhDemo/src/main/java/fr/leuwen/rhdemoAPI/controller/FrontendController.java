@@ -4,9 +4,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 
@@ -21,13 +20,12 @@ import java.nio.charset.StandardCharsets;
  * sur la réponse FORWARD. En retournant directement via ResponseEntity, on reste
  * dans le dispatch REQUEST original où le wrapper est actif et les headers sont écrits.
  */
-@Controller
+@RestController
 public class FrontendController {
 
     private static final Resource INDEX_HTML = new ClassPathResource("static/index.html");
 
     @GetMapping({"/front", "/front/**"})
-    @ResponseBody
     public ResponseEntity<Resource> serveIndex() {
         return ResponseEntity.ok()
                 .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))

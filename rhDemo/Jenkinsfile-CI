@@ -1442,21 +1442,55 @@ YMLEOF
                             if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
                                 echo "✅ Connexion à ZAP réussie"
 
-                                # Générer le rapport HTML
-                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
-                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
-                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                # --- Rapport HTML verbeux (traditional-html-plus) ---
+                                # Inclut pour chaque alerte : code HTTP, headers de requête/réponse,
+                                # corps de réponse et evidence. Indispensable pour diagnostiquer
+                                # les faux positifs (ex: alerte CSP sur une 302 vs une 200).
+                                echo "📄 Génération rapport HTML détaillé (traditional-html-plus)..."
+                                GENERATE_RESULT=\$(curl -s -X POST \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/reports/action/generate/" \
+                                    --data-urlencode "apikey=\${ZAP_API_KEY}" \
+                                    --data-urlencode "title=RHDemo ZAP Security Report" \
+                                    --data-urlencode "template=traditional-html-plus" \
+                                    --data-urlencode "reportFileName=zap-report-verbose" \
+                                    --data-urlencode "reportDir=/zap/reports" 2>&1)
+                                echo "   Résultat API: \${GENERATE_RESULT}"
+
+                                # Copier le rapport depuis le conteneur ZAP vers le workspace Jenkins
+                                if docker cp rhdemo-jenkins-zap:/zap/reports/zap-report-verbose.html \
+                                    "\${WORKSPACE_DIR}/zap-reports/zap-report.html" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP verbeux généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
                                 else
-                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                    echo "⚠️  Échec de copie du rapport HTML verbeux, fallback sur rapport basique..."
+                                    curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                        "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1 \
+                                        && echo "✅ Rapport HTML basique généré" \
+                                        || echo "⚠️  Échec du rapport HTML basique également"
                                 fi
 
-                                # Générer également le rapport JSON pour analyse
-                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                # --- Rapport JSON des alertes ---
+                                # Contient messageId par alerte : utilisable pour corréler
+                                # avec le HAR via jq '.messages[] | select(.id == <messageId>)'
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-alerts.json" \
                                     "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
-                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
-                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
+                                    ALERT_COUNT=\$(jq '.alerts | length' "\${WORKSPACE_DIR}/zap-reports/zap-alerts.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON alertes généré: \${ALERT_COUNT} alertes détectées"
                                 else
-                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                    echo "⚠️  Échec de génération du rapport JSON alertes"
+                                fi
+
+                                # --- Export HAR (HTTP Archive) ---
+                                # Contient TOUTES les requêtes/réponses interceptées par ZAP
+                                # avec code HTTP, headers complets et body.
+                                # Permet de vérifier sur quel code HTTP (302 vs 200) chaque alerte a été déclenchée.
+                                # Corrélation : zap-alerts.json[].messageId ↔ zap-messages.har messages[].id (via _zapMessageId)
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-messages.har" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/messagesHar/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    MSG_COUNT=\$(jq '.log.entries | length' "\${WORKSPACE_DIR}/zap-reports/zap-messages.har" 2>/dev/null || echo "?")
+                                    echo "✅ Export HAR généré: \${MSG_COUNT} messages HTTP capturés"
+                                    echo "   → Corréler avec zap-alerts.json via le champ messageId"
+                                else
+                                    echo "⚠️  Échec de l'export HAR"
                                 fi
                             else
                                 echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"

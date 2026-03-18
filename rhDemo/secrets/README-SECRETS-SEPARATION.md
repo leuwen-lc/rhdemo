@@ -10,7 +10,7 @@ Les environnements `ephemere` (Docker Compose) et `stagingkub` (Kubernetes) util
 |---------|---------------|-------------|-------------|
 | `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
 | `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Environnement permanent Kubernetes | SOPS/Age |
-| `secrets-rhdemo.yml` | Temporaire | Généré depuis secrets-staging*.yml pour l'app | Non chiffré (temporaire) |
+| `secrets-rhdemo.yml` | test local Non chiffré Non commité |
 
 ## 🔐 Gestion des secrets
 
@@ -47,22 +47,6 @@ SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-stagingkub.yml
 
 # Déchiffrer pour inspection
 sops -d secrets-stagingkub.yml > secrets-stagingkub-decrypted.yml
-```
-
-## 🔄 Migration initiale
-
-Lors de la création de `secrets-stagingkub.yml` :
-
-1. Le fichier a été dupliqué depuis `secrets-ephemere.yml`
-2. **Vous devriez changer les secrets** pour stagingkub pour plus de sécurité
-3. Notamment :
-   - Mots de passe des bases de données
-   - Client secret OAuth2 Keycloak
-   - Mots de passe admin Keycloak
-
-```bash
-# Éditer secrets-stagingkub.yml et générer de nouveaux secrets
-SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-stagingkub.yml
 ```
 
 ## 🎯 Avantages de la séparation

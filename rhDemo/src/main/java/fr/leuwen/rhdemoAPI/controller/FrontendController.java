@@ -32,9 +32,12 @@ public class FrontendController {
 
     @GetMapping({"/front", "/front/**"})
     public ResponseEntity<Resource> serveIndex(HttpServletRequest request, HttpServletResponse response) {
-        log.debug("FrontendController.serveIndex chemin={} query={}", request.getRequestURI(), request.getQueryString());
-        log.debug("Type du wrapper de réponse : {}", response.getClass().getName());
-        log.debug("Header CSP à l'entrée du contrôleur : {}", response.getHeader("Content-Security-Policy"));
+        if (log.isDebugEnabled()) {
+            log.debug("FrontendController.serveIndex chemin={} query={}", request.getRequestURI(),
+                    request.getQueryString());
+            log.debug("Type du wrapper de réponse : {}", response.getClass().getName());
+            log.debug("Header CSP à l'entrée du contrôleur : {}", response.getHeader("Content-Security-Policy"));
+        }
         return ResponseEntity.ok()
                 .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
                 .body(INDEX_HTML);

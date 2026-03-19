@@ -1,16 +1,16 @@
-# Procédure standard : PR `evolutions-post-1.1.5` -> `master`, release `1.1.6-RELEASE`, tag, puis retour en `-SNAPSHOT`
+# Procédure standard : PR `evolutions-post-1.1.6` -> `master`, release `1.1.7-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte (modifier les versions par remplacement global):
-- Branche source (exemple) : `evolutions-post-1.1.5` 
+
+- Branche source (exemple) : `evolutions-post-1.1.6`
 - Branche cible : `master`
-- Tag Git (exemple) : `1.1.6-RELEASE`
+- Tag Git (exemple) : `1.1.7-RELEASE`
 - Après la release, `master` repasse en `-SNAPSHOT`
 
+## Prérequis
 
-## Prérequis 
 - chaine CI/CD complète au vert avec options sonarqube et selenium
 - README.md racine mis à jour en particulier la section changelog pour la nouvelle version
-
 
 ## 1) Synchroniser le repo local avec le distant
 
@@ -20,12 +20,12 @@ git fetch origin
 ```
 
 ```bash
-git checkout evolutions-post-1.1.5
+git checkout evolutions-post-1.1.6
 # Bascule sur la branche de travail à livrer.
 ```
 
 ```bash
-git pull --rebase origin evolutions-post-1.1.5
+git pull --rebase origin evolutions-post-1.1.6
 # Met à jour la branche avec le distant en rejouant les commits au-dessus (historique plus propre qu’un merge).
 ```
 
@@ -44,14 +44,14 @@ git merge origin/master
 # Pas de rebase pour éviter de devoir donner un droit git force sur la branche 
 ```
 
-> Si conflits : les résoudre, puis faire `git add ...` 
+> Si conflits : les résoudre, puis faire `git add ...`
 
 ---
 
-## 3) Passer la version Maven en `1.1.6-RELEASE` (dans les POM)
+## 3) Passer la version Maven en `1.1.7-RELEASE` (dans les POM)
 
 1. Modifie les `pom.xml` (3 modules) :
-   - Remplacer par exemple `1.1.6-SNAPSHOT` par `1.1.6-RELEASE`.
+   - Remplacer par exemple `1.1.6-SNAPSHOT` par `1.1.7-RELEASE`.
 
 Puis :
 
@@ -66,12 +66,12 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore(release): passage à la version 1.1.6-RELEASE"
+git commit -m "chore(release): passage à la version 1.1.7-RELEASE"
 # Crée un commit traçable qui fige la version release dans les POM.
 ```
 
 ```bash
-git push origin evolutions-post-1.1.5
+git push origin evolutions-post-1.1.6
 # Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
 ```
 
@@ -80,13 +80,14 @@ git push origin evolutions-post-1.1.5
 ## 4) Ouvrir et merger la Pull Request sur GitHub
 
 Sur GitHub :
+
 - (Demandeur) Créer une PR :
   - **base** : `master`
-  - **compare** : `evolutions-post-1.1.5`
+  - **compare** : `evolutions-post-1.1.6`
 - Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
 - Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
 
-> Stratégie de merge : Squash/Merge 
+> Stratégie de merge : Squash/Merge
 ---
 
 ## 5) Tagger la release sur le commit de `master` (après merge)
@@ -107,12 +108,12 @@ git pull origin master
 ```
 
 ```bash
-git tag -a 1.1.6-RELEASE -m "Release 1.1.6-RELEASE"
+git tag -a 1.1.7-RELEASE -m "Release 1.1.7-RELEASE"
 # Crée un tag annoté sur le commit courant (celui de master) pour marquer officiellement la release.
 ```
 
 ```bash
-git push origin 1.1.6-RELEASE
+git push origin 1.1.7-RELEASE
 # Publie le tag vers le remote pour le rendre visible à tous (et déclencher d’éventuels pipelines de release).
 ```
 
@@ -121,8 +122,8 @@ git push origin 1.1.6-RELEASE
 ## 6) Repasser `master` en `-SNAPSHOT` après la release
 
 Décide de la version de développement suivante :
-- `1.1.6-SNAPSHOT` (exemple)
 
+- `1.1.6-SNAPSHOT` (exemple)
 
 1. Modifier les `pom.xml` pour mettre la prochaine version `-SNAPSHOT`.
 
@@ -139,7 +140,7 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.6-RELEASE"
+git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.7-RELEASE"
 # Committe le retour en version de développement pour éviter que master reste bloqué en version release.
 ```
 
@@ -147,7 +148,3 @@ git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.6-RELEASE"
 git push origin master
 # Publie le commit sur master.
 ```
-
-
-
-

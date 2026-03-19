@@ -149,7 +149,9 @@ public class SecurityConfig {
         //pas de HttpOnly car ce cookie doit être lu par le js pourqu'il puisse renvoyer le token attendu par le serveur
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();// NOSONAR
         // Applique le même flag Secure que les cookies de session (configuré par profil)
-        repository.setCookieCustomizer(cookieCustomizer -> cookieCustomizer.secure(cookieSecureFlag));
+        repository.setCookieCustomizer(cookieCustomizer -> cookieCustomizer
+                .secure(cookieSecureFlag)
+                .sameSite("Strict"));
         return repository;
     }
 

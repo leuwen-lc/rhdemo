@@ -5,6 +5,9 @@ import org.keycloak.representations.idm.RealmRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import fr.leuwen.keycloak.config.KeycloakProperties;
 
 /**
@@ -78,7 +81,33 @@ public class RealmService {
                 realmToUpdate.setSsoSessionIdleTimeout(properties.getRealm().getSsoSessionIdleTimeout());
                 realmToUpdate.setSsoSessionMaxLifespan(properties.getRealm().getSsoSessionMaxLifespan());
                 realmToUpdate.setAccessTokenLifespan(properties.getRealm().getAccessTokenLifespan());
-                
+
+                // Configuration des headers de sécurité du navigateur (browserSecurityHeaders)
+                // Objectif : expliciter toutes les directives CSP pour éviter les alertes ZAP/OWASP
+                // "Failure to Define Directive with No Fallback" et "Wildcard Directive".
+                //
+                // Limites connues (thème Keycloak 26 par défaut) :
+                // - 'unsafe-inline' et 'unsafe-eval' sur script-src sont imposés par les templates
+                //   du thème Keycloak (scripts inline dans les pages de login).
+                //   Supprimables uniquement avec un thème custom (hors scope de ce projet).
+                // - L'absence de token CSRF classique détectée par ZAP est un faux positif :
+                //   la protection est assurée par le paramètre 'state' OAuth2.
+                Map<String, String> browserSecurityHeaders = new HashMap<>();
+                browserSecurityHeaders.put("contentSecurityPolicy",
+                        "default-src 'self'; " +
+                        "script-src 'self' 'unsafe-eval' 'unsafe-inline'; " +
+                        "style-src 'self' 'unsafe-inline'; " +
+                        "img-src 'self' data:; " +
+                        "font-src 'self' data:; " +
+                        "connect-src 'self'; " +
+                        "frame-src 'self'; " +
+                        "frame-ancestors 'self'; " +
+                        "object-src 'none'; " +
+                        "base-uri 'self'; " +
+                        "form-action 'self'");
+                browserSecurityHeaders.put("referrerPolicy", "no-referrer");
+                realmToUpdate.setBrowserSecurityHeaders(browserSecurityHeaders);
+
                 // Mettre à jour le realm
                 keycloak.realm(realmName).update(realmToUpdate);
                 logger.info("✅ Configuration du realm '{}' appliquée avec succès!", realmName);

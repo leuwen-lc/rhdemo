@@ -49,9 +49,12 @@ pipeline {
 
         // Fichiers de secrets SOPS (stagingkub utilise ses propres secrets, différents de staging Docker Compose)
         SECRETS_FILE = 'rhDemo/secrets/secrets-stagingkub.yml'
-        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
-        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
-        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+        // Répertoire isolé hors workspace pour les secrets déchiffrés (sécurité)
+        // Préfixe "-cd-" pour éviter collision si CI et CD tournent en parallèle sur le même agent
+        SECRETS_TMP_DIR   = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}"
+        SECRETS_DECRYPTED = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/secrets-decrypted.yml"
+        SECRETS_ENV_VARS  = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/env-vars.sh"
+        SECRETS_RHDEMO    = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/secrets-rhdemo.yml"
 
         // URLs
         APP_URL = 'https://rhdemo-stagingkub.intra.leuwen-lc.fr'
@@ -105,6 +108,15 @@ pipeline {
 
                 // Checkout du code
                 checkout scm
+
+                // Purge des résidus de l'ancienne convention (fichiers générés dans le workspace)
+                // Cible uniquement les fichiers générés, PAS les fichiers SOPS chiffrés versionnés
+                sh '''
+                    rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
+                    echo "✅ Résidus de secrets workspace nettoyés"
+                '''
             }
         }
 
@@ -172,12 +184,14 @@ pipeline {
                 // Utiliser le credential sops-age-key de manière sécurisée
                 withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
                     sh '''
-                        # Créer le répertoire secrets s'il n'existe pas
-                        mkdir -p rhDemo/secrets
+                        # Créer le répertoire temporaire isolé hors workspace (permissions strictes)
+                        mkdir -p ${SECRETS_TMP_DIR}
+                        chmod 700 ${SECRETS_TMP_DIR}
 
                         # Déchiffrer le fichier de secrets
                         echo "Déchiffrement de ${SECRETS_FILE}..."
                         sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                        chmod 600 ${SECRETS_DECRYPTED}
 
                         # Vérifier que le fichier a été déchiffré
                         if [ ! -f ${SECRETS_DECRYPTED} ]; then
@@ -206,12 +220,13 @@ pipeline {
                             echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
                             echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
                             echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // \"admin\"' ${SECRETS_DECRYPTED})"
-                        } > rhDemo/secrets/env-vars.sh 2>&1
+                        } > ${SECRETS_ENV_VARS} 2>&1
+                        chmod 600 ${SECRETS_ENV_VARS}
 
                         # Réactiver l'écho des commandes
                         set -x
 
-                        echo "✅ Variables d'environnement préparées"
+                        echo "✅ Variables d'environnement préparées dans ${SECRETS_ENV_VARS}"
                     '''
                 }
             }
@@ -235,11 +250,11 @@ pipeline {
                     # SÉCURITÉ: Désactiver l'écho des commandes
                     set +x
 
-                    # Source les secrets
-                    . rhDemo/secrets/env-vars.sh
+                    # Source les secrets (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
-                    # Créer le fichier secrets-rhdemo.yml
-                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+                    # Créer le fichier secrets-rhdemo.yml (dans /tmp, hors workspace)
+                    cat > ${SECRETS_RHDEMO} <<EOF
 
 rhdemo:
   datasource:
@@ -253,10 +268,12 @@ rhdemo:
           secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
 EOF
 
+                    chmod 600 ${SECRETS_RHDEMO}
+
                     # Réactiver l'écho
                     set -x
 
-                    echo "✅ Fichier secrets-rhdemo.yml créé"
+                    echo "✅ Fichier ${SECRETS_RHDEMO} créé hors workspace"
                 '''
             }
         }
@@ -542,8 +559,8 @@ EOF
                     # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
                     set +x
 
-                    # Charger les secrets depuis SOPS
-                    . rhDemo/secrets/env-vars.sh
+                    # Charger les secrets depuis /tmp (hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
                     # Note: Le kubeconfig RBAC définit déjà current-context correctement
 
@@ -563,9 +580,9 @@ EOF
                       --namespace ${env.K8S_NAMESPACE} \\
                       --dry-run=client -o yaml | kubectl apply -f -
 
-                    # Mettre à jour le secret pour secrets-rhdemo.yml
+                    # Mettre à jour le secret pour secrets-rhdemo.yml (lu depuis /tmp, hors workspace)
                     kubectl create secret generic rhdemo-app-secrets \\
-                      --from-file=secrets-rhdemo.yml=rhDemo/secrets/secrets-rhdemo.yml \\
+                      --from-file=secrets-rhdemo.yml=${SECRETS_RHDEMO} \\
                       --namespace ${env.K8S_NAMESPACE} \\
                       --dry-run=client -o yaml | kubectl apply -f -
 
@@ -610,6 +627,16 @@ EOF
                         echo "ℹ️  Version RELEASE fixe : imagePullPolicy=IfNotPresent"
                     fi
 
+                    # Détecter la présence des CRDs Prometheus Operator (ServiceMonitor)
+                    # kubectl api-resources ne nécessite pas de permission spéciale sur les CRDs
+                    MONITORING_ENABLED="false"
+                    if kubectl api-resources --api-group=monitoring.coreos.com 2>/dev/null | grep -q ServiceMonitor; then
+                        MONITORING_ENABLED="true"
+                        echo "✅ Prometheus Operator détecté : ServiceMonitors activés"
+                    else
+                        echo "ℹ️  Prometheus Operator absent : ServiceMonitors désactivés (déploiement sans monitoring)"
+                    fi
+
                     # Déployer ou mettre à jour avec Helm
                     # IMPORTANT: Pour KinD, utiliser localhost:5000 qui est mirroré vers le registry
                     # Note: --create-namespace crée automatiquement le namespace s'il n'existe pas
@@ -620,6 +647,8 @@ EOF
                       --set rhdemo.image.repository=localhost:5000/${env.DOCKER_IMAGE_NAME} \\
                       --set rhdemo.image.tag=${env.DEPLOY_IMAGE_TAG} \\
                       --set rhdemo.image.pullPolicy=\${PULL_POLICY} \\
+                      --set rhdemo.metrics.serviceMonitor.enabled=\${MONITORING_ENABLED} \\
+                      --set "postgresql-rhdemo.metrics.serviceMonitor.enabled=\${MONITORING_ENABLED}" \\
                       --wait \\
                       --timeout 15m \\
                       --debug
@@ -850,12 +879,13 @@ EOF
                 echo "Pipeline CD terminé: ${currentBuild.currentResult}"
                 echo "═══════════════════════════════════════════════════════"
 
-                // Supprimer les fichiers de secrets
+                // Supprimer les fichiers de secrets et le répertoire temporaire isolé
                 sh """
                     rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
                     rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
                     rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
-                
+                    rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true
+
                     echo "✅ Nettoyage terminé"
                 
                     #Déconnecter Jenkins du réseau Kind

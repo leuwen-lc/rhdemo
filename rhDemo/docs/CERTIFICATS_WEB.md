@@ -8,12 +8,43 @@ Ce document décrit les deux options de gestion des certificats TLS pour l'envir
 
 | Aspect | Auto-signé | Let's Encrypt |
 |--------|------------|---------------|
-| **Domaine** | `*.stagingkub.intra.leuwen-lc.fr` | `*.intra.leuwen-lc.fr` |
+| **Domaine** | `*.intra.leuwen-lc.fr` | `*.intra.leuwen-lc.fr` |
 | **Validité** | 365 jours (renouvelable manuellement) | 90 jours (renouvellement automatique) |
 | **Prérequis** | Aucun | cert-manager + webhook DNS (Infomaniak) |
 | **Avertissement navigateur** | Oui (certificat non reconnu) | Non |
 | **Logout OIDC** | ❌ Non fonctionnel | ✅ Fonctionnel |
 | **Cas d'usage** | Développement local, environnement isolé | Staging proche production |
+
+---
+
+## Architecture TLS avec NGINX Gateway Fabric
+
+Depuis la migration vers **NGINX Gateway Fabric 2.4.2**, la terminaison TLS est centralisée au niveau du `shared-gateway` dans le namespace `nginx-gateway`. Les Ingress Kubernetes ne sont plus utilisés.
+
+```
+Internet → KinD (hostPort 443) → NodePort 32616 → shared-gateway (TLS terminé ici) → HTTPRoutes → Services
+```
+
+Le **shared-gateway** gère les certificats TLS pour tous les services :
+- `rhdemo-stagingkub.intra.leuwen-lc.fr` → HTTPRoute dans `rhdemo-stagingkub`
+- `keycloak-stagingkub.intra.leuwen-lc.fr` → HTTPRoute dans `rhdemo-stagingkub`
+- `grafana-stagingkub.intra.leuwen-lc.fr` → HTTPRoute dans `loki-stack`
+
+Le certificat TLS est référencé dans `shared-gateway.yaml` (namespace `nginx-gateway`) :
+
+```yaml
+# infra/stagingkub/shared-gateway.yaml
+spec:
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: shared-tls-cert      # auto-signé (init-stagingkub.sh)
+          # - name: intra-wildcard-tls # Let's Encrypt (cert-manager)
+```
 
 ---
 
@@ -30,7 +61,7 @@ Ce document décrit les deux options de gestion des certificats TLS pour l'envir
 
 #### 1. Initialiser l'environnement
 
-Le script `init-stagingkub.sh` génère automatiquement un certificat auto-signé :
+Le script `init-stagingkub.sh` génère automatiquement un certificat auto-signé et le charge dans les namespaces appropriés :
 
 ```bash
 cd rhDemo/infra/stagingkub
@@ -40,38 +71,56 @@ cd rhDemo/infra/stagingkub
 Le script génère :
 - `certs/tls.crt` : Certificat X.509 auto-signé
 - `certs/tls.key` : Clé privée RSA 2048 bits
-- Secret Kubernetes `rhdemo-tls-cert` dans le namespace `rhdemo-stagingkub`
+- Secret Kubernetes `shared-tls-cert` dans le namespace `nginx-gateway` (utilisé par le shared-gateway)
+- Secret Kubernetes `rhdemo-tls-cert` dans le namespace `rhdemo-stagingkub` (**legacy, inutilisé** — à supprimer d'`init-stagingkub.sh` : le port-forward utilise HTTP direct, et sans DNS cluster Keycloak est de toute façon inaccessible hors cluster)
 
-Le certificat couvre :
-- `*.stagingkub.intra.leuwen-lc.fr` (wildcard)
-- `rhdemo-stagingkub.intra.leuwen-lc.fr` (SAN)
-- `keycloak-stagingkub.intra.leuwen-lc.fr` (SAN)
-- `grafana-stagingkub.intra.leuwen-lc.fr` (SAN)
+Le certificat couvre le domaine wildcard `*.intra.leuwen-lc.fr`.
 
-#### 2. Configurer Helm pour utiliser le certificat auto-signé
+#### 2. Configuration Helm pour rhdemo (auto-signé)
 
-Modifier `infra/stagingkub/helm/rhdemo/values.yaml` :
+Avec les certificats auto-signés, **aucune modification de `values.yaml` n'est nécessaire** pour le TLS. La terminaison TLS est gérée par le `shared-gateway` créé par `init-stagingkub.sh`.
+
+La section `gateway:` dans `infra/stagingkub/helm/rhdemo/values.yaml` configure uniquement le routage :
+
+```yaml
+gateway:
+  enabled: true
+
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Listener du shared-gateway.yaml
+
+  routes:
+    - name: rhdemo-route
+      hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      rules:
+        - path: /
+          pathType: PathPrefix
+          serviceName: rhdemo-app
+          servicePort: 9000
+
+    - name: keycloak-route
+      hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      rules:
+        - path: /
+          pathType: PathPrefix
+          serviceName: keycloak
+          servicePort: 8080
+```
+
+> **Note** : La section `ingress:` n'existe plus dans `values.yaml`. Le TLS est entièrement géré par le `shared-gateway` dans le namespace `nginx-gateway`.
+
+#### 3. Configuration Helm pour Grafana (auto-signé)
+
+L'Ingress est désactivé dans `infra/stagingkub/helm/observability/grafana-values.yaml` :
 
 ```yaml
 ingress:
-  tls:
-    enabled: true
-    secretName: rhdemo-tls-cert  # Certificat auto-signé
+  enabled: false  # Remplacé par Gateway API
 ```
 
-Pour Grafana, modifier `infra/stagingkub/helm/observability/grafana-values.yaml` :
-
-```yaml
-ingress:
-  tls:
-    - secretName: grafana-tls-cert  # Certificat auto-signé Grafana
-      hosts:
-        - grafana-stagingkub.intra.leuwen-lc.fr
-```
-
-#### 3. Installer la stack d'observabilité (Grafana)
-
-Le script `install-observability.sh` génère automatiquement le certificat auto-signé pour Grafana :
+Le script `install-observability.sh` crée automatiquement une HTTPRoute inline attachée au `shared-gateway` :
 
 ```bash
 cd rhDemo/infra/stagingkub
@@ -79,11 +128,11 @@ cd rhDemo/infra/stagingkub
 ```
 
 Ce script :
+- Installe Loki et Grafana via Helm (sans Ingress)
+- Crée une `HTTPRoute` dans `loki-stack` attachée au `shared-gateway` (namespace `nginx-gateway`) via `kubectl apply` inline
+- Grafana est ainsi exposé via le même certificat `shared-tls-cert` que les autres services
 
-- Crée le namespace `loki-stack`
-- Génère un certificat auto-signé pour `grafana-stagingkub.intra.leuwen-lc.fr`
-- Crée le secret `grafana-tls-cert` dans le namespace `loki-stack`
-- Installe Loki et Grafana via Helm
+> **Note** : Le fichier `infra/stagingkub/helm/observability/grafana-gateway.yaml` présent dans le dépôt est une **ancienne architecture** (gateway dédié dans `loki-stack` avec `intra-wildcard-tls`). Il n'est plus appliqué par les scripts. L'architecture active utilise le `shared-gateway` décrit ci-dessus.
 
 #### 4. Déployer l'application
 
@@ -213,15 +262,16 @@ Appliquer :
 kubectl apply -f cluster-issuer.yaml
 ```
 
-#### 4. Créer les certificats
+#### 4. Créer le certificat wildcard dans nginx-gateway
 
-Pour rhdemo-stagingkub :
+Le certificat doit être créé dans le namespace `nginx-gateway` car c'est le `shared-gateway` qui s'en sert pour la terminaison TLS :
+
 ```yaml
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: intra-wildcard
-  namespace: rhdemo-stagingkub
+  namespace: nginx-gateway
 spec:
   secretName: intra-wildcard-tls
   dnsNames:
@@ -231,59 +281,65 @@ spec:
     kind: ClusterIssuer
 ```
 
-Pour loki-stack (Grafana) :
+> **Note** : Contrairement à l'ancienne configuration Ingress, le certificat est dans le namespace `nginx-gateway` (pas `rhdemo-stagingkub` ni `loki-stack`), car le `shared-gateway` centralise toute la terminaison TLS.
+
+#### 5. Mettre à jour le shared-gateway pour Let's Encrypt
+
+Modifier `infra/stagingkub/shared-gateway.yaml` pour référencer le certificat Let's Encrypt :
+
 ```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: intra-wildcard
-  namespace: loki-stack
 spec:
-  secretName: intra-wildcard-tls
-  dnsNames:
-    - "*.intra.leuwen-lc.fr"
-  issuerRef:
-    name: letsencrypt-infomaniak-prod
-    kind: ClusterIssuer
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: intra-wildcard-tls  # Let's Encrypt
 ```
 
-#### 5. Vérifier les certificats
+Appliquer :
+```bash
+kubectl apply -f infra/stagingkub/shared-gateway.yaml
+```
+
+#### 6. Vérifier les certificats
 
 ```bash
-# Vérifier le statut
-kubectl get certificates -A
+# Vérifier le statut du certificat
+kubectl get certificates -n nginx-gateway
 
 # Vérifier les détails
-kubectl describe certificate intra-wildcard -n rhdemo-stagingkub
+kubectl describe certificate intra-wildcard -n nginx-gateway
 
 # Vérifier le contenu du certificat
-kubectl get secret intra-wildcard-tls -n rhdemo-stagingkub \
+kubectl get secret intra-wildcard-tls -n nginx-gateway \
   -o jsonpath='{.data.tls\.crt}' | base64 -d | \
   openssl x509 -noout -text | grep -E "(Subject:|DNS:|Not After)"
 ```
 
-#### 6. Configurer Helm pour Let's Encrypt
+#### 7. Configuration Helm pour rhdemo (Let's Encrypt)
 
-Les fichiers `values.yaml` sont déjà configurés par défaut pour Let's Encrypt :
+**Aucune modification de `values.yaml` n'est nécessaire** : la configuration `gateway:` dans `values.yaml` est identique pour les deux options. Le certificat est résolu au niveau du `shared-gateway`, pas du chart Helm.
 
-`infra/stagingkub/helm/rhdemo/values.yaml` :
 ```yaml
-ingress:
-  tls:
-    enabled: true
-    secretName: intra-wildcard-tls  # Let's Encrypt
+# infra/stagingkub/helm/rhdemo/values.yaml - identique auto-signé et Let's Encrypt
+gateway:
+  enabled: true
+  sharedGateway:
+    name: shared-gateway
+    namespace: nginx-gateway
+    sectionName: https
 ```
 
-`infra/stagingkub/helm/observability/grafana-values.yaml` :
-```yaml
-ingress:
-  tls:
-    - secretName: intra-wildcard-tls  # Let's Encrypt
-      hosts:
-        - grafana-stagingkub.intra.leuwen-lc.fr
-```
+#### 8. Configuration pour Grafana (Let's Encrypt)
 
-#### 7. Déployer
+Identique à l'option auto-signée : `ingress.enabled: false` dans `grafana-values.yaml`, HTTPRoute attachée au `shared-gateway` via `install-observability.sh`. Aucune modification supplémentaire.
+
+Le certificat `intra-wildcard-tls` étant dans le namespace `nginx-gateway` (là où réside le `shared-gateway`), Grafana bénéficie automatiquement du certificat Let's Encrypt sans configuration supplémentaire dans `loki-stack`.
+
+#### 9. Déployer
 
 Le déploiement se fait via le pipeline Jenkins CD :
 
@@ -304,15 +360,18 @@ Voir [Jenkinsfile-CD](../Jenkinsfile-CD) pour les détails du pipeline.
 
 ---
 
-## Comparaison des fichiers de configuration
+## Comparaison des configurations
 
-### Différences dans values.yaml
+### Où est configuré le certificat ?
 
-| Paramètre | Auto-signé | Let's Encrypt |
-|-----------|------------|---------------|
-| `ingress.tls.secretName` | `rhdemo-tls-cert` | `intra-wildcard-tls` |
-| Secret créé par | `init-stagingkub.sh` | cert-manager |
-| Renouvellement | Manuel (annuel) | Automatique (90j) |
+| Élément | Auto-signé | Let's Encrypt |
+|---------|------------|---------------|
+| **Secret TLS** | `shared-tls-cert` dans `nginx-gateway` | `intra-wildcard-tls` dans `nginx-gateway` |
+| **Créé par** | `init-stagingkub.sh` (openssl) | cert-manager |
+| **Référencé dans** | `shared-gateway.yaml` | `shared-gateway.yaml` |
+| **Renouvellement** | Manuel (annuel) | Automatique (90j) |
+| **values.yaml rhdemo** | Inchangé | Inchangé |
+| **grafana-values.yaml** | `ingress.enabled: false` | `ingress.enabled: false` |
 
 ### Résolution DNS (/etc/hosts)
 
@@ -330,11 +389,11 @@ Identique pour les deux options :
 ### Certificat auto-signé expiré
 
 ```bash
-# Supprimer l'ancien certificat
+# Supprimer les anciens certificats
 rm -f infra/stagingkub/certs/tls.*
-kubectl delete secret rhdemo-tls-cert -n rhdemo-stagingkub
+kubectl delete secret shared-tls-cert -n nginx-gateway
 
-# Régénérer
+# Régénérer (relancer init-stagingkub.sh qui recrée le secret)
 ./scripts/init-stagingkub.sh
 ```
 
@@ -342,13 +401,24 @@ kubectl delete secret rhdemo-tls-cert -n rhdemo-stagingkub
 
 ```bash
 # Vérifier les événements
-kubectl describe certificate intra-wildcard -n rhdemo-stagingkub
+kubectl describe certificate intra-wildcard -n nginx-gateway
 
 # Vérifier les challenges
 kubectl get challenges -A
 
 # Vérifier les logs cert-manager
 kubectl logs -n cert-manager deploy/cert-manager -f
+```
+
+### HTTPRoute non attachée au Gateway
+
+```bash
+# Vérifier le statut des HTTPRoutes
+kubectl get httproute -n rhdemo-stagingkub
+kubectl get httproute -n loki-stack
+
+# Vérifier les détails (section "Parents" pour voir si attaché)
+kubectl describe httproute rhdemo-route -n rhdemo-stagingkub
 ```
 
 ### Erreur "certificate signed by unknown authority"
@@ -374,5 +444,7 @@ Avec un certificat auto-signé, cette erreur est normale pour les appels HTTPS s
 
 - [cert-manager Documentation](https://cert-manager.io/docs/)
 - [Let's Encrypt](https://letsencrypt.org/)
+- [NGINX Gateway Fabric 2.4.2](https://docs.nginx.com/nginx-gateway-fabric/) (correctif CVE-2026-33186)
+- [Gateway API - Kubernetes](https://gateway-api.sigs.k8s.io/)
 - [Spring Security OAuth2 Client](https://docs.spring.io/spring-security/reference/servlet/oauth2/client/index.html)
 - [Keycloak OIDC Logout](https://www.keycloak.org/docs/latest/securing_apps/#logout)

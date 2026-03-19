@@ -1,22 +1,28 @@
 package fr.leuwen.rhdemoAPI.controller;
 
+import java.util.List;
+import java.util.stream.StreamSupport;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import fr.leuwen.rhdemoAPI.model.Employe;
-import fr.leuwen.rhdemoAPI.repository.EmployeSpecification;
+import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
+import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
 import jakarta.validation.Valid;
 
@@ -35,8 +41,10 @@ public class EmployeController {
 	
 	@GetMapping("/api/employes")
 	@PreAuthorize("hasRole('consult')")
-	public Iterable<Employe> getEmployes() {
-		return employeservice.getEmployes();
+	public List<EmployeResponseDTO> getEmployes() {
+		return StreamSupport.stream(employeservice.getEmployes().spliterator(), false)
+				.map(EmployeResponseDTO::from)
+				.toList();
 	}
 	
 	/**
@@ -50,7 +58,7 @@ public class EmployeController {
 	 * @param filterNom Filtre sur le nom (recherche partielle insensible à la casse). Optionnel.
 	 * @param filterMail Filtre sur l'email (recherche partielle insensible à la casse). Optionnel.
 	 * @param filterAdresse Filtre sur l'adresse (recherche partielle insensible à la casse). Optionnel.
-	 * @return Page<Employe> Objet contenant la liste des employés de la page demandée ainsi que
+	 * @return Page<EmployeResponseDTO> Objet contenant la liste des employés de la page demandée ainsi que
 	 *         les métadonnées de pagination (totalElements, totalPages, etc.)
 	 *
 	 * Exemple d'utilisation :
@@ -64,7 +72,7 @@ public class EmployeController {
 	 */
 	@GetMapping("/api/employes/page")
 	@PreAuthorize("hasRole('consult')")
-	public Page<Employe> getEmployesPage(
+	public Page<EmployeResponseDTO> getEmployesPage(
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size,
 			@RequestParam(required = false) String sort,
@@ -82,37 +90,41 @@ public class EmployeController {
 			pageable = PageRequest.of(page, size);
 		}
 
-		Specification<Employe> spec = EmployeSpecification.withFilters(filterPrenom, filterNom, filterMail, filterAdresse);
-		return employeservice.getEmployesPage(spec, pageable);
+		return employeservice.getEmployesPage(filterPrenom, filterNom, filterMail, filterAdresse, pageable).map(EmployeResponseDTO::from);
 	}
-	
-	@GetMapping("/api/employe")
+
+	@GetMapping("/api/employes/{id}")
 	@PreAuthorize("hasRole('consult')")
-	public Employe getEmploye(@RequestParam final Long id) {
-		return employeservice.getEmploye(id);
+	public EmployeResponseDTO getEmploye(@PathVariable final Long id) {
+		return EmployeResponseDTO.from(employeservice.getEmploye(id));
 	}
 	
-	@DeleteMapping("/api/employe")
+	@DeleteMapping("/api/employes/{id}")
 	@PreAuthorize("hasRole('MAJ')")
-	public void deleteEmploye(@RequestParam final Long id) {
-	      employeservice.deleteEmploye(id);
-	     
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteEmploye(@PathVariable final Long id) {
+		logger.debug("Suppression employé - ID: {}", id);
+		employeservice.deleteEmploye(id);
+		logger.info("Employé supprimé avec succès - ID: {}", id);
 	}
-	
-	@PostMapping ("/api/employe")
+
+	@PostMapping("/api/employes")
 	@PreAuthorize("hasRole('MAJ')")
-	public Employe saveEmploye(@Valid @RequestBody Employe employe) {
-	      logger.debug("=== RÉCEPTION DONNÉES EMPLOYE ===");
-	      logger.debug("ID reçu: {}", employe.getId());
-	      logger.debug("Prénom reçu: {}", employe.getPrenom());
-	      logger.debug("Nom reçu: {}", employe.getNom());
-	      logger.debug("Mail reçu: {}", employe.getMail());
-	      logger.debug("Adresse reçue: {}", employe.getAdresse());
-	      logger.info("Données employé validées, sauvegarde en cours...");
-	      
-	      Employe savedEmploye = employeservice.saveEmploye(employe);
-	      logger.info("Employé sauvegardé avec succès - ID: {}", savedEmploye.getId());
-	      return savedEmploye;
-	}	
+	@ResponseStatus(HttpStatus.CREATED)
+	public EmployeResponseDTO createEmploye(@Valid @RequestBody EmployeRequestDTO dto) {
+		logger.debug("Création employé - prénom: {}, nom: {}", dto.prenom(), dto.nom());
+		EmployeResponseDTO result = EmployeResponseDTO.from(employeservice.createEmploye(dto.toEmploye()));
+		logger.info("Employé créé avec succès - ID: {}", result.id());
+		return result;
+	}
+
+	@PutMapping("/api/employes/{id}")
+	@PreAuthorize("hasRole('MAJ')")
+	public EmployeResponseDTO updateEmploye(@PathVariable final Long id, @Valid @RequestBody EmployeRequestDTO dto) {
+		logger.debug("Mise à jour employé ID: {} - prénom: {}, nom: {}", id, dto.prenom(), dto.nom());
+		EmployeResponseDTO result = EmployeResponseDTO.from(employeservice.updateEmploye(id, dto.toEmploye()));
+		logger.info("Employé mis à jour avec succès - ID: {}", result.id());
+		return result;
+	}
 
 }

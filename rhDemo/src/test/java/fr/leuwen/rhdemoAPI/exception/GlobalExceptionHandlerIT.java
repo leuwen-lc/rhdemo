@@ -34,7 +34,7 @@ public class GlobalExceptionHandlerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testEmployeNotFoundException_ShouldReturn404WithErrorResponse() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "999"))
+        mockMvc.perform(get("/api/employes/999"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").exists())
@@ -58,7 +58,7 @@ public class GlobalExceptionHandlerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
@@ -84,7 +84,7 @@ public class GlobalExceptionHandlerIT {
                 }
                 """;
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
@@ -107,7 +107,7 @@ public class GlobalExceptionHandlerIT {
                 }
                 """, tooLongString);
 
-        mockMvc.perform(post("/api/employe")
+        mockMvc.perform(post("/api/employes")
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
@@ -123,7 +123,7 @@ public class GlobalExceptionHandlerIT {
     @Test
     @WithMockUser(username = "user", roles = {"consult"})
     public void testTypeMismatchException_WithInvalidIdType_ShouldReturn400() throws Exception {
-        mockMvc.perform(get("/api/employe").param("id", "not-a-number"))
+        mockMvc.perform(get("/api/employes/not-a-number"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").exists())

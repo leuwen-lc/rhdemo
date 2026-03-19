@@ -108,7 +108,7 @@
   </div>
 </template>
 <script>
-import { getEmploye, saveEmploye } from '../services/api';
+import { getEmploye, createEmploye, updateEmploye } from '../services/api';
 import { hasRole } from '../stores/userStore';
 
 export default {
@@ -186,7 +186,9 @@ export default {
           employeToSave.adresse = '';
         }
         
-        const result = await saveEmploye(employeToSave);
+        const result = this.isEditing
+          ? await updateEmploye(this.$route.params.id, employeToSave)
+          : await createEmploye(employeToSave);
         this.success = `Employé ${this.isEditing ? 'modifié' : 'ajouté'} avec succès !`;
         
         // Rediriger après un délai pour montrer le message de succès

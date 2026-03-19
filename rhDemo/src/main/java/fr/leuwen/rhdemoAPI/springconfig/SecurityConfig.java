@@ -3,6 +3,7 @@ package fr.leuwen.rhdemoAPI.springconfig;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -12,6 +13,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.HeaderWriterFilter;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
@@ -147,7 +149,9 @@ public class SecurityConfig {
         //pas de HttpOnly car ce cookie doit être lu par le js pourqu'il puisse renvoyer le token attendu par le serveur
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();// NOSONAR
         // Applique le même flag Secure que les cookies de session (configuré par profil)
-        repository.setCookieCustomizer(cookieCustomizer -> cookieCustomizer.secure(cookieSecureFlag));
+        repository.setCookieCustomizer(cookieCustomizer -> cookieCustomizer
+                .secure(cookieSecureFlag)
+                .sameSite("Strict"));
         return repository;
     }
 
@@ -171,6 +175,20 @@ public class SecurityConfig {
 	    .contentSecurityPolicy(csp -> csp
 	        .policyDirectives(buildCspDirectives())
 	    )
+	    // Workaround bug Spring Security 7.0.0-7.0.3 / Spring Framework 7.0.5 :
+	    // HeaderWriterFilter écrit les headers en mode lazy (à la validation de la réponse),
+	    // mais LifecycleHttpServletResponse (Spring MVC 7.0.5+) intercepte le commit avant
+	    // que OnCommittedResponseWrapper ne le détecte → CSP absent sur /front/**.
+	    // Le mode eager écrit les headers avant la chaîne de filtres, contournant ce bug.
+	    // Corrigé dans Spring Security 7.0.4 (spring-security#18798).
+	    // TODO : supprimer ce workaround lors du passage à Spring Boot 4.0.4+
+	    .withObjectPostProcessor(new ObjectPostProcessor<HeaderWriterFilter>() {
+	        @Override
+	        public HeaderWriterFilter postProcess(HeaderWriterFilter filter) {
+	            filter.setShouldWriteHeadersEagerly(true);
+	            return filter;
+	        }
+	    })
 	)
 	.authorizeHttpRequests(auth -> ( auth
             .requestMatchers("/error*","/logout","/api-docs").permitAll()

@@ -5,12 +5,12 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.0.2</version>
+		<version>4.0.3</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
 	<artifactId>rhdemoAPI</artifactId>
-	<version>1.1.6-RELEASE</version>
+	<version>1.1.7-RELEASE</version>
 	<name>rhdemo</name>
 	<description>demo API appli rh avec Spring Boot</description>
 	<url/>
@@ -31,7 +31,7 @@
 		<!-- Override Mockito pour Java 25 (ByteBuddy 1.17.8+) - Spring Boot 4.0.2 gère 5.20.0 -->
 		<mockito.version>5.21.0</mockito.version>
 		<!-- SpringDoc OpenAPI compatible Spring Boot 4 / Jackson 3 -->
-		<springdoc-openapi.version>3.0.1</springdoc-openapi.version>
+		<springdoc-openapi.version>3.0.2</springdoc-openapi.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->
@@ -42,6 +42,26 @@
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-lang3</artifactId>
 				<version>3.18.0</version>
+			</dependency>
+			<!--
+			  Upgrade Jackson BOM 3.0.4 → 3.1.0 pour corriger alerte sécurité.
+			  IMPORTANT : forcer les 3 artefacts core individuellement (jackson-core,
+			  jackson-databind, jackson-annotations) est INSUFFISANT.
+			  jackson-databind:3.1.0 nécessite @JsonSerializeAs (nouveau dans 3.1.0)
+			  provenant de jackson-annotations, mais aussi une version cohérente de
+			  jackson-dataformat-yaml (utilisé par Spring Boot pour parser application.yml),
+			  jackson-datatype-jsr310, jackson-module-parameter-names, etc.
+			  Un mélange de versions entre modules Jackson provoque un
+			  NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs au démarrage.
+			  → Solution : importer le Jackson BOM complet, qui aligne TOUS les modules.
+			  L'entrée du child POM prend priorité sur le BOM importé par spring-boot-starter-parent.
+			-->
+			<dependency>
+				<groupId>tools.jackson</groupId>
+				<artifactId>jackson-bom</artifactId>
+				<version>3.1.0</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>

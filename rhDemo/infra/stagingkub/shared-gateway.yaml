@@ -33,6 +33,7 @@ spec:
         mode: Terminate
         certificateRefs:
           # Certificat auto-signé (init-stagingkub.sh) ou Let's Encrypt (cert-manager)
+          # Auto-signé: shared-tls-cert
           # Let's Encrypt: intra-wildcard-tls
           - name: shared-tls-cert
             kind: Secret

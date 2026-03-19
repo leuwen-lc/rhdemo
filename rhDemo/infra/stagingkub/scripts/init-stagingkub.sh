@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
-echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.4.0${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.4.2${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -319,7 +319,10 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
 # ═══════════════════════════════════════════════════════════════
 
-NGF_VERSION="2.4.0"
+NGF_VERSION="2.4.2"
+# Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
+# 2.4.2 : correctif CVE-2026-33186
+NGF_IMAGE_DIGEST="sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"
@@ -666,14 +669,6 @@ if [ ! -f "$CERTS_DIR/tls.crt" ]; then
 else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
 fi
-
-# Créer le secret TLS dans rhdemo-stagingkub
-kubectl create secret tls rhdemo-tls-cert \
-  --cert="$CERTS_DIR/tls.crt" \
-  --key="$CERTS_DIR/tls.key" \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-echo -e "${GREEN}✅ Secret TLS créé (rhdemo-stagingkub)${NC}"
 
 # Créer le secret TLS dans nginx-gateway pour le Gateway partagé
 kubectl create secret tls shared-tls-cert \

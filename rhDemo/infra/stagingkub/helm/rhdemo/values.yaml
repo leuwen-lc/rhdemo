@@ -68,7 +68,9 @@ postgresql-rhdemo:
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
+      # false par défaut : ne pas créer le ServiceMonitor si Prometheus Operator est absent.
+      # Le pipeline CD active ce flag automatiquement quand la CRD ServiceMonitor est détectée.
+      enabled: false
       namespace: monitoring
       interval: 30s
       scrapeTimeout: 10s
@@ -205,7 +207,9 @@ rhdemo:
   # Configuration des métriques Prometheus
   metrics:
     serviceMonitor:
-      enabled: true
+      # false par défaut : ne pas créer le ServiceMonitor si Prometheus Operator est absent.
+      # Le pipeline CD active ce flag automatiquement quand la CRD ServiceMonitor est détectée.
+      enabled: false
       namespace: monitoring  # Namespace où Prometheus Operator est installé
       interval: 30s
       scrapeTimeout: 10s

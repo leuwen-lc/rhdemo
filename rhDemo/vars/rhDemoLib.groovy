@@ -74,7 +74,7 @@ def waitForHealthcheck(Map config) {
         done
 
         echo "❌ ${name} timeout après ${timeout}s"
-        ${config.container ? "docker logs --tail=20 ${config.container} || true" : ''}
+        ${config.container ? "docker logs --tail=150 ${config.container} 2>&1 || true" : ''}
         exit 1
     """
 }
@@ -114,11 +114,11 @@ def generateTrivyReport(String image, String reportName) {
         # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         # --ignorefile : Exclut les CVE documentées comme faux positifs (voir SECURITY_ADVISORIES.md)
-        TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore"
+        TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore.yaml"
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
             IGNOREFILE_OPT="--ignorefile \${TRIVYIGNORE}"
-            echo "📋 Utilisation de .trivyignore (\$(grep -c '^CVE-' "\${TRIVYIGNORE}") CVE exclues)"
+            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c '- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
         fi
 
         timeout 5m trivy image \\
@@ -282,7 +282,10 @@ def cleanupSecrets(List files) {
     files.each { file ->
         sh """
             if [ -f "${file}" ]; then
-                shred -vfz -n 3 ${file} 2>/dev/null || rm -f ${file}
+                # -u : unlink (supprime le fichier après écrasement) - OBLIGATOIRE pour réellement effacer
+                # -z : passe finale à zéro (masque l'écrasement)
+                # -n 3 : 3 passes d'écrasement
+                shred -vfzu -n 3 ${file} 2>/dev/null || rm -f ${file}
                 echo "✅ ${file} supprimé de manière sécurisée"
             fi
         """

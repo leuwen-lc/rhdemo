@@ -6,12 +6,12 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 - Expérimenter des outils et méthodes standards et largement adoptés.
 - Intégrer de nombreuses considérations de sécurité dès le début du projet (DevSecOps).
-- Utiliser des agents IA (Copilot Chat / Claude Code / Gemini Code Assist dans VS Code) pour améliorer la productivité et la qualité du code.
+- Utiliser des agents IA (GitHub Copilot / Claude Code dans VS Code) pour améliorer la productivité et la qualité du code.
 - S'appuyer sur Spring Boot et son écosystème pour le back‑end.
 - Fournir une IHM riche côté client avec Vue.js et le design system Element Plus.
 - Mettre en place une structure solide et évolutive même si le projet reste simple (couches, API, client riche, OIDC, gestion des rôles).
 - Inclure une chaine CI/CD évoluée avec nombreux controles qualité/sécurité, test-automatisés, déploiement en containers,....
-- Basé à 100% sur du logiciel libre, indépendance maximale avec les grandes plateformes gitlab/github et leurs solutions intégrées.
+- Basé à 100% sur du logiciel libre, dépendance minimale avec GitHub, uniquement hébergement de code et PR, pas de GitHub Actions.
 - Pour garder le coté preuve de concept facile à déployer, tout, y compris l'environnement ephemere, la chaine CI/CD et le cluster kubernetes KinD doivent pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
 
 ## Quelques orientations
@@ -23,17 +23,16 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Montrer le déploiement sur un cluster Kubernetes léger (KinD)
 - Mettre en place de l'observabilité avec Loki/Prometheus/Grafana et quelques dashboard (consolidation des logs, métriques Spring Actuator, métriques PostgreSQL) sur l'environnement KinD
 
-
 ## Accent mis sur le DevSecOps
 
 (C'est à dire mettre en place les sécurisations de responsabilité dev dès le début du projet)
 
 - Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
-- Utilisation de Spring Security : 
-  - Inteface Keycloak OIDC custom pour récupérer les roles des utilisateurs dans l'idtoken, 
-  - activation de l'anti-CSRF via cookie dédié sur le module principal lié à l'utilisation du pattern BFF. 
-  - Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes 
+- Utilisation de Spring Security :
+  - Interface Keycloak OIDC custom pour récupérer les roles des utilisateurs dans l'idtoken,
+  - activation de l'anti-CSRF via cookie dédié sur le module principal lié à l'utilisation du pattern BFF.
+  - Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisation d'un outil centralisé de type Hashicorp Vault demandera une expertise plus spécialisée mais reste possible sans modifier l'applicatif.
 - Entêtes CSP réglées au plus strict possible sur l'applicatif : interdiction notamment du javascript inline, puissant moteur d'injections XSS.
 - CI
@@ -41,38 +40,41 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - Scans des images docker utilisées dans l'environnement CI ephemere avec Trivy
   - Génération d'un SBOM (inventaires des composants) au format CycloneDX dans les artefacts du pipeline;
   - SonarQube avec quality gate plus léger que le standard :
-      - couverture de test >=50%,
-      - code Smell uniquement de niveau medium ou supérieur,
-      - sécurité toute faille potentielle doit être revue.
-  - Activation d'un proxy ZAP pour analyse dynamique intégrée durant le stage de tests en Selenium (analyse fournie dans un artefact du pipeline).
-  - Publication du container applicatif dans un registry local en TLS (auto-signé pour l'instant)
+    - couverture de test >=50%,
+    - code Smell uniquement de niveau medium ou supérieur,
+    - sécurité toute faille potentielle doit être revue.
+  - Activation d'un proxy ZAP pour analyse dynamique intégrée durant le stage de tests en Selenium. Vérification que le rapport ne contient aucune alerte sur l'IHM rhDemo (qq alertes résiduelles sur l'IHM Keycloak standard)
+  - Publication du container applicatif dans un registry local en TLS
   - Signature du container avec Cosign
 - CD
   - Utilisation des secrets Kubernetes (chargement des secrets après décodage SOPS)
-  - Déploiement basé sur la lecture du digest du container constuit lors du dernier build CI réussi (pas de tag dangereux "Latest")
+  - Déploiement basé sur la lecture du digest du container construit lors du dernier build CI réussi (pas de tag dangereux "Latest")
   - Vérification de signature Cosign
 - TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé).
   --> Certificats autosignés ou Let's Encrypt sur stagingkub (généré via DNS01 uniquement si administrateur DNS du domaine leuwen-lc.fr).
-- Logging / monitoring de base fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana.
+- Semi-automatisation de la gestion de versions : utilisation de renovate qui scanne et pousse des PR pour des mises à jour. Délai de 7 jours après publication (Cooldown) : permet de révéler éventuellement une attaque.
+- Logging / monitoring de base fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana :
+  - logs : app/keycloak/pg,
+  - métriques : système/pg/spring
 - Compte de service et Role RBAC pour limiter les droits de Jenkins sur stagingkub.
 - Network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement KinD.
-  --> ajout de Cilium sur l'environnement KinD pour appliquer ces policies.
+  --> ajout du CNI Cilium sur l'environnement KinD pour appliquer ces policies.
 
 ## Fonctionnalités
 
 - Application basique CRUD (Create / Read / Update / Delete) sur une base simplifiée d'employés.
-- ... Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, persistance, API REST, client riche, gestion des rôles).
+- Mais architecture prête pour évoluer vers une application métier plus complète (couches métier, DTO, persistance, API REST, client riche, gestion des rôles).
 - Pagination gérée côté front‑end et back‑end pour démontrer la résolution d'un problème ultra fréquent en informatique de gestion lorsque le jeu de données grossit et les réponses aux requètes deviennent trop lourdes sans pagination.
 
 ## Architecture applicative
 
 - Back‑end : Spring Boot, Spring Security
-  - Architecture logicielle classique en 3 couches (facilement évolutive en cas de besoin vers DTO ou clean architecture).
-   Pattern Backend For Front-end (BFF) :
-  - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
-  - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
-- Le Back-end fait à la fois BFF et traite directement les différents appels d'API. On pourrait imaginer une évolution avec une délagation du traitement des API à d'autres Back-end partagés au niveau SI. Pour accéder à ces back-end on pourrait se baser sur l'access token JWT signé de keycloak.
-- Front‑end : Vue.js + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
+  - Architecture logicielle classique en 3 couches avec DTO(facilement évolutive vers clean architecture),
+  - pattern Backend For Front-end (BFF) :
+    - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
+    - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
+  - Le Back-end fait à la fois BFF et traite directement les différents appels d'API. On pourrait imaginer une évolution avec une délégation du traitement des API à d'autres Back-end partagés au niveau SI en se basant sur l'access token JWT signé de keycloak.
+- Front‑end : Vue.js approche composants + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
 - Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend.
 - Deux chaines CI/CD séparées :
   - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
@@ -103,14 +105,14 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Ce qu'il faudrait faire pour atteindre un niveau production .
   - conception/réalisation d'un vrai cluster kubernetes redondant et sécurisé (ou conf sur cloud public).
   - configuration sur certains composants applicatifs en cible production :
-      - passage en mode production et durcissement de la configuration Keycloak qui serait fait probablement dans le cadre d'un projet IAM transverse :
-            - interface avec un logiciel RH pour gérer les arrivées/départ    
+    - passage en mode production et durcissement de la configuration Keycloak qui serait fait probablement dans le cadre d'un projet IAM transverse :
+            - interface avec un logiciel RH pour gérer les arrivées/départ
             - activation de sécurités d'authentification des utilisateurs (vérification mail, renouvellement et longueur mdp, double authentification,...) .
-      - durcissement de la configuration des logiciels de CI/CD, gestion fine des utilisateurs/droits, ajout d'une instance dédiee production.
-      - mise en place les mécanismes de scalabilité (Redis, etc...)
+    - durcissement de la configuration des logiciels de CI/CD, gestion fine des utilisateurs/droits, ajout d'une instance dédiee production.
+    - mise en place les mécanismes de scalabilité (Redis, etc...)
   - fonctionnellement le projet n'est pas du tout viable en l'état (ce n'était pas le but) :
-      - manque énormément d'informations/transactions de gestion sur les employes,
-      - l'adresse est dans un seul champ, el devrait être dans une table à part et répondre aux normes internationales,
+    - manque énormément d'informations/transactions de gestion sur les employes,
+    - l'adresse est dans un seul champ, el devrait être dans une table à part et répondre aux normes internationales,
   - ...
 
 ## Utiliser le projet
@@ -141,50 +143,71 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
+### Version 1.1.7
+
+Architecture logicielle : 
+- Amélioration de la conformité REST de l'API Employe (voir rhDemo/docs/API_REST_NORMALISATION.md)
+- Ajout d'une couche data transfer object (DTO) immutable (record) seule connue du Controller API pour stabiliser et sécuriser le contrat REST.
+
+Sécurité :
+- Tous les secrets manipulés temporairement au sein des chaines CI/CD positionnés dans un sous répertoire de /TMP avec des droits restreints
+- Meilleure conformité IHM par rapport au rapport ZAP (certaines réponses ne comprenaient pas les entêtes CSP, samesite=strict sur le cookie anti-CSRF)
+
+Versions : 
+- Diverses mises à jour au fil des CVE levées par OWASP-DC et TRIVY
+(cf rhDemo/docs/SECURITY_ADVISORIES.md )
+- Utilisation de Renovate qui propose automatiquement des PR de mise à jour de version sur la branche en cours (commits laissés en anglais)
+
 ### Version 1.1.6
 
 Fonctionnalités front :
+
 - Ajout d'un bouton de logout OIDC (déjà implémenté sur /logout)
-- Ajout de champs filtres sur la liste des employés, interfacé avec la pagination coté back 
+- Ajout de champs filtres sur la liste des employés, interfacé avec la pagination coté back
 - Transmission et application des roles sur le front : boutons de maj grisés si profil consult (avant : erreur coté back uniquement)
 
 Sécurité rhDemo :
+
 - Ajout de security context sur les déploiement helm (runAsNonRoot: true) contournement pour Postgres qui nécessite un démarrage root
 - Ajout de Pod Security Admission en mode audit/warn (enforce difficile avec Postgres)
 - Activation de PKCE S256 (paramétrage Keycloak) pour sécuriser le dialogue OIDC (recommandé même en BFF)
 
-Seleniumn amélioration des diagnostics 
+Seleniumn amélioration des diagnostics
+
 - Screenshot en cas d'erreur
 - retry "flaky" une fois en cas d'echec sur timeout
 - assertions enrichies avec des éléments de contexte
 
-Versions 
+Versions
+
 - Passage à PostgreSQL 18.2 (CVE) et Postgres_exporter en 0.19.0 (Compat)
 - généralisation du suffixage des versions de container avec le digest sha256 (pinning)
-
 
 ### Version 1.1.5
 
 Outillage CI-CD (infra/jenkins-docker)
+
 - Séparation de Jenkins en une instance master de pilotage et un agent spécialisé pour le build (recommandations sécurité)
 - Remplacement plugin Jacoco obsolète par Coverage Plugin
 - Montée de niveau SonarQube (26.2.0.119303)
 
 Applicatif rhDemo
+
 - Montées de version (cf rhDemo/docs/SPRING_BOOT_4_MIGRATION.md):
   - Java 25, Spring Boot 4.0.2, PostgreSQL 18.1, Keycloack 26.5.0
-  - Junit 6.0.2, Selenium 4.40, 
+  - Junit 6.0.2, Selenium 4.40,
   - Frontend : Actualisation des versions par NPM update (cf package-lock.json)
 
 Environnement stagingkub
+
 - Passage de Ingress Nginx (fin de vie mars 2026) à Nginx Gateway Fabric 2.4 (cf rhDemo/docs/NGINX_GATEWAY_FABRIC_MIGRATION.md)
 - Adaptation des network policies
 - "Pin" des versions des outils d'observabilité (prometheus, loki, grafana,...) pour éviter l'instabilité liée aux versions "latest"
 
-
 ### Version 1.1.4
 
 Environnement de Stagingkub
+
 - Ajout d'un tableau de bord Grafana exposant les métriques Spring Actuator/Micrometer(métriques JVM, Http, Pool de connexion db, ...) exposées sur le end point prometheus (port dédié non exposé en externe).
 
 - Ajout d'un tableau de bord Grafana exposant les métriques PostgreSQL (stats requètes, connexions, cache, ...)  via postgres-exporter pour Prometheus.

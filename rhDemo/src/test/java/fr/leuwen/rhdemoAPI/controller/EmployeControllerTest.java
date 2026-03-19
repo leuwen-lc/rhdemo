@@ -2,6 +2,8 @@ package fr.leuwen.rhdemoAPI.controller;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.*;
 
 import java.util.Arrays;
@@ -17,14 +19,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 
+import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
+import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
 import fr.leuwen.rhdemoAPI.model.Employe;
 import fr.leuwen.rhdemoAPI.service.EmployeService;
 
 /**
  * Tests unitaires pour EmployeController.
- * Teste la logique du contrôleur (tri, pagination, filtres) sans contexte Spring.
+ * Teste la logique du contrôleur (tri, pagination, filtres, DTOs) sans contexte Spring.
  */
 @ExtendWith(MockitoExtension.class)
 class EmployeControllerTest {
@@ -36,6 +39,7 @@ class EmployeControllerTest {
     private EmployeController controller;
 
     private Employe employe1;
+    private EmployeRequestDTO requestDto;
 
     @BeforeEach
     void setUp() {
@@ -45,6 +49,8 @@ class EmployeControllerTest {
         employe1.setNom("Dupont");
         employe1.setMail("jean.dupont@example.com");
         employe1.setAdresse("123 Rue de Paris");
+
+        requestDto = new EmployeRequestDTO("Jean", "Dupont", "jean.dupont@example.com", "123 Rue de Paris");
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -52,20 +58,21 @@ class EmployeControllerTest {
     // ════════════════════════════════════════════════════════════════
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithSort_ShouldCreateSortedPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
-        Page<Employe> result = controller.getEmployesPage(0, 20, "nom", "ASC",
+        Page<EmployeResponseDTO> result = controller.getEmployesPage(0, 20, "nom", "ASC",
                 null, null, null, null);
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().isSorted());
         assertEquals("nom", captured.getSort().iterator().next().getProperty());
@@ -73,33 +80,35 @@ class EmployeControllerTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithSortDesc_ShouldCreateDescendingPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
         controller.getEmployesPage(0, 10, "prenom", "DESC",
                 null, null, null, null);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().iterator().next().isDescending());
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void getEmployesPage_WithoutSort_ShouldCreateUnsortedPageable() {
         Page<Employe> expectedPage = new PageImpl<>(List.of(employe1));
-        when(employeService.getEmployesPage(any(Specification.class), any(Pageable.class)))
+        when(employeService.getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), any(Pageable.class)))
                 .thenReturn(expectedPage);
 
         controller.getEmployesPage(0, 20, null, "ASC",
                 null, null, null, null);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(employeService).getEmployesPage(any(Specification.class), pageableCaptor.capture());
+        verify(employeService).getEmployesPage(nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), pageableCaptor.capture());
         Pageable captured = pageableCaptor.getValue();
         assertTrue(captured.getSort().isUnsorted());
     }
@@ -112,9 +121,11 @@ class EmployeControllerTest {
     void getEmployes_ShouldDelegateToService() {
         when(employeService.getEmployes()).thenReturn(Arrays.asList(employe1));
 
-        Iterable<Employe> result = controller.getEmployes();
+        List<EmployeResponseDTO> result = controller.getEmployes();
 
         assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals(1L, result.get(0).id());
         verify(employeService).getEmployes();
     }
 
@@ -126,24 +137,41 @@ class EmployeControllerTest {
     void getEmploye_ShouldDelegateToService() {
         when(employeService.getEmploye(1L)).thenReturn(employe1);
 
-        Employe result = controller.getEmploye(1L);
+        EmployeResponseDTO result = controller.getEmploye(1L);
 
-        assertEquals(1L, result.getId());
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
         verify(employeService).getEmploye(1L);
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Tests saveEmploye
+    // Tests createEmploye
     // ════════════════════════════════════════════════════════════════
 
     @Test
-    void saveEmploye_ShouldDelegateToService() {
-        when(employeService.saveEmploye(employe1)).thenReturn(employe1);
+    void createEmploye_ShouldDelegateToService() {
+        when(employeService.createEmploye(any(Employe.class))).thenReturn(employe1);
 
-        Employe result = controller.saveEmploye(employe1);
+        EmployeResponseDTO result = controller.createEmploye(requestDto);
 
-        assertEquals(1L, result.getId());
-        verify(employeService).saveEmploye(employe1);
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
+        verify(employeService).createEmploye(any(Employe.class));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Tests updateEmploye
+    // ════════════════════════════════════════════════════════════════
+
+    @Test
+    void updateEmploye_ShouldDelegateToService() {
+        when(employeService.updateEmploye(eq(1L), any(Employe.class))).thenReturn(employe1);
+
+        EmployeResponseDTO result = controller.updateEmploye(1L, requestDto);
+
+        assertEquals(1L, result.id());
+        assertEquals("Jean", result.prenom());
+        verify(employeService).updateEmploye(eq(1L), any(Employe.class));
     }
 
     // ════════════════════════════════════════════════════════════════

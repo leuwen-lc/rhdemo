@@ -45,9 +45,11 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.29.4-alpine@sha256:a60ab79b8d1cbc6c0860ca9829908c5e7e83ed887034e778fc7adf0b1bfe5e47"
+        NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67"
         POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
+        // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
+        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.2@sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -55,9 +57,13 @@ pipeline {
 
         // Fichiers de secrets SOPS
         SECRETS_FILE = 'rhDemo/secrets/secrets-ephemere.yml'
-        SECRETS_DECRYPTED = 'rhDemo/secrets/secrets-decrypted.yml'
-        SECRETS_ENV_VARS = 'rhDemo/secrets/env-vars.sh'
-        SECRETS_RHDEMO = 'rhDemo/secrets/secrets-rhdemo.yml'
+        // Répertoire isolé hors workspace pour les secrets déchiffrés (sécurité)
+        SECRETS_TMP_DIR   = "/tmp/rhdemo-secrets-${BUILD_NUMBER}"
+        SECRETS_DECRYPTED = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-decrypted.yml"
+        SECRETS_ENV_VARS  = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/env-vars.sh"
+        SECRETS_RHDEMO    = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-rhdemo.yml"
+        // Config Keycloak générée hors sources (ne jamais écrire dans rhDemoInitKeycloak/src/)
+        KEYCLOAK_CONFIG_TMP = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/application-ephemere.yml"
 
         // Configuration environnement ephemere (Docker Compose)
         EPHEMERE_INFRA_PATH = 'rhDemo/infra/ephemere'
@@ -109,6 +115,19 @@ pipeline {
                 // Checkout du code
                 checkout scm
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
+
+                // Purge des résidus de l'ancienne convention (fichiers générés dans le workspace)
+                // Cible uniquement les fichiers générés, PAS les fichiers SOPS chiffrés versionnés
+                // (secrets-ephemere.yml, secrets-stagingkub.yml sont des fichiers Git légitimes)
+                // Évite que des fichiers shredés (remplis de null bytes) soient trouvés par Spring Boot
+                // via optional:file:./secrets/secrets-rhdemo.yml et causent une erreur YAML (0x0)
+                sh '''
+                    rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
+                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
+                    rm -f rhDemoInitKeycloak/src/main/resources/application-ephemere.yml 2>/dev/null || true
+                    echo "✅ Résidus de secrets workspace nettoyés"
+                '''
 
                 script {
                     echo '▶ Vérification des projets dans le workspace...'
@@ -207,12 +226,14 @@ pipeline {
                 // Utiliser le credential sops-age-key de manière sécurisée
                 withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
                     sh '''
-                        # Créer le répertoire secrets s'il n'existe pas
-                        mkdir -p rhDemo/secrets
+                        # Créer le répertoire temporaire isolé hors workspace (permissions strictes)
+                        mkdir -p ${SECRETS_TMP_DIR}
+                        chmod 700 ${SECRETS_TMP_DIR}
 
                         # Déchiffrer le fichier de secrets
                         echo "Déchiffrement de ${SECRETS_FILE}..."
                         sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
+                        chmod 600 ${SECRETS_DECRYPTED}
 
                         # Vérifier que le fichier a été déchiffré
                         if [ ! -f ${SECRETS_DECRYPTED} ]; then
@@ -260,13 +281,14 @@ pipeline {
                             if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
                                 echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
                             fi
-                        } > rhDemo/secrets/env-vars.sh 2>&1
+                        } > ${SECRETS_ENV_VARS} 2>&1
+                        chmod 600 ${SECRETS_ENV_VARS}
 
                         # Réactiver l'écho des commandes
                         set -x
 
                         # Afficher (sans montrer les valeurs)
-                        echo "✅ Variables d'environnement préparées"
+                        echo "✅ Variables d'environnement préparées dans ${SECRETS_ENV_VARS}"
                     '''
                 }
             }
@@ -290,12 +312,12 @@ pipeline {
                     # SÉCURITÉ: Désactiver l'écho des commandes
                     set +x
 
-                    # Source les secrets
-                    . rhDemo/secrets/env-vars.sh
+                    # Source les secrets (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
                     # Créer un fichier secrets-rhdemo.yml contenant UNIQUEMENT les secrets rhDemo
                     # Ce fichier sera monté dans le container Docker de rhDemo
-                    cat > rhDemo/secrets/secrets-rhdemo.yml <<EOF
+                    cat > ${SECRETS_RHDEMO} <<EOF
 
 rhdemo:
   datasource:
@@ -309,10 +331,12 @@ rhdemo:
           secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
 EOF
 
+                    chmod 600 ${SECRETS_RHDEMO}
+
                     # Réactiver l'écho
                     set -x
 
-                    echo "✅ Fichier rhDemo/secrets/secrets-rhdemo.yml créé (secrets limités à rhDemo uniquement)"
+                    echo "✅ Fichier ${SECRETS_RHDEMO} créé hors workspace (secrets limités à rhDemo uniquement)"
                 '''
             }
         }
@@ -332,12 +356,12 @@ EOF
                     # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
                     set +x
 
-                    # Source les secrets déchiffrés
-                    . rhDemo/secrets/env-vars.sh
+                    # Source les secrets déchiffrés (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
-                    # Générer application-ephemere.yml (sera utilisé directement par Maven)
+                    # Générer application-ephemere.yml dans /tmp (hors sources du projet)
                     # NOTE: set +x reste actif pendant la génération pour ne pas logger les secrets
-                    CONFIG_FILE="rhDemoInitKeycloak/src/main/resources/application-ephemere.yml"
+                    CONFIG_FILE="${KEYCLOAK_CONFIG_TMP}"
 
                     # IMPORTANT: Sans guillemets sur YMLEOF pour que bash substitue les variables
                     cat > "${CONFIG_FILE}" << YMLEOF
@@ -428,11 +452,13 @@ keycloak:
         - ROLE_MAJ
 YMLEOF
 
+                    chmod 600 "${CONFIG_FILE}"
+
                     # Réactiver l'écho maintenant que les secrets ont été écrits dans le fichier
                     set -x
 
-                    echo "✅ Fichier de configuration Keycloak généré: ${CONFIG_FILE}"
-                    echo "   Ce fichier sera utilisé par rhDemoInitKeycloak pour initialiser Keycloak"
+                    echo "✅ Fichier de configuration Keycloak généré hors workspace: ${CONFIG_FILE}"
+                    echo "   Ce fichier sera passé à rhDemoInitKeycloak via spring.config.additional-location"
                     echo "   Redirect URIs configurés pour:"
                     echo "     - https://${TEST_DOMAIN}:58443/*"
                     echo "     - https://rhdemo.ephemere.local:58443/* (pour Selenium/ZAP)"
@@ -455,8 +481,8 @@ YMLEOF
                 }
 
                 sh '''
-                    # Charger les secrets
-                    . rhDemo/secrets/env-vars.sh
+                    # Charger les secrets (depuis /tmp, hors workspace)
+                    . ${SECRETS_ENV_VARS}
 
                     echo "Java version:"
                     java -version
@@ -484,19 +510,20 @@ YMLEOF
             }
         }
 
-        stage('✅ Tests Unitaires') {
+        stage('✅ Tests Unitaires et Intégration') {
             steps {
                 script {
-                    echo "▶ Exécution des tests unitaires..."
+                    echo "▶ Exécution des tests unitaires et d'intégration..."
                 }
 
                 dir('rhDemo') {
-                    sh './mvnw test'
+                    sh './mvnw verify'
                 }
             }
             post {
                 always {
                     junit 'rhDemo/target/surefire-reports/*.xml'
+                    junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                 }
             }
         }
@@ -530,18 +557,6 @@ YMLEOF
                     }
                 }
             }
-
-        stage('📦 Build Maven') {
-            steps {
-                script {
-                    echo "▶ Build du projet (création du JAR)..."
-                }
-
-                dir('rhDemo') {
-                    sh './mvnw package -DskipTests'
-                }
-            }
-        }
 
         stage('📊 Analyse SonarQube') {
             when {
@@ -702,9 +717,9 @@ YMLEOF
 
                 dir(env.EPHEMERE_INFRA_PATH) {
                     sh """
-                        # Source les secrets
+                        # Source les secrets (depuis /tmp, hors workspace)
                         set +x
-                        . ../../secrets/env-vars.sh
+                        . ${SECRETS_ENV_VARS}
 
                         # Exporter les variables d'environnement nécessaires pour docker-compose
                         # Mapping des noms de variables entre secrets et docker-compose
@@ -787,14 +802,14 @@ YMLEOF
             }
         }
 
-        stage('⏳ Attente Services Staging') {
+        stage('⏳ Attente DB Services Staging') {
             steps {
                 script {
-                    echo "▶ Attente du démarrage complet des services..."
+                    echo "▶ Attente du démarrage complet des services DB..."
                 }
 
                 sh """
-                    echo "▶ Attente PostgreSQL..."
+                    echo "▶ Attente DB RhDemo..."
                     timeout 120 bash -c 'until docker exec ${env.CONTAINER_DB} pg_isready -U rhdemo > /dev/null 2>&1; do sleep 2; done'
                     echo "✓ PostgreSQL prêt"
 
@@ -803,7 +818,6 @@ YMLEOF
                     echo "✓ Keycloak DB prêt"
 
                     echo "✅ Bases de données prêtes"
-                    echo "   Note: Le healthcheck Keycloak sera fait dans un stage dédié ultérieur"
                 """
             }
         }
@@ -887,53 +901,104 @@ YMLEOF
                 }
 
                 dir(env.KEYCLOAK_INIT_PATH) {
-                    sh '''
+                    sh """
                         # Exécuter l'initialisation avec Maven
-                        echo "▶ Exécution de rhDemoInitKeycloak..."
-                        ../rhDemo/mvnw spring-boot:run -Dspring-boot.run.profiles=ephemere
+                        # La config application-ephemere.yml est dans /tmp (hors workspace)
+                        # spring.config.additional-location indique à Spring Boot où chercher
+                        # les fichiers de config par profil (application-ephemere.yml)
+                        echo "▶ Exécution de rhDemoInitKeycloak (config depuis ${env.SECRETS_TMP_DIR}/)..."
+                        ../rhDemo/mvnw spring-boot:run \\
+                            -Dspring-boot.run.profiles=ephemere \\
+                            -Dspring.config.additional-location=file:${env.SECRETS_TMP_DIR}/
 
                         echo "✅ Keycloak initialisé avec succès"
-                    '''
+                    """
                 }
             }
         }
 
-        stage('📋 Copie Secrets vers Container App') {
+        stage('📋 Injection Secrets dans Container App') {
             steps {
                 script {
-                    echo "▶ Copie du fichier de secrets dans le container applicatif..."
-                }
-
-                sh """
-                    # Créer le répertoire secrets dans le container
-                    # Ces commandes fonctionnent même si le container est en restart loop
-                    docker exec --user root ${env.CONTAINER_APP} mkdir -p /workspace/secrets
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets
-
-                    # Copier le fichier de secrets
-                    docker cp ${env.SECRETS_RHDEMO} ${env.CONTAINER_APP}:/workspace/secrets/secrets-rhdemo.yml
-
-                    # Définir les permissions (user spring:spring)
-                    docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets/secrets-rhdemo.yml
-                    docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
-
-                    echo "✅ Secrets copiés dans le container"
-                """
-            }
-        }
-
-        stage('🔄 Redémarrage Application') {
-            steps {
-                script {
-                    echo "▶ Redémarrage du container applicatif pour charger les secrets..."
+                    echo "▶ Injection des secrets dans le container applicatif..."
+                    echo "   (Le container est probablement en restart loop : secrets absents au 1er démarrage)"
                 }
 
                 dir(env.EPHEMERE_INFRA_PATH) {
                     sh """
-                        # Redémarrer via docker-compose pour charger les secrets
-                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} restart rhdemo-app
-                        echo "⏳ Attente du redémarrage (30s)..."
+                        # Arrêter le container avant injection
+                        # docker exec échoue sur un container en restart loop → on l'arrête d'abord
+                        echo "▶ Arrêt du container avant injection des secrets..."
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} stop rhdemo-app
+
+                        # Attendre l'arrêt complet (status exited)
+                        TIMEOUT=30
+                        while [ "\$(docker inspect --format='{{.State.Status}}' ${env.CONTAINER_APP} 2>/dev/null)" != "exited" ] && [ \$TIMEOUT -gt 0 ]; do
+                            sleep 1
+                            TIMEOUT=\$((TIMEOUT - 1))
+                        done
+                        echo "✅ Container arrêté (status: \$(docker inspect --format='{{.State.Status}}' ${env.CONTAINER_APP}))"
+
+                        # Préparer un répertoire de staging avec la structure /workspace/secrets/
+                        # docker cp nécessite que les répertoires parents existent dans le container
+                        # Un flux tar crée les répertoires manquants et fonctionne sur container arrêté
+                        STAGE_DIR=\$(mktemp -d)
+                        mkdir -p "\${STAGE_DIR}/workspace/secrets"
+                        cp ${env.SECRETS_RHDEMO} "\${STAGE_DIR}/workspace/secrets/secrets-rhdemo.yml"
+                        # 644 temporaire : permet la lecture par l'utilisateur spring après démarrage
+                        # Sera restreint à 400 via docker exec une fois le container démarré
+                        chmod 644 "\${STAGE_DIR}/workspace/secrets/secrets-rhdemo.yml"
+
+                        # Injection via flux tar (fonctionne sur container arrêté, crée /workspace/secrets/)
+                        tar -C "\${STAGE_DIR}" -cf - workspace | docker cp - ${env.CONTAINER_APP}:/
+                        rm -rf "\${STAGE_DIR}"
+
+                        echo "✅ Secrets injectés dans le container arrêté"
+                    """
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "❌ Échec de l'injection des secrets — Logs du container applicatif :"
+                        docker logs --tail 100 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+                        echo ""
+                        echo "État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}"
+                    """
+                }
+            }
+        }
+
+        stage('🔄 Démarrage Application avec Secrets') {
+            steps {
+                script {
+                    echo "▶ Démarrage du container applicatif avec les secrets injectés..."
+                }
+
+                dir(env.EPHEMERE_INFRA_PATH) {
+                    sh """
+                        # Démarrer (pas restart) : le container a été arrêté par le stage précédent
+                        docker-compose -p ${env.COMPOSE_PROJECT_NAME} start rhdemo-app
+                        echo "⏳ Attente du démarrage (30s)..."
                         sleep 30
+
+                        # Container démarré : définir les permissions définitives sur le fichier de secrets
+                        docker exec --user root ${env.CONTAINER_APP} chown spring:spring /workspace/secrets /workspace/secrets/secrets-rhdemo.yml
+                        docker exec --user root ${env.CONTAINER_APP} chmod 700 /workspace/secrets
+                        docker exec --user root ${env.CONTAINER_APP} chmod 400 /workspace/secrets/secrets-rhdemo.yml
+                        echo "✅ Permissions définitives appliquées sur les secrets"
+                    """
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "❌ Échec du démarrage — Logs du container applicatif :"
+                        docker logs --tail 150 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+                        echo ""
+                        echo "État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}"
                     """
                 }
             }
@@ -949,13 +1014,35 @@ YMLEOF
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                     // Healthcheck Application RHDemo depuis Jenkins (connecté au réseau ephemere)
+                    // container: active docker logs --tail=150 dans waitForHealthcheck en cas de timeout
                     lib.waitForHealthcheck([
                         name: 'RHDemo App',
                         url: "http://${env.CONTAINER_APP}:9000/front/",
                         timeout: 90,
-                        acceptedCodes: [200, 301, 302]
-                        // Pas de container: test depuis Jenkins, pas docker exec
+                        acceptedCodes: [200, 301, 302],
+                        container: env.CONTAINER_APP
                     ])
+                }
+            }
+            post {
+                failure {
+                    sh """
+                        echo "════════════════════════════════════════════════════"
+                        echo "❌ DIAGNOSTIC ÉCHEC HEALTHCHECK RHDEMO APP"
+                        echo "════════════════════════════════════════════════════"
+
+                        echo "\\n📦 État des containers ephemere :"
+                        docker ps -a --filter name=rhdemo-ephemere --format "table {{.Names}}\\t{{.Status}}\\t{{.RestartCount}}"
+
+                        echo "\\n📋 Logs complets ${env.CONTAINER_APP} (200 dernières lignes) :"
+                        docker logs --tail 200 ${env.CONTAINER_APP} 2>&1 || echo "Impossible de récupérer les logs"
+
+                        echo "\\n🔍 Inspect état container :"
+                        docker inspect --format='État: {{.State.Status}} | Redémarrages: {{.State.RestartCount}} | Erreur: {{.State.Error}}' ${env.CONTAINER_APP} 2>/dev/null || true
+
+                        echo "\\n🔍 Secrets présents dans le container :"
+                        docker exec ${env.CONTAINER_APP} ls -la /workspace/secrets/ 2>/dev/null || echo "Répertoire /workspace/secrets absent ou container arrêté"
+                    """
                 }
             }
         }
@@ -1030,6 +1117,7 @@ YMLEOF
                         [image: env.POSTGRES_IMAGE, name: 'postgres'],
                         [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
                         [image: env.NGINX_IMAGE, name: 'nginx'],
+                        [image: env.NGF_IMAGE, name: 'nginx-gateway-fabric'],
                         [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
                     ]
 
@@ -1209,9 +1297,9 @@ YMLEOF
 
                 dir(env.TEST_PROJECT_PATH) {
                     sh """
-                        # Source les secrets pour les tests
+                        # Source les secrets pour les tests (depuis /tmp, hors workspace)
                         set +x
-                        . ../rhDemo/secrets/env-vars.sh
+                        . ${SECRETS_ENV_VARS}
 
                         # URLs via nginx avec HTTPS
                         # Depuis que nginx écoute aussi sur le port 58443 en interne (réseau Docker),
@@ -1343,21 +1431,55 @@ YMLEOF
                             if curl -s -f "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/version/?apikey=\${ZAP_API_KEY}" >/dev/null 2>&1; then
                                 echo "✅ Connexion à ZAP réussie"
 
-                                # Générer le rapport HTML
-                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
-                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1; then
-                                    echo "✅ Rapport HTML ZAP généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
+                                # --- Rapport HTML verbeux (traditional-html-plus) ---
+                                # Inclut pour chaque alerte : code HTTP, headers de requête/réponse,
+                                # corps de réponse et evidence. Indispensable pour diagnostiquer
+                                # les faux positifs (ex: alerte CSP sur une 302 vs une 200).
+                                echo "📄 Génération rapport HTML détaillé (traditional-html-plus)..."
+                                GENERATE_RESULT=\$(curl -s -X POST \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/reports/action/generate/" \
+                                    --data-urlencode "apikey=\${ZAP_API_KEY}" \
+                                    --data-urlencode "title=RHDemo ZAP Security Report" \
+                                    --data-urlencode "template=traditional-html-plus" \
+                                    --data-urlencode "reportFileName=zap-report-verbose" \
+                                    --data-urlencode "reportDir=/zap/reports" 2>&1)
+                                echo "   Résultat API: \${GENERATE_RESULT}"
+
+                                # Copier le rapport depuis le conteneur ZAP vers le workspace Jenkins
+                                if docker cp rhdemo-jenkins-zap:/zap/reports/zap-report-verbose.html \
+                                    "\${WORKSPACE_DIR}/zap-reports/zap-report.html" 2>&1; then
+                                    echo "✅ Rapport HTML ZAP verbeux généré: \$(du -h \${WORKSPACE_DIR}/zap-reports/zap-report.html | cut -f1)"
                                 else
-                                    echo "⚠️  Échec de génération du rapport HTML ZAP"
+                                    echo "⚠️  Échec de copie du rapport HTML verbeux, fallback sur rapport basique..."
+                                    curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.html" \
+                                        "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/htmlreport/?apikey=\${ZAP_API_KEY}" 2>&1 \
+                                        && echo "✅ Rapport HTML basique généré" \
+                                        || echo "⚠️  Échec du rapport HTML basique également"
                                 fi
 
-                                # Générer également le rapport JSON pour analyse
-                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-report.json" \
+                                # --- Rapport JSON des alertes ---
+                                # Contient messageId par alerte : utilisable pour corréler
+                                # avec le HAR via jq '.messages[] | select(.id == <messageId>)'
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-alerts.json" \
                                     "http://\${ZAP_HOST}:\${ZAP_PORT}/JSON/core/view/alerts/?apikey=\${ZAP_API_KEY}" 2>&1; then
-                                    ALERT_COUNT=\$(jq '. | length' "\${WORKSPACE_DIR}/zap-reports/zap-report.json" 2>/dev/null || echo "?")
-                                    echo "✅ Rapport JSON ZAP généré: \${ALERT_COUNT} alertes détectées"
+                                    ALERT_COUNT=\$(jq '.alerts | length' "\${WORKSPACE_DIR}/zap-reports/zap-alerts.json" 2>/dev/null || echo "?")
+                                    echo "✅ Rapport JSON alertes généré: \${ALERT_COUNT} alertes détectées"
                                 else
-                                    echo "⚠️  Échec de génération du rapport JSON ZAP"
+                                    echo "⚠️  Échec de génération du rapport JSON alertes"
+                                fi
+
+                                # --- Export HAR (HTTP Archive) ---
+                                # Contient TOUTES les requêtes/réponses interceptées par ZAP
+                                # avec code HTTP, headers complets et body.
+                                # Permet de vérifier sur quel code HTTP (302 vs 200) chaque alerte a été déclenchée.
+                                # Corrélation : zap-alerts.json[].messageId ↔ zap-messages.har messages[].id (via _zapMessageId)
+                                if curl -f -o "\${WORKSPACE_DIR}/zap-reports/zap-messages.har" \
+                                    "http://\${ZAP_HOST}:\${ZAP_PORT}/OTHER/core/other/messagesHar/?apikey=\${ZAP_API_KEY}" 2>&1; then
+                                    MSG_COUNT=\$(jq '.log.entries | length' "\${WORKSPACE_DIR}/zap-reports/zap-messages.har" 2>/dev/null || echo "?")
+                                    echo "✅ Export HAR généré: \${MSG_COUNT} messages HTTP capturés"
+                                    echo "   → Corréler avec zap-alerts.json via le champ messageId"
+                                else
+                                    echo "⚠️  Échec de l'export HAR"
                                 fi
                             else
                                 echo "❌ Impossible de se connecter à ZAP - Vérifier que ZAP est démarré et que la clé API est correcte"
@@ -1392,6 +1514,7 @@ YMLEOF
                         ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
                         ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
                         ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
+                        ['trivy-reports', 'nginx-gateway-fabric.html', 'Trivy - NGF'],
                         ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
                         ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
                         ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']
@@ -1746,8 +1869,11 @@ YMLEOF
                 lib.cleanupSecrets([
                     env.SECRETS_DECRYPTED,
                     env.SECRETS_ENV_VARS,
-                    env.SECRETS_RHDEMO
+                    env.SECRETS_RHDEMO,
+                    env.KEYCLOAK_CONFIG_TMP
                 ])
+                // Supprimer le répertoire temporaire isolé
+                sh "rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true"
 
                 echo "✅ Nettoyage terminé"
             }

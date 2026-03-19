@@ -6,12 +6,12 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 - Expérimenter des outils et méthodes standards et largement adoptés.
 - Intégrer de nombreuses considérations de sécurité dès le début du projet (DevSecOps).
-- Utiliser des agents IA (Github Copilot / Claude Code dans VS Code) pour améliorer la productivité et la qualité du code.
+- Utiliser des agents IA (GitHub Copilot / Claude Code dans VS Code) pour améliorer la productivité et la qualité du code.
 - S'appuyer sur Spring Boot et son écosystème pour le back‑end.
 - Fournir une IHM riche côté client avec Vue.js et le design system Element Plus.
 - Mettre en place une structure solide et évolutive même si le projet reste simple (couches, API, client riche, OIDC, gestion des rôles).
 - Inclure une chaine CI/CD évoluée avec nombreux controles qualité/sécurité, test-automatisés, déploiement en containers,....
-- Basé à 100% sur du logiciel libre, dépendance minimale avec Github, uniquement hébergement de code et PR, pas de Github actions.
+- Basé à 100% sur du logiciel libre, dépendance minimale avec GitHub, uniquement hébergement de code et PR, pas de GitHub Actions.
 - Pour garder le coté preuve de concept facile à déployer, tout, y compris l'environnement ephemere, la chaine CI/CD et le cluster kubernetes KinD doivent pouvoir tourner sur un unique PC récent 16Go sous linux (testé sur Ubuntu)
 
 ## Quelques orientations
@@ -30,7 +30,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Authentification / Autorisation : délégué à KeyCloak, qui permet de gérer les identités (IAM) de manière centralisée, interapplicative (SSO), application de politiques de mots de passe, MFA (....)
 - Contrôles d’accès : RBAC, les roles des utilisateurs sont portés par Keycloak et transmis à Spring Boot dans  l'idtoken OIDC.
 - Utilisation de Spring Security :
-  - Inteface Keycloak OIDC custom pour récupérer les roles des utilisateurs dans l'idtoken,
+  - Interface Keycloak OIDC custom pour récupérer les roles des utilisateurs dans l'idtoken,
   - activation de l'anti-CSRF via cookie dédié sur le module principal lié à l'utilisation du pattern BFF.
   - Filtrage des API au niveau méthode, au niveau url pour les fonctions annexes
 - Secrets applicatifs : choix d'utiliser le chiffrement des valeurs des clés contenant des secrets avec SOPS et de les commiter dans Git. L'utilisation d'un outil centralisé de type Hashicorp Vault demandera une expertise plus spécialisée mais reste possible sans modifier l'applicatif.

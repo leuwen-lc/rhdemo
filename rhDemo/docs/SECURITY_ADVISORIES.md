@@ -278,7 +278,7 @@ POM uniquement
 
 ### Remédiation
 
-Passage à la version Spring Boot 4.03
+Passage à la version Spring Boot 4.0.3
 
 ---
 
@@ -300,7 +300,7 @@ POM uniquement
 
 ### Remédiation
 
-Passage à la version springdoc-openapi 3.0.1
+Passage à la version springdoc-openapi 3.0.2
 
 ---
 

@@ -92,7 +92,12 @@ public class RealmService {
                 //   Supprimables uniquement avec un thème custom (hors scope de ce projet).
                 // - L'absence de token CSRF classique détectée par ZAP est un faux positif :
                 //   la protection est assurée par le paramètre 'state' OAuth2.
-                Map<String, String> browserSecurityHeaders = new HashMap<>();
+                // Partir des headers existants (défauts Keycloak) pour ne pas écraser
+                // xContentTypeOptions, xFrameOptions, strictTransportSecurity, etc.
+                Map<String, String> browserSecurityHeaders = realmToUpdate.getBrowserSecurityHeaders();
+                if (browserSecurityHeaders == null) {
+                    browserSecurityHeaders = new HashMap<>();
+                }
                 browserSecurityHeaders.put("contentSecurityPolicy",
                         "default-src 'self'; " +
                         "script-src 'self' 'unsafe-eval' 'unsafe-inline'; " +

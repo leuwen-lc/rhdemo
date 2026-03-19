@@ -118,7 +118,7 @@ def generateTrivyReport(String image, String reportName) {
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
             IGNOREFILE_OPT="--ignorefile \${TRIVYIGNORE}"
-            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c '^\s*- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
+            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c '- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
         fi
 
         timeout 5m trivy image \\

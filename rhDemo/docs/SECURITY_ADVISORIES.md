@@ -345,32 +345,36 @@ Cette action a corrigé CVE-2026-1642 (Medium, nginx versions 1.3.0–1.29.4). E
 CVE-2026-22184 persiste car les deux images embarquent le même paquet Alpine `zlib-1.3.1-r2`
 (Alpine 3.23.3) non encore patché par Alpine.
 
+**Phase 2 — 2026-03-10** : exclusion Trivy documentée dans `.trivyignore`.
+
+**Phase 3 — 2026-03-19** : mise à jour `nginx:1.29.5-alpine` → `nginx:1.29.6-alpine` (correctif CVE-2026-32767).
+
+CVE-2026-22184 persiste dans 1.29.6 (Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2`) — exclusion `.trivyignore` maintenue.
+
 ```text
 nginx:1.29.4-alpine  →  Alpine 3.22   zlib-1.3.1-r2  ← CVE-2026-22184 présente
 nginx:1.29.5-alpine  →  Alpine 3.23.3 zlib-1.3.1-r2  ← CVE-2026-22184 toujours présente
-nginx:stable-alpine  →  Alpine 3.23.3 zlib-1.3.1-r2  ← idem (nginx 1.28.2)
+nginx:1.29.6-alpine  →  Alpine 3.23.3 zlib-1.3.1-r2  ← CVE-2026-22184 toujours présente
 ```
 
-Aucune image nginx:alpine disponible ne contient un `zlib` patché à la date du 2026-03-10.
-
-**Phase 2 — 2026-03-10** : exclusion Trivy documentée dans `.trivyignore`.
+Aucune image nginx:alpine disponible ne contient un `zlib` patché à la date du 2026-03-19.
 
 ### Fichiers modifiés
 
-- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, phase 1)
-- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`, phase 1)
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, phases 1 et 3)
+- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`, phases 1 et 3)
 - `.trivyignore` (exclusion CVE-2026-22184 avec justification, phase 2)
 
 ### Validation
 
 ```bash
 # Confirmer la version zlib dans l'image courante
-docker run --rm --entrypoint sh nginx:1.29.5-alpine \
+docker run --rm --entrypoint sh nginx:1.29.6-alpine \
   -c "apk info zlib | head -1 && cat /etc/alpine-release"
 # Résultat : zlib-1.3.1-r2 / 3.23.3
 
 # Vérifier que le scan CI passe (CVE exclue via .trivyignore)
-trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL nginx:1.29.5-alpine
+trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL nginx:1.29.6-alpine
 ```
 
 ### Condition de clôture
@@ -388,6 +392,7 @@ est disponible.
 | 2026-03-10 | Mise à jour nginx:1.29.4 → 1.29.5 (corrige CVE-2026-1642, pas CVE-2026-22184) |
 | 2026-03-10 | Analyse : Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2` non patché |
 | 2026-03-10 | Exclusion `.trivyignore` avec justification documentée |
+| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (correctif CVE-2026-32767) — CVE-2026-22184 toujours présente |
 
 ### Références
 
@@ -495,6 +500,116 @@ Retirer les entrées `dependencyManagement` pour Jackson lorsque Spring Boot int
 
 ---
 
+## CVE-2026-32767 — nginx:1.29.5-alpine
+
+### Détection
+
+- **Date** : 2026-03-19
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : À préciser (voir NVD)
+- **Composant affecté** : `nginx:1.29.5-alpine`
+
+### Description
+
+CVE-2026-32767 affecte nginx en version 1.29.5. La version 1.29.6 contient le correctif.
+
+### Images affectées
+
+| Image | Version vulnérable | Version corrective | Statut |
+| --- | --- | --- | --- |
+| `nginx` | 1.29.5-alpine | 1.29.6-alpine | ✅ Corrigé |
+
+### Remédiation appliquée
+
+**Action** : Mise à jour vers `nginx:1.29.6-alpine`
+
+**Fichiers modifiés** :
+
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`)
+- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`)
+- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
+
+**Digest 1.29.6-alpine** : `sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67`
+
+**Note** : CVE-2026-22184 (zlib) reste présente dans 1.29.6 (Alpine 3.23.3 — `zlib-1.3.1-r2` non patché). L'exclusion `.trivyignore` correspondante est maintenue.
+
+### Validation
+
+```bash
+# Scanner avec Trivy
+trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL,HIGH nginx:1.29.6-alpine
+```
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-19 | Détection par Trivy dans le pipeline CI (nginx:1.29.5-alpine) |
+| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 |
+
+### Références
+
+- [NVD — CVE-2026-32767](https://nvd.nist.gov/vuln/detail/CVE-2026-32767)
+- [nginx security advisories](https://nginx.org/en/security_advisories.html)
+
+---
+
+## CVE-2026-33186 — NGINX Gateway Fabric
+
+### Détection
+
+- **Date** : 2026-03-19
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : À préciser (voir NVD)
+- **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric:2.4.0`
+
+### Description
+
+CVE-2026-33186 affecte NGINX Gateway Fabric en version 2.4.0. La version 2.4.2 contient le correctif.
+
+### Images affectées
+
+| Image | Version vulnérable | Version corrective | Statut |
+| --- | --- | --- | --- |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.0 | 2.4.2 | ✅ Corrigé |
+
+### Remédiation appliquée
+
+**Action** : Mise à jour vers `nginx-gateway-fabric:2.4.2`
+
+**Fichiers modifiés** :
+
+- `Jenkinsfile-CI` (variable `NGF_IMAGE`)
+- `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
+- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
+- `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
+
+**Digest 2.4.2** : `sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255`
+
+### Validation
+
+```bash
+# Vérifier la version après mise à jour du cluster
+kubectl get deployment -n nginx-gateway -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+
+# Scanner avec Trivy
+trivy image ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
+```
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
+| 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 |
+
+### Références
+
+- [NVD — CVE-2026-33186](https://nvd.nist.gov/vuln/detail/CVE-2026-33186)
+- [NGINX Gateway Fabric releases](https://github.com/nginx/nginx-gateway-fabric/releases)
+
+---
+
 ## Template pour futures vulnérabilités
 
 ```markdown
@@ -529,4 +644,4 @@ Retirer les entrées `dependencyManagement` pour Jackson lorsque Spring Boot int
 
 ---
 
-**Dernière mise à jour** : 2026-03-14
+**Dernière mise à jour** : 2026-03-19 (CVE-2026-32767 nginx, CVE-2026-33186 NGF)

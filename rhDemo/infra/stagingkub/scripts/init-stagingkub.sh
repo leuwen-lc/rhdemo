@@ -319,9 +319,10 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
 # ═══════════════════════════════════════════════════════════════
 
-NGF_VERSION="2.4.0"
+NGF_VERSION="2.4.2"
 # Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
-NGF_IMAGE_DIGEST="sha256:5c40d574639b655deea77ea521032e88cc3ee19dbea0be21f8cda3368e5d9f39"
+# 2.4.2 : correctif CVE-2026-33186
+NGF_IMAGE_DIGEST="sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"

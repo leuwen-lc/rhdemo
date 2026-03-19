@@ -45,11 +45,11 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.29.5-alpine@sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba"
+        NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67"
         POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
         // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
-        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.0@sha256:5c40d574639b655deea77ea521032e88cc3ee19dbea0be21f8cda3368e5d9f39"
+        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.2@sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
 
         // Configuration des tests
         TEST_PORT = '9000'

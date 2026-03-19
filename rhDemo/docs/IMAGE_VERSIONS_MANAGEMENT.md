@@ -26,8 +26,8 @@ Le tag est conservé pour la lisibilité ; le digest assure l'intégrité.
 | --- | --- | --- |
 | `postgres:18.2-alpine3.22` | BDD rhdemo + keycloak, backups | dev, ephemere, stagingkub |
 | `quay.io/keycloak/keycloak:26.5.0` | Serveur d'authentification | dev, ephemere, stagingkub |
-| `nginx:1.29.5-alpine` | Reverse proxy HTTPS | ephemere, Jenkinsfile-CI |
-| `ghcr.io/nginx/nginx-gateway-fabric:2.4.0` | API Gateway / Ingress Kubernetes | stagingkub, Jenkinsfile-CI (scan Trivy) |
+| `nginx:1.29.6-alpine` | Reverse proxy HTTPS | ephemere, Jenkinsfile-CI |
+| `ghcr.io/nginx/nginx-gateway-fabric:2.4.2` | API Gateway / Ingress Kubernetes | stagingkub, Jenkinsfile-CI (scan Trivy) |
 | `busybox:1.36` | Init containers (fix-permissions, wait-for) | stagingkub |
 | `quay.io/prometheuscommunity/postgres-exporter:v0.15.0` | Métriques PostgreSQL | stagingkub |
 
@@ -60,11 +60,11 @@ Les images sont définies dans les variables d'environnement du pipeline.
 
 ```groovy
 environment {
-    NGINX_IMAGE = "nginx:1.29.5-alpine@sha256:1d13701a..."
+    NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0..."
     POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924a..."
     KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb..."
     // NGINX Gateway Fabric — scanné en CI sans être déployé par ce pipeline
-    NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.0@sha256:5c40d574..."
+    NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.2@sha256:a30677fa..."
 }
 ```
 
@@ -107,7 +107,7 @@ global:
 | --- | --- | --- |
 | PostgreSQL | `postgres:18.2-alpine3.22` (conteneur) | `postgres:18.2-alpine3.22` (StatefulSet) |
 | Keycloak | `quay.io/keycloak/keycloak:26.5.0` | idem |
-| Nginx | `nginx:1.29.5-alpine` (reverse proxy) | NGINX Gateway Fabric 2.4.0 (Helm, namespace `nginx-gateway`) |
+| Nginx | `nginx:1.29.6-alpine` (reverse proxy) | NGINX Gateway Fabric 2.4.2 (Helm, namespace `nginx-gateway`) |
 
 ---
 
@@ -218,4 +218,4 @@ Le format `image:tag@sha256:digest` combine les avantages :
 
 ---
 
-**Dernière mise à jour** : 10 mars 2026
+**Dernière mise à jour** : 19 mars 2026

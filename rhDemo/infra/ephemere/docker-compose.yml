@@ -148,7 +148,7 @@ services:
   # Nginx - Reverse Proxy avec HTTPS
   # ═══════════════════════════════════════════════════════════════
   nginx:
-    image: ${NGINX_IMAGE:-nginx:1.29.5-alpine@sha256:1d13701a5f9f3fb01aaa88cef2344d65b6b5bf6b7d9fa4cf0dca557a8d7702ba}
+    image: ${NGINX_IMAGE:-nginx:1.29.6-alpine@sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67}
     container_name: rhdemo-ephemere-nginx
     restart: unless-stopped
     ports:

@@ -114,11 +114,11 @@ def generateTrivyReport(String image, String reportName) {
         # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         # --ignorefile : Exclut les CVE documentées comme faux positifs (voir SECURITY_ADVISORIES.md)
-        TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore"
+        TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore.yaml"
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
             IGNOREFILE_OPT="--ignorefile \${TRIVYIGNORE}"
-            echo "📋 Utilisation de .trivyignore (\$(grep -c '^CVE-' "\${TRIVYIGNORE}") CVE exclues)"
+            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c '^\s*- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
         fi
 
         timeout 5m trivy image \\

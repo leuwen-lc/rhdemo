@@ -1,0 +1,40 @@
+# Fichier d'exclusion Trivy (format YAML — supporte le filtrage par package)
+# Voir rhDemo/docs/SECURITY_ADVISORIES.md pour la justification de chaque exclusion
+
+vulnerabilities:
+
+  # CVE-2026-32767 - nginx
+  # Affecte : libexpat 2.7.4-r0 dans nginx:1.29.6-alpine (Alpine 3.23.3) — pas de correctif disponible
+  # Risque réel : À évaluer selon publication NVD
+  # À retirer quand : Alpine publie libexpat avec le correctif intégré
+  - id: CVE-2026-32767
+    pkg-name: libexpat
+    statement: "libexpat 2.7.4-r0 dans nginx:1.29.6-alpine - aucune version nginx:alpine ne corrige cette CVE (Alpine 3.23.3 non patché)"
+
+  # CVE-2026-33186 - NGINX Gateway Fabric
+  # Affecte : google.golang.org/grpc v1.78.0 dans ghcr.io/nginx/nginx-gateway-fabric:2.4.2 — pas de correctif disponible
+  # Risque réel : À évaluer selon publication NVD
+  # À retirer quand : une version NGF intégrant un grpc corrigé est publiée
+  - id: CVE-2026-33186
+    pkg-name: google.golang.org/grpc
+    statement: "google.golang.org/grpc v1.78.0 dans NGF 2.4.2 — aucune version NGF ne corrige cette CVE"
+
+  # CVE-2026-22184 - zlib contrib/untgz buffer overflow (Out-of-bounds Write, CWE-787)
+  # Affecte : zlib-1.3.1-r2 dans nginx:1.29.6-alpine (Alpine 3.23.3) — paquet non patché par Alpine
+  # Risque réel : FAIBLE — vulnérabilité dans l'utilitaire CLI autonome contrib/untgz,
+  #   non utilisé par nginx en tant que serveur web ; vecteur local uniquement (CVSS v4 : 4.6 MEDIUM)
+  # Note : l'upgrade nginx:1.29.4→1.29.6 a corrigé CVE-2026-1642 mais pas CVE-2026-32767 ni
+  #   CVE-2026-22184 car Alpine 3.23.3 ne publie pas encore de patch pour zlib-1.3.1-r2
+  # À retirer quand : Alpine publie zlib-1.3.1-r3+ avec le correctif intégré
+  - id: CVE-2026-22184
+    pkg-name: zlib
+    statement: "zlib-1.3.1-r2 dans nginx:1.29.6-alpine - contrib/untgz non utilisé par nginx web server ; vecteur local uniquement (CVSS v4 : 4.6 MEDIUM)"
+
+  # CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
+  # Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine
+  # Risque réel : NUL - gosu n'effectue aucune connexion TLS (setuid/setgid uniquement)
+  # Suivi upstream : https://github.com/docker-library/postgres/issues/1324
+  # À retirer quand : gosu est recompilé avec Go >= 1.24.13 (nouvelle release postgres:18-alpine)
+  - id: CVE-2025-68121
+    pkg-name: gosu
+    statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution (setuid/setgid uniquement)"

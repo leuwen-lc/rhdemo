@@ -217,24 +217,24 @@ Cette position est confirmée par :
 
 ### Remédiation appliquée
 
-**Action** : Exclusion de la CVE dans Trivy via `.trivyignore` (risque accepté - faux positif fonctionnel)
+**Action** : Exclusion de la CVE dans Trivy via `.trivyignore.yaml` (risque accepté - faux positif fonctionnel)
 
-**Fichier créé** : `rhDemo/.trivyignore`
+**Fichier créé** : `rhDemo/.trivyignore.yaml`
 
-```text
-# CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
-# Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine
-# Risque réel : NUL - gosu n'effectue aucune connexion TLS
-CVE-2025-68121
+```yaml
+vulnerabilities:
+  - id: CVE-2025-68121
+    pkg-name: gosu
+    statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution"
 ```
 
 **Fichier modifié** : `rhDemo/vars/rhDemoLib.groovy`
 
-- Ajout de `--ignorefile rhDemo/.trivyignore` aux commandes `trivy image` (scans JSON et table)
+- Ajout de `--ignorefile rhDemo/.trivyignore.yaml` aux commandes `trivy image` (scans JSON et table)
 
 ### Condition de retrait de l'exclusion
 
-L'exclusion dans `.trivyignore` devra être **retirée** lorsque l'une de ces conditions sera remplie :
+L'exclusion dans `.trivyignore.yaml` devra être **retirée** lorsque l'une de ces conditions sera remplie :
 
 - Nouvelle release de gosu compilée avec Go >= 1.24.13 ou >= 1.25.7
 - Mise à jour de l'image `postgres:18-alpine` intégrant un gosu corrigé
@@ -243,7 +243,7 @@ L'exclusion dans `.trivyignore` devra être **retirée** lorsque l'une de ces co
 
 ```bash
 # Vérifier que Trivy ignore bien la CVE
-trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL postgres:18-alpine
+trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL postgres:18-alpine
 
 # Vérifier que gosu n'utilise pas crypto/tls (nécessite govulncheck)
 # govulncheck -mode binary /usr/local/bin/gosu
@@ -312,7 +312,7 @@ Passage à la version springdoc-openapi 3.0.1
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : CRITICAL (CVSS v3.1 : 9.8) / MEDIUM (CVSS v4.0 : 4.6)
 - **Composant affecté** : `zlib-1.3.1-r2` (paquet Alpine) — utilitaire `contrib/untgz`
-- **Statut** : Risque accepté — exclusion `.trivyignore` en attente de patch Alpine
+- **Statut** : Risque accepté — exclusion `.trivyignore.yaml` en attente de patch Alpine
 
 ### Description
 
@@ -335,7 +335,7 @@ CVSS v4.0 corrige à 4.6 MEDIUM avec vecteur local.
 | nginx exposé ? | Non — `untgz` n'est pas exécuté par nginx web server |
 | Risque réel en production | Faible |
 | Patch upstream disponible ? | Non — Alpine 3.23.3 livre toujours `zlib-1.3.1-r2` |
-| Décision | Risque accepté + exclusion `.trivyignore` documentée |
+| Décision | Risque accepté + exclusion `.trivyignore.yaml` documentée |
 
 ### Chronologie de la remédiation
 
@@ -345,11 +345,11 @@ Cette action a corrigé CVE-2026-1642 (Medium, nginx versions 1.3.0–1.29.4). E
 CVE-2026-22184 persiste car les deux images embarquent le même paquet Alpine `zlib-1.3.1-r2`
 (Alpine 3.23.3) non encore patché par Alpine.
 
-**Phase 2 — 2026-03-10** : exclusion Trivy documentée dans `.trivyignore`.
+**Phase 2 — 2026-03-10** : exclusion Trivy documentée dans `.trivyignore.yaml`.
 
-**Phase 3 — 2026-03-19** : mise à jour `nginx:1.29.5-alpine` → `nginx:1.29.6-alpine` (correctif CVE-2026-32767).
+**Phase 3 — 2026-03-19** : mise à jour `nginx:1.29.5-alpine` → `nginx:1.29.6-alpine` (dernière version disponible).
 
-CVE-2026-22184 persiste dans 1.29.6 (Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2`) — exclusion `.trivyignore` maintenue.
+CVE-2026-32767 et CVE-2026-22184 persistent dans 1.29.6 — exclusions `.trivyignore.yaml` maintenues.
 
 ```text
 nginx:1.29.4-alpine  →  Alpine 3.22   zlib-1.3.1-r2  ← CVE-2026-22184 présente
@@ -363,7 +363,7 @@ Aucune image nginx:alpine disponible ne contient un `zlib` patché à la date du
 
 - `Jenkinsfile-CI` (variable `NGINX_IMAGE`, phases 1 et 3)
 - `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`, phases 1 et 3)
-- `.trivyignore` (exclusion CVE-2026-22184 avec justification, phase 2)
+- `.trivyignore.yaml` (exclusion CVE-2026-22184 avec justification, phase 2)
 
 ### Validation
 
@@ -374,12 +374,12 @@ docker run --rm --entrypoint sh nginx:1.29.6-alpine \
 # Résultat : zlib-1.3.1-r2 / 3.23.3
 
 # Vérifier que le scan CI passe (CVE exclue via .trivyignore)
-trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL nginx:1.29.6-alpine
+trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL nginx:1.29.6-alpine
 ```
 
 ### Condition de clôture
 
-Retirer `CVE-2026-22184` du `.trivyignore` quand Alpine publie `zlib-1.3.1-r3` ou
+Retirer `CVE-2026-22184` du `.trivyignore.yaml` quand Alpine publie `zlib-1.3.1-r3` ou
 supérieur avec le correctif intégré, et qu'une image `nginx:*-alpine` basée sur ce paquet
 est disponible.
 
@@ -391,8 +391,8 @@ est disponible.
 | 2026-03-10 | Détection par Trivy dans le pipeline CI (nginx:1.29.4-alpine) |
 | 2026-03-10 | Mise à jour nginx:1.29.4 → 1.29.5 (corrige CVE-2026-1642, pas CVE-2026-22184) |
 | 2026-03-10 | Analyse : Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2` non patché |
-| 2026-03-10 | Exclusion `.trivyignore` avec justification documentée |
-| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (correctif CVE-2026-32767) — CVE-2026-22184 toujours présente |
+| 2026-03-10 | Exclusion `.trivyignore.yaml` avec justification documentée |
+| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (dernière disponible) — CVE-2026-32767 et CVE-2026-22184 toujours présentes |
 
 ### Références
 
@@ -500,44 +500,50 @@ Retirer les entrées `dependencyManagement` pour Jackson lorsque Spring Boot int
 
 ---
 
-## CVE-2026-32767 — nginx:1.29.5-alpine
+## CVE-2026-32767 — nginx
 
 ### Détection
 
 - **Date** : 2026-03-19
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : À préciser (voir NVD)
-- **Composant affecté** : `nginx:1.29.5-alpine`
+- **Composant affecté** : `nginx:1.29.5-alpine` puis `nginx:1.29.6-alpine`
+- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
 
 ### Description
 
-CVE-2026-32767 affecte nginx en version 1.29.5. La version 1.29.6 contient le correctif.
+CVE-2026-32767 affecte nginx. La version 1.29.6 (dernière disponible) ne corrige pas cette CVE.
 
 ### Images affectées
 
-| Image | Version vulnérable | Version corrective | Statut |
+| Image | Version | Correctif disponible | Statut |
 | --- | --- | --- | --- |
-| `nginx` | 1.29.5-alpine | 1.29.6-alpine | ✅ Corrigé |
+| `nginx` | 1.29.6-alpine (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
 
 ### Remédiation appliquée
 
-**Action** : Mise à jour vers `nginx:1.29.6-alpine`
+**Action** : Mise à jour nginx 1.29.5 → 1.29.6 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
 
 **Fichiers modifiés** :
 
-- `Jenkinsfile-CI` (variable `NGINX_IMAGE`)
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, upgrade vers 1.29.6)
 - `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`)
 - `docs/IMAGE_VERSIONS_MANAGEMENT.md`
+- `.trivyignore.yaml` (exclusion CVE-2026-32767 avec justification)
 
 **Digest 1.29.6-alpine** : `sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67`
 
-**Note** : CVE-2026-22184 (zlib) reste présente dans 1.29.6 (Alpine 3.23.3 — `zlib-1.3.1-r2` non patché). L'exclusion `.trivyignore` correspondante est maintenue.
+**Note** : CVE-2026-22184 (zlib) reste également présente dans 1.29.6. Les deux sont exclues via `.trivyignore.yaml`.
+
+### Condition de clôture
+
+Retirer `CVE-2026-32767` du `.trivyignore.yaml` quand une version nginx:alpine intégrant le correctif est publiée.
 
 ### Validation
 
 ```bash
-# Scanner avec Trivy
-trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL,HIGH nginx:1.29.6-alpine
+# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
+trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL,HIGH nginx:1.29.6-alpine
 ```
 
 ### Timeline
@@ -545,7 +551,8 @@ trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL,HIGH nginx:1.29
 | Date | Action |
 | --- | --- |
 | 2026-03-19 | Détection par Trivy dans le pipeline CI (nginx:1.29.5-alpine) |
-| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 |
+| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (dernière disponible — ne corrige pas CVE-2026-32767) |
+| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
 
 ### Références
 
@@ -561,39 +568,41 @@ trivy image --ignorefile rhDemo/.trivyignore --severity CRITICAL,HIGH nginx:1.29
 - **Date** : 2026-03-19
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : À préciser (voir NVD)
-- **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric:2.4.0`
+- **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric`
+- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
 
 ### Description
 
-CVE-2026-33186 affecte NGINX Gateway Fabric en version 2.4.0. La version 2.4.2 contient le correctif.
+CVE-2026-33186 affecte NGINX Gateway Fabric. La version 2.4.2 (dernière disponible) ne corrige pas cette CVE.
 
 ### Images affectées
 
-| Image | Version vulnérable | Version corrective | Statut |
+| Image | Version | Correctif disponible | Statut |
 | --- | --- | --- | --- |
-| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.0 | 2.4.2 | ✅ Corrigé |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
 
 ### Remédiation appliquée
 
-**Action** : Mise à jour vers `nginx-gateway-fabric:2.4.2`
+**Action** : Mise à jour NGF 2.4.0 → 2.4.2 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
 
 **Fichiers modifiés** :
 
-- `Jenkinsfile-CI` (variable `NGF_IMAGE`)
+- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.4.2)
 - `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
 - `docs/IMAGE_VERSIONS_MANAGEMENT.md`
 - `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
+- `.trivyignore.yaml` (exclusion CVE-2026-33186 avec justification)
 
-**Digest 2.4.2** : `sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255`
+### Condition de clôture
+
+Retirer `CVE-2026-33186` du `.trivyignore.yaml` quand une version NGF intégrant le correctif est publiée.
 
 ### Validation
 
 ```bash
-# Vérifier la version après mise à jour du cluster
-kubectl get deployment -n nginx-gateway -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
-
-# Scanner avec Trivy
-trivy image ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
+# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
+trivy image --ignorefile rhDemo/.trivyignore.yaml \
+  ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
 ```
 
 ### Timeline
@@ -601,7 +610,8 @@ trivy image ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
 | Date | Action |
 | --- | --- |
 | 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
-| 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 |
+| 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 (dernière disponible — ne corrige pas CVE-2026-33186) |
+| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
 
 ### Références
 

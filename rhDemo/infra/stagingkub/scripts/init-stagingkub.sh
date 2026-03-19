@@ -670,14 +670,6 @@ else
     echo -e "${GREEN}✅ Certificats SSL déjà existants${NC}"
 fi
 
-# Créer le secret TLS dans rhdemo-stagingkub
-kubectl create secret tls rhdemo-tls-cert \
-  --cert="$CERTS_DIR/tls.crt" \
-  --key="$CERTS_DIR/tls.key" \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-echo -e "${GREEN}✅ Secret TLS créé (rhdemo-stagingkub)${NC}"
-
 # Créer le secret TLS dans nginx-gateway pour le Gateway partagé
 kubectl create secret tls shared-tls-cert \
   --cert="$CERTS_DIR/tls.crt" \

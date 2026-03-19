@@ -19,7 +19,7 @@ Ce document décrit les deux options de gestion des certificats TLS pour l'envir
 
 ## Architecture TLS avec NGINX Gateway Fabric
 
-Depuis la migration vers **NGINX Gateway Fabric 2.4.0**, la terminaison TLS est centralisée au niveau du `shared-gateway` dans le namespace `nginx-gateway`. Les Ingress Kubernetes ne sont plus utilisés.
+Depuis la migration vers **NGINX Gateway Fabric 2.4.2**, la terminaison TLS est centralisée au niveau du `shared-gateway` dans le namespace `nginx-gateway`. Les Ingress Kubernetes ne sont plus utilisés.
 
 ```
 Internet → KinD (hostPort 443) → NodePort 32616 → shared-gateway (TLS terminé ici) → HTTPRoutes → Services
@@ -72,7 +72,7 @@ Le script génère :
 - `certs/tls.crt` : Certificat X.509 auto-signé
 - `certs/tls.key` : Clé privée RSA 2048 bits
 - Secret Kubernetes `shared-tls-cert` dans le namespace `nginx-gateway` (utilisé par le shared-gateway)
-- Secret Kubernetes `rhdemo-tls-cert` dans le namespace `rhdemo-stagingkub` (référence conservée)
+- Secret Kubernetes `rhdemo-tls-cert` dans le namespace `rhdemo-stagingkub` (**legacy, inutilisé** — à supprimer d'`init-stagingkub.sh` : le port-forward utilise HTTP direct, et sans DNS cluster Keycloak est de toute façon inaccessible hors cluster)
 
 Le certificat couvre le domaine wildcard `*.intra.leuwen-lc.fr`.
 
@@ -120,7 +120,7 @@ ingress:
   enabled: false  # Remplacé par Gateway API
 ```
 
-Le script `install-observability.sh` crée automatiquement une HTTPRoute attachée au `shared-gateway` :
+Le script `install-observability.sh` crée automatiquement une HTTPRoute inline attachée au `shared-gateway` :
 
 ```bash
 cd rhDemo/infra/stagingkub
@@ -129,8 +129,10 @@ cd rhDemo/infra/stagingkub
 
 Ce script :
 - Installe Loki et Grafana via Helm (sans Ingress)
-- Crée une `HTTPRoute` dans `loki-stack` attachée au `shared-gateway` (namespace `nginx-gateway`)
+- Crée une `HTTPRoute` dans `loki-stack` attachée au `shared-gateway` (namespace `nginx-gateway`) via `kubectl apply` inline
 - Grafana est ainsi exposé via le même certificat `shared-tls-cert` que les autres services
+
+> **Note** : Le fichier `infra/stagingkub/helm/observability/grafana-gateway.yaml` présent dans le dépôt est une **ancienne architecture** (gateway dédié dans `loki-stack` avec `intra-wildcard-tls`). Il n'est plus appliqué par les scripts. L'architecture active utilise le `shared-gateway` décrit ci-dessus.
 
 #### 4. Déployer l'application
 
@@ -333,7 +335,9 @@ gateway:
 
 #### 8. Configuration pour Grafana (Let's Encrypt)
 
-Identique à l'option auto-signée : `ingress.enabled: false` dans `grafana-values.yaml`, HTTPRoute attachée au `shared-gateway`. Aucune modification supplémentaire.
+Identique à l'option auto-signée : `ingress.enabled: false` dans `grafana-values.yaml`, HTTPRoute attachée au `shared-gateway` via `install-observability.sh`. Aucune modification supplémentaire.
+
+Le certificat `intra-wildcard-tls` étant dans le namespace `nginx-gateway` (là où réside le `shared-gateway`), Grafana bénéficie automatiquement du certificat Let's Encrypt sans configuration supplémentaire dans `loki-stack`.
 
 #### 9. Déployer
 
@@ -388,9 +392,8 @@ Identique pour les deux options :
 # Supprimer les anciens certificats
 rm -f infra/stagingkub/certs/tls.*
 kubectl delete secret shared-tls-cert -n nginx-gateway
-kubectl delete secret rhdemo-tls-cert -n rhdemo-stagingkub
 
-# Régénérer (relancer init-stagingkub.sh qui recrée les secrets)
+# Régénérer (relancer init-stagingkub.sh qui recrée le secret)
 ./scripts/init-stagingkub.sh
 ```
 
@@ -441,7 +444,7 @@ Avec un certificat auto-signé, cette erreur est normale pour les appels HTTPS s
 
 - [cert-manager Documentation](https://cert-manager.io/docs/)
 - [Let's Encrypt](https://letsencrypt.org/)
-- [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/)
+- [NGINX Gateway Fabric 2.4.2](https://docs.nginx.com/nginx-gateway-fabric/) (correctif CVE-2026-33186)
 - [Gateway API - Kubernetes](https://gateway-api.sigs.k8s.io/)
 - [Spring Security OAuth2 Client](https://docs.spring.io/spring-security/reference/servlet/oauth2/client/index.html)
 - [Keycloak OIDC Logout](https://www.keycloak.org/docs/latest/securing_apps/#logout)

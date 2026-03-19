@@ -10,7 +10,7 @@ Les environnements `ephemere` (Docker Compose) et `stagingkub` (Kubernetes) util
 |---------|---------------|-------------|-------------|
 | `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
 | `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Environnement permanent Kubernetes | SOPS/Age |
-| `secrets-rhdemo.yml` | test local Non chiffré Non commité |
+| `secrets-rhdemo.yml` | **local** | Test local | Non chiffré, non commité |
 
 ## 🔐 Gestion des secrets
 

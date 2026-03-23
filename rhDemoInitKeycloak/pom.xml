@@ -63,7 +63,7 @@
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
             <artifactId>resteasy-core</artifactId>
-            <version>6.2.7.Final</version>
+            <version>6.2.15.Final</version>
         </dependency>
 
         <!-- Apache HTTP Client pour support SSL custom -->

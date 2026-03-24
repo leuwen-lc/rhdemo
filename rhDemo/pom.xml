@@ -41,7 +41,7 @@
 			<dependency>
 				<groupId>org.apache.commons</groupId>
 				<artifactId>commons-lang3</artifactId>
-				<version>3.18.0</version>
+				<version>3.20.0</version>
 			</dependency>
 			<!--
 			  Upgrade Jackson BOM 3.0.4 → 3.1.0 pour corriger alerte sécurité.

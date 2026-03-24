@@ -17,7 +17,7 @@
         <maven.compiler.source>25</maven.compiler.source>
         <maven.compiler.target>25</maven.compiler.target>
         <selenium.version>4.40.0</selenium.version>
-        <junit.version>6.0.2</junit.version>
+        <junit.version>6.0.3</junit.version>
         <webdrivermanager.version>6.3.3</webdrivermanager.version>
     </properties>
 

@@ -148,11 +148,11 @@ fr.leuwen.rhdemoAPI/
 ## Impact sur les tests (contrainte SonarQube ≥ 50%)
 
 Tout nouveau code doit être couvert à ≥ 50%. La migration génère :
-- 6 use cases → 6 nouvelles classes de tests unitaires (sans Spring context, c'est l'avantage)
+- 6 use cases → 6 nouvelles classes de tests unitaires
 - 1 `EmployeRepositoryAdapter` → tests d'intégration ou mock
 - 1-2 mappers → tests unitaires simples
 
-**L'avantage concret** : les use cases testables sans `@SpringBootTest` → tests **plus rapides** (pas de chargement du contexte Spring).
+**Remarque** : la testabilité unitaire n'est pas un avantage propre à la Clean Architecture. Dans l'architecture en couches actuelle, `EmployeRepository` (Spring Data) peut déjà être mocké avec Mockito (`@Mock` + `@ExtendWith(MockitoExtension.class)`) sans charger de contexte Spring. Le code de test est identique dans les deux cas — seul le nom de l'interface mockée change.
 
 ---
 

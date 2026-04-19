@@ -358,7 +358,7 @@
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
-				<version>12.2.0</version>
+				<version>12.2.1</version>
 				<configuration>
 					<!-- La clé API NVD est passée via -DnvdApiKey en ligne de commande -->
 					<!-- Échouer le build si des vulnérabilités sont détectées -->

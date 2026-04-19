@@ -32,6 +32,8 @@
 		<mockito.version>5.21.0</mockito.version>
 		<!-- SpringDoc OpenAPI compatible Spring Boot 4 / Jackson 3 -->
 		<springdoc-openapi.version>3.0.3</springdoc-openapi.version>
+		<!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 -->
+		<tomcat.version>11.0.21</tomcat.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->

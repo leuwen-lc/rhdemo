@@ -620,6 +620,80 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml \
 
 ---
 
+## CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — Apache Tomcat Embed Core
+
+### Détection
+
+- **Date** : 2026-04-19
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : À préciser (voir NVD) — niveau suffisant pour bloquer le pipeline (CVSS ≥ 7)
+- **Composant affecté** : `org.apache.tomcat.embed:tomcat-embed-core:11.0.20`
+
+### Description
+
+Trois CVE affectant Tomcat Embed Core 11.0.20, composant embarqué par Spring Boot 4.0.5 pour le serveur HTTP.
+
+| CVE | Description |
+| --- | --- |
+| CVE-2026-34483 | À préciser (voir NVD) |
+| CVE-2026-34486 | À préciser (voir NVD) |
+| CVE-2026-34487 | À préciser (voir NVD) |
+
+### Composants affectés
+
+| Composant | Version vulnérable | Version corrective |
+| --- | --- | --- |
+| `org.apache.tomcat.embed:tomcat-embed-core` | 11.0.20 | 11.0.21 |
+
+### Remédiation appliquée
+
+**Action** : Forçage de la propriété `<tomcat.version>` dans `pom.xml` pour surcharger la version gérée par `spring-boot-starter-parent`.
+
+```xml
+<properties>
+  <!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 -->
+  <tomcat.version>11.0.21</tomcat.version>
+</properties>
+```
+
+**Fichier modifié** : `pom.xml` (section `<properties>`)
+
+Spring Boot expose la propriété `tomcat.version` pour permettre l'override de tous les artefacts `tomcat-embed-*` sans modifier les dépendances directes.
+
+### Validation
+
+```bash
+# Vérifier que Maven résout bien Tomcat 11.0.21
+cd rhDemo && ./mvnw dependency:tree | grep tomcat-embed
+
+# Résultat attendu :
+# org.apache.tomcat.embed:tomcat-embed-core:jar:11.0.21
+# org.apache.tomcat.embed:tomcat-embed-websocket:jar:11.0.21
+
+# Relancer le scan OWASP pour confirmer la disparition des alertes
+./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+```
+
+### Condition de clôture
+
+Retirer `<tomcat.version>11.0.21</tomcat.version>` du `pom.xml` quand Spring Boot intègre nativement Tomcat >= 11.0.21 dans son parent POM.
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-04-19 | Détection par OWASP Dependency-Check dans le pipeline CI (tomcat-embed-core:11.0.20) |
+| 2026-04-19 | Forçage `<tomcat.version>11.0.21</tomcat.version>` dans `pom.xml` |
+
+### Références
+
+- [NVD — CVE-2026-34483](https://nvd.nist.gov/vuln/detail/CVE-2026-34483)
+- [NVD — CVE-2026-34486](https://nvd.nist.gov/vuln/detail/CVE-2026-34486)
+- [NVD — CVE-2026-34487](https://nvd.nist.gov/vuln/detail/CVE-2026-34487)
+- [Apache Tomcat security advisories](https://tomcat.apache.org/security-11.html)
+
+---
+
 ## Template pour futures vulnérabilités
 
 ```markdown
@@ -654,4 +728,4 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml \
 
 ---
 
-**Dernière mise à jour** : 2026-03-19 (CVE-2026-32767 nginx, CVE-2026-33186 NGF)
+**Dernière mise à jour** : 2026-04-19 (CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — tomcat-embed-core 11.0.21)

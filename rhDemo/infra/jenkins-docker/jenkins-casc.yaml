@@ -54,10 +54,25 @@ jenkins:
           password: "${JENKINS_ADMIN_PASSWORD:-admin123}"
           name: "Administrator"
           description: "Jenkins Administrator"
-  
+        - id: "claude"
+          password: "${JENKINS_CLAUDE_PASSWORD:-changeme}"
+          name: "Claude Code"
+          description: "Compte lecture seule pour Claude Code (/fixcve)"
+
   authorizationStrategy:
-    loggedInUsersCanDoAnything:
-      allowAnonymousRead: false
+    globalMatrix:
+      entries:
+        - user:
+            name: "admin"
+            permissions:
+              - "Overall/Administer"
+              - "Overall/Read"
+        - user:
+            name: "claude"
+            permissions:
+              - "Overall/Read"
+              - "Job/Read"
+              - "View/Read"
   
   # ────────────────────────────────────────────────────────────────
   # VARIABLES GLOBALES (héritées par tous les noeuds)

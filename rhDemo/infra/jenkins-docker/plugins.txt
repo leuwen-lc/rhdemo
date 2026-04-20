@@ -28,6 +28,7 @@ workflow-aggregator:latest          # pipeline {}, stages, steps
 pipeline-stage-view:latest          # Visualisation des stages
 credentials:latest                  # Gestion des credentials
 credentials-binding:latest          # withCredentials([file(...)])
+matrix-auth:latest                  # Stratégie globalMatrix (droits par utilisateur)
 
 # ────────────────────────────────────────────────────────────────
 # BUILD & OUTILS JAVA

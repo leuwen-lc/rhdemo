@@ -4,6 +4,46 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE Jenkins — Upgrade 2.541.2 → 2.555.1
+
+### Détection
+
+- **Date de détection** : 2026-04-20
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL
+- **Composant affecté** : `jenkins/jenkins:lts-jdk21` (image Docker) en version `2.541.2`
+
+### Remédiation
+
+- **Action** : Épinglage de l'image Docker sur la version corrigée
+- **Fichier modifié** : `rhDemo/infra/jenkins-docker/Dockerfile.jenkins`
+- **Détail** : `FROM jenkins/jenkins:lts-jdk21` → `FROM jenkins/jenkins:2.555.1-lts-jdk21`
+
+---
+
+## CVE-2026-40477 & CVE-2026-40478 — Thymeleaf
+
+### Détection
+
+- **Date de détection** : 2026-04-20
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `org.thymeleaf:thymeleaf` et `org.thymeleaf:thymeleaf-spring6` en version `3.1.3.RELEASE`
+
+### Description
+
+**CVE-2026-40477** — Improper restriction of the scope of accessible objects in Thymeleaf expressions : un attaquant peut accéder à des objets hors du scope prévu via des expressions Thymeleaf, conduisant à une divulgation d'informations ou une élévation de privilèges.
+
+**CVE-2026-40478** — Improper neutralization of specific syntax patterns for unauthorized expressions : une neutralisation insuffisante de certains motifs syntaxiques permet l'injection d'expressions non autorisées dans les templates Thymeleaf.
+
+### Remédiation
+
+- **Action** : Upgrade `org.thymeleaf:thymeleaf` + `org.thymeleaf:thymeleaf-spring6` vers `3.1.4.RELEASE`
+- **Fichier modifié** : `rhDemo/pom.xml`
+- **Détail** : Propriété Maven `<thymeleaf.version>3.1.4.RELEASE</thymeleaf.version>` dans `<properties>` (override du BOM Spring Boot)
+
+---
+
 ## CVE-2025-49794 & CVE-2025-49796 - Vulnérabilités libxml2
 
 ### Détection

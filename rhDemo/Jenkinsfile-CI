@@ -32,6 +32,7 @@ pipeline {
         timeout(time: 2, unit: 'HOURS')
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+        copyArtifactPermission('RHDemo-CD')
     }
 
     tools {

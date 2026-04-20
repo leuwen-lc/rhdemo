@@ -94,7 +94,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue.
   - Possibilité d'utiliser également Spring Tool Suite (Eclipse)
 - Pour exécution en env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
-- Pour chaine CI/CD  Jenkins 2.541.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
+- Pour chaine CI/CD  Jenkins 2.555.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
 - Pour déploiement env de ephemere (CI) : Docker Compose avec un réseau dédié.
 - Pour déploiement env staginkub (CD) : KinD 0.31+, Helm 3.19.2+, Kubectl v1.31+
 

@@ -36,41 +36,44 @@ docker info
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌───────────────────────────┐     ┌──────────────────────────────────────────────┐ │
-│  │  JENKINS CONTROLLER       │     │  JENKINS AGENT (builder)                     │ │
-│  │  (Port 8080, 50000)       │◄───►│  rhdemo-jenkins-agent                       │ │
-│  │  rhdemo-jenkins           │     │                                              │ │
-│  │                           │     │  Outils de build :                           │ │
-│  │  Pilotage uniquement :    │     │  • JDK 25 (Eclipse Temurin)                  │ │
-│  │  • numExecutors: 0        │     │  • Maven 3.9.12                              │ │
-│  │  • Orchestration pipelines│     │  • Docker CLI + Docker Compose               │ │
-│  │  • Interface web          │     │  • Node.js/npm (build frontend)              │ │
-│  │  • Gestion credentials    │     │  • Firefox ESR + Xvfb (Selenium headless)    │ │
-│  │  • JCasC                  │     │  • SOPS, yq (secrets & YAML)                 │ │
-│  │                           │     │  • Trivy (scan CVE images Docker)            │ │
-│  │  Plugins :                │     │  • kubectl, Helm (déploiement K8s)           │ │
-│  │  • Pipeline & Git         │     │  • Cosign (signature images)                 │ │
-│  │  • SonarQube Scanner      │     │                                              │ │
-│  │  • Docker Workflow        │     │  Connexion : WebSocket (JNLP)                │ │
-│  │  • Coverage               │     │  Docker-in-Docker via socket monté            │ │
-│  │  • OWASP Dep-Check        │     └──────────────────────────────────────────────┘ │
-│  │  • Email, BlueOcean       │                                                      │
-│  └───────────────────────────┘     ┌──────────────────────────┐                     │
-│                                    │      SONARQUBE           │                     │
-│                                    │     (Port 9020)          │                     │
-│                                    │                          │                     │
-│                                    │ • Community Edition      │                     │
-│                                    │ • Analyse qualité code   │                     │
-│                                    │ • Couverture tests       │                     │
-│                                    │ • Security hotspots      │                     │
-│                                    └──────────┬───────────────┘                     │
-│                                               │                                     │
-│                                               ▼                                     │
-│                                    ┌──────────────────────────┐                     │
-│                                    │   PostgreSQL 16          │                     │
-│                                    │   (sonarqube-db)         │                     │
-│                                    │ • Base de données        │                     │
-│                                    │   SonarQube              │                     │
-│                                    └──────────────────────────┘                     │
+│  │  JENKINS CONTROLLER       │     │  DOCKER SOCKET PROXY                         │ │
+│  │  (Port 8080, 50000)       │────►│  rhdemo-docker-socket-proxy                 │ │
+│  │  rhdemo-jenkins           │     │  Port TCP: 2375 (API filtrée)               │ │
+│  │                           │     │                                              │ │
+│  │  Pilotage uniquement :    │     │  Endpoints autorisés :                       │ │
+│  │  • numExecutors: 0        │     │  • POST /containers/create (créer agent)     │ │
+│  │  • Orchestration pipelines│     │  • POST /containers/{id}/start              │ │
+│  │  • Interface web          │     │  • POST /containers/{id}/stop               │ │
+│  │  • Gestion credentials    │     │  • DELETE /containers/{id}                  │ │
+│  │  • JCasC + Docker Cloud   │     │  Tout le reste : bloqué                     │ │
+│  │                           │     └──────────────────────────────────────────────┘ │
+│  └───────────────────────────┘                    │ crée/détruit                    │
+│                                                   ▼                                 │
+│                                    ┌──────────────────────────────────────────────┐ │
+│                                    │  AGENTS ÉPHÉMÈRES (Docker Cloud)             │ │
+│                                    │  Image: rhdemo-jenkins-agent:latest          │ │
+│                                    │  Créés à la demande, détruits après le build │ │
+│                                    │                                              │ │
+│                                    │  Outils de build :                           │ │
+│                                    │  • JDK 25 (Eclipse Temurin) + Maven 3.9.12  │ │
+│                                    │  • Docker CLI + Docker Compose (socket hôte) │ │
+│                                    │  • Node.js/npm (build frontend)              │ │
+│                                    │  • Firefox ESR + Xvfb (Selenium headless)    │ │
+│                                    │  • SOPS, yq (secrets & YAML)                 │ │
+│                                    │  • Trivy, kubectl, Helm, Cosign              │ │
+│                                    └──────────────────────────────────────────────┘ │
+│                                                                                     │
+│  ┌──────────────────────────┐                                                       │
+│  │      SONARQUBE           │                                                       │
+│  │     (Port 9020)          │                                                       │
+│  │ • Community Edition      │                                                       │
+│  │ • Analyse qualité code   │                                                       │
+│  └──────────┬───────────────┘                                                       │
+│             ▼                                                                       │
+│  ┌──────────────────────────┐                                                       │
+│  │   PostgreSQL 16          │                                                       │
+│  │   (sonarqube-db)         │                                                       │
+│  └──────────────────────────┘                                                       │
 │                                                                                     │
 │  Autres services :                                                                  │
 │  • kind-registry:5000 (Docker Registry local HTTPS)                                 │
@@ -84,7 +87,7 @@ docker info
                     │   rhdemo-jenkins-network      │
                     └───────────┬───────────────────┘
                                 │
-                                │ Connexion dynamique (agent)
+                                │ Connexion dynamique (agent éphémère)
                                 ▼
                     ┌───────────────────────────────┐
                     │   Réseau Staging (externe)    │
@@ -102,8 +105,8 @@ docker info
 | Volume | Usage | Taille estimée |
 |--------|-------|----------------|
 | `rhdemo-jenkins-home` | Configuration et jobs Jenkins (controller) | ~2 GB |
-| `rhdemo-jenkins-agent-workspace` | Workspace de l'agent (builds) | ~2 GB |
-| `rhdemo-maven-repository` | Cache Maven (.m2) sur l'agent | ~1 GB |
+| `rhdemo-maven-repository` | Cache Maven (.m2) partagé entre agents éphémères | ~1 GB |
+| `rhdemo-trivy-cache` | Cache DB Trivy partagé entre agents éphémères | ~300 MB |
 | `rhdemo-sonarqube-data` | Données SonarQube | ~500 MB |
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
@@ -112,6 +115,8 @@ docker info
 | `rhdemo-jenkins-zap-sessions` | Sessions ZAP (réutilisation entre builds) | ~50 MB |
 | `rhdemo-jenkins-zap-reports` | Rapports ZAP HTML/JSON | ~100 MB |
 
+> Les caches Maven et Trivy sont montés dans chaque agent éphémère via le template Docker Cloud — les builds successifs restent rapides malgré la destruction du conteneur après chaque build.
+
 **Note** : Le volume `kind-registry-data` stocke les images du registry Docker local nommé `kind-registry`. Ce nom est standardisé pour garantir la résolution DNS dans les clusters Kubernetes (KinD).
 
 ### Services inclus
@@ -119,30 +124,40 @@ docker info
 | Service | Description | Port | Fichier |
 |---------|-------------|------|---------|
 | `jenkins` | Controller Jenkins (pilotage uniquement) | 8080, 50000 | docker-compose.yml |
-| `jenkins-agent` | Agent de build (exécute tous les pipelines) | - | docker-compose.yml |
+| `docker-socket-proxy` | Proxy API Docker filtré (création/arrêt agents uniquement) | 2375 (interne) | docker-compose.yml |
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
 | `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
+| agents éphémères | Créés à la demande par Docker Cloud, détruits après le build | - | Docker Cloud (JCasC) |
 
-### 🤖 Architecture Master/Agent
+### 🤖 Architecture Controller / Agents éphémères
 
-Le master Jenkins (controller) ne fait que du **pilotage** : orchestration des pipelines, gestion des credentials, interface web et JCasC. Tous les builds sont délégués à l'agent dédié **"builder"** pour des raisons de sécurité (réduction de la surface d'attaque du master).
+Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines, gestion des credentials, interface web et JCasC. Tous les builds sont délégués à des **agents éphémères** créés à la demande via le Docker Plugin (Docker Cloud).
 
 **Controller (`Dockerfile.jenkins`)** :
 
 - `numExecutors: 0` — n'exécute aucun build
 - `mode: EXCLUSIVE` — ne peut pas recevoir de jobs
 - Contient uniquement les plugins et la configuration JCasC
+- Se connecte au daemon Docker via `docker-socket-proxy` (API filtrée TCP)
+- N'a pas accès direct à `/var/run/docker.sock`
 
-**Agent "builder" (`Dockerfile.agent`)** :
+**Docker Socket Proxy** :
 
-- Image personnalisée basée sur `jenkins/inbound-agent:latest-jdk21`
-- Connexion WebSocket (JNLP) au controller
-- `numExecutors: 2` — exécute 2 jobs en parallèle
-- Contient tous les outils de build :
+- Seul service montant `/var/run/docker.sock` de l'hôte
+- Expose une API TCP filtrée sur le port 2375 (interne au réseau Jenkins)
+- Autorise uniquement : création, démarrage, arrêt, suppression de conteneurs
+- Bloque : builds d'images, gestion volumes/réseaux, exec, system info
+
+**Agents éphémères (`Dockerfile.agent`)** :
+
+- Image `rhdemo-jenkins-agent:latest` instanciée à la demande par Docker Cloud
+- Créés pour chaque build, détruits immédiatement après
+- Max 2 simultanés (`instanceCapStr: "2"`)
+- Contiennent tous les outils de build :
   - JDK 25 (Eclipse Temurin) + Maven 3.9.12
-  - Docker CLI + Docker Compose (DinD via socket)
+  - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
   - Firefox ESR + Xvfb (tests Selenium headless)
   - SOPS, yq (secrets et parsing YAML)
   - Trivy (scan CVE images Docker)
@@ -150,13 +165,7 @@ Le master Jenkins (controller) ne fait que du **pilotage** : orchestration des p
   - Cosign (signature d'images)
   - Node.js/npm (build frontend)
 
-**Configuration du secret agent :**
-
-1. Démarrer le master seul : `docker-compose up -d jenkins`
-2. Aller dans Jenkins > Manage Jenkins > Nodes > builder
-3. Copier le secret affiché
-4. Mettre à jour `JENKINS_SECRET` dans `.env`
-5. Démarrer l'agent : `docker-compose up -d jenkins-agent`
+> Il n'y a plus de `JENKINS_SECRET` à configurer — la connexion controller ↔ agent est gérée automatiquement par le Docker Plugin.
 
 ## ⚡ Installation rapide
 
@@ -250,7 +259,8 @@ jenkins-docker/
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
 - ✅ Controller en mode pilotage (`numExecutors: 0`, `mode: EXCLUSIVE`)
-- ✅ Agent permanent "builder" (2 executors, WebSocket JNLP)
+- ✅ Docker Cloud avec template agent éphémère (label `builder`, max 2 simultanés)
+- ✅ Connexion Docker via `tcp://docker-socket-proxy:2375` (pas de socket direct)
 - ✅ Outils (JDK25, Maven3, Git, OWASP Dependency-Check)
 - ✅ Intégrations (SonarQube)
 - ✅ Jobs pipeline (CI + CD)
@@ -284,11 +294,12 @@ docker-compose logs -f
 # Controller uniquement
 docker-compose logs -f jenkins
 
-# Agent de build
-docker-compose logs -f jenkins-agent
+# Proxy socket
+docker-compose logs -f docker-socket-proxy
 
-# Dernières 100 lignes
-docker-compose logs --tail=100 jenkins-agent
+# Agent éphémère en cours (nom dynamique)
+AGENT=$(docker ps --filter "ancestor=rhdemo-jenkins-agent" --format '{{.Names}}' | head -n1)
+docker logs -f "$AGENT"
 ```
 
 ### Arrêter Jenkins
@@ -316,8 +327,9 @@ docker-compose restart jenkins
 # Controller (pilotage)
 docker-compose exec jenkins bash
 
-# Agent (builds)
-docker-compose exec jenkins-agent bash
+# Agent éphémère en cours (nom dynamique)
+AGENT=$(docker ps --filter "ancestor=rhdemo-jenkins-agent" --format '{{.Names}}' | head -n1)
+docker exec -it "$AGENT" bash
 ```
 
 ## 🔌 Plugins installés
@@ -379,21 +391,25 @@ Les pipelines sont créés automatiquement au démarrage dans la section `jobs:`
 
 ## 🐳 Docker-in-Docker (DinD)
 
-L'**agent Jenkins** (pas le controller) peut exécuter des commandes Docker et docker-compose grâce au montage du socket Docker :
+Les **agents éphémères** (pas le controller) peuvent exécuter des commandes Docker et docker-compose grâce au montage du socket Docker configuré dans le template Docker Cloud :
 
 ```yaml
-# Dans le service jenkins-agent
+# Dans le template Docker Cloud (jenkins-casc.yaml)
 volumes:
-  - /var/run/docker.sock:/var/run/docker.sock
-  - /usr/bin/docker:/usr/bin/docker
+  - "/var/run/docker.sock:/var/run/docker.sock"
+  - "/usr/bin/docker:/usr/bin/docker"
 ```
 
-### Vérifier Docker dans l'agent
+Le **controller** n'a pas accès au socket Docker directement — il passe par `docker-socket-proxy` (API filtrée limitée à la gestion du cycle de vie des conteneurs).
+
+### Vérifier Docker dans un agent éphémère
 
 ```bash
-docker-compose exec jenkins-agent docker --version
-docker-compose exec jenkins-agent docker-compose --version
-docker-compose exec jenkins-agent docker ps
+# Pendant un build, identifier le conteneur agent
+AGENT=$(docker ps --filter "ancestor=rhdemo-jenkins-agent" --format '{{.Names}}' | head -n1)
+
+docker exec "$AGENT" docker --version
+docker exec "$AGENT" docker ps
 ```
 
 ## 📊 Intégrations
@@ -716,31 +732,29 @@ docker-compose down -v
 # Supprimer les volumes
 docker volume rm rhdemo-jenkins-home
 docker volume rm rhdemo-maven-repository
+docker volume rm rhdemo-trivy-cache
 
 # Redémarrer
 ./start-jenkins.sh
 ```
 
-### L'agent Jenkins se relance en boucle
+### Aucun agent ne démarre pour un build
 
-**Symptôme :** Logs montrant "Secret is required for inbound agents"
+**Symptôme :** Le build reste en attente ("waiting for available executor")
 
-**Cause :** Le secret de l'agent n'est pas configuré dans `.env`.
+**Causes possibles :**
 
-**Solution :**
+1. **`docker-socket-proxy` non démarré** : `docker-compose ps docker-socket-proxy`
+2. **Image agent introuvable** : `docker images rhdemo-jenkins-agent` — construire avec `docker-compose build jenkins-agent`
+3. **Docker Cloud mal configuré** : Jenkins > Manage Jenkins > Clouds > docker-local > Test Connection
+4. **Capacité atteinte** : max 2 agents simultanés (`instanceCapStr: "2"`) — attendre qu'un build se termine
 
-1. Vérifier que le master est démarré et sain : `docker-compose ps jenkins`
-2. Aller dans Jenkins > Manage Jenkins > Nodes > builder
-3. Copier le secret affiché sur la page du noeud
-4. Mettre à jour `JENKINS_SECRET=<secret>` dans `.env`
-5. Redémarrer l'agent : `docker-compose up -d jenkins-agent`
-
-**Vérification :**
 ```bash
-# Logs de l'agent
-docker-compose logs -f jenkins-agent
+# Vérifier que le proxy répond
+docker exec rhdemo-jenkins curl -s http://docker-socket-proxy:2375/version | head -c 100
 
-# Doit afficher : "INFO: Connected"
+# Logs du controller (chercher les erreurs Docker Cloud)
+docker-compose logs jenkins | grep -i "docker\|cloud\|agent"
 ```
 
 ## 📈 Monitoring

@@ -905,12 +905,13 @@ YMLEOF
                     sh """
                         # Exécuter l'initialisation avec Maven
                         # La config application-ephemere.yml est dans /tmp (hors workspace)
-                        # spring.config.additional-location indique à Spring Boot où chercher
-                        # les fichiers de config par profil (application-ephemere.yml)
+                        # IMPORTANT agents éphémères : -Dspring.config.additional-location est une
+                        # propriété JVM Maven et n'est pas transmise au process forked Spring Boot.
+                        # On utilise les variables d'environnement à la place (héritées par tout fork).
+                        export SPRING_PROFILES_ACTIVE=ephemere
+                        export SPRING_CONFIG_ADDITIONAL_LOCATION="file:${env.SECRETS_TMP_DIR}/"
                         echo "▶ Exécution de rhDemoInitKeycloak (config depuis ${env.SECRETS_TMP_DIR}/)..."
-                        ../rhDemo/mvnw spring-boot:run \\
-                            -Dspring-boot.run.profiles=ephemere \\
-                            -Dspring.config.additional-location=file:${env.SECRETS_TMP_DIR}/
+                        ../rhDemo/mvnw spring-boot:run
 
                         echo "✅ Keycloak initialisé avec succès"
                     """
@@ -1097,7 +1098,7 @@ YMLEOF
                     echo "📥 Téléchargement de la base de données Trivy dans le cache partagé..."
                     sh '''
                         # Créer et utiliser le répertoire de cache partagé
-                        TRIVY_CACHE_DIR="$(pwd)/.trivy-cache-shared"
+                        TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
                         mkdir -p "${TRIVY_CACHE_DIR}"
                         export TRIVY_CACHE_DIR
 
@@ -1110,7 +1111,7 @@ YMLEOF
                         trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
 
                         echo "✅ Bases de données Trivy prêtes dans ${TRIVY_CACHE_DIR} (vuln + java)"
-                        echo "   Chaque scan parallèle copiera ce cache pour éviter les conflits d'accès"
+                        echo "   Cache persistant via volume Docker — réutilisé entre les builds"
                     '''
 
                     // Définir les images à scanner avec leurs noms de rapports
@@ -1173,7 +1174,7 @@ YMLEOF
                     mkdir -p "\${WORKSPACE_DIR}/sbom-reports"
 
                     # Utiliser le cache partagé Trivy (déjà préparé par le stage précédent)
-                    TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-shared"
+                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
                     export TRIVY_CACHE_DIR
 
                     echo "▶ Génération SBOM au format CycloneDX JSON..."

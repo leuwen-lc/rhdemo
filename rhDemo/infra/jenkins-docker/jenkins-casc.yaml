@@ -20,29 +20,43 @@ jenkins:
   scmCheckoutRetryCount: 3
 
   # ────────────────────────────────────────────────────────────────
-  # AGENT DE BUILD
+  # AGENTS ÉPHÉMÈRES — Docker Cloud
   # ────────────────────────────────────────────────────────────────
-  nodes:
-    - permanent:
-        name: "builder"
-        labelString: "builder"
-        numExecutors: 2
-        mode: NORMAL
-        remoteFS: "/home/jenkins/agent"
-        retentionStrategy: "always"
-        launcher:
-          inbound:
-            webSocket: true
-        nodeProperties:
-          - envVars:
-              env:
-                - key: "JAVA_HOME"
-                  value: "/opt/java/temurin-25"
-                - key: "MAVEN_HOME"
-                  value: "/opt/maven"
-                - key: "PATH+EXTRA"
-                  value: "/opt/java/temurin-25/bin:/opt/maven/bin"
-  
+  # Les agents sont créés à la demande pour chaque build et détruits
+  # immédiatement après. Pas d'agent permanent.
+  # Le controller passe par docker-socket-proxy (TCP filtré).
+  # ────────────────────────────────────────────────────────────────
+  clouds:
+    - docker:
+        name: "docker-local"
+        dockerApi:
+          dockerHost:
+            uri: "tcp://docker-socket-proxy:2375"
+        templates:
+          - labelString: "builder"
+            dockerTemplateBase:
+              image: "rhdemo-jenkins-agent:latest"
+              mountsString: |
+                type=bind,source=/var/run/docker.sock,destination=/var/run/docker.sock
+                type=bind,source=/usr/bin/docker,destination=/usr/bin/docker
+                type=volume,source=rhdemo-maven-repository,destination=/home/jenkins/.m2
+                type=volume,source=rhdemo-trivy-cache,destination=/home/jenkins/.cache/trivy
+              network: "rhdemo-jenkins-network"
+              extraGroupsString: "984"
+              environmentsString: |
+                JAVA_HOME=/opt/java/temurin-25
+                MAVEN_HOME=/opt/maven
+                PATH=/opt/java/temurin-25/bin:/opt/maven/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            remoteFs: "/home/jenkins/agent"
+            connector:
+              jnlp:
+                jenkinsUrl: "http://jenkins:8080/"
+            retentionStrategy:
+              idleMinutes: 5
+            instanceCapStr: "2"
+            removeVolumes: false
+            pullStrategy: PULL_NEVER
+
   # ────────────────────────────────────────────────────────────────
   # SÉCURITÉ
   # ────────────────────────────────────────────────────────────────

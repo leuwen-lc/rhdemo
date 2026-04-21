@@ -56,6 +56,7 @@ dependency-check-jenkins-plugin:latest  # OWASP Dependency-Check tool config
 # ────────────────────────────────────────────────────────────────
 # DOCKER
 # ────────────────────────────────────────────────────────────────
+docker-plugin:latest                # Agents éphémères Docker (Docker Cloud)
 docker-workflow:latest              # Commandes Docker dans pipeline
 
 # ────────────────────────────────────────────────────────────────

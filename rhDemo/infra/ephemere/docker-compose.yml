@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db:
-    image: ${POSTGRES_IMAGE:-postgres:18.3-alpine3.22@sha256:cd50a785da60925f8f6b59fdf680ae0a10dc96392d5bda489af12d945986dd78}
+    image: ${POSTGRES_IMAGE:-postgres:18.3-alpine3.22@sha256:af27ebd3413839ccfdcdf88e91ca76ad82117e52192067b76de9bb5be7ea6e04}
     container_name: rhdemo-ephemere-db
     restart: unless-stopped
     environment:
@@ -28,7 +28,7 @@ services:
   # Base de données PostgreSQL pour Keycloak
   # ═══════════════════════════════════════════════════════════════
   keycloak-db:
-    image: ${POSTGRES_IMAGE:-postgres:18.3-alpine3.22@sha256:cd50a785da60925f8f6b59fdf680ae0a10dc96392d5bda489af12d945986dd78}
+    image: ${POSTGRES_IMAGE:-postgres:18.3-alpine3.22@sha256:af27ebd3413839ccfdcdf88e91ca76ad82117e52192067b76de9bb5be7ea6e04}
     container_name: keycloak-ephemere-db
     restart: unless-stopped
     environment:

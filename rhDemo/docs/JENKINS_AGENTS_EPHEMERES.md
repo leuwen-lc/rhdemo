@@ -334,6 +334,8 @@ Après migration, valider dans cet ordre :
 
 L'accès au socket Docker `/var/run/docker.sock` reste nécessaire pour les pipelines (docker-compose, docker build, docker network). Ce n'est pas éliminé par les agents éphémères mais **limité dans le temps** à la durée du build. En cas de compromission, la fenêtre d'exposition est réduite.
 
+Les agents ont **déjà** accès au socket dans l'architecture actuelle (voir section 1). Le montage dans le controller (étape 2 du plan) est donc un risque **supplémentaire** propre à la gestion des agents éphémères — il n'existait pas avant cette migration.
+
 ### Limitation PC 16 Go RAM
 
 Chaque agent éphémère consomme la RAM de l'image Firefox/Selenium (~400 Mo). Avec `instanceCapStr: "3"`, la consommation maximale reste maîtrisée. Ne pas dépasser 2 agents simultanés en pratique compte tenu de l'environnement ephemere Docker Compose qui tourne en parallèle.

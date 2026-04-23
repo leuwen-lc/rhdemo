@@ -18,27 +18,19 @@ sudo systemctl restart docker
 cp .env.example .env
 nano .env  # Éditer avec vos valeurs
 
-# 5. Builder et Démarrer Jenkins (controller + agent)
+# 5. Builder et Démarrer Jenkins
 ./start-jenkins.sh
-
-# 6. Configurer le secret de l'agent
-#    - Ouvrir http://localhost:8080
-#    - Login: admin / (pwd défini dans .env)
-#    - Aller dans Manage Jenkins > Nodes > builder
-#    - Copier le secret affiché
-#    - Mettre à jour JENKINS_SECRET dans .env
-#    - Redémarrer l'agent : docker-compose up -d jenkins-agent
 ```
 
 > **Note** : Les étapes 2-3 (certificats) ne sont nécessaires qu'une seule fois.
 > Le script `start-jenkins.sh` vous guidera si les certificats sont manquants.
-> L'étape 6 (secret agent) n'est nécessaire qu'au premier démarrage.
+> Les agents sont éphémères : créés à la demande par le Docker Plugin, aucun secret agent à configurer.
 
 ## Fichiers de configuration
 
 | Fichier | Description | Action requise |
 |---------|-------------|----------------|
-| `.env` | Secrets et variables (dont JENKINS_SECRET) | **A configurer** |
+| `.env` | Secrets et variables | **A configurer** |
 | `certs/registry/` | Certificats TLS registry | **A générer** (`./init-registry-certs.sh`) |
 | `docker-compose.yml` | Services Docker (controller + agent) | Pret |
 | `Dockerfile.jenkins` | Image controller (pilotage) | Pret |
@@ -51,9 +43,6 @@ nano .env  # Éditer avec vos valeurs
 ```env
 # OBLIGATOIRE
 JENKINS_ADMIN_PASSWORD=VotreMotDePasseSecurise
-
-# OBLIGATOIRE - Secret de l'agent (voir étape 6 ci-dessus)
-JENKINS_SECRET=<secret-copié-depuis-jenkins-ui>
 ```
 
 ## Créer les pipelines RHDemo
@@ -74,3 +63,27 @@ Dans l'interface d'administration Jenkins, créez les credentials Jenkins suivan
 - sous l'id "jenkins-sonar-token" la clé d'échange avec sonarQube (à générer préalablement en se connectant à sonarQube http://localhost:9020 My account/security/generate tokens
 - sous l'id "nvd-api-key" et "ossindex-credentials" deux clés à obtenir pour accélérer les téléchargement des dépendances et CVE liées à OWASP Dependency Check (voir le README.md)
 - (facultatif) sous l'id "mail.credentials" un compte sur un serveur de mails permettant l'envoi SMTP
+
+## Génération des clés Cosign et credentials Jenkins pour la signature d'images
+
+Le pipeline CI signe l'image Docker produite (étape `🔏 Signature Cosign`) et le pipeline CD vérifie cette signature avant tout déploiement.
+
+**1. Générer la paire de clés Cosign (à faire une seule fois sur l'hôte) :**
+
+```bash
+# Installer cosign si besoin
+# https://docs.sigstore.dev/cosign/system_config/installation/
+cosign generate-key-pair
+# → Saisir et confirmer un mot de passe (COSIGN_PASSWORD)
+# → Produit : cosign.key (clé privée) et cosign.pub (clé publique)
+```
+
+**2. Créer les 3 credentials Jenkins** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
+
+| ID credential Jenkins   | Kind         | Contenu                          | Pipeline |
+|-------------------------|--------------|----------------------------------|---------|
+| `cosign-private-key`    | Secret file  | Fichier `cosign.key`             | CI      |
+| `cosign-password`       | Secret text  | Mot de passe saisi à la génération | CI    |
+| `cosign-public-key`     | Secret file  | Fichier `cosign.pub`             | CD      |
+
+> **Sécurité** : conservez `cosign.key` hors du dépôt Git. Le fichier `cosign.pub` peut être versionné si souhaité.

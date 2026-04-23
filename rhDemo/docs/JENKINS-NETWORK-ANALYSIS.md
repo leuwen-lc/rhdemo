@@ -226,9 +226,9 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 │                          Réseau: kind                                    │
 │                                                                          │
 │  ┌─────────────────────┐  ┌─────────────────┐  ┌────────────┐          │
-│  │ rhdemo-jenkins-agent│  │ kind-registry   │  │ rhdemo-    │          │
-│  │ (builder)           │  │ (container)     │  │ control-   │          │
-│  │ IP: 172.21.0.x      │  │ IP: 172.21.0.3  │  │ plane      │          │
+│  │ agent éphémère      │  │ kind-registry   │  │ rhdemo-    │          │
+│  │ (créé par build,    │  │ (container)     │  │ control-   │          │
+│  │  nom = hash court)  │  │ IP: 172.21.0.3  │  │ plane      │          │
 │  │                     │  │                 │  │            │          │
 │  │                     │  │ Alias DNS:      │  │ :6443 API  │          │
 │  │                     │  │ kind-registry   │  │            │          │
@@ -238,11 +238,14 @@ Toutes les commandes suivantes fonctionnent maintenant correctement depuis Jenki
 ┌──────────────────────────────────────────────────────────────────────────┐
 │              Réseau: rhdemo-jenkins-network                               │
 │                                                                          │
-│  ┌──────────────────┐  ┌─────────────────────┐  ┌─────────────────┐    │
-│  │ rhdemo-jenkins   │  │ rhdemo-jenkins-agent│  │ kind-registry   │    │
-│  │ (controller)     │  │ (builder)           │  │                 │    │
-│  │ Port: 8080       │  │                     │  │ Port: 5000      │    │
-│  └──────────────────┘  └─────────────────────┘  └─────────────────┘    │
+│  ┌──────────────────┐  ┌────────────────────────┐  ┌─────────────────┐  │
+│  │ rhdemo-jenkins   │  │ rhdemo-docker-socket-  │  │ kind-registry   │  │
+│  │ (controller)     │  │ proxy (API filtrée)    │  │                 │  │
+│  │ Port: 8080       │  │ Port TCP: 2375         │  │ Port: 5000      │  │
+│  └──────────────────┘  └────────────────────────┘  └─────────────────┘  │
+│                                                                          │
+│  Agents éphémères : créés dynamiquement par Docker Cloud lors des builds │
+│  et détruits immédiatement après. Connexion au réseau kind dynamique.    │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -287,14 +290,15 @@ Avant de lancer un build Jenkins avec `DEPLOY_ENV=stagingkub` :
 - [ ] **Registry nommé `kind-registry`** : `docker ps --filter "publish=5000" --format '{{.Names}}'` ⚠️ **DOIT afficher exactement `kind-registry`**
 - [ ] Registry actif : `docker ps | grep kind-registry`
 - [ ] Jenkins démarré : `docker ps | grep rhdemo-jenkins`
-- [ ] Agent builder démarré : `docker ps | grep rhdemo-jenkins-agent`
-- [ ] Agent connecté au réseau kind : `docker network inspect kind | grep rhdemo-jenkins-agent`
+- [ ] Proxy socket démarré : `docker ps | grep rhdemo-docker-socket-proxy`
+- [ ] **Registry nommé `kind-registry`** : `docker ps --filter "publish=5000" --format '{{.Names}}'`
 - [ ] **Registry connecté au réseau kind avec alias** : `docker network inspect kind | grep -A2 kind-registry | grep Aliases` ⚠️ **Critique pour éviter ImagePullBackOff**
 - [ ] Secrets SOPS disponibles : `ls rhDemo/secrets/env-vars.sh`
 
 **Note** :
-- Le nom `kind-registry` est **obligatoire** et vérifié par les pipelines CI/CD
-- Les connexions de l'agent et du Registry au réseau kind sont vérifiées et établies automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
+- Il n'y a plus d'agent permanent à démarrer — les agents éphémères sont créés automatiquement par le Docker Cloud au déclenchement d'un build
+- La connexion de l'agent (éphémère) et du Registry au réseau kind est vérifiée et établie automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
+- L'agent éphémère est identifié par son hash court (`$(hostname)`) — ce pattern fonctionne sans modification dans les pipelines
 - Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) pour la configuration complète du registry
 
 **Commande d'initialisation** :
@@ -343,15 +347,20 @@ docker restart kind-registry
 
 ### Erreur : "Unable to connect to Kubernetes cluster"
 ```bash
+# Identifier le conteneur de l'agent éphémère en cours
+AGENT=$(docker ps --filter "ancestor=rhdemo-jenkins-agent" --format '{{.Names}}' | head -n1)
+
 # Vérifier que l'agent est sur le réseau kind
-docker network inspect kind | grep rhdemo-jenkins-agent
+docker network inspect kind | grep "$AGENT"
 
 # Reconnecter manuellement si nécessaire
-docker network connect kind rhdemo-jenkins-agent
+docker network connect kind "$AGENT"
 
 # Vérifier depuis l'agent
-docker exec rhdemo-jenkins-agent kubectl cluster-info
+docker exec "$AGENT" kubectl cluster-info
 ```
+
+> **Note** : Avec les agents éphémères, il n'y a plus de conteneur `rhdemo-jenkins-agent` permanent. Le conteneur actif se trouve via `docker ps --filter ancestor=rhdemo-jenkins-agent`.
 
 ### Erreur : "kind: command not found" dans Jenkins
 
@@ -359,16 +368,19 @@ C'est **normal** et voulu. `kind` CLI n'est PAS installé sur l'agent pour des r
 
 ### Commandes kubectl échouent dans le pipeline
 ```bash
+# Identifier le conteneur de l'agent éphémère en cours
+AGENT=$(docker ps --filter "ancestor=rhdemo-jenkins-agent" --format '{{.Names}}' | head -n1)
+
 # Tester l'accès manuellement depuis l'agent
-docker exec rhdemo-jenkins-agent kubectl get nodes
+docker exec "$AGENT" kubectl get nodes
 
 # Vérifier la kubeconfig sur l'agent
-docker exec rhdemo-jenkins-agent cat /home/jenkins/.kube/config
+docker exec "$AGENT" cat /home/jenkins/.kube/config
 
 # Recréer la kubeconfig (depuis l'hôte)
 kind get kubeconfig --name rhdemo | \
     sed 's|https://127.0.0.1:[0-9]*|https://rhdemo-control-plane:6443|g' | \
-    docker exec -i rhdemo-jenkins-agent tee /home/jenkins/.kube/config
+    docker exec -i "$AGENT" tee /home/jenkins/.kube/config
 ```
 
 ---
@@ -390,6 +402,7 @@ kind get kubeconfig --name rhdemo | \
 | 2026-01-09 | Ajout connexion automatique du registry au réseau kind | Claude Code |
 | 2026-01-15 | Standardisation nom registry → `kind-registry` + vérification obligatoire + alias DNS | Claude Code |
 | 2026-02-08 | Mise à jour architecture master/agent : l'agent (builder) remplace le master pour les connexions réseau | Claude Code |
+| 2026-04-20 | Migration vers agents éphémères Docker Cloud + docker-socket-proxy : suppression agent permanent, mise à jour architecture, checklist et dépannage | Claude Code |
 
 ---
 

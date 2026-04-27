@@ -1245,7 +1245,7 @@ YMLEOF
                     echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
                     echo "   Réseau: rhdemo-jenkins-network"
                     echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
-                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.zap.yml up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (60s max)..."
                     echo "   (ZAP doit charger ses add-ons, créer le certificat CA, etc.)"

@@ -36,7 +36,7 @@ class AccueilControllerTest {
         assertThat(result).containsEntry("username", "testuser");
         @SuppressWarnings("unchecked")
         List<String> roles = (List<String>) result.get("roles");
-        assertThat(roles).containsExactly("ROLE_consult");
+        assertThat(roles).containsExactly("consult");
     }
 
     @Test
@@ -50,7 +50,7 @@ class AccueilControllerTest {
         assertThat(result).containsEntry("username", "admin");
         @SuppressWarnings("unchecked")
         List<String> roles = (List<String>) result.get("roles");
-        assertThat(roles).containsExactly("ROLE_consult", "ROLE_MAJ");
+        assertThat(roles).containsExactly("consult", "maj");
     }
 
     // ════════════════════════════════════════════════════════════════

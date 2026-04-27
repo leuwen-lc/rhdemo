@@ -1,6 +1,7 @@
 package fr.leuwen.rhdemoAPI.controller;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import fr.leuwen.rhdemoAPI.dto.EmployeRequestDTO;
 import fr.leuwen.rhdemoAPI.dto.EmployeResponseDTO;
@@ -30,6 +32,8 @@ import jakarta.validation.Valid;
 public class EmployeController {
 
     private static final Logger logger = LoggerFactory.getLogger(EmployeController.class);
+    private static final Set<String> SORT_ALLOWED_FIELDS = Set.of("prenom", "nom", "mail", "adresse");
+    private static final int PAGE_SIZE_MAX = 200;
 
 	private final EmployeService employeservice;
 
@@ -51,7 +55,7 @@ public class EmployeController {
 	 * Récupère une page d'employés avec pagination, tri optionnel et filtres optionnels.
 	 *
 	 * @param page Numéro de la page à récupérer (commence à 0). Par défaut : 0 (première page)
-	 * @param size Nombre d'éléments par page. Par défaut : 20.
+	 * @param size Nombre d'éléments par page. Par défaut : 20. Maximum : 200 (au-delà, tronqué à 200).
 	 * @param sort Nom de la colonne pour le tri (prenom, nom, mail, adresse). Optionnel.
 	 * @param order Direction du tri : ASC (ascendant) ou DESC (descendant). Par défaut : ASC.
 	 * @param filterPrenom Filtre sur le prénom (recherche partielle insensible à la casse). Optionnel.
@@ -82,12 +86,17 @@ public class EmployeController {
 			@RequestParam(required = false) String filterMail,
 			@RequestParam(required = false) String filterAdresse) {
 
+		int effectiveSize = Math.min(size, PAGE_SIZE_MAX);
 		Pageable pageable;
 		if (sort != null && !sort.isEmpty()) {
+			if (!SORT_ALLOWED_FIELDS.contains(sort)) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+						"Champ de tri invalide. Valeurs acceptées : " + SORT_ALLOWED_FIELDS);
+			}
 			Sort.Direction direction = "DESC".equalsIgnoreCase(order) ? Sort.Direction.DESC : Sort.Direction.ASC;
-			pageable = PageRequest.of(page, size, Sort.by(direction, sort));
+			pageable = PageRequest.of(page, effectiveSize, Sort.by(direction, sort));
 		} else {
-			pageable = PageRequest.of(page, size);
+			pageable = PageRequest.of(page, effectiveSize);
 		}
 
 		return employeservice.getEmployesPage(filterPrenom, filterNom, filterMail, filterAdresse, pageable).map(EmployeResponseDTO::from);

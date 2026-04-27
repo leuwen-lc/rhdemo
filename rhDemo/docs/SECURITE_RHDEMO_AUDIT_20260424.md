@@ -58,14 +58,8 @@
   - `ALWAYS` signifie que même les valeurs marquées comme sensibles par Spring (mots de passe, secrets) sont exposées en clair, contrairement à `WHEN_AUTHORIZED` qui masque les propriétés sensitives.
   - Cela constitue un risque réel si un compte admin est compromis : tous les secrets opérationnels sont lisibles en une seule requête HTTP.
   - `WHEN_AUTHORIZED` fournirait le même niveau d'accès aux admins légitimes tout en masquant les valeurs des propriétés classées "sensitive" par Spring.
-- **Remédiation** :
-  Remplacer `ALWAYS` par `WHEN_AUTHORIZED` dans les trois fichiers de configuration. Cette valeur affiche les valeurs uniquement aux utilisateurs authentifiés et ayant accès à l'endpoint, mais masque automatiquement les propriétés dont le nom contient des mots-clés sensibles (`password`, `secret`, `key`, `token`, etc.).
-  ```yaml
-  management:
-    endpoint:
-      env:
-        show-values: WHEN_AUTHORIZED
-  ```
+- **Remédiation appliquée** :
+  `ALWAYS` remplacé par `WHEN_AUTHORIZED` dans les trois fichiers de configuration (`application.yml:117`, `application-ephemere.yml:66`, `application-stagingkub.yml:77`). Les valeurs sensibles (mots de passe, secrets) sont désormais masquées même pour un admin authentifié, contrairement à `ALWAYS` qui les exposait en clair.
 
 ---
 
@@ -94,34 +88,8 @@
   - L'attaquant dispose du rôle `consult` (compte non privilégié valide dans le modèle de menace).
   - La validation se fait au niveau JPA (pas de SQL injection) mais pas au niveau applicatif : n'importe quelle chaîne de caractères est acceptée comme nom de colonne.
   - Cela constitue un information disclosure actif sur la structure du schéma de données.
-- **Remédiation** :
-  Ajouter une allowlist des champs autorisés pour le tri dans le contrôleur :
-  ```java
-  private static final Set<String> SORT_ALLOWED_FIELDS = Set.of("prenom", "nom", "mail", "adresse");
-
-  @GetMapping("/api/employes/page")
-  @PreAuthorize("hasRole('consult')")
-  public Page<EmployeResponseDTO> getEmployesPage(
-          @RequestParam(defaultValue = "0") int page,
-          @RequestParam(defaultValue = "20") int size,
-          @RequestParam(required = false) String sort,
-          @RequestParam(defaultValue = "ASC") String order,
-          ...) {
-
-      Pageable pageable;
-      if (sort != null && !sort.isEmpty()) {
-          if (!SORT_ALLOWED_FIELDS.contains(sort)) {
-              throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                  "Champ de tri invalide. Valeurs acceptées : " + SORT_ALLOWED_FIELDS);
-          }
-          Sort.Direction direction = "DESC".equalsIgnoreCase(order) ? Sort.Direction.DESC : Sort.Direction.ASC;
-          pageable = PageRequest.of(page, size, Sort.by(direction, sort));
-      } else {
-          pageable = PageRequest.of(page, size);
-      }
-      ...
-  }
-  ```
+- **Remédiation appliquée** :
+  Constante `SORT_ALLOWED_FIELDS = Set.of("prenom", "nom", "mail", "adresse")` ajoutée dans `EmployeController`. Si le paramètre `sort` n'appartient pas à cet ensemble, une `ResponseStatusException(BAD_REQUEST)` est levée. Un handler dédié `@ExceptionHandler(ResponseStatusException.class)` a été ajouté dans `GlobalExceptionHandler` pour retourner un 400 formaté (le handler générique `Exception.class` existant aurait retourné 500). Tests : `testGetEmployesPage_WithInvalidSort_ShouldReturn400` ajouté dans `EmployeControllerIT`.
 
 ---
 
@@ -147,21 +115,8 @@
   - Le rôle `consult` est le rôle minimal valide dans le modèle de menace.
   - Il n'existe aucune contrainte `@Max`, aucun plafond hard-codé, aucune logique de clamping dans le service.
   - NetworkPolicy ne protège pas contre les requêtes HTTP légitimes.
-- **Remédiation** :
-  Ajouter une annotation `@Max` sur le paramètre `size` et activer la validation de méthode :
-  ```java
-  @GetMapping("/api/employes/page")
-  @PreAuthorize("hasRole('consult')")
-  @Validated
-  public Page<EmployeResponseDTO> getEmployesPage(
-          @RequestParam(defaultValue = "0") @Min(0) int page,
-          @RequestParam(defaultValue = "20") @Min(1) @Max(200) int size,
-          ...) {
-  ```
-  Alternativement, implémenter un clamping dans le service :
-  ```java
-  int effectiveSize = Math.min(size, 200);
-  ```
+- **Remédiation appliquée** :
+  Clamping appliqué dans `EmployeController.getEmployesPage()` : `int effectiveSize = Math.min(size, PAGE_SIZE_MAX)` (constante `PAGE_SIZE_MAX = 200`). Toutes les constructions `PageRequest.of(page, size, ...)` utilisent désormais `effectiveSize`. L'approche `@Validated + @Max` a été écartée car `GlobalExceptionHandler` ne gérait pas `ConstraintViolationException` et aurait retourné 500. Tests : `testGetEmployesPage_WithOversizedPage_ShouldClampToMax` ajouté dans `EmployeControllerIT` (vérifie que `$.page.size` vaut 200 pour `size=1000000`).
 
 ---
 
@@ -192,13 +147,8 @@
   - L'attaquant dispose d'un compte Keycloak valide (modèle de menace inclut "compte non privilégié").
   - La règle `anyRequest().authenticated()` laisse passer tout utilisateur authentifié quelle que soit sa liste de rôles.
   - Ce point est faible car les données renvoyées concernent l'utilisateur lui-même (pas d'autres utilisateurs). La sévérité est donc faible.
-- **Remédiation** :
-  Ajouter `@PreAuthorize("hasAnyRole('consult', 'MAJ', 'admin')")` pour limiter l'accès aux utilisateurs ayant un rôle applicatif :
-  ```java
-  @GetMapping("/api/userinfo")
-  @PreAuthorize("hasAnyRole('consult', 'MAJ', 'admin')")
-  public Map<String, Object> getUserInfo(Authentication auth) {
-  ```
+- **Remédiation appliquée** :
+  `@PreAuthorize("hasAnyRole('consult', 'MAJ', 'admin')")` ajouté sur `AccueilController.getUserInfo()`. Un utilisateur Keycloak authentifié sans rôle applicatif reçoit désormais 403. Test : `testUserInfo_WithNoApplicableRole_ShouldReturn403` ajouté dans `AccueilControllerIT`.
 
 ---
 
@@ -222,15 +172,12 @@
   - Le frontend utilise cet endpoint pour adapter l'affichage des boutons (`hasRole('MAJ')`). Le retour des rôles est donc fonctionnel.
   - L'impact est limité : les noms de rôles sont déjà visibles via l'interface Keycloak pour l'administrateur. Pour un attaquant externe, cette information est de valeur modérée.
   - Sévérité faible car l'impact direct est limité.
-- **Remédiation** :
-  Filtrer les rôles retournés pour n'exposer que les rôles métier pertinents pour l'affichage frontend, en mappant les noms internes vers des libellés génériques :
-  ```java
-  List<String> roles = auth.getAuthorities().stream()
-          .map(GrantedAuthority::getAuthority)
-          .filter(r -> r.startsWith("ROLE_"))
-          .map(r -> r.replace("ROLE_", "").toLowerCase())
-          .toList();
-  ```
+- **Remédiation appliquée** :
+  Le stream de `AccueilController.getUserInfo()` filtre désormais les autorités non préfixées `ROLE_` et supprime le préfixe avant de retourner les noms en minuscules (`consult`, `maj`, `admin`). La préfixation `ROLE_` interne à Spring n'est plus exposée côté client.
+
+  Le frontend a été mis à jour en conséquence : `userStore.js` utilise `role.toLowerCase()` au lieu de `'ROLE_' + role` dans la fonction `hasRole()`, ce qui assure la cohérence avec le nouveau format.
+
+  Les tests `AccueilControllerTest` et `AccueilControllerIT` ont été mis à jour pour valider le nouveau format (`"consult"` au lieu de `"ROLE_consult"`, `"maj"` au lieu de `"ROLE_MAJ"`).
 
 ---
 
@@ -334,12 +281,8 @@
   ```
 - **Pourquoi ce n'est pas un faux positif** :
   - Ces logs sont effectivement envoyés à la console du navigateur en production. Informationnel car l'impact direct est très limité.
-- **Remédiation** :
-  Supprimer le `console.log` de debug dans `main.js`. Pour les `console.error` de l'intercepteur, limiter les informations loguées (ne pas inclure de fragments de tokens) :
-  ```javascript
-  // Remplacer par :
-  console.error('Erreur CSRF - veuillez recharger la page');
-  ```
+- **Remédiation appliquée** :
+  `console.log('[DEBUG] Vue.js application montée avec succès')` supprimé de `main.js` (le flag programmatique `window.__VUE_APP_MOUNTED__ = true` utilisé par les tests Selenium est conservé). Dans `api.js`, les trois lignes `console.error` qui exposaient la méthode HTTP, l'URL et un fragment du token CSRF ont été remplacées par un message générique : `console.error('Erreur CSRF - veuillez recharger la page')`. Le bloc de debug CSRF commenté (lignes 22-26) était déjà inactif et n'a pas été modifié.
 
 ---
 
@@ -359,15 +302,10 @@
   - En stagingkub (proche production), la documentation est désactivée — le risque est donc confiné à ephemere (environnement CI non exposé au réseau public).
   - En dev local, c'est intentionnel (usage développeur).
   - Informationnel car l'exposition de l'environnement ephemere au réseau public n'est pas dans le modèle de menace standard.
-- **Remédiation** :
-  Si la documentation doit rester accessible en ephemere, la protéger par authentification :
-  ```java
-  // Dans SecurityConfig, remplacer :
-  .requestMatchers("/error*", "/logout", "/api-docs").permitAll()
-  // Par :
-  .requestMatchers("/error*", "/logout").permitAll()
-  ```
-  Et ajouter une règle pour `/api-docs/**` avec `hasRole("admin")`.
+- **Remédiation appliquée** :
+  `/api-docs` retiré de `permitAll()` dans `SecurityConfig` et `TestSecurityConfig`. Une règle explicite `.requestMatchers("/api-docs/**").hasRole("admin")` a été ajoutée pour couvrir l'ensemble des chemins SpringDoc (UI et OpenAPI JSON). La documentation reste accessible aux admins authentifiés en dev/ephemere et est désactivée en stagingkub via la configuration SpringDoc existante.
+
+  `TestSecurityConfig` a été mis en conformité avec `SecurityConfig` sur ce point ainsi que sur l'exposition publique de `/actuator/health` et `/actuator/prometheus` (règles `permitAll()` manquantes qui existaient en production mais pas dans la config de test). Les tests `SecurityConfigIT` ont été ajustés en conséquence.
 
 ---
 
@@ -395,6 +333,13 @@
 
 L'application RHDemo présente un niveau de sécurité globalement satisfaisant pour un PoC académique à visée DevSecOps. Les couches de protection fondamentales sont correctement mises en place : CSRF avec cookie SameSite Strict, CSP stricte sans `unsafe-inline`, RBAC Keycloak cohérent avec les opérations exposées, isolation réseau Kubernetes Zero Trust, et absence de patterns dangereux comme `v-html` ou SQL dynamique.
 
-Le finding le plus significatif (F-01, sévérité Élevée) concerne la configuration `management.endpoint.env.show-values: ALWAYS` présente dans **tous** les profils y compris stagingkub, qui exposerait les secrets applicatifs en clair à tout compte ayant le rôle `admin`. Sa correction est simple (`WHEN_AUTHORIZED`) et ne nécessite pas de refactoring. Les deux findings de sévérité Moyenne (F-02, F-03) concernent l'absence de validation sur les paramètres de pagination, avec un risque de DoS applicatif par un utilisateur authentifié et une fuite d'information sur le schéma de données ; leur remédiation est également minimaliste.
+**Ensemble des findings remédiés** (2026-04-27). Les corrections appliquées couvrent les 8 findings (F-01 à F-08, F-06 inclus) :
 
-Les findings Faibles et Informationnels n'ont pas d'impact direct exploitable dans le modèle de menace défini mais devraient être corrigés avant d'envisager une exposition plus large de l'application.
+- **F-01 (Élevée)** : `show-values: WHEN_AUTHORIZED` dans les 3 profils — secrets masqués à l'endpoint `/actuator/env`.
+- **F-02 (Moyenne)** : Allowlist sur le paramètre `sort` — énumération de colonnes JPA impossible, 400 retourné pour valeur invalide.
+- **F-03 (Moyenne)** : Clamping de `size` à 200 — le DoS par pagination massive est neutralisé.
+- **F-04 (Faible)** : `@PreAuthorize` sur `/api/userinfo` — un compte Keycloak sans rôle applicatif reçoit 403.
+- **F-05 (Faible)** : Rôles retournés sans préfixe `ROLE_` et en minuscules — la nomenclature interne Spring n'est plus exposée. Frontend mis à jour en conséquence.
+- **F-06 (Faible)** : Headers `Forwarded` RFC 7239 supprimés par Nginx (ephemere) et NGF (stagingkub) ; `buildBaseUrl()` s'appuie uniquement sur le wrapper `ForwardedHeaderFilter`.
+- **F-07 (Informationnel)** : `console.log` de debug et fragments de token CSRF supprimés de la console navigateur.
+- **F-08 (Informationnel)** : Swagger/OpenAPI restreint au rôle `admin` dans tous les environnements ; `TestSecurityConfig` aligné sur `SecurityConfig`.

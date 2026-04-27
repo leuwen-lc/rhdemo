@@ -36,25 +36,34 @@ class SecurityConfigIT {
     // ==================== Tests du contrôle d'accès basé sur les roles ====================
 
     @Test
-    @DisplayName("GET /actuator/health doit nécessiter le role ROLE_admin")
-    @WithMockUser(roles = {"admin"})
-    void testActuatorEndpoint_WithAdminRole_ShouldBeAccessible() throws Exception {
+    @DisplayName("GET /actuator/health doit être accessible sans authentification (Kubernetes probe)")
+    void testActuatorHealth_ShouldBePublic() throws Exception {
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk());
     }
 
     @Test
-    @DisplayName("GET /actuator/health doit refuser l'accès sans role admin")
+    @DisplayName("GET /actuator/health doit être accessible avec le role ROLE_admin")
+    @WithMockUser(roles = {"admin"})
+    void testActuatorEndpoint_WithAdminRole_ShouldBeAccessible() throws Exception {
+        // /actuator/health est permitAll, donc accessible à tous y compris admin
+        mockMvc.perform(get("/actuator/health"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("GET /actuator/loggers doit refuser l'accès sans role admin (Spring Security bloque avant le routing)")
     @WithMockUser(roles = {"consult"})
     void testActuatorEndpoint_WithoutAdminRole_ShouldBeForbidden() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
+        // Spring Security évalue la règle hasRole("admin") avant même de chercher l'endpoint MVC
+        mockMvc.perform(get("/actuator/loggers"))
             .andExpect(status().isForbidden()); // 403 Forbidden
     }
 
     @Test
-    @DisplayName("GET /actuator/health doit refuser l'accès sans authentification")
+    @DisplayName("GET /actuator/loggers doit refuser l'accès sans authentification")
     void testActuatorEndpoint_WithoutAuthentication_ShouldBeUnauthorized() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
+        mockMvc.perform(get("/actuator/loggers"))
             .andExpect(status().isUnauthorized()); // 401 Unauthorized
     }
 

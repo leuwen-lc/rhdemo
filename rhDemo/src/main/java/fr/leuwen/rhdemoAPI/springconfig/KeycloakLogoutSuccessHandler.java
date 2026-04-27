@@ -168,37 +168,24 @@ public class KeycloakLogoutSuccessHandler implements LogoutSuccessHandler {
 
     /**
      * Construit l'URL de base à partir de la requête.
-     * Prend en compte les headers X-Forwarded-* pour les reverse proxies.
      *
-     * @param request La requête HTTP
+     * ForwardedHeaderFilter (activé par server.forward-headers-strategy: framework) a déjà
+     * traité les headers X-Forwarded-* et corrigé request.getScheme(), getServerName(),
+     * getServerPort() avec les valeurs du proxy. Il a également supprimé ces headers du wrapper
+     * de requête, rendant toute lecture directe via getHeader() inutile et trompeuse.
+     * En accès direct (dev local), ces méthodes retournent les valeurs réelles du serveur.
+     *
+     * @param request La requête HTTP (wrappée par ForwardedHeaderFilter si derrière un proxy)
      * @return L'URL de base (scheme://host[:port])
      */
     String buildBaseUrl(HttpServletRequest request) {
-        // Vérifier les headers de proxy (X-Forwarded-*)
-        String forwardedProto = request.getHeader("X-Forwarded-Proto");
-        String forwardedHost = request.getHeader("X-Forwarded-Host");
-        String forwardedPort = request.getHeader("X-Forwarded-Port");
-
-        String scheme;
-        String host;
-        int port;
-
-        if (forwardedProto != null && forwardedHost != null) {
-            // Derrière un reverse proxy
-            scheme = forwardedProto;
-            host = forwardedHost;
-            port = forwardedPort != null ? Integer.parseInt(forwardedPort) : -1;
-        } else {
-            // Accès direct
-            scheme = request.getScheme();
-            host = request.getServerName();
-            port = request.getServerPort();
-        }
+        String scheme = request.getScheme();
+        String host = request.getServerName();
+        int port = request.getServerPort();
 
         StringBuilder url = new StringBuilder();
         url.append(scheme).append("://").append(host);
 
-        // Ajouter le port seulement s'il n'est pas standard
         if (port > 0 && !isStandardPort(scheme, port)) {
             url.append(":").append(port);
         }

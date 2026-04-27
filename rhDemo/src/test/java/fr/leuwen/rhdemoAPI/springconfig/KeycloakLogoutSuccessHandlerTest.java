@@ -218,22 +218,34 @@ class KeycloakLogoutSuccessHandlerTest {
             assertThat(result).isEqualTo("http://localhost:9000");
         }
 
-        @ParameterizedTest(name = "X-Forwarded: proto={0}, host={1}, port={2} → {3}")
+        @ParameterizedTest(name = "ForwardedHeaderFilter résolu: scheme={0}, host={1}, port={2} → {3}")
         @CsvSource({
             "https, rhdemo-stagingkub.intra.leuwen-lc.fr, 443, https://rhdemo-stagingkub.intra.leuwen-lc.fr",
             "https, rhdemo.example.com, 8443, https://rhdemo.example.com:8443",
-            "https, rhdemo.example.com, , https://rhdemo.example.com"
+            "https, rhdemo.ephemere.local, 58443, https://rhdemo.ephemere.local:58443"
         })
-        @DisplayName("doit construire l'URL correctement avec les headers X-Forwarded-*")
-        void shouldBuildUrlWithForwardedHeaders(String proto, String host, String port, String expectedUrl) {
-            when(request.getHeader("X-Forwarded-Proto")).thenReturn(proto);
-            when(request.getHeader("X-Forwarded-Host")).thenReturn(host);
-            // CsvSource traite les valeurs vides comme null
-            when(request.getHeader("X-Forwarded-Port")).thenReturn(port != null && port.isEmpty() ? null : port);
+        @DisplayName("doit construire l'URL depuis les valeurs déjà résolues par ForwardedHeaderFilter")
+        void shouldBuildUrlFromValuesResolvedByFilter(String scheme, String host, int port, String expectedUrl) {
+            // ForwardedHeaderFilter a déjà traité les headers X-Forwarded-* et corrigé
+            // getScheme(), getServerName(), getServerPort() — buildBaseUrl() doit s'appuyer
+            // uniquement sur ces méthodes, sans lire les headers bruts directement.
+            when(request.getScheme()).thenReturn(scheme);
+            when(request.getServerName()).thenReturn(host);
+            when(request.getServerPort()).thenReturn(port);
 
             String result = handler.buildBaseUrl(request);
 
             assertThat(result).isEqualTo(expectedUrl);
+        }
+
+        @Test
+        @DisplayName("ne doit pas lire les headers X-Forwarded-* directement (contrat de sécurité)")
+        void shouldNotReadForwardedHeadersDirectly() {
+            handler.buildBaseUrl(request);
+
+            verify(request, never()).getHeader(eq("X-Forwarded-Proto"));
+            verify(request, never()).getHeader(eq("X-Forwarded-Host"));
+            verify(request, never()).getHeader(eq("X-Forwarded-Port"));
         }
     }
 

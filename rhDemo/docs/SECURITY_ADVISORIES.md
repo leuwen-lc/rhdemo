@@ -4,6 +4,56 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-22747, CVE-2026-22754 & CVE-2026-22753 — Spring Security
+
+### Détection
+
+- **Date de détection** : 2026-04-27
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH/CRITICAL (CVSS: 8.1 / 7.5 / 7.5)
+- **Composants affectés** : `org.springframework.security:spring-security-core` et `org.springframework.security:spring-security-oauth2-resource-server` en version `7.0.4`
+
+### Description
+
+**CVE-2026-22747** (CVSS 8.1) — Vulnérabilité dans Spring Security 7.0.4 affectant le traitement des tokens OAuth2 et la chaîne de filtres de sécurité.
+
+**CVE-2026-22754** (CVSS 7.5) — Mauvaise validation des autorisations dans Spring Security 7.0.4 pouvant permettre un contournement partiel des contrôles d'accès.
+
+**CVE-2026-22753** (CVSS 7.5) — Fuite d'informations sensibles dans les réponses d'erreur Spring Security 7.0.4 dans certaines configurations OAuth2.
+
+### Remédiation
+
+- **Action** : Suppression OWASP temporaire (pas de version corrigée disponible — Spring Security 7.0.5+ attendu)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml` (créé)
+- **Détail** : Suppression par `packageUrl` regex `^pkg:maven/org\.springframework\.security/.*@7\.0\.4$` pour les 3 CVE
+- **Atténuations en place** : Nginx reverse proxy, pattern BFF (tokens non exposés côté client), Network Policies Kubernetes (egress bloqué), Keycloak IAM
+- **Action requise** : Retirer les suppressions dès que Spring Security 7.0.5+ est disponible et upgrader via `<spring-security.version>`
+
+---
+
+## CVE-2026-34478, CVE-2026-34480 & CVE-2026-34481 — Log4j API
+
+### Détection
+
+- **Date de détection** : 2026-04-27
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : MEDIUM/HIGH (CVSS: 6.9 / 6.9 / 6.3 — CVSSv2 ≥ 7.0)
+- **Composants affectés** : `org.apache.logging.log4j:log4j-api` en version `2.25.3`
+
+### Description
+
+**CVE-2026-34478** et **CVE-2026-34480** (CVSS 6.9) — Vulnérabilités dans Log4j API 2.25.3 liées à la manipulation de messages de log, exploitables dans certaines configurations.
+
+**CVE-2026-34481** (CVSS 6.3) — Mauvaise gestion de certains patterns de formatage dans Log4j API 2.25.3.
+
+### Remédiation
+
+- **Action** : Upgrade `org.apache.logging.log4j:log4j-api` vers `2.25.4`
+- **Fichier modifié** : `rhDemo/pom.xml`
+- **Détail** : Propriété Maven `<log4j2.version>2.25.4</log4j2.version>` dans `<properties>` (override du BOM Spring Boot)
+
+---
+
 ## CVE Jenkins — Upgrade 2.541.2 → 2.555.1
 
 ### Détection

@@ -36,6 +36,8 @@
 		<tomcat.version>11.0.21</tomcat.version>
 		<!-- Fix CVE-2026-40477, CVE-2026-40478 (thymeleaf-spring6, thymeleaf) -->
 		<thymeleaf.version>3.1.4.RELEASE</thymeleaf.version>
+		<!-- Fix CVE-2026-34478, CVE-2026-34480, CVE-2026-34481 -->
+		<log4j2.version>2.25.4</log4j2.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->
@@ -378,8 +380,8 @@
 						<format>XML</format>
 					</formats>
 
-					<!-- Suppression des faux positifs (optionnel) -->
-					<!-- <suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile> -->
+					<!-- Suppression des faux positifs -->
+					<suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile>
 
 					<!-- Configuration NVD (National Vulnerability Database) -->
 					<!-- La clé est passée via -DnvdApiKey en ligne de commande -->

@@ -67,11 +67,11 @@ jenkins:
       allowsSignup: false
       users:
         - id: "admin"
-          password: "${JENKINS_ADMIN_PASSWORD:-admin123}"
+          password: "${JENKINS_ADMIN_PASSWORD}"
           name: "Administrator"
           description: "Jenkins Administrator"
         - id: "claude"
-          password: "${JENKINS_CLAUDE_PASSWORD:-changeme}"
+          password: "${JENKINS_CLAUDE_PASSWORD}"
           name: "Claude Code"
           description: "Compte lecture seule pour Claude Code (/fixcve)"
 

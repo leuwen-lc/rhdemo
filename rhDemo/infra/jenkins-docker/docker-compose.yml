@@ -73,8 +73,8 @@ services:
 
       # Credentials depuis .env (tokens gérés dans l'interface Jenkins)
       - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
-      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:-admin123}
-      - JENKINS_CLAUDE_PASSWORD=${JENKINS_CLAUDE_PASSWORD:-changeme}
+      - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:?Définir JENKINS_ADMIN_PASSWORD dans .env avant de démarrer}
+      - JENKINS_CLAUDE_PASSWORD=${JENKINS_CLAUDE_PASSWORD:?Définir JENKINS_CLAUDE_PASSWORD dans .env avant de démarrer}
 
       # Timezone
       - TZ=${TZ:-Europe/Paris}

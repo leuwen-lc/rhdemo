@@ -40,9 +40,13 @@ nano .env  # Éditer avec vos valeurs
 
 ## Configuration minimale du .env
 
+> **⚠️ OBLIGATOIRE avant tout `docker compose up`**  
+> Le démarrage échouera si `JENKINS_ADMIN_PASSWORD` ou `JENKINS_CLAUDE_PASSWORD` sont absents ou vides dans `.env`.
+
 ```env
-# OBLIGATOIRE
+# OBLIGATOIRE — Remplacer par des mots de passe forts
 JENKINS_ADMIN_PASSWORD=VotreMotDePasseSecurise
+JENKINS_CLAUDE_PASSWORD=AutreMotDePasseSecurise
 ```
 
 ## Créer les pipelines RHDemo

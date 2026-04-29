@@ -343,55 +343,56 @@ docker exec -it "$AGENT" bash
 
 ## 🔌 Plugins installés
 
-<details>
-<summary><b>Voir la liste complète des plugins (cliquez pour développer)</b></summary>
+Les plugins sont définis dans `plugins.txt` sous forme de **lockfile versionné** : toutes les versions (plugins directs + dépendances transitives) sont pinnées explicitement. Cela garantit des builds d'image Jenkins reproductibles et auditables.
 
-### Gestion du code source
-- Git, GitHub, GitLab, Bitbucket
+### Plugins directs (utilisés par les pipelines)
 
-### Build & Outils Java
-- Maven Plugin
-- Pipeline Maven
-- JDK Tool
+| Catégorie | Plugin | Usage |
+|-----------|--------|-------|
+| Pipeline | `workflow-aggregator`, `pipeline-stage-view` | Pipeline déclaratif, visualisation des stages |
+| SCM | `git` | `checkout scm` |
+| Credentials | `credentials`, `credentials-binding`, `matrix-auth` | Gestion des secrets, droits par utilisateur |
+| Build Java | `maven-plugin`, `jdk-tool` | `tools { maven 'Maven3' }`, `tools { jdk 'JDK21' }` |
+| Qualité | `sonar`, `coverage` | `withSonarQubeEnv`, `recordCoverage` (JaCoCo) |
+| Tests | `junit`, `htmlpublisher` | Rapports Surefire, Trivy, ZAP, OWASP |
+| Sécurité | `dependency-check-jenkins-plugin` | Configuration outil OWASP Dependency-Check |
+| Docker | `docker-plugin`, `docker-workflow` | Agents éphémères Docker Cloud, commandes Docker |
+| Notifications | `mailer` | Configuration email JCasC |
+| Pipeline options | `timestamper`, `build-timeout`, `ws-cleanup` | Timestamps, timeout, nettoyage workspace |
+| Config as Code | `configuration-as-code`, `job-dsl` | `jenkins-casc.yaml`, définition des jobs |
+| Utilitaires | `pipeline-utility-steps`, `copyartifact` | `readJSON`, `readYaml`, récupération digest CI |
 
-### Qualité du code
-- SonarQube Scanner
-- Coverage (remplace JaCoCo, supporte JaCoCo parser)
-- Warnings NG
-- Checkstyle, PMD, FindBugs
+Les dépendances transitives (~70 plugins) sont également pinnées dans `plugins.txt` pour une reproductibilité totale.
 
-### Tests
-- JUnit
-- TestNG
-- HTML Publisher
-- Performance Plugin
+### Mettre à jour les plugins
 
-### Sécurité
-- OWASP Dependency-Check Jenkins Plugin
-  - Utilisation : Publication des rapports uniquement (dependencyCheckPublisher)
-  - Exécution : Via plugin Maven 12.1.9 (support CVSS v4.0)
-  - Cache NVD : Local dans target/dependency-check-data/
+Les mises à jour se font en deux étapes explicites pour rester auditables :
 
-### Docker & Kubernetes
-- Docker Workflow
-- Docker Plugin
-- Kubernetes
+**Étape 1 — Mettre à jour via l'UI Jenkins :**
 
-### Notifications
-- Slack
-- Email Extension
-- Mailer
+Manage Jenkins → Plugins → Updates → Update All, puis redémarrer Jenkins.
 
-### UI & Reporting
-- Blue Ocean
-- Dashboard View
-- Build Monitor
-- Pipeline Graph View
-- AnsiColor
+**Étape 2 — Régénérer le lockfile depuis l'instance mise à jour :**
 
-### Configuration as Code
-- Configuration as Code (JCasC)
-- Job DSL
+```bash
+# Prévisualiser les changements sans modifier plugins.txt
+./generate-pluginslist.sh --dry-run
+
+# Mettre à jour plugins.txt en place
+./generate-pluginslist.sh
+```
+
+Le script met à jour les versions directement dans `plugins.txt` en préservant la structure (catégories, commentaires), et met à jour la date de génération dans l'en-tête. Committer ensuite — le diff git rend les changements de versions explicites et auditables.
+
+> **Pourquoi pas `jenkins-plugin-cli --list` ?** Cette commande lit depuis `/usr/share/jenkins/ref/plugins/`, le répertoire baked dans l'image Docker au moment du build. Les mises à jour faites via l'UI Jenkins sont écrites dans le volume (`/var/jenkins_home/plugins/`) sans modifier la ref — les deux divergent. `generate-pluginslist.sh` lit directement les fichiers `MANIFEST.MF` dans le volume via `docker compose exec`, sans passer par l'API HTTP.
+
+**Étape 3 — Reconstruire l'image proprement :**
+
+```bash
+./start-jenkins.sh --clean-plugins
+```
+
+> `--clean-plugins` purge les plugins du volume Jenkins **et** force `docker build --no-cache` pour que `jenkins-plugin-cli` réinstalle exactement les versions du lockfile (sans cache Docker). Sans `--no-cache`, Docker réutiliserait la couche `RUN jenkins-plugin-cli` même si les versions ont changé.
 
 ## 🔨 Création des pipelines CI et CD pour RHDemo
 
@@ -747,13 +748,12 @@ docker-compose logs jenkins
 
 ### Plugins ne s'installent pas
 
-**Solution :**
 ```bash
-# Reconstruire l'image
-docker-compose build --no-cache jenkins
+# Purge du volume + rebuild image sans cache (réinstalle les versions du lockfile)
+./start-jenkins.sh --clean-plugins
 
-# Redémarrer
-docker-compose up -d --force-recreate jenkins
+# Si le problème persiste, forcer aussi le rebuild de l'image agent
+./start-jenkins.sh --clean-plugins --rebuild
 ```
 
 ### Docker-in-Docker ne fonctionne pas

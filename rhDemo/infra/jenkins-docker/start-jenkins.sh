@@ -183,6 +183,9 @@ if [ -f Dockerfile.jenkins ]; then
         if [ "$FORCE_REBUILD" = true ]; then
             echo "🔄 Rebuild forcé demandé (--rebuild)..."
             NEED_REBUILD=true
+        elif [ "$CLEAN_PLUGINS" = true ]; then
+            echo "🔄 Mise à jour des plugins demandée (--clean-plugins)..."
+            NEED_REBUILD=true
         elif [ "$COMBINED_HASH" != "$IMAGE_HASH" ]; then
             echo "🔄 Configuration modifiée (Dockerfile ou plugins.txt), rebuild nécessaire..."
             NEED_REBUILD=true
@@ -192,14 +195,17 @@ if [ -f Dockerfile.jenkins ]; then
         fi
 
         if [ "$NEED_REBUILD" = true ]; then
-            # Nettoyer les plugins si demandé ou si plugins.txt a changé
+            # Nettoyer les plugins si demandé
             if [ "$CLEAN_PLUGINS" = true ]; then
                 echo "🧹 Nettoyage du répertoire plugins Jenkins (--clean-plugins)..."
                 docker run --rm -v rhdemo-jenkins-home:/var/jenkins_home alpine sh -c "rm -rf /var/jenkins_home/plugins/* 2>/dev/null || true"
                 echo "✅ Répertoire plugins nettoyé"
+                # --no-cache obligatoire : sans lui, Docker réutilise la couche RUN jenkins-plugin-cli
+                # cachée et ne re-télécharge pas les versions à jour des plugins (:latest)
+                docker build --no-cache -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
+            else
+                docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
             fi
-
-            docker build -f Dockerfile.jenkins --label config_hash=$COMBINED_HASH -t rhdemo-jenkins:latest .
             echo "✅ Image controller reconstruite avec succès"
         fi
     else

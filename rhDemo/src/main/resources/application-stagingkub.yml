@@ -68,6 +68,8 @@ springdoc:
 
 # Endpoints Actuator disponibles
 management:
+  server:
+    port: 9001  # Port management dédié — actuator inaccessible sur le port applicatif (9000) exposé par NGF
   endpoints:
     web:
       exposure:

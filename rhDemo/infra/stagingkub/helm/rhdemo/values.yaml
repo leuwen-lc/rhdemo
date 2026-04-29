@@ -180,6 +180,7 @@ rhdemo:
 
   springProfile: stagingkub
   serverPort: 9000
+  managementPort: 9001
 
   database:
     host: postgresql-rhdemo

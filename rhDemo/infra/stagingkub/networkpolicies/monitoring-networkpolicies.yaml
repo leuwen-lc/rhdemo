@@ -76,7 +76,7 @@ spec:
 #   - kubelet: health checks
 #
 # EGRESS:
-#   - rhdemo-stagingkub: scrape métriques (rhdemo-app:9000, postgres:9187)
+#   - rhdemo-stagingkub: scrape métriques (rhdemo-app:9001, postgres:9187)
 #   - monitoring: scrape interne (node-exporter, kube-state-metrics, etc.)
 #   - kube-system: métriques API server, kubelet
 #   - loki-stack: scrape Grafana, Loki
@@ -129,7 +129,7 @@ spec:
               kubernetes.io/metadata.name: rhdemo-stagingkub
       ports:
         - protocol: TCP
-          port: 9000   # rhdemo-app actuator
+          port: 9001   # rhdemo-app actuator (port management dédié)
         - protocol: TCP
           port: 9187   # postgres_exporter
     # Scrape interne monitoring (node-exporter, kube-state-metrics, alertmanager)

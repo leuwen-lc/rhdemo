@@ -309,6 +309,49 @@
 
 ---
 
+### F-09 — `/actuator/prometheus` accessible à tout utilisateur authentifié sur le port applicatif
+
+- **Sévérité** : Moyenne
+- **Catégorie** : C1 — Divulgation d'information via métriques Prometheus
+- **Fichier(s)** :
+  - `rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/SecurityConfig.java`
+  - `rhDemo/src/main/resources/application-stagingkub.yml`
+  - `rhDemo/infra/ephemere/nginx/conf.d/rhdemo.conf`
+- **Description** : L'endpoint `/actuator/prometheus` est exposé sur le même port que l'application (9000), accessible via HTTPS à tout utilisateur authentifié possédant un compte Keycloak valide (rôles `consult` ou `MAJ`). Les métriques Prometheus exposent des informations système : noms des endpoints HTTP, durées de traitement, taille des pools de connexions HikariCP, état des connexions base de données, métriques JVM (heap, GC, threads), statut des health checks.
+
+  Ces données ne permettent pas une attaque directe mais constituent de la **reconnaissance à faible coût** pour un attaquant disposant d'un compte utilisateur standard. Un attaquant peut cartographier les temps de réponse par endpoint (identifier les plus lents/résilients à saturer), surveiller l'état du pool de connexions (adapter le timing d'une attaque par épuisement de connexions), ou déduire des informations d'architecture depuis les labels des métriques Spring.
+- **Scénario d'attaque** :
+  Un utilisateur avec le rôle `consult` accède à `https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/prometheus` et observe :
+  - `hikaricp_connections_active` → saturation du pool de connexions BDD
+  - `http_server_requests_seconds_count{uri="/api/employes/page"}` → cartographie des endpoints actifs
+  - `jvm_memory_used_bytes{area="heap"}` → utilisation mémoire courante (vecteur DoS adaptatif)
+  - `spring_security_authorizations_total` → comportement du système d'autorisation
+- **Pourquoi ce n'est pas un faux positif** :
+  - L'endpoint `/actuator/prometheus` est `permitAll()` dans SecurityConfig (conçu pour que Prometheus scrape sans authentification). Or, en stagingkub, cet endpoint est exposé via le port applicatif que NGF route vers l'extérieur.
+  - Prometheus scrape pod-à-pod (pas via NGF), donc une restriction sur le port applicatif n'affecte pas le scraping.
+  - L'impact est moyen car les données exposées facilitent la reconnaissance sans permettre d'attaque directe.
+- **Remédiation appliquée** :
+  Approche différenciée par environnement : séparation de port en stagingkub (proche production), blocage Nginx en ephemere (CI).
+
+  **1. stagingkub — Port management dédié** :
+  `management.server.port: 9001` ajouté dans `application-stagingkub.yml`. Spring Boot crée un servlet context séparé sur le port 9001 pour tous les endpoints actuator. Le port 9001 n'est pas exposé par NGF (seul le port 9000 est routé dans les HTTPRoutes) — les métriques sont physiquement inaccessibles depuis l'extérieur.
+
+  Infrastructure mise à jour pour refléter le changement de port :
+  - `values.yaml` : `rhdemo.managementPort: 9001`
+  - `rhdemo-app-deployment.yaml` : port `management: 9001` ajouté, variable d'environnement `MANAGEMENT_SERVER_PORT: 9001`, sondes liveness/readiness migrées de `port: http` vers `port: management`
+  - `rhdemo-app-service.yaml` : port `management: 9001` ajouté au Service Kubernetes
+  - `servicemonitor-rhdemo.yaml` : `port: http` → `port: management` (Prometheus scrape désormais le port 9001)
+  - `networkpolicy-rhdemo-app.yaml` : règles ingress monitoring (Prometheus) et kubelet (health probes) mises à jour vers le port 9001
+  - `monitoring-networkpolicies.yaml` : règle egress Prometheus vers `rhdemo-stagingkub` mise à jour de 9000 → 9001
+
+  **2. ephemere — Blocage Nginx** :
+  Le bloc `location /actuator/` qui transmettait sans restriction vers le backend a été remplacé par `location ^~ /actuator { return 403; }`. L'opérateur `^~` garantit la priorité sur les locations regex. Les healthchecks Docker Compose s'adressent directement à `rhdemo-app:9000` sans passer par Nginx — ils ne sont pas affectés.
+
+  **3. dev** :
+  Non modifié. En développement local, l'accès aux métriques actuator sur `localhost:9000` est intentionnel et acceptable dans le modèle de menace.
+
+---
+
 ## Composants vérifiés et non vulnérables
 
 | Check | Résultat |
@@ -321,7 +364,7 @@
 | **B2** — XSS Vue.js (`v-html`, `innerHTML`) | PASS — Aucun usage de `v-html` ou `.innerHTML` dans les 7 composants Vue.js. Toutes les données sont interpolées via `{{ }}` (auto-échappées par Vue). |
 | **B3** — EL/SpEL Injection | PASS — Les `@Value` utilisés ne contiennent pas de données utilisateur ; ils référencent uniquement des propriétés de configuration statiques. |
 | **B4** — Open redirect via paramètre utilisateur | PASS — Aucun endpoint ne construit une URL de redirection à partir d'un paramètre HTTP contrôlable par l'utilisateur. Le `KeycloakLogoutSuccessHandler` utilise l'`authorization-uri` de configuration, pas un paramètre de requête. (Voir F-06 pour le risque lié aux headers X-Forwarded.) |
-| **C1** — Actuator Prometheus sans authentification | Accepté par conception — `/actuator/prometheus` est `permitAll()` mais protégé par NetworkPolicy en Kubernetes (seul Prometheus interne peut atteindre le pod). En dev local, cela expose les métriques au réseau local uniquement. |
+| **C1** — Actuator Prometheus sans authentification | Traité (F-09) — En stagingkub, le port management (9001) est séparé et non exposé via NGF. En ephemere, Nginx bloque `/actuator`. En dev local, accepté (réseau local uniquement). |
 | **C5** — IDOR / Enumération d'IDs | Accepté par conception — Les IDs sont séquentiels et tous les employés sont partagés (pas de notion de propriété par utilisateur). Le rôle `consult` peut lire tous les employés — c'est le comportement attendu d'une application RH CRUD. |
 | **D1** — CORS | PASS — Pas de `@CrossOrigin` dans les contrôleurs. Pas de configuration CORS permissive dans `WebMvcConfig`. L'application fonctionne en mode same-origin (frontend servi par le même backend). |
 | **D2** — Headers de sécurité / CSP | PASS — CSP stricte sans `unsafe-inline` ni `unsafe-eval`. Scripts et styles externalisés. `frame-ancestors 'none'`. `object-src 'none'`. `base-uri 'self'`. |
@@ -333,7 +376,7 @@
 
 L'application RHDemo présente un niveau de sécurité globalement satisfaisant pour un PoC académique à visée DevSecOps. Les couches de protection fondamentales sont correctement mises en place : CSRF avec cookie SameSite Strict, CSP stricte sans `unsafe-inline`, RBAC Keycloak cohérent avec les opérations exposées, isolation réseau Kubernetes Zero Trust, et absence de patterns dangereux comme `v-html` ou SQL dynamique.
 
-**Ensemble des findings remédiés** (2026-04-27). Les corrections appliquées couvrent les 8 findings (F-01 à F-08, F-06 inclus) :
+**Ensemble des findings remédiés** (2026-04-27). Les corrections appliquées couvrent les 9 findings (F-01 à F-09, F-06 inclus) :
 
 - **F-01 (Élevée)** : `show-values: WHEN_AUTHORIZED` dans les 3 profils — secrets masqués à l'endpoint `/actuator/env`.
 - **F-02 (Moyenne)** : Allowlist sur le paramètre `sort` — énumération de colonnes JPA impossible, 400 retourné pour valeur invalide.
@@ -343,3 +386,4 @@ L'application RHDemo présente un niveau de sécurité globalement satisfaisant 
 - **F-06 (Faible)** : Headers `Forwarded` RFC 7239 supprimés par Nginx (ephemere) et NGF (stagingkub) ; `buildBaseUrl()` s'appuie uniquement sur le wrapper `ForwardedHeaderFilter`.
 - **F-07 (Informationnel)** : `console.log` de debug et fragments de token CSRF supprimés de la console navigateur.
 - **F-08 (Informationnel)** : Swagger/OpenAPI restreint au rôle `admin` dans tous les environnements ; `TestSecurityConfig` aligné sur `SecurityConfig`.
+- **F-09 (Moyenne)** : Port management dédié (9001) en stagingkub — `/actuator/prometheus` physiquement inaccessible via NGF. Nginx bloque `/actuator` en ephemere.

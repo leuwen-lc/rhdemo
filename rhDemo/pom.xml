@@ -400,6 +400,9 @@
 
 					<!-- Désactiver les analyseurs non pertinents pour réduire les warnings -->
 					<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
+
+					<!-- OSS Index : nouvelle URL depuis migration Sonatype (ancienne : ossindex.sonatype.org) -->
+					<ossindexAnalyzerUrl>https://api.guide.sonatype.com</ossindexAnalyzerUrl>
 				</configuration>
 			</plugin>
 		</plugins>

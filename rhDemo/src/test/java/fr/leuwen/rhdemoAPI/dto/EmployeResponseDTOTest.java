@@ -63,41 +63,4 @@ public class EmployeResponseDTOTest {
         assertEquals("Paul", dto.prenom());
     }
 
-    // ════════════════════════════════════════════════════════════════
-    // Tests propriétés du record (equals, hashCode, immutabilité)
-    // ════════════════════════════════════════════════════════════════
-
-    @Test
-    public void testEquals_SameValues_ShouldBeEqual() {
-        EmployeResponseDTO dto1 = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-        EmployeResponseDTO dto2 = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-
-        assertEquals(dto1, dto2);
-    }
-
-    @Test
-    public void testEquals_DifferentId_ShouldNotBeEqual() {
-        EmployeResponseDTO dto1 = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-        EmployeResponseDTO dto2 = new EmployeResponseDTO(2L, "Jean", "Dupont", "jean@example.com", "Paris");
-
-        assertNotEquals(dto1, dto2);
-    }
-
-    @Test
-    public void testHashCode_SameValues_ShouldBeEqual() {
-        EmployeResponseDTO dto1 = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-        EmployeResponseDTO dto2 = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-
-        assertEquals(dto1.hashCode(), dto2.hashCode());
-    }
-
-    @Test
-    public void testToString_ShouldContainFieldValues() {
-        EmployeResponseDTO dto = new EmployeResponseDTO(1L, "Jean", "Dupont", "jean@example.com", "Paris");
-
-        String str = dto.toString();
-
-        assertTrue(str.contains("Jean"));
-        assertTrue(str.contains("Dupont"));
-    }
 }

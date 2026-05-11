@@ -25,8 +25,12 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
 
     private static final Logger log = LoggerFactory.getLogger(GrantedAuthoritiesKeyCloakMapper.class);
 
-    @Value("${spring.security.oauth2.client.registration.keycloak.client-id}")
-    private String rhDemoClientID;
+    private final String rhDemoClientID;
+
+    public GrantedAuthoritiesKeyCloakMapper(
+            @Value("${spring.security.oauth2.client.registration.keycloak.client-id}") String rhDemoClientID) {
+        this.rhDemoClientID = rhDemoClientID;
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> mapAuthorities(Collection<? extends GrantedAuthority> authorities) {

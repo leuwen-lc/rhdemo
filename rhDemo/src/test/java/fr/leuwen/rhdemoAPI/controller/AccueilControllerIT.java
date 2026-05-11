@@ -34,7 +34,11 @@ public class AccueilControllerIT {
     public void testAccueil_ShouldReturnWelcomeMessage() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("API")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("API disponibles sur /api/")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Front end disponible sur /front")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Logout sur /logout")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Swagger UI")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("OpenAPI")));
     }
 
     // ════════════════════════════════════════════════════════════════

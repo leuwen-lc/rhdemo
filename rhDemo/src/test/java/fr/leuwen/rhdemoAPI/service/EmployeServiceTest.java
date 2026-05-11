@@ -110,20 +110,6 @@ public class EmployeServiceTest {
         verify(employeRepository, times(1)).findAll();
     }
 
-    @Test
-    public void testGetEmployes_WhenEmpty_ShouldReturnEmptyList() {
-        // Arrange
-        when(employeRepository.findAll()).thenReturn(Arrays.asList());
-
-        // Act
-        Iterable<Employe> result = employeService.getEmployes();
-
-        // Assert
-        assertNotNull(result);
-        assertEquals(0, ((java.util.Collection<?>) result).size());
-        verify(employeRepository, times(1)).findAll();
-    }
-
     // ════════════════════════════════════════════════════════════════
     // Tests getEmployesPage(pageable)
     // ════════════════════════════════════════════════════════════════

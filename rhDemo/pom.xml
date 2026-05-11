@@ -38,6 +38,8 @@
 		<thymeleaf.version>3.1.4.RELEASE</thymeleaf.version>
 		<!-- Fix CVE-2026-34478, CVE-2026-34480, CVE-2026-34481 -->
 		<log4j2.version>2.25.4</log4j2.version>
+		<!-- Fix CVE-2026-42198 — pgjdbc DoS via SCRAM-SHA-256 iteration count -->
+		<postgresql.version>42.7.11</postgresql.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->

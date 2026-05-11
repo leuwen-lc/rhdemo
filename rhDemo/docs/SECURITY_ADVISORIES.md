@@ -4,6 +4,27 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-42198 — PostgreSQL JDBC Driver (pgjdbc)
+
+### Détection
+
+- **Date de détection** : 2026-05-11
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5)
+- **Composants affectés** : `org.postgresql/postgresql` en version `42.7.10`
+
+### Description
+
+De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service côté client lors de l'authentification SCRAM-SHA-256. Un serveur malveillant peut instruire le driver d'effectuer une authentification SCRAM avec un nombre d'itérations PBKDF2 très élevé, saturant indéfiniment le CPU client. Le timeout `loginTimeout` ne suffisait pas à stopper le thread de connexion, qui continuait à consommer du CPU même après expiration.
+
+### Remédiation
+
+- **Action** : Upgrade vers `42.7.11`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<postgresql.version>42.7.11</postgresql.version>` ajoutée dans `<properties>` — Spring Boot BOM respecte cette surcharge
+
+---
+
 ## CVE-2026-22747, CVE-2026-22754 & CVE-2026-22753 — Spring Security
 
 ### Détection

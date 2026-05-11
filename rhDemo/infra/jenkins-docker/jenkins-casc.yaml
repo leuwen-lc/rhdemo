@@ -23,8 +23,8 @@ jenkins:
   # AGENTS ÉPHÉMÈRES — Docker Cloud
   # ────────────────────────────────────────────────────────────────
   # Les agents sont créés à la demande pour chaque build et détruits
-  # immédiatement après. Pas d'agent permanent.
-  # Le controller passe par docker-socket-proxy (TCP filtré).
+  # après 5 minutes d'inactivité (réutilisation possible entre builds rapprochés).
+  # Pas d'agent permanent. Le controller passe par docker-socket-proxy (TCP filtré).
   # ────────────────────────────────────────────────────────────────
   clouds:
     - docker:

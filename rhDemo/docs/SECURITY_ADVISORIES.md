@@ -4,6 +4,36 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
+
+### Détection
+
+- **Date de détection** : 2026-05-19
+- **Outil** : OWASP Dependency-Check (RetireJS + NVD)
+- **Sévérité** : CRITICAL (CVSS: 9.8) / MEDIUM (CVSS: 6.1)
+- **Composants affectés** : `pkg:javascript/DOMPurify@3.3.2` embarqué dans `swagger-ui-5.32.2.jar` (via `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3`)
+
+### Description
+
+**CVE-2026-41240** (NVD, CVSS 6.1) — DOMPurify < 3.4.0 : XSS bypass lorsque `FORBID_TAGS` est combiné avec `ADD_TAGS` en mode function-based. Le check `EXTRA_ELEMENT_HANDLING.tagCheck` court-circuite la vérification `FORBID_TAGS`, permettant à des éléments interdits de survivre à la sanitisation. Corrigé dans DOMPurify 3.4.0.
+
+**CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp** (RetireJS/GHSA, CVSS jusqu'à 9.8) — Autres vecteurs XSS dans DOMPurify 3.3.2 détectés par RetireJS.
+
+Toutes ces vulnérabilités sont présentes dans le JavaScript embarqué dans le JAR swagger-ui, utilisé uniquement pour la documentation de l'API.
+
+### Remédiation
+
+- **Action** : Suppression OWASP temporaire (springdoc-openapi 3.0.3 est la dernière version disponible, aucun fix existant)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Suppression par `packageUrl` regex `^pkg:javascript/DOMPurify@3\.3\.2$` — 1 suppression `<cve>` (CVE-2026-41240) + 3 suppressions `<vulnerabilityName>` (RetireJS)
+- **Atténuations en place** :
+  - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security)
+  - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
+  - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
+- **Action requise** : Retirer les suppressions et vérifier l'upgrade DOMPurify dès que springdoc-openapi 3.0.4+ est disponible
+
+---
+
 ## CVE-2026-42198 — PostgreSQL JDBC Driver (pgjdbc)
 
 ### Détection

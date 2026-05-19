@@ -4,6 +4,34 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-41284, CVE-2026-43513 & CVE-2026-42498 — Apache Tomcat
+
+### Détection
+
+- **Date de détection** : 2026-05-19
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : CRITICAL (CVSS: 9.8) / HIGH (CVSS: 7.5 / 7.3)
+- **Composants affectés** : `org.apache.tomcat.embed:tomcat-embed-core` en version `11.0.21`
+
+### Description
+
+Six vulnérabilités affectant Apache Tomcat 11.0.0-M1 à 11.0.21 (embarqué via Spring Boot) :
+
+- **CVE-2026-41293** (CVSS 9.8) et **CVE-2026-43512** (CVSS 9.8) : vulnérabilités critiques dans le moteur Tomcat
+- **CVE-2026-43515** (CVSS 9.1) : exécution de code à distance
+- **CVE-2026-41284** (CVSS 7.5) et **CVE-2026-43513** (CVSS 7.5) : vulnérabilités HIGH dans le traitement des requêtes
+- **CVE-2026-42498** (CVSS 7.3) : vulnérabilité HIGH dans le moteur Tomcat
+
+Toutes corrigées dans la version 11.0.22.
+
+### Remédiation
+
+- **Action** : Upgrade `tomcat-embed-core` vers `11.0.22`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<tomcat.version>11.0.22</tomcat.version>` (ligne 36)
+
+---
+
 ## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
 
 ### Détection

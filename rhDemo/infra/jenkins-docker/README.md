@@ -282,7 +282,7 @@ docker-compose restart jenkins
 ### Configuration de SOPS et des credentials dans Jenkins
 
 (Obligatoire pour pouvoir lancer le pipeline Jenkinsfile-CI)
->>> Voir le fichier QUICKSTART.md
+Voir le fichier [QUICKSTART.md](QUICKSTART.md) pour la liste complète des credentials à créer.
 
 
 ## 🎯 Utilisation

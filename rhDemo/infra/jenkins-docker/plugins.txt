@@ -2,7 +2,7 @@
 # PLUGINS JENKINS - Liste verrouillée pour RHDemo CI/CD
 # ═══════════════════════════════════════════════════════════════════
 #
-# Versions pinnées depuis l'instance Jenkins le 2026-04-29.
+# Versions pinnées depuis l'instance Jenkins le 2026-05-19.
 # Pour mettre à jour : ./start-jenkins.sh --clean-plugins
 # Puis régénérer avec : docker compose exec jenkins jenkins-plugin-cli --list
 #
@@ -26,7 +26,7 @@ jdk-tool:83.v417146707a_3d                          # tools { jdk 'JDK21' }
 
 # Qualité du code
 sonar:2.18.2                                        # withSonarQubeEnv, waitForQualityGate
-coverage:3.3240.vb_5a_8809f7523                       # recordCoverage(tools: [[parser: 'JACOCO']])
+coverage:3.3212.vd0f86de315fe                       # recordCoverage(tools: [[parser: 'JACOCO']])
 
 # Tests & Rapports
 junit:1403.vd9d1413fd205                            # junit 'target/surefire-reports/*.xml'
@@ -60,10 +60,10 @@ copyartifact:795.ve8e151429b_27                     # copyArtifacts() - Récupé
 # ────────────────────────────────────────────────────────────────
 antisamy-markup-formatter:173.v680e3a_b_69ff3
 apache-httpcomponents-client-4-api:4.5.14-269.vfa_2321039a_83
-apache-httpcomponents-client-5-api:5.6.1-195.v65ffe15189a_d
+apache-httpcomponents-client-5-api:5.6-193.vf028a_770a_fa_c
 asm-api:9.9.1-189.vb_5ef2964da_91
 authentication-tokens:1.144.v5ff4a_5ec5c33
-bootstrap5-api:5.3.8-1038.vee76a_fe825ff
+bootstrap5-api:5.3.8-1024.v127320880c60
 bouncycastle-api:2.30.1.84-291.v9f17b_21896e2
 branch-api:2.1280.v0d4e5b_b_460ef
 caffeine-api:3.2.3-194.v31a_b_f7a_b_5a_81
@@ -73,37 +73,37 @@ cloudbees-folder:6.1100.ve9eed61d16c4
 commons-compress-api:1.28.0-3
 commons-lang3-api:3.20.0-109.ve43756e2d2b_4
 commons-text-api:1.15.0-218.va_61573470393
-data-tables-api:2.3.8-1570.v1cb_1cd2a_0fb_c
+data-tables-api:2.3.7-1558.vf82fa_133ce1c
 display-url-api:2.217.va_6b_de84cc74b_
 docker-commons:472.vee120e23d3a_c
 docker-java-api:3.7.1-136.v5d70f77a_c3d6
 durable-task:664.v2b_e7a_dfff66c
-echarts-api:6.0.0-1287.vfd24c22a_3d00
+echarts-api:6.0.0-1281.vd3d21a_1ca_cb_4
 eddsa-api:0.3.0.1-29.v67e9a_1c969b_b_
-font-awesome-api:7.2.0-990.vf220b_2a_496f9
-forensics-api:4.1891.v5e60f3377506
+font-awesome-api:7.2.0-983.v3f63c34eddb_9
+forensics-api:4.1881.v79c6e496c613
 git-client:6.6.0
-gson-api:2.14.0-201.v8eefe5515533
+gson-api:2.13.2-198.v45e4a_55d9b_a_a_
 instance-identity:203.v15e81a_1b_7a_38
 ionicons-api:94.vcc3065403257
 jackson-annotations2-api:2.21-7.v4777a_f3a_a_d47
 jackson2-api:2.21.2-436.v29efdb_7418ff
-jackson3-api:3.1.3-76.vd9b_7cd2e80b_8
+jackson3-api:3.1.2-73.v3e5485d8b_148
 jakarta-activation-api:2.1.4-1
 jakarta-mail-api:2.1.5-1
 jakarta-xml-bind-api:4.0.6-12.vb_1833c1231d3
 javadoc:354.vee1a_660b_4990
 javax-activation-api:1.2.0-8
 jaxb:2.3.9-143.v5979df3304e6
-joda-time-api:2.14.2-193.v422b_efce56e0
-jquery3-api:3.7.1-687.v68d468e40b_30
+joda-time-api:2.14.1-187.vdf2def02b_8a_1
+jquery3-api:3.7.1-682.vfa_cdce169929
 jsch:0.2.16-95.v3eecb_55fa_b_78
 json-api:20251224-185.v0cc18490c62c
 json-path-api:3.0.0-218.vcd4dd1355de2
-jsoup:1.22.2-95.vc5d00f1eb_42d
+jsoup:1.22.1-76.v9cdb_2456c0e3
 matrix-project:870.v9db_fcfc2f45b_
-mina-sshd-api-common:2.16.0-184.v1e0e8b_e8e813
-mina-sshd-api-core:2.16.0-184.v1e0e8b_e8e813
+mina-sshd-api-common:2.16.0-167.va_269f38cc024
+mina-sshd-api-core:2.16.0-167.va_269f38cc024
 okhttp-api:5.3.2-200.vedb_720a_cf1f8
 oss-symbols-api:442.v99039087229b_
 pipeline-build-step:584.vdb_a_2cc3a_d07a_
@@ -119,7 +119,7 @@ pipeline-stage-step:345.va_96187909426
 pipeline-stage-tags-metadata:2.2277.v00573e73ddf1
 plain-credentials:199.v9f8e1f741799
 plugin-util-api:7.1330.v47b_46ee2047a_
-prism-api:1.30.0-727.vc475481f034d
+prism-api:1.30.0-720.v1eb_7496954b_3
 resource-disposer:0.25
 scm-api:728.vc30dcf7a_0df5
 script-security:1402.v94c9ce464861
@@ -136,7 +136,7 @@ workflow-api:1413.v2ff1a_5e720fa_
 workflow-basic-steps:1098.v808b_fd7f8cf4
 workflow-cps:4285.v8df38f05c3c5
 workflow-durable-task-step:1475.ved562f6ec8b_3
-workflow-job:1571.1580.v18e46842c125
+workflow-job:1571.vb_423c255d6d9
 workflow-multibranch:821.vc3b_4ea_780798
 workflow-scm-step:466.va_d69e602552b_
 workflow-step-api:724.v538c2362b_dfb_

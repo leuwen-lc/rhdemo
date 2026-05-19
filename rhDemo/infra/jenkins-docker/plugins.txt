@@ -80,7 +80,7 @@ docker-java-api:3.7.1-136.v5d70f77a_c3d6
 durable-task:664.v2b_e7a_dfff66c
 echarts-api:6.0.0-1281.vd3d21a_1ca_cb_4
 eddsa-api:0.3.0.1-29.v67e9a_1c969b_b_
-font-awesome-api:7.2.0-983.v3f63c34eddb_9
+font-awesome-api:7.2.0-990.vf220b_2a_496f9
 forensics-api:4.1881.v79c6e496c613
 git-client:6.6.0
 gson-api:2.13.2-198.v45e4a_55d9b_a_a_

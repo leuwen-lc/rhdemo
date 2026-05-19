@@ -12,6 +12,7 @@ import org.springframework.security.web.authentication.logout.LogoutSuccessHandl
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.util.Optional;
 
 /**
  * Handler de logout personnalisé pour Keycloak.
@@ -71,24 +72,21 @@ public class KeycloakLogoutSuccessHandler implements LogoutSuccessHandler {
      */
     String determineTargetUrl(HttpServletRequest request, Authentication authentication) {
         // Si pas d'authorization-uri configuré, redirection simple vers la page d'accueil
-        if (authorizationUri == null || authorizationUri.isEmpty()) {
+        if (authorizationUri == null || authorizationUri.isBlank()) {
             return resolvePostLogoutRedirectUri(request);
         }
 
         // Construire l'URL de logout Keycloak en remplaçant /auth par /logout
-        String logoutUri = deriveLogoutUri(authorizationUri);
-        if (logoutUri == null) {
+        Optional<String> logoutUri = deriveLogoutUri(authorizationUri);
+        if (logoutUri.isEmpty()) {
             logger.warn("Could not derive logout URI from authorization URI: {}", authorizationUri);
             return resolvePostLogoutRedirectUri(request);
         }
 
-        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(logoutUri);
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(logoutUri.get());
 
         // Ajouter l'id_token_hint si disponible (permet à Keycloak de savoir quel utilisateur déconnecter)
-        String idToken = extractIdToken(authentication);
-        if (idToken != null) {
-            builder.queryParam("id_token_hint", idToken);
-        }
+        extractIdToken(authentication).ifPresent(token -> builder.queryParam("id_token_hint", token));
 
         // Ajouter l'URL de redirection post-logout
         String redirectUri = resolvePostLogoutRedirectUri(request);
@@ -104,45 +102,40 @@ public class KeycloakLogoutSuccessHandler implements LogoutSuccessHandler {
      * En:         .../protocol/openid-connect/logout
      *
      * @param authUri L'URI d'autorisation OAuth2
-     * @return L'URI de logout, ou null si la transformation échoue
+     * @return L'URI de logout, ou Optional vide si la transformation échoue
      */
-    String deriveLogoutUri(String authUri) {
-        if (authUri == null || authUri.isEmpty()) {
-            return null;
+    Optional<String> deriveLogoutUri(String authUri) {
+        if (authUri == null || authUri.isBlank()) {
+            return Optional.empty();
         }
 
         // L'authorization-uri se termine par /auth, on le remplace par /logout
         if (authUri.endsWith("/auth")) {
-            return authUri.substring(0, authUri.length() - "/auth".length()) + "/logout";
+            return Optional.of(authUri.substring(0, authUri.length() - "/auth".length()) + "/logout");
         }
 
         // Fallback: essayer de trouver /protocol/openid-connect/auth dans l'URL
         int index = authUri.indexOf("/protocol/openid-connect/auth");
         if (index > 0) {
-            return authUri.substring(0, index) + "/protocol/openid-connect/logout";
+            return Optional.of(authUri.substring(0, index) + "/protocol/openid-connect/logout");
         }
 
-        return null;
+        return Optional.empty();
     }
 
     /**
      * Extrait le token ID de l'authentification OIDC.
      *
      * @param authentication L'authentification (peut être null ou non-OIDC)
-     * @return Le token ID ou null si non disponible
+     * @return Le token ID ou Optional vide si non disponible
      */
-    String extractIdToken(Authentication authentication) {
-        if (authentication == null) {
-            return null;
-        }
-
+    Optional<String> extractIdToken(Authentication authentication) {
         if (authentication instanceof OAuth2AuthenticationToken oauthToken
                 && oauthToken.getPrincipal() instanceof OidcUser oidcUser
                 && oidcUser.getIdToken() != null) {
-            return oidcUser.getIdToken().getTokenValue();
+            return Optional.of(oidcUser.getIdToken().getTokenValue());
         }
-
-        return null;
+        return Optional.empty();
     }
 
     /**

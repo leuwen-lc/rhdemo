@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,9 +78,9 @@ public class GrantedAuthoritiesKeyCloakMapper implements GrantedAuthoritiesMappe
         List<String> roles = (List<String>) clientID.get("roles");
         if (roles != null) {
             grantedAuths = roles.stream()
-                .filter(e -> e.startsWith("ROLE_"))
-                .map(SimpleGrantedAuthority::new)
-                .collect(Collectors.toList());
+                .filter(e -> e != null && e.startsWith("ROLE_"))
+                .<GrantedAuthority>map(SimpleGrantedAuthority::new)
+                .toList();
         }
         return grantedAuths;
     }

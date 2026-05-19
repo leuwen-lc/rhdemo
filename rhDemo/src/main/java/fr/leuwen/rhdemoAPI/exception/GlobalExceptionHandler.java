@@ -32,10 +32,11 @@ public class GlobalExceptionHandler {
         log.warn("Erreur de validation: {}", ex.getMessage());
         
         Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
+        ex.getBindingResult().getAllErrors().forEach(error -> {
+            if (error instanceof FieldError fe) {
+                errors.put(fe.getField(),
+                    fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "Erreur de validation");
+            }
         });
         
         ErrorResponse errorResponse = new ErrorResponse(

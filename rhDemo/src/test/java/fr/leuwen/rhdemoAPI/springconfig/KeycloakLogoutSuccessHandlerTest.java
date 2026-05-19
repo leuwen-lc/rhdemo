@@ -20,6 +20,7 @@ import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -77,34 +78,31 @@ class KeycloakLogoutSuccessHandlerTest {
         })
         @DisplayName("doit transformer correctement les URIs d'autorisation en URIs de logout")
         void shouldDeriveLogoutUriFromAuthUri(String authUri, String expectedLogoutUri) {
-            String result = handler.deriveLogoutUri(authUri);
-            assertThat(result).isEqualTo(expectedLogoutUri);
+            Optional<String> result = handler.deriveLogoutUri(authUri);
+            assertThat(result).hasValue(expectedLogoutUri);
         }
 
         @ParameterizedTest(name = "URI invalide: [{0}]")
         @NullAndEmptySource
-        @DisplayName("doit retourner null pour les URIs null ou vides")
-        void shouldReturnNullForNullOrEmptyUri(String invalidUri) {
-            String result = handler.deriveLogoutUri(invalidUri);
-            assertThat(result).isNull();
+        @DisplayName("doit retourner un Optional vide pour les URIs null ou vides")
+        void shouldReturnEmptyForNullOrEmptyUri(String invalidUri) {
+            Optional<String> result = handler.deriveLogoutUri(invalidUri);
+            assertThat(result).isEmpty();
         }
 
         @Test
-        @DisplayName("doit retourner null si l'URI ne contient pas /auth")
-        void shouldReturnNullIfNoAuthPath() {
-            String result = handler.deriveLogoutUri("https://keycloak.example.com/some/other/path");
-            assertThat(result).isNull();
+        @DisplayName("doit retourner un Optional vide si l'URI ne contient pas /auth")
+        void shouldReturnEmptyIfNoAuthPath() {
+            Optional<String> result = handler.deriveLogoutUri("https://keycloak.example.com/some/other/path");
+            assertThat(result).isEmpty();
         }
 
         @Test
         @DisplayName("doit gérer les URIs avec /protocol/openid-connect/auth au milieu")
         void shouldHandleAuthPathInMiddle() {
             String uri = "https://keycloak.example.com/realms/RHDemo/protocol/openid-connect/auth?param=value";
-            // Le handler cherche /auth à la fin, donc ce cas retourne null
-            // car l'URI ne se termine pas par /auth
-            String result = handler.deriveLogoutUri(uri);
-            // Avec query params, ça ne finit pas par /auth donc fallback sur indexOf
-            assertThat(result).isEqualTo("https://keycloak.example.com/realms/RHDemo/protocol/openid-connect/logout");
+            Optional<String> result = handler.deriveLogoutUri(uri);
+            assertThat(result).hasValue("https://keycloak.example.com/realms/RHDemo/protocol/openid-connect/logout");
         }
     }
 
@@ -129,50 +127,49 @@ class KeycloakLogoutSuccessHandlerTest {
             when(authentication.getPrincipal()).thenReturn(oidcUser);
             when(oidcUser.getIdToken()).thenReturn(idToken);
 
-            String result = handler.extractIdToken(authentication);
+            Optional<String> result = handler.extractIdToken(authentication);
 
-            assertThat(result).isEqualTo(expectedToken);
+            assertThat(result).hasValue(expectedToken);
         }
 
         @Test
-        @DisplayName("doit retourner null si l'authentification est null")
-        void shouldReturnNullIfAuthenticationIsNull() {
-            String result = handler.extractIdToken(null);
-            assertThat(result).isNull();
+        @DisplayName("doit retourner un Optional vide si l'authentification est null")
+        void shouldReturnEmptyIfAuthenticationIsNull() {
+            Optional<String> result = handler.extractIdToken(null);
+            assertThat(result).isEmpty();
         }
 
         @Test
-        @DisplayName("doit retourner null si le principal n'est pas un OidcUser")
-        void shouldReturnNullIfPrincipalIsNotOidcUser() {
-            // Créer un OAuth2User non-OIDC (qui n'est pas une instance de OidcUser)
+        @DisplayName("doit retourner un Optional vide si le principal n'est pas un OidcUser")
+        void shouldReturnEmptyIfPrincipalIsNotOidcUser() {
             org.springframework.security.oauth2.core.user.OAuth2User nonOidcUser =
                 mock(org.springframework.security.oauth2.core.user.OAuth2User.class);
             when(authentication.getPrincipal()).thenReturn(nonOidcUser);
 
-            String result = handler.extractIdToken(authentication);
+            Optional<String> result = handler.extractIdToken(authentication);
 
-            assertThat(result).isNull();
+            assertThat(result).isEmpty();
         }
 
         @Test
-        @DisplayName("doit retourner null si le token ID est null")
-        void shouldReturnNullIfIdTokenIsNull() {
+        @DisplayName("doit retourner un Optional vide si le token ID est null")
+        void shouldReturnEmptyIfIdTokenIsNull() {
             when(authentication.getPrincipal()).thenReturn(oidcUser);
             when(oidcUser.getIdToken()).thenReturn(null);
 
-            String result = handler.extractIdToken(authentication);
+            Optional<String> result = handler.extractIdToken(authentication);
 
-            assertThat(result).isNull();
+            assertThat(result).isEmpty();
         }
 
         @Test
-        @DisplayName("doit retourner null pour une authentification non-OAuth2")
-        void shouldReturnNullForNonOAuth2Authentication() {
+        @DisplayName("doit retourner un Optional vide pour une authentification non-OAuth2")
+        void shouldReturnEmptyForNonOAuth2Authentication() {
             Authentication basicAuth = mock(Authentication.class);
 
-            String result = handler.extractIdToken(basicAuth);
+            Optional<String> result = handler.extractIdToken(basicAuth);
 
-            assertThat(result).isNull();
+            assertThat(result).isEmpty();
         }
     }
 

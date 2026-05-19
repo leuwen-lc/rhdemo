@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Entité JPA Employe.
@@ -21,16 +23,16 @@ public class Employe {
     private Long id;
 
     @Column(nullable = false, length = 50)
-    private String prenom;
+    private @NonNull String prenom;
 
     @Column(nullable = false, length = 50)
-    private String nom;
+    private @NonNull String nom;
 
     @Column(nullable = false, unique = true, length = 100)
-    private String mail;
+    private @NonNull String mail;
 
     @Column(length = 200)
-    private String adresse;
+    private @Nullable String adresse;
 
 
     public Long getId() {

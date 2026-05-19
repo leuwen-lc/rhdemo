@@ -1,5 +1,7 @@
 package fr.leuwen.rhdemoAPI.springconfig;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.stereotype.Component;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class CspPolicyBuilder {
 
+    private static final Logger log = LoggerFactory.getLogger(CspPolicyBuilder.class);
+
     private final String keycloakAuthorizationUri;
     private final boolean cookieSecureFlag;
 
@@ -31,7 +35,7 @@ public class CspPolicyBuilder {
      * Exemple: "https://keycloak.ephemere.local/realms/..." → "https://keycloak.ephemere.local"
      */
     public String extractKeycloakBaseUrl() {
-        if (keycloakAuthorizationUri == null || keycloakAuthorizationUri.isEmpty()) {
+        if (keycloakAuthorizationUri == null || keycloakAuthorizationUri.isBlank()) {
             return "";
         }
         try {
@@ -41,7 +45,8 @@ public class CspPolicyBuilder {
             }
             return uri.getScheme() + "://" + uri.getHost()
                     + (uri.getPort() > 0 && uri.getPort() != 80 && uri.getPort() != 443 ? ":" + uri.getPort() : "");
-        } catch (Exception _) {
+        } catch (IllegalArgumentException e) {
+            log.warn("URI Keycloak invalide '{}', connect-src dégradé : {}", keycloakAuthorizationUri, e.getMessage());
             return "";
         }
     }

@@ -94,8 +94,8 @@ def generateTrivyReport(String image, String reportName) {
 
         # Créer un cache dédié pour ce scan en copiant le cache partagé
         # Évite les conflits d'accès concurrent entre scans parallèles
-        # La DB a été téléchargée une seule fois dans .trivy-cache-shared
-        TRIVY_CACHE_SHARED="\${WORKSPACE_DIR}/.trivy-cache-shared"
+        # La DB a été téléchargée une seule fois dans /home/jenkins/.cache/trivy (voir Jenkinsfile-CI)
+        TRIVY_CACHE_SHARED="/home/jenkins/.cache/trivy"
         TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-\${NAME}"
 
         if [ -d "\${TRIVY_CACHE_SHARED}" ]; then
@@ -118,9 +118,13 @@ def generateTrivyReport(String image, String reportName) {
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
             IGNOREFILE_OPT="--ignorefile \${TRIVYIGNORE}"
-            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c '- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
+            echo "📋 Utilisation de .trivyignore.yaml (\$(grep -c -- '- id: CVE-' "\${TRIVYIGNORE}") CVE exclues)"
         fi
 
+        SCAN_FAILED=false
+        TRIVY_LOG="\${WORKSPACE_DIR}/trivy-reports/\${NAME}.log"
+
+        # Scan JSON — sortie capturée dans le log, exit code Trivy isolé du pipe grep
         timeout 5m trivy image \\
             --skip-db-update \\
             --skip-java-db-update \\
@@ -129,23 +133,29 @@ def generateTrivyReport(String image, String reportName) {
             \${IGNOREFILE_OPT} \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
-            "\${IMAGE}" 2>&1 | grep -E "(Downloading|Analyzing|Total)" || true
+            "\${IMAGE}" > "\${TRIVY_LOG}" 2>&1
+        TRIVY_EXIT=\$?
+        grep -E "(Analyzing|Total)" "\${TRIVY_LOG}" || true
 
-        # Créer un fichier JSON vide si le scan échoue
-        if [ ! -f "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" ]; then
-            echo '{"Results":[]}' > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json"
+        if [ \${TRIVY_EXIT} -ne 0 ] || [ ! -f "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" ]; then
+            echo "❌ Scan JSON Trivy échoué pour \${NAME} (exit \${TRIVY_EXIT})"
+            cat "\${TRIVY_LOG}"
+            echo "exit=\${TRIVY_EXIT}" > "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.failed"
+            SCAN_FAILED=true
         fi
 
-        # Scan format table pour lecture humaine
-        timeout 3m trivy image \\
-            --skip-db-update \\
-            --skip-java-db-update \\
-            --no-progress \\
-            --severity CRITICAL,HIGH,MEDIUM \\
-            \${IGNOREFILE_OPT} \\
-            --format table \\
-            --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
-            "\${IMAGE}" 2>&1 || echo "⚠️  Scan table timeout ou erreur pour \${NAME}"
+        # Scan format table pour lecture humaine (ignoré si le scan JSON a échoué)
+        if [ "\${SCAN_FAILED}" = false ]; then
+            timeout 3m trivy image \\
+                --skip-db-update \\
+                --skip-java-db-update \\
+                --no-progress \\
+                --severity CRITICAL,HIGH,MEDIUM \\
+                \${IGNOREFILE_OPT} \\
+                --format table \\
+                --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.txt" \\
+                "\${IMAGE}" 2>&1 || echo "⚠️  Scan format table échoué pour \${NAME} (rapport HTML non disponible)"
+        fi
 
         # Nettoyer le cache dédié après le scan pour économiser l'espace disque
         rm -rf "\${TRIVY_CACHE_DIR}"
@@ -193,6 +203,19 @@ def aggregateTrivyResults() {
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📊 RÉSULTATS GLOBAUX TRIVY"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            FAILED_COUNT=$(ls trivy-reports/*.failed 2>/dev/null | wc -l)
+            if [ "$FAILED_COUNT" -gt 0 ]; then
+                echo ""
+                echo "❌ $FAILED_COUNT scan(s) Trivy n'ont pas abouti :"
+                for FAILED_FILE in trivy-reports/*.failed; do
+                    IMAGE_NAME=$(basename "${FAILED_FILE%.failed}")
+                    REASON=$(cat "$FAILED_FILE")
+                    echo "   - ${IMAGE_NAME} : ${REASON}"
+                done
+                echo "   Consultez les logs du stage pour le détail des erreurs."
+                exit 1
+            fi
 
             TOTAL_CRITICAL=0
             TOTAL_HIGH=0

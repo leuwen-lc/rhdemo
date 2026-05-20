@@ -143,6 +143,27 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
+### Version 1.1.8
+
+Architecture logicielle :
+- Etude sur le passage à Clean Architecture (non appliqué voir rhDemo/docs/IMPACT_CLEAN_ARCHITECTURE.md)
+
+Code Backend :
+- Amélioration de la gestion des Null (voir rhDemo/docs/NULL_REFONTE.md)
+
+CI/CD : 
+- Passage à des agents jenkins ephemeres (voir rhDemo/docs/JENKINS_AGENTS_EPHEMERES.md)
+- Ajout du plugin Jenkins matrix-auth pour gestion fine des droits (notamment pour user Claude Code)
+- Verouillage des versions de plugin Jenkins dans un lockfile mis à jour par un script (sécurisation en remplacement des versions latest)
+
+Tests : 
+- Refonte des tests unitaires pour améliorer leur maintenabilité : suppression des tests triviaux et en doublon unitaires/intégration (voir rhDemo/docs/TESTS_REFONTE.md)
+- ajout d'un test "property based" avec le framework jqwik
+
+Sécurité :
+- Diverses remédiations suite à un audit Claude Code (rhDemo/docs/SECURITE_RHDEMO_AUDIT_20260424.md)
+
+
 ### Version 1.1.7
 
 Architecture logicielle : 

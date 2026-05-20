@@ -321,8 +321,8 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 NGF_VERSION="2.4.2"
 # Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
-# 2.4.2 : correctif CVE-2026-33186
-NGF_IMAGE_DIGEST="sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
+# 2.6.0 : correctif CVE-2026-31789 (libcrypto3/libssl3 3.5.6-r0 Alpine 3.22)
+NGF_IMAGE_DIGEST="sha256:9f209a203cd0ed7af53b2b3f03ae8c115a10924456c725e9a38ca4fcf665af44"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"

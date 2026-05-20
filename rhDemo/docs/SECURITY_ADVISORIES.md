@@ -4,6 +4,268 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-31789 — OpenSSL heap buffer overflow (nginx 1.29.x Alpine)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (image `nginx`)
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `libcrypto3` et `libssl3` en version `3.5.5-r0` (Alpine 3.22) dans `nginx:1.29.7-alpine`
+
+### Description
+
+Heap buffer overflow dans OpenSSL sur les systèmes 32 bits lors du traitement de grands certificats X.509 (champ sujet long). La branche mainline nginx 1.29.x n'ayant pas reçu le patch Alpine `3.5.6-r0`, migration vers la branche stable nginx 1.30.x nécessaire.
+
+### Remédiation
+
+- **Action** : Upgrade `nginx:1.29.7-alpine` → `nginx:1.30.1-alpine` (branche stable, sorti 2026-05-20)
+- **Fichiers modifiés** : `Jenkinsfile-CI`, `infra/ephemere/docker-compose.yml`
+- **Détail** : `nginx:1.30.1-alpine@sha256:c819f83c54b0361f5557601bf5eb4943d09360e7a7fdf426afc466570f45874d` — contient `libcrypto3 3.5.6-r0`
+
+---
+
+## CVE-2026-41901 — Thymeleaf (SSTI bypass)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (image `rhdemo-app`)
+- **Sévérité** : CRITICAL (CVSS 9.0)
+- **Composants affectés** : `org.thymeleaf:thymeleaf` et `org.thymeleaf:thymeleaf-spring6` en version `3.1.4.RELEASE`
+
+### Description
+
+Bypass du sandbox Thymeleaf permettant l'exécution d'expressions potentiellement dangereuses dans des contextes sandboxés. Forme une chaîne patch-on-patch avec CVE-2026-40478 (fixé en 3.1.4) : un second contournement a été découvert, corrigé en 3.1.5.RELEASE. Exploitable uniquement si des variables non maîtrisées atteignent le moteur de template.
+
+### Remédiation
+
+- **Action** : Montée de version `3.1.4.RELEASE` → `3.1.5.RELEASE`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>` (commentaire CVE mis à jour)
+
+---
+
+## CVE-2026-31789 — OpenSSL libcrypto3/libssl3 (heap buffer overflow Alpine)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (images `postgres` et `nginx`)
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `libcrypto3` et `libssl3` version `3.5.5-r0` dans Alpine 3.22
+
+### Description
+
+Débordement de tampon heap sur les systèmes 32-bit lors du traitement de certificats X.509 avec une valeur OCTET STRING excessivement large (SKID/AKID). Corrigé dans OpenSSL 3.5.6 via le package Alpine `libcrypto3 3.5.6-r0` (disponible depuis le 9 avril 2026).
+
+### Remédiation
+
+- **Action** : Mise à jour des digests SHA256 des images vers des rebuilds Alpine 3.22 intégrant `libcrypto3 3.5.6-r0` (même tag, image reconstruite après le patch Alpine du 9 avril 2026)
+- **Fichiers modifiés** : `Jenkinsfile-CI`, `infra/ephemere/docker-compose.yml`, `infra/dev/docker-compose.yml`
+- **Détail** :
+  - `nginx:1.29.7-alpine` : `sha256:e7257f1e...` → `sha256:7e89aa6c...`
+  - `postgres:18.3-alpine3.22` : `sha256:cd50a785.../af27ebd3...` → `sha256:5af62d45...`
+
+---
+
+## CVE-2026-42154 — Prometheus Java clients (micrometer-registry-prometheus, prometheus-metrics-*)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5)
+- **Composants affectés** : `io.micrometer:micrometer-registry-prometheus@1.16.5` et tous les modules `io.prometheus:prometheus-metrics-*@1.4.3` (core, model, config, exposition-formats, exposition-textformats, tracer-common)
+
+### Description
+
+Le endpoint `/api/v1/read` du **serveur Prometheus** (binaire Go) ne valide pas la taille déclarée dans les requêtes snappy-compressées avant d'allouer de la mémoire. Un attaquant non authentifié peut envoyer un petit payload provoquant une allocation mémoire massive, épuisant la mémoire disponible et crashant le processus Prometheus (DoS). Corrigé dans les versions serveur 3.5.3 et 3.11.3.
+
+**Faux positif** : OWASP Dependency-Check associe incorrectement cette CVE aux bibliothèques Java `micrometer-registry-prometheus` et `prometheus-metrics-*`, qui sont des **clients** exportant des métriques VERS Prometheus. Elles n'implémentent pas l'endpoint `/api/v1/read` du serveur Prometheus (Go) et ne sont pas affectées.
+
+### Remédiation
+
+- **Action** : Suppression (faux positif) dans `owasp-suppressions.xml`
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Suppression par `packageUrl regex` `^pkg:maven/io\.micrometer/micrometer-registry-prometheus@.*$` et `^pkg:maven/io\.prometheus/prometheus-metrics-[^@]+@.*$` — couvre tous les sous-modules actuels et futurs de la bibliothèque Java Prometheus client
+
+---
+
+## CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-41284, CVE-2026-43513 & CVE-2026-42498 — Apache Tomcat
+
+### Détection
+
+- **Date de détection** : 2026-05-19
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : CRITICAL (CVSS: 9.8) / HIGH (CVSS: 7.5 / 7.3)
+- **Composants affectés** : `org.apache.tomcat.embed:tomcat-embed-core` en version `11.0.21`
+
+### Description
+
+Six vulnérabilités affectant Apache Tomcat 11.0.0-M1 à 11.0.21 (embarqué via Spring Boot) :
+
+- **CVE-2026-41293** (CVSS 9.8) et **CVE-2026-43512** (CVSS 9.8) : vulnérabilités critiques dans le moteur Tomcat
+- **CVE-2026-43515** (CVSS 9.1) : exécution de code à distance
+- **CVE-2026-41284** (CVSS 7.5) et **CVE-2026-43513** (CVSS 7.5) : vulnérabilités HIGH dans le traitement des requêtes
+- **CVE-2026-42498** (CVSS 7.3) : vulnérabilité HIGH dans le moteur Tomcat
+
+Toutes corrigées dans la version 11.0.22.
+
+### Remédiation
+
+- **Action** : Upgrade `tomcat-embed-core` vers `11.0.22`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<tomcat.version>11.0.22</tomcat.version>` (ligne 36)
+
+---
+
+## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
+
+### Détection
+
+- **Date de détection** : 2026-05-19
+- **Outil** : OWASP Dependency-Check (RetireJS + NVD)
+- **Sévérité** : CRITICAL (CVSS: 9.8) / MEDIUM (CVSS: 6.1)
+- **Composants affectés** : `pkg:javascript/DOMPurify@3.3.2` embarqué dans `swagger-ui-5.32.2.jar` (via `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3`)
+
+### Description
+
+**CVE-2026-41240** (NVD, CVSS 6.1) — DOMPurify < 3.4.0 : XSS bypass lorsque `FORBID_TAGS` est combiné avec `ADD_TAGS` en mode function-based. Le check `EXTRA_ELEMENT_HANDLING.tagCheck` court-circuite la vérification `FORBID_TAGS`, permettant à des éléments interdits de survivre à la sanitisation. Corrigé dans DOMPurify 3.4.0.
+
+**CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp** (RetireJS/GHSA, CVSS jusqu'à 9.8) — Autres vecteurs XSS dans DOMPurify 3.3.2 détectés par RetireJS.
+
+Toutes ces vulnérabilités sont présentes dans le JavaScript embarqué dans le JAR swagger-ui, utilisé uniquement pour la documentation de l'API.
+
+### Remédiation
+
+- **Action** : Suppression OWASP temporaire (springdoc-openapi 3.0.3 est la dernière version disponible, aucun fix existant)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Suppression par `packageUrl` regex `^pkg:javascript/DOMPurify@3\.3\.2$` — 1 suppression `<cve>` (CVE-2026-41240) + 3 suppressions `<vulnerabilityName>` (RetireJS)
+- **Atténuations en place** :
+  - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security)
+  - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
+  - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
+- **Action requise** : Retirer les suppressions et vérifier l'upgrade DOMPurify dès que springdoc-openapi 3.0.4+ est disponible
+
+---
+
+## CVE-2026-42198 — PostgreSQL JDBC Driver (pgjdbc)
+
+### Détection
+
+- **Date de détection** : 2026-05-11
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5)
+- **Composants affectés** : `org.postgresql/postgresql` en version `42.7.10`
+
+### Description
+
+De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service côté client lors de l'authentification SCRAM-SHA-256. Un serveur malveillant peut instruire le driver d'effectuer une authentification SCRAM avec un nombre d'itérations PBKDF2 très élevé, saturant indéfiniment le CPU client. Le timeout `loginTimeout` ne suffisait pas à stopper le thread de connexion, qui continuait à consommer du CPU même après expiration.
+
+### Remédiation
+
+- **Action** : Upgrade vers `42.7.11`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<postgresql.version>42.7.11</postgresql.version>` ajoutée dans `<properties>` — Spring Boot BOM respecte cette surcharge
+
+---
+
+## CVE-2026-22747, CVE-2026-22754 & CVE-2026-22753 — Spring Security
+
+### Détection
+
+- **Date de détection** : 2026-04-27
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH/CRITICAL (CVSS: 8.1 / 7.5 / 7.5)
+- **Composants affectés** : `org.springframework.security:spring-security-core` et `org.springframework.security:spring-security-oauth2-resource-server` en version `7.0.4`
+
+### Description
+
+**CVE-2026-22747** (CVSS 8.1) — Vulnérabilité dans Spring Security 7.0.4 affectant le traitement des tokens OAuth2 et la chaîne de filtres de sécurité.
+
+**CVE-2026-22754** (CVSS 7.5) — Mauvaise validation des autorisations dans Spring Security 7.0.4 pouvant permettre un contournement partiel des contrôles d'accès.
+
+**CVE-2026-22753** (CVSS 7.5) — Fuite d'informations sensibles dans les réponses d'erreur Spring Security 7.0.4 dans certaines configurations OAuth2.
+
+### Remédiation initiale (2026-04-27)
+
+- **Action** : Suppression OWASP temporaire (pas de version corrigée disponible — Spring Security 7.0.5+ attendu)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Suppression par `packageUrl` regex `^pkg:maven/org\.springframework\.security/.*@7\.0\.4$` pour les 3 CVE
+- **Atténuations en place** : Nginx reverse proxy, pattern BFF (tokens non exposés côté client), Network Policies Kubernetes (egress bloqué), Keycloak IAM
+
+### Clôture (2026-05-20)
+
+- **Action** : Suppressions retirées — Spring Security 7.0.5 désormais embarqué via Spring Boot 4.0.6 (BOM)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Les 3 suppressions CVE-2026-22747, CVE-2026-22754, CVE-2026-22753 supprimées ; corrigées nativement par le BOM Spring Boot 4.0.6 → Spring Security 7.0.5
+
+---
+
+## CVE-2026-34478, CVE-2026-34480 & CVE-2026-34481 — Log4j API
+
+### Détection
+
+- **Date de détection** : 2026-04-27
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : MEDIUM/HIGH (CVSS: 6.9 / 6.9 / 6.3 — CVSSv2 ≥ 7.0)
+- **Composants affectés** : `org.apache.logging.log4j:log4j-api` en version `2.25.3`
+
+### Description
+
+**CVE-2026-34478** et **CVE-2026-34480** (CVSS 6.9) — Vulnérabilités dans Log4j API 2.25.3 liées à la manipulation de messages de log, exploitables dans certaines configurations.
+
+**CVE-2026-34481** (CVSS 6.3) — Mauvaise gestion de certains patterns de formatage dans Log4j API 2.25.3.
+
+### Remédiation
+
+- **Action** : Upgrade `org.apache.logging.log4j:log4j-api` vers `2.25.4`
+- **Fichier modifié** : `rhDemo/pom.xml`
+- **Détail** : Propriété Maven `<log4j2.version>2.25.4</log4j2.version>` dans `<properties>` (override du BOM Spring Boot)
+
+---
+
+## CVE Jenkins — Upgrade 2.541.2 → 2.555.1
+
+### Détection
+
+- **Date de détection** : 2026-04-20
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL
+- **Composant affecté** : `jenkins/jenkins:lts-jdk21` (image Docker) en version `2.541.2`
+
+### Remédiation
+
+- **Action** : Épinglage de l'image Docker sur la version corrigée
+- **Fichier modifié** : `rhDemo/infra/jenkins-docker/Dockerfile.jenkins`
+- **Détail** : `FROM jenkins/jenkins:lts-jdk21` → `FROM jenkins/jenkins:2.555.1-lts-jdk21`
+
+---
+
+## CVE-2026-40477 & CVE-2026-40478 — Thymeleaf
+
+### Détection
+
+- **Date de détection** : 2026-04-20
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `org.thymeleaf:thymeleaf` et `org.thymeleaf:thymeleaf-spring6` en version `3.1.3.RELEASE`
+
+### Description
+
+**CVE-2026-40477** — Improper restriction of the scope of accessible objects in Thymeleaf expressions : un attaquant peut accéder à des objets hors du scope prévu via des expressions Thymeleaf, conduisant à une divulgation d'informations ou une élévation de privilèges.
+
+**CVE-2026-40478** — Improper neutralization of specific syntax patterns for unauthorized expressions : une neutralisation insuffisante de certains motifs syntaxiques permet l'injection d'expressions non autorisées dans les templates Thymeleaf.
+
+### Remédiation
+
+- **Action** : Upgrade `org.thymeleaf:thymeleaf` + `org.thymeleaf:thymeleaf-spring6` vers `3.1.4.RELEASE`
+- **Fichier modifié** : `rhDemo/pom.xml`
+- **Détail** : Propriété Maven `<thymeleaf.version>3.1.4.RELEASE</thymeleaf.version>` dans `<properties>` (override du BOM Spring Boot)
+
+---
+
 ## CVE-2025-49794 & CVE-2025-49796 - Vulnérabilités libxml2
 
 ### Détection
@@ -569,40 +831,37 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL,HIGH nginx
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : À préciser (voir NVD)
 - **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric`
-- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
+- **Statut** : ✅ Corrigé — NGF 2.6.0 intègre `google.golang.org/grpc v1.80.0` (fix en v1.79.3)
 
 ### Description
 
-CVE-2026-33186 affecte NGINX Gateway Fabric. La version 2.4.2 (dernière disponible) ne corrige pas cette CVE.
+CVE-2026-33186 est un contournement d'autorisation dans gRPC (CVSS 9.1 Critical) : les en-têtes `:path` non canoniques (sans `/` initial) échappaient aux politiques d'autorisation basées sur le chemin. Affectait NGF 2.4.x (grpc v1.78.0). **Corrigé dans NGF 2.6.0** via la mise à jour grpc → v1.80.0.
 
 ### Images affectées
 
 | Image | Version | Correctif disponible | Statut |
 | --- | --- | --- | --- |
-| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 | Non | ~~⚠️ CVE présente~~ (obsolète) |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.6.0 | Oui (grpc v1.80.0) | ✅ Corrigé |
 
 ### Remédiation appliquée
 
-**Action** : Mise à jour NGF 2.4.0 → 2.4.2 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
+**Action** : Mise à jour NGF 2.4.2 → 2.6.0 (correctif CVE-2026-31789 + CVE-2026-33186). Exclusion `.trivyignore.yaml` supprimée.
 
 **Fichiers modifiés** :
 
-- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.4.2)
+- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.6.0)
 - `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
 - `docs/IMAGE_VERSIONS_MANAGEMENT.md`
 - `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
-- `.trivyignore.yaml` (exclusion CVE-2026-33186 avec justification)
-
-### Condition de clôture
-
-Retirer `CVE-2026-33186` du `.trivyignore.yaml` quand une version NGF intégrant le correctif est publiée.
+- `.trivyignore.yaml` (exclusion CVE-2026-33186 **supprimée** — CVE corrigée dans NGF 2.6.0)
 
 ### Validation
 
 ```bash
-# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
-trivy image --ignorefile rhDemo/.trivyignore.yaml \
-  ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
+# Vérifier que le scan CI passe sans exclusion
+trivy image ghcr.io/nginx/nginx-gateway-fabric:2.6.0 --severity CRITICAL,HIGH
+# CVE-2026-33186 ne doit plus apparaître
 ```
 
 ### Timeline
@@ -612,11 +871,87 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml \
 | 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
 | 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 (dernière disponible — ne corrige pas CVE-2026-33186) |
 | 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
+| 2026-05-20 | Mise à jour NGF 2.4.2 → 2.6.0 (grpc v1.78.0 → v1.80.0, CVE-2026-33186 corrigée) |
+| 2026-05-20 | Exclusion `.trivyignore.yaml` supprimée — CVE résolue upstream |
 
 ### Références
 
 - [NVD — CVE-2026-33186](https://nvd.nist.gov/vuln/detail/CVE-2026-33186)
 - [NGINX Gateway Fabric releases](https://github.com/nginx/nginx-gateway-fabric/releases)
+
+---
+
+## CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — Apache Tomcat Embed Core
+
+### Détection
+
+- **Date** : 2026-04-19
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : À préciser (voir NVD) — niveau suffisant pour bloquer le pipeline (CVSS ≥ 7)
+- **Composant affecté** : `org.apache.tomcat.embed:tomcat-embed-core:11.0.20`
+
+### Description
+
+Trois CVE affectant Tomcat Embed Core 11.0.20, composant embarqué par Spring Boot 4.0.5 pour le serveur HTTP.
+
+| CVE | Description |
+| --- | --- |
+| CVE-2026-34483 | À préciser (voir NVD) |
+| CVE-2026-34486 | À préciser (voir NVD) |
+| CVE-2026-34487 | À préciser (voir NVD) |
+
+### Composants affectés
+
+| Composant | Version vulnérable | Version corrective |
+| --- | --- | --- |
+| `org.apache.tomcat.embed:tomcat-embed-core` | 11.0.20 | 11.0.21 |
+
+### Remédiation appliquée
+
+**Action** : Forçage de la propriété `<tomcat.version>` dans `pom.xml` pour surcharger la version gérée par `spring-boot-starter-parent`.
+
+```xml
+<properties>
+  <!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 -->
+  <tomcat.version>11.0.21</tomcat.version>
+</properties>
+```
+
+**Fichier modifié** : `pom.xml` (section `<properties>`)
+
+Spring Boot expose la propriété `tomcat.version` pour permettre l'override de tous les artefacts `tomcat-embed-*` sans modifier les dépendances directes.
+
+### Validation
+
+```bash
+# Vérifier que Maven résout bien Tomcat 11.0.21
+cd rhDemo && ./mvnw dependency:tree | grep tomcat-embed
+
+# Résultat attendu :
+# org.apache.tomcat.embed:tomcat-embed-core:jar:11.0.21
+# org.apache.tomcat.embed:tomcat-embed-websocket:jar:11.0.21
+
+# Relancer le scan OWASP pour confirmer la disparition des alertes
+./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+```
+
+### Condition de clôture
+
+Retirer `<tomcat.version>11.0.21</tomcat.version>` du `pom.xml` quand Spring Boot intègre nativement Tomcat >= 11.0.21 dans son parent POM.
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-04-19 | Détection par OWASP Dependency-Check dans le pipeline CI (tomcat-embed-core:11.0.20) |
+| 2026-04-19 | Forçage `<tomcat.version>11.0.21</tomcat.version>` dans `pom.xml` |
+
+### Références
+
+- [NVD — CVE-2026-34483](https://nvd.nist.gov/vuln/detail/CVE-2026-34483)
+- [NVD — CVE-2026-34486](https://nvd.nist.gov/vuln/detail/CVE-2026-34486)
+- [NVD — CVE-2026-34487](https://nvd.nist.gov/vuln/detail/CVE-2026-34487)
+- [Apache Tomcat security advisories](https://tomcat.apache.org/security-11.html)
 
 ---
 
@@ -654,4 +989,4 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml \
 
 ---
 
-**Dernière mise à jour** : 2026-03-19 (CVE-2026-32767 nginx, CVE-2026-33186 NGF)
+**Dernière mise à jour** : 2026-04-19 (CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — tomcat-embed-core 11.0.21)

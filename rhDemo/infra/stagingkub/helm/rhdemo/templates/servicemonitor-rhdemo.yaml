@@ -31,7 +31,7 @@ spec:
       app: rhdemo-app
   # Configuration des endpoints à scraper
   endpoints:
-    - port: http
+    - port: management
       path: /actuator/prometheus
       interval: {{ .Values.rhdemo.metrics.serviceMonitor.interval | default "30s" }}
       scrapeTimeout: {{ .Values.rhdemo.metrics.serviceMonitor.scrapeTimeout | default "10s" }}

@@ -1,5 +1,7 @@
 package fr.leuwen.rhdemoAPI.dto;
 
+import java.util.Objects;
+
 import fr.leuwen.rhdemoAPI.model.Employe;
 
 /**
@@ -10,6 +12,7 @@ import fr.leuwen.rhdemoAPI.model.Employe;
 public record EmployeResponseDTO(Long id, String prenom, String nom, String mail, String adresse) {
 
     public static EmployeResponseDTO from(Employe employe) {
+        Objects.requireNonNull(employe, "employe ne peut pas être null");
         return new EmployeResponseDTO(
                 employe.getId(),
                 employe.getPrenom(),

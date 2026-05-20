@@ -94,7 +94,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - VSCode avec Extension Pack pour Java, Maven Spring Boot Tools, Vue.
   - Possibilité d'utiliser également Spring Tool Suite (Eclipse)
 - Pour exécution en env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
-- Pour chaine CI/CD  Jenkins 2.541.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
+- Pour chaine CI/CD  Jenkins 2.555.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
 - Pour déploiement env de ephemere (CI) : Docker Compose avec un réseau dédié.
 - Pour déploiement env staginkub (CD) : KinD 0.31+, Helm 3.19.2+, Kubectl v1.31+
 
@@ -142,6 +142,27 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Lancez le pipelne rhDemo/Jenkinsfile-CD
 
 ## Changelog
+
+### Version 1.1.8
+
+Architecture logicielle :
+- Etude sur le passage à Clean Architecture (non appliqué voir rhDemo/docs/IMPACT_CLEAN_ARCHITECTURE.md)
+
+Code Backend :
+- Amélioration de la gestion des Null (voir rhDemo/docs/NULL_REFONTE.md)
+
+CI/CD : 
+- Passage à des agents jenkins ephemeres (voir rhDemo/docs/JENKINS_AGENTS_EPHEMERES.md)
+- Ajout du plugin Jenkins matrix-auth pour gestion fine des droits (notamment pour user Claude Code)
+- Verouillage des versions de plugin Jenkins dans un lockfile mis à jour par un script (sécurisation en remplacement des versions latest)
+
+Tests : 
+- Refonte des tests unitaires pour améliorer leur maintenabilité : suppression des tests triviaux et en doublon unitaires/intégration (voir rhDemo/docs/TESTS_REFONTE.md)
+- ajout d'un test "property based" avec le framework jqwik
+
+Sécurité :
+- Diverses remédiations suite à un audit Claude Code (rhDemo/docs/SECURITE_RHDEMO_AUDIT_20260424.md)
+
 
 ### Version 1.1.7
 

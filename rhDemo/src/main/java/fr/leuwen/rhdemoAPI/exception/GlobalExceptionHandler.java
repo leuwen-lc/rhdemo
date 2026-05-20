@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Gestionnaire global des exceptions pour l'API
@@ -31,10 +32,11 @@ public class GlobalExceptionHandler {
         log.warn("Erreur de validation: {}", ex.getMessage());
         
         Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getAllErrors().forEach((error) -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
-            errors.put(fieldName, errorMessage);
+        ex.getBindingResult().getAllErrors().forEach(error -> {
+            if (error instanceof FieldError fe) {
+                errors.put(fe.getField(),
+                    fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "Erreur de validation");
+            }
         });
         
         ErrorResponse errorResponse = new ErrorResponse(
@@ -85,6 +87,20 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
     
+    /**
+     * Gère les ResponseStatusException lancées par les contrôleurs (ex: paramètre de tri invalide)
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException ex) {
+        log.warn("Erreur de requête: {}", ex.getMessage());
+        ErrorResponse errorResponse = new ErrorResponse(
+            ex.getStatusCode().value(),
+            ex.getReason() != null ? ex.getReason() : "Erreur HTTP " + ex.getStatusCode().value(),
+            LocalDateTime.now()
+        );
+        return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
+    }
+
     /**
      * Gère toutes les autres exceptions non gérées
      * Ne capture PAS les exceptions de Spring Security qui doivent être gérées par le framework

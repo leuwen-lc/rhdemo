@@ -8,13 +8,13 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.3</version>
+        <version>4.0.6</version>
         <relativePath/>
     </parent>
 
     <groupId>fr.leuwen</groupId>
     <artifactId>rhDemoInitKeycloak</artifactId>
-    <version>1.1.7-RELEASE</version>
+    <version>1.1.8-RELEASE</version>
     <packaging>jar</packaging>
 
     <name>RH Demo - Keycloak Initialization</name>
@@ -22,7 +22,7 @@
 
     <properties>
         <java.version>25</java.version>
-        <keycloak.version>26.0.8</keycloak.version>
+        <keycloak.version>26.0.9</keycloak.version>
     </properties>
 
     <dependencies>
@@ -51,19 +51,19 @@
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
             <artifactId>resteasy-client</artifactId>
-            <version>6.2.7.Final</version>
+            <version>6.2.16.Final</version>
         </dependency>
 
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
             <artifactId>resteasy-jackson2-provider</artifactId>
-            <version>6.2.7.Final</version>
+            <version>6.2.16.Final</version>
         </dependency>
 
         <dependency>
             <groupId>org.jboss.resteasy</groupId>
             <artifactId>resteasy-core</artifactId>
-            <version>6.2.7.Final</version>
+            <version>6.2.16.Final</version>
         </dependency>
 
         <!-- Apache HTTP Client pour support SSL custom -->

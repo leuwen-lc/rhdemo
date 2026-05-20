@@ -8,7 +8,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.core.user.OAuth2UserAuthority;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.*;
@@ -33,9 +32,7 @@ class GrantedAuthoritiesKeyCloakMapperTest {
 
     @BeforeEach
     void setUp() {
-        mapper = new GrantedAuthoritiesKeyCloakMapper();
-        // Injecter le client ID via reflection (car @Value ne fonctionne pas dans les tests unitaires)
-        ReflectionTestUtils.setField(mapper, "rhDemoClientID", CLIENT_ID);
+        mapper = new GrantedAuthoritiesKeyCloakMapper(CLIENT_ID);
     }
 
     @Test

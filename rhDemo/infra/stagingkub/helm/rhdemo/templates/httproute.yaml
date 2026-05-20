@@ -28,6 +28,11 @@ spec:
     - path:
         type: {{ .pathType }}
         value: {{ .path }}
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        remove:
+        - Forwarded
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}

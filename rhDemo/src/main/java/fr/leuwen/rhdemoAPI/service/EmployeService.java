@@ -1,5 +1,6 @@
 package fr.leuwen.rhdemoAPI.service;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -19,7 +20,7 @@ public class EmployeService {
 		this.employerepository = employerepository;
 	}
 	
-	public Employe getEmploye(final Long id) {
+	public Employe getEmploye(final @NonNull Long id) {
         return employerepository.findById(id)
             .orElseThrow(() -> new EmployeNotFoundException(id));
     }
@@ -38,7 +39,7 @@ public class EmployeService {
         return employerepository.findAll(spec, pageable);
     }
 
-    public void deleteEmploye(final Long id) {
+    public void deleteEmploye(final @NonNull Long id) {
         // Vérifier que l'employé existe avant de le supprimer
         if (!employerepository.existsById(id)) {
             throw new EmployeNotFoundException(id);
@@ -51,7 +52,7 @@ public class EmployeService {
         return employerepository.save(employe);
     }
 
-    public Employe updateEmploye(Long id, Employe employe) {
+    public Employe updateEmploye(@NonNull Long id, Employe employe) {
         if (!employerepository.existsById(id)) {
             throw new EmployeNotFoundException(id);
         }

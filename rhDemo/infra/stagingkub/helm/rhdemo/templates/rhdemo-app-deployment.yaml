@@ -50,6 +50,9 @@ spec:
         - name: http
           containerPort: {{ .Values.rhdemo.serverPort }}
           protocol: TCP
+        - name: management
+          containerPort: {{ .Values.rhdemo.managementPort }}
+          protocol: TCP
         env:
         # Spring Boot - utiliser underscore pour Paketo
         - name: SPRING_PROFILES_ACTIVE
@@ -73,6 +76,8 @@ spec:
               key: {{ .Values.rhdemo.database.passwordSecret.key }}
 
         # Actuator
+        - name: MANAGEMENT_SERVER_PORT
+          value: "{{ .Values.rhdemo.managementPort }}"
         - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
           value: {{ .Values.rhdemo.actuator.endpoints.include }}
         - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
@@ -106,7 +111,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
-            port: http
+            port: management
           initialDelaySeconds: {{ .Values.rhdemo.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.rhdemo.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.rhdemo.livenessProbe.timeoutSeconds }}
@@ -115,7 +120,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /actuator/health/readiness
-            port: http
+            port: management
           initialDelaySeconds: {{ .Values.rhdemo.readinessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.rhdemo.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.rhdemo.readinessProbe.timeoutSeconds }}

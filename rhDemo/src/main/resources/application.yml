@@ -114,7 +114,7 @@ management:
         include: '*'
   endpoint:
     env:
-      show-values:  ALWAYS  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS
+      show-values: WHEN_AUTHORIZED  # Options: NEVER, WHEN_AUTHORIZED, ALWAYS
   metrics:
     distribution:
       percentiles-histogram:

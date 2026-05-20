@@ -17,12 +17,12 @@ import org.springframework.test.context.ActiveProfiles;
 import fr.leuwen.rhdemoAPI.model.Employe;
 
 /**
- * Tests unitaires pour EmployeSpecification.
- * Utilise @DataJpaTest avec H2 pour tester les Specifications JPA.
+ * Tests d'intégration pour EmployeSpecification.
+ * Utilise @DataJpaTest avec H2 pour tester les Specifications JPA contre une vraie BDD.
  */
 @DataJpaTest
 @ActiveProfiles("test")
-class EmployeSpecificationTest {
+class EmployeSpecificationIT {
 
     @Autowired
     private EmployeRepository employeRepository;

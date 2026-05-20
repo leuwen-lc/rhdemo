@@ -41,14 +41,14 @@ spec:
         - protocol: TCP
           port: {{ .Values.rhdemo.serverPort }}
 
-    # Règle 2: Scraping Prometheus depuis namespace monitoring
+    # Règle 2: Scraping Prometheus depuis namespace monitoring (port management dédié)
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
-          port: {{ .Values.rhdemo.serverPort }}
+          port: {{ .Values.rhdemo.managementPort }}
 
     # Règle 3: Communication interne au namespace
     - from:
@@ -59,11 +59,11 @@ spec:
         - protocol: TCP
           port: {{ .Values.rhdemo.serverPort }}
 
-    # Règle 4: Health checks kubelet (liveness/readiness probes)
+    # Règle 4: Health checks kubelet (liveness/readiness probes sur port management)
     # Note: Le kubelet n'est pas dans un namespace, règle sans from
     - ports:
         - protocol: TCP
-          port: {{ .Values.rhdemo.serverPort }}
+          port: {{ .Values.rhdemo.managementPort }}
 
   egress:
     # Règle 1: Accès à PostgreSQL rhdemo

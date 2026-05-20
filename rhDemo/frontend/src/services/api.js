@@ -40,9 +40,7 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error.response && error.response.status === 403) {
-      console.error('❌ [CSRF] Erreur 403 - Token CSRF invalide ou expiré');
-      console.error('❌ [CSRF] Requête:', error.config.method.toUpperCase(), error.config.url);
-      console.error('❌ [CSRF] Header envoyé:', error.config.headers['X-XSRF-TOKEN']?.substring(0, 20) + '...');
+      console.error('Erreur CSRF - veuillez recharger la page');
     }
     return Promise.reject(error);
   }

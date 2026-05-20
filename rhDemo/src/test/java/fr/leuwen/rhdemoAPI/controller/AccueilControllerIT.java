@@ -34,7 +34,11 @@ public class AccueilControllerIT {
     public void testAccueil_ShouldReturnWelcomeMessage() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("API")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("API disponibles sur /api/")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Front end disponible sur /front")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Logout sur /logout")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Swagger UI")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("OpenAPI")));
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -49,7 +53,7 @@ public class AccueilControllerIT {
                 .andExpect(content().contentType("application/json"))
                 .andExpect(jsonPath("$.username").value("testuser"))
                 .andExpect(jsonPath("$.roles").isArray())
-                .andExpect(jsonPath("$.roles[0]").value("ROLE_consult"));
+                .andExpect(jsonPath("$.roles[0]").value("consult"));
     }
 
     @Test
@@ -61,5 +65,12 @@ public class AccueilControllerIT {
                 .andExpect(jsonPath("$.username").value("madjid"))
                 .andExpect(jsonPath("$.roles").isArray())
                 .andExpect(jsonPath("$.roles.length()").value(2));
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"BadRole"})
+    public void testUserInfo_WithNoApplicableRole_ShouldReturn403() throws Exception {
+        mockMvc.perform(get("/api/userinfo"))
+                .andExpect(status().isForbidden());
     }
 }

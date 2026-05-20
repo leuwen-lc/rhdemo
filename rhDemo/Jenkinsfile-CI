@@ -32,6 +32,7 @@ pipeline {
         timeout(time: 2, unit: 'HOURS')
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+        copyArtifactPermission('RHDemo-CD')
     }
 
     tools {
@@ -45,11 +46,11 @@ pipeline {
         DOCKER_IMAGE_NAME = "rhdemo-api"
 
         // Configuration Docker
-        NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67"
-        POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
-        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb632fa37445c8ca979886f5b2370651335b92ed72724369f8e5f56b4f"
+        NGINX_IMAGE = "nginx:1.30.1-alpine@sha256:c819f83c54b0361f5557601bf5eb4943d09360e7a7fdf426afc466570f45874d"
+        POSTGRES_IMAGE = "postgres:18.3-alpine3.22@sha256:5af62d454ff2a5e88b2bcc9ec3a44b56267a8c6d5086a1e58135ee64230d4870"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.6.2@sha256:a5f5b927218053d0f4180f2ba3741623b932fe6a575b46cf9e6122cf08b80385"
         // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
-        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.4.2@sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
+        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.0@sha256:9f209a203cd0ed7af53b2b3f03ae8c115a10924456c725e9a38ca4fcf665af44"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -904,12 +905,13 @@ YMLEOF
                     sh """
                         # Exécuter l'initialisation avec Maven
                         # La config application-ephemere.yml est dans /tmp (hors workspace)
-                        # spring.config.additional-location indique à Spring Boot où chercher
-                        # les fichiers de config par profil (application-ephemere.yml)
+                        # IMPORTANT agents éphémères : -Dspring.config.additional-location est une
+                        # propriété JVM Maven et n'est pas transmise au process forked Spring Boot.
+                        # On utilise les variables d'environnement à la place (héritées par tout fork).
+                        export SPRING_PROFILES_ACTIVE=ephemere
+                        export SPRING_CONFIG_ADDITIONAL_LOCATION="file:${env.SECRETS_TMP_DIR}/"
                         echo "▶ Exécution de rhDemoInitKeycloak (config depuis ${env.SECRETS_TMP_DIR}/)..."
-                        ../rhDemo/mvnw spring-boot:run \\
-                            -Dspring-boot.run.profiles=ephemere \\
-                            -Dspring.config.additional-location=file:${env.SECRETS_TMP_DIR}/
+                        ../rhDemo/mvnw spring-boot:run
 
                         echo "✅ Keycloak initialisé avec succès"
                     """
@@ -1096,7 +1098,7 @@ YMLEOF
                     echo "📥 Téléchargement de la base de données Trivy dans le cache partagé..."
                     sh '''
                         # Créer et utiliser le répertoire de cache partagé
-                        TRIVY_CACHE_DIR="$(pwd)/.trivy-cache-shared"
+                        TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
                         mkdir -p "${TRIVY_CACHE_DIR}"
                         export TRIVY_CACHE_DIR
 
@@ -1109,7 +1111,7 @@ YMLEOF
                         trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
 
                         echo "✅ Bases de données Trivy prêtes dans ${TRIVY_CACHE_DIR} (vuln + java)"
-                        echo "   Chaque scan parallèle copiera ce cache pour éviter les conflits d'accès"
+                        echo "   Cache persistant via volume Docker — réutilisé entre les builds"
                     '''
 
                     // Définir les images à scanner avec leurs noms de rapports
@@ -1172,7 +1174,7 @@ YMLEOF
                     mkdir -p "\${WORKSPACE_DIR}/sbom-reports"
 
                     # Utiliser le cache partagé Trivy (déjà préparé par le stage précédent)
-                    TRIVY_CACHE_DIR="\${WORKSPACE_DIR}/.trivy-cache-shared"
+                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
                     export TRIVY_CACHE_DIR
 
                     echo "▶ Génération SBOM au format CycloneDX JSON..."
@@ -1243,7 +1245,7 @@ YMLEOF
                     echo "🚀 Démarrage d'un nouveau conteneur ZAP..."
                     echo "   Réseau: rhdemo-jenkins-network"
                     echo "   Clé API: ${env.ZAP_API_KEY.take(8)}..."
-                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.yml -f docker-compose.zap.yml up -d owasp-zap
+                    ZAP_API_KEY=${env.ZAP_API_KEY} docker-compose -f docker-compose.zap.yml up -d owasp-zap
 
                     echo "⏳ Attente du démarrage de ZAP (60s max)..."
                     echo "   (ZAP doit charger ses add-ons, créer le certificat CA, etc.)"

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!--
+        CVE-2026-41240, CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp — DOMPurify 3.3.2 dans swagger-ui
+        DOMPurify < 3.4.0 embarqué dans swagger-ui-5.32.2.jar (springdoc-openapi 3.0.3, dernière version disponible).
+        CVE-2026-41240 (NVD, CVSS 6.1) : XSS bypass via FORBID_TAGS + ADD_TAGS function-based — corrigé dans DOMPurify 3.4.0.
+        CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp (RetireJS) : autres vecteurs XSS dans DOMPurify 3.3.2.
+        Risque atténué par les contrôles suivants :
+          - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security)
+          - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
+          - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
+        À retirer dès que springdoc-openapi 3.0.4+ embarque DOMPurify >= 3.4.0.
+    -->
+    <suppress>
+        <notes>CVE-2026-41240 : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <cve>CVE-2026-41240</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-41238 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <vulnerabilityName>CVE-2026-41238</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-41239 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <vulnerabilityName>CVE-2026-41239</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-39q2-94rc-95cp (RetireJS/GHSA) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        CVE-2026-42154 — micrometer-registry-prometheus et prometheus-metrics-core (faux positif)
+        CVE-2026-42154 (CVSS 7.5 HIGH) : DoS par épuisement mémoire dans le endpoint /api/v1/read
+        du SERVEUR Prometheus (binaire Go) — ne valide pas la taille déclarée dans les requêtes
+        snappy-compressées avant d'allouer de la mémoire.
+        FAUX POSITIF : les bibliothèques Java micrometer-registry-prometheus et prometheus-metrics-core
+        sont des CLIENTS qui exportent des métriques VERS Prometheus. Elles n'implémentent pas
+        l'endpoint /api/v1/read du serveur. OWASP Dependency-Check les associe incorrectement
+        car elles partagent le mot "prometheus" dans leur nom de package.
+        Fix officiel : serveur Prometheus 3.5.3 et 3.11.3 (sans rapport avec ces libs Java).
+    -->
+    <suppress>
+        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas le client Java micrometer-registry-prometheus.</notes>
+        <packageUrl regex="true">^pkg:maven/io\.micrometer/micrometer-registry-prometheus@.*$</packageUrl>
+        <cve>CVE-2026-42154</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas les clients Java prometheus-metrics-* (core, model, config, exposition-formats, etc.).</notes>
+        <packageUrl regex="true">^pkg:maven/io\.prometheus/prometheus-metrics-[^@]+@.*$</packageUrl>
+        <cve>CVE-2026-42154</cve>
+    </suppress>
+
+</suppressions>

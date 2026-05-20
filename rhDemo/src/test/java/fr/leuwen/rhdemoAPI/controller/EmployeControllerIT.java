@@ -129,6 +129,23 @@ public class EmployeControllerIT {
                 .andExpect(jsonPath("$.content.length()").value(4));
     }
 
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_WithInvalidSort_ShouldReturn400() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("sort", "champInvalide"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "user", roles = {"consult"})
+    public void testGetEmployesPage_WithOversizedPage_ShouldClampToMax() throws Exception {
+        mockMvc.perform(get("/api/employes/page")
+                        .param("size", "1000000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.size").value(200));
+    }
+
     // ════════════════════════════════════════════════════════════════
     // Tests GET /api/employes/page avec filtres
     // ════════════════════════════════════════════════════════════════

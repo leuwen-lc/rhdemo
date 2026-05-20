@@ -8,7 +8,7 @@ const userStore = reactive({
 });
 
 export function hasRole(role) {
-  return userStore.roles.includes('ROLE_' + role);
+  return userStore.roles.includes(role.toLowerCase());
 }
 
 export async function loadUserInfo() {

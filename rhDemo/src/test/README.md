@@ -1,99 +1,101 @@
 # Tests RHDemo API
 
-## Structure des tests
+## Organisation
 
-### Tests d'intégration (@SpringBootTest)
-Ces tests démarrent le contexte Spring complet et testent l'application de bout en bout.
+Deux familles de tests, exécutées par deux plugins Maven distincts :
 
-- **EmployeControllerIntegrationTest** - Tests des endpoints REST avec authentification
-  - GET /api/employes - Liste complète avec autorisations
-  - GET /api/employes/page - Pagination
-  - GET /api/employe?id=X - Récupération d'un employé
-  - POST /api/employe - Création/modification avec validation
-  - DELETE /api/employe?id=X - Suppression
+| Plugin | Suffixe | Phase Maven | Démarrage Spring |
+|---|---|---|---|
+| Surefire | `*Test.java` | `test` | Non (ou minimal) |
+| Failsafe | `*IT.java` / `*ITCase.java` | `integration-test` / `verify` | Oui (`@SpringBootTest` ou `@DataJpaTest`) |
 
-- **AccueilControllerIntegrationTest** - Tests des endpoints d'information
-  - GET / - Page d'accueil
-  - GET /who - Informations utilisateur connecté
+Voir `docs/TESTS_REFONTE.md` pour la justification de cette répartition et l'historique de la refonte.
 
-- **GlobalExceptionHandlerTest** - Tests de gestion d'erreurs
-  - 404 - EmployeNotFoundException
-  - 400 - Validation errors
-  - 400 - Type mismatch errors
-  - 403 - Security exceptions (non interceptées)
+## Tests unitaires (Surefire — `*Test.java`)
 
-### Tests unitaires (@ExtendWith(MockitoExtension))
-Ces tests isolent la logique métier en mockant les dépendances.
+Tests métier isolés, sans contexte Spring (sauf exceptions ci-dessous), généralement avec Mockito.
 
-- **EmployeServiceTest** - Tests de la couche service
-  - getEmploye() - Cas nominal et exceptions
-  - getEmployes() - Liste vide et avec données
-  - getEmployesPage() - Pagination
-  - deleteEmploye() - Suppression et exceptions
-  - saveEmploye() - Création et modification
+| Classe | Périmètre testé |
+|---|---|
+| `service.EmployeServiceTest` | Logique métier `EmployeService` : règles d'écrasement d'id (POST nullifie, PUT impose le path), exceptions `EmployeNotFoundException` sur ID inexistant, délégation des filtres au repository via `Specification`. |
+| `dto.EmployeRequestDTOTest` | Contraintes Bean Validation (`@NotBlank`, `@Email`, `@Size`) sur les champs du DTO d'entrée + mapping `toEmploye()`. |
+| `dto.EmployeResponseDTOTest` | Mapping `EmployeResponseDTO.from(Employe)` (entité → DTO). |
+| `springconfig.GrantedAuthoritiesKeyCloakMapperTest` | Extraction des rôles depuis `resource_access` du token OIDC Keycloak, filtrage des rôles non préfixés `ROLE_`, gestion des claims manquants/null. |
+| `springconfig.KeycloakLogoutSuccessHandlerTest` | Dérivation de l'URL `logout` depuis `authorization-uri`, extraction du `id_token_hint`, construction de l'URL de base derrière `ForwardedHeaderFilter`. |
+| `springconfig.CspPolicyBuilderTest` | Extraction de l'URL de base Keycloak, construction des directives Content-Security-Policy (sans `unsafe-*`), configuration du repository CSRF Cookie. |
 
-- **EmployeValidationTest** - Tests des contraintes de validation
-  - @NotBlank sur prenom, nom, mail, adresse
-  - @Email sur mail
-  - @Size(max=100) sur prenom, nom, mail
-  - @Size(max=200) sur adresse
-  - Edge cases (longueurs exactes)
+## Tests d'intégration (Failsafe — `*IT.java`)
 
-### Configuration de test
+Tests démarrant un contexte Spring (souvent avec `MockMvc`) — valident la chaîne HTTP, la sécurité, la persistance.
 
-- **TestSecurityConfig** - Configuration de sécurité allégée pour les tests
-- **application-test.yml** - Configuration Spring pour environnement de test (H2)
+| Classe | Périmètre testé |
+|---|---|
+| `controller.EmployeControllerIT` | CRUD complet `/api/employes`, pagination, tri, filtres, autorisations `@PreAuthorize`, validation HTTP. |
+| `controller.AccueilControllerIT` | Endpoints `/` (page d'info) et `/api/userinfo` avec autorisations basées rôles. |
+| `exception.GlobalExceptionHandlerIT` | Formatage JSON des erreurs : 404 `EmployeNotFoundException`, 400 validation/type, et non-interception des exceptions Spring Security. |
+| `repository.EmployeSpecificationIT` | Specifications JPA contre H2 en mémoire (`@DataJpaTest`) : filtres simples, combinés, insensibles à la casse, partiels. |
+| `springconfig.SecurityConfigIT` | Matrice d'autorisation : `/actuator/health` public, `/actuator/loggers` restreint au rôle `admin`, 401/403 selon le contexte. |
 
-## Exécution des tests
+> Note : les directives CSP sont testées en unitaire sur `CspPolicyBuilder` (qui est la classe réellement utilisée par `SecurityConfig` **et** par `TestSecurityConfig`). Ce qui évite la divergence test/prod qui existait avant la refonte.
 
-### Tests unitaires seulement
+## Configuration de test
+
+| Fichier | Rôle |
+|---|---|
+| `config/TestSecurityConfig.java` | Configuration `@EnableWebSecurity` activée par `@Profile("test")`. Remplace `SecurityConfig` (désactivé en profil `test`), désactive OAuth2/Keycloak, simule l'authentification via `@WithMockUser`. Réutilise `CspPolicyBuilder` pour partager exactement le CSP de production. |
+| `config/TestDataLoader.java` | `@TestConfiguration` qui charge 4 employés de test dans H2 au démarrage du contexte. Importé par les IT via `@Import(TestDataLoader.class)`. |
+| `resources/application-test.yml` | Profil Spring `test` : datasource H2 in-memory, désactivation OAuth2, exposition actuator restreinte. |
+| `resources/employe-test-data.sql` | Jeu de données SQL alternatif (utilisable au besoin). |
+
+### Données de test injectées par `TestDataLoader`
+
+| Prénom | Nom | Mail | Adresse |
+|---|---|---|---|
+| Laurent | Martin | laurent.martin@example.com | 1 Rue de la Paix, Paris |
+| Sophie | Dubois | sophie.dubois@example.com | 2 Avenue des Champs, Lyon |
+| Pierre | Bernard | pierre.bernard@example.com | 3 Boulevard Victor Hugo, Marseille |
+| Marie | Durand | marie.durand@example.com | 4 Place de la République, Toulouse |
+
+## Exécution
+
 ```bash
+# Tests unitaires uniquement (Surefire)
 ./mvnw test
-```
 
-### Tests unitaires + intégration
-```bash
+# Tests unitaires + intégration + couverture JaCoCo
 ./mvnw verify
-```
+# Rapport HTML : target/site/jacoco/index.html
+# Rapport CSV  : target/site/jacoco/jacoco.csv
 
-### Avec couverture JaCoCo
-```bash
-./mvnw verify
-# Rapport HTML: target/site/jacoco/index.html
-```
-
-### Tests spécifiques
-```bash
+# Filtrer un test
 ./mvnw test -Dtest=EmployeServiceTest
-./mvnw test -Dtest=EmployeControllerIntegrationTest#testGetEmployes_WithConsultRole_ShouldReturnList
+./mvnw verify -Dit.test=EmployeControllerIT#testGetEmployesPage_WithSort_ShouldReturnSortedList
 ```
 
 ## Couverture de code
 
-Les tests couvrent :
-- ✅ Tous les endpoints REST (EmployeController + AccueilController)
-- ✅ Toute la logique métier (EmployeService)
-- ✅ Gestion des exceptions (GlobalExceptionHandler)
-- ✅ Validation du modèle (Employe)
-- ✅ Autorisations (rôles consult et MAJ)
+**Quality gate SonarQube** : couverture instructions ≥ **50 %** sur le nouveau code.
 
-**Cibles de couverture :**
-- Lignes : > 80%
-- Branches : > 70%
-- Méthodes : > 80%
+Couverture mesurée après refonte (rapport aggregate `target/site/jacoco/jacoco.csv`) : **~82 %** brute, **~97 %** après exclusions Sonar.
 
-## Bonnes pratiques
+Classes exclues du calcul de couverture (déclaré dans `sonar-project.properties`, justifications dans `docs/TESTS_REFONTE.md` §4) :
+- `RhdemoApplication` — main Spring Boot.
+- `SecurityConfig`, `SpaCsrfTokenRequestHandler` — `@Profile("!test")`, configuration déclarative Spring Security DSL non exercée en test.
+- `WebMvcConfig` — mapping statique de ressources, pas de logique.
+- `FrontendController` — pass-through vers `index.html`, validé fonctionnellement par les tests Selenium du projet `rhDemoAPITestIHM/`.
 
-1. **Nommage des tests** : `testMethodName_Condition_ExpectedResult`
-2. **Arrange-Act-Assert** : Structure claire des tests
-3. **Tests indépendants** : Pas de dépendances entre tests
-4. **Données de test** : Utiliser data.sql pour les tests d'intégration
-5. **Mocks** : Utiliser Mockito pour isoler les dépendances
+## Conventions
 
-## Données de test
+1. **Nommage** : `testMethodName_Condition_ExpectedResult` (style assertion) ou `methodName_Scenario` (style BDD). Les deux cohabitent dans le projet.
+2. **Structure** : Arrange / Act / Assert lisible (séparateurs `// ════` autorisés pour grouper visuellement).
+3. **Pas de réflexion** : si un test a besoin de `ReflectionTestUtils`, c'est le signal d'un défaut de testabilité du code applicatif — refactoring préféré (cf. extraction `CspPolicyBuilder` et injection constructeur de `GrantedAuthoritiesKeyCloakMapper`).
+4. **Tests métier en unitaire** privilégiés (Surefire, sans Spring) — IT réservé à ce qui ne se teste pas autrement : sécurité, persistance, contrat HTTP, formatage des réponses.
+5. **Pas de doublon unit/IT** sur un même comportement : choisir le niveau le plus représentatif.
+6. **Marqueurs Selenium** : les attributs `data-testid` sont posés côté frontend pour la robustesse des tests E2E (cf. `docs/DATA_TESTID_GUIDE.md`).
 
-Le fichier `src/test/resources/data.sql` contient 4 employés de test :
-- ID 1 : Laurent Olivier
-- ID 2 : Patrick Linder
-- ID 3 : Paul Atreides
-- ID 4 : Henri Martin
+## Voir aussi
+
+- `docs/TESTS_REFONTE.md` — Refonte des tests : suppressions, refactorings, exclusions Sonar.
+- `docs/TESTS_SECURITY_COVERAGE.md` — Couverture des tests de sécurité.
+- `docs/DATA_TESTID_GUIDE.md` — Marqueurs `data-testid` pour Selenium.
+- `rhDemoAPITestIHM/` — Tests E2E Selenium (projet séparé, hors couverture JaCoCo).

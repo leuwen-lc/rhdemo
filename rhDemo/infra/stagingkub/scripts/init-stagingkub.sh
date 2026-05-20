@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
-echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.4.2${NC}"
+echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.6.0${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé
@@ -311,7 +311,7 @@ EOF
 echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 # ═══════════════════════════════════════════════════════════════
-# Installation de NGINX Gateway Fabric 2.4.0 (remplace nginx-ingress)
+# Installation de NGINX Gateway Fabric 2.6.0 (remplace nginx-ingress)
 # ═══════════════════════════════════════════════════════════════
 # NGINX Gateway Fabric implémente Gateway API (gateway.networking.k8s.io/v1)
 # Les headers X-Forwarded-* sont configurés automatiquement par NGF
@@ -319,10 +319,10 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
 # ═══════════════════════════════════════════════════════════════
 
-NGF_VERSION="2.4.2"
+NGF_VERSION="2.6.0"
 # Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
-# 2.4.2 : correctif CVE-2026-33186
-NGF_IMAGE_DIGEST="sha256:a30677fa38ec7a86ea6cdc40c6e51f6b6867bdab6ba40caeace8e33e5ff63255"
+# 2.6.0 : correctif CVE-2026-31789 (libcrypto3/libssl3 3.5.6-r0 Alpine 3.22)
+NGF_IMAGE_DIGEST="sha256:9f209a203cd0ed7af53b2b3f03ae8c115a10924456c725e9a38ca4fcf665af44"
 NGF_NAMESPACE="nginx-gateway"
 
 echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"

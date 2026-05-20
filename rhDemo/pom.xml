@@ -34,8 +34,8 @@
 		<springdoc-openapi.version>3.0.3</springdoc-openapi.version>
 		<!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487, CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-41284, CVE-2026-43513, CVE-2026-42498 -->
 		<tomcat.version>11.0.22</tomcat.version>
-		<!-- Fix CVE-2026-40477, CVE-2026-40478 (thymeleaf-spring6, thymeleaf) -->
-		<thymeleaf.version>3.1.4.RELEASE</thymeleaf.version>
+		<!-- Fix CVE-2026-40477, CVE-2026-40478, CVE-2026-41901 (thymeleaf-spring6, thymeleaf) -->
+		<thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>
 		<!-- Fix CVE-2026-34478, CVE-2026-34480, CVE-2026-34481 -->
 		<log4j2.version>2.25.4</log4j2.version>
 		<!-- Fix CVE-2026-42198 — pgjdbc DoS via SCRAM-SHA-256 iteration count -->

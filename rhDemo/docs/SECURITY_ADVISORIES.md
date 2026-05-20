@@ -4,6 +4,50 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-41901 — Thymeleaf (SSTI bypass)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (image `rhdemo-app`)
+- **Sévérité** : CRITICAL (CVSS 9.0)
+- **Composants affectés** : `org.thymeleaf:thymeleaf` et `org.thymeleaf:thymeleaf-spring6` en version `3.1.4.RELEASE`
+
+### Description
+
+Bypass du sandbox Thymeleaf permettant l'exécution d'expressions potentiellement dangereuses dans des contextes sandboxés. Forme une chaîne patch-on-patch avec CVE-2026-40478 (fixé en 3.1.4) : un second contournement a été découvert, corrigé en 3.1.5.RELEASE. Exploitable uniquement si des variables non maîtrisées atteignent le moteur de template.
+
+### Remédiation
+
+- **Action** : Montée de version `3.1.4.RELEASE` → `3.1.5.RELEASE`
+- **Fichier modifié** : `pom.xml`
+- **Détail** : Propriété Maven `<thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>` (commentaire CVE mis à jour)
+
+---
+
+## CVE-2026-31789 — OpenSSL libcrypto3/libssl3 (heap buffer overflow Alpine)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (images `postgres` et `nginx`)
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `libcrypto3` et `libssl3` version `3.5.5-r0` dans Alpine 3.22
+
+### Description
+
+Débordement de tampon heap sur les systèmes 32-bit lors du traitement de certificats X.509 avec une valeur OCTET STRING excessivement large (SKID/AKID). Corrigé dans OpenSSL 3.5.6 via le package Alpine `libcrypto3 3.5.6-r0` (disponible depuis le 9 avril 2026).
+
+### Remédiation
+
+- **Action** : Mise à jour des digests SHA256 des images vers des rebuilds Alpine 3.22 intégrant `libcrypto3 3.5.6-r0` (même tag, image reconstruite après le patch Alpine du 9 avril 2026)
+- **Fichiers modifiés** : `Jenkinsfile-CI`, `infra/ephemere/docker-compose.yml`, `infra/dev/docker-compose.yml`
+- **Détail** :
+  - `nginx:1.29.7-alpine` : `sha256:e7257f1e...` → `sha256:7e89aa6c...`
+  - `postgres:18.3-alpine3.22` : `sha256:cd50a785.../af27ebd3...` → `sha256:5af62d45...`
+
+---
+
 ## CVE-2026-42154 — Prometheus Java clients (micrometer-registry-prometheus, prometheus-metrics-*)
 
 ### Détection

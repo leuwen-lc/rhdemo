@@ -3,7 +3,7 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo (dev local)
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db-dev:
-    image: postgres:18.3-alpine3.22@sha256:af27ebd3413839ccfdcdf88e91ca76ad82117e52192067b76de9bb5be7ea6e04
+    image: postgres:18.3-alpine3.22@sha256:5af62d454ff2a5e88b2bcc9ec3a44b56267a8c6d5086a1e58135ee64230d4870
     container_name: rhdemo-dev-db
     restart: unless-stopped
     ports:

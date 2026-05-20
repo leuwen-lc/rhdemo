@@ -4,6 +4,27 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-31789 — OpenSSL heap buffer overflow (nginx 1.29.x Alpine)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : Trivy Security Scanner (image `nginx`)
+- **Sévérité** : CRITICAL
+- **Composants affectés** : `libcrypto3` et `libssl3` en version `3.5.5-r0` (Alpine 3.22) dans `nginx:1.29.7-alpine`
+
+### Description
+
+Heap buffer overflow dans OpenSSL sur les systèmes 32 bits lors du traitement de grands certificats X.509 (champ sujet long). La branche mainline nginx 1.29.x n'ayant pas reçu le patch Alpine `3.5.6-r0`, migration vers la branche stable nginx 1.30.x nécessaire.
+
+### Remédiation
+
+- **Action** : Upgrade `nginx:1.29.7-alpine` → `nginx:1.30.1-alpine` (branche stable, sorti 2026-05-20)
+- **Fichiers modifiés** : `Jenkinsfile-CI`, `infra/ephemere/docker-compose.yml`
+- **Détail** : `nginx:1.30.1-alpine@sha256:c819f83c54b0361f5557601bf5eb4943d09360e7a7fdf426afc466570f45874d` — contient `libcrypto3 3.5.6-r0`
+
+---
+
 ## CVE-2026-41901 — Thymeleaf (SSTI bypass)
 
 ### Détection

@@ -2,7 +2,7 @@
 
 **Statut** : ✅ Migration implémentée
 **Environnement** : stagingkub (Kubernetes/KinD)
-**Version** : **2.4.2** (correctif CVE-2026-33186)
+**Version** : **2.6.0** (correctif CVE-2026-31789)
 **Architecture** : **Shared Gateway** (namespace `nginx-gateway`)
 
 ---
@@ -106,7 +106,7 @@ spec:
 
 ```yaml
 # ═══════════════════════════════════════════════════════════════
-# GATEWAY API (NGINX Gateway Fabric 2.4.2)
+# GATEWAY API (NGINX Gateway Fabric 2.6.0)
 # ═══════════════════════════════════════════════════════════════
 gateway:
   enabled: true

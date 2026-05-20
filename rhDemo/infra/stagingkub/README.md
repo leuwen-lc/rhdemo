@@ -25,7 +25,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 |-----------|---------|-------------|
 | **KinD** | 0.30+ | Cluster Kubernetes local |
 | **Cilium** | 1.18.6 | CNI avec kube-proxy replacement (eBPF) |
-| **NGINX Gateway Fabric** | 2.3.0 | Gateway API (remplace nginx-ingress) |
+| **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
 | **PostgreSQL** | 16-alpine | Base de données |
 | **Keycloak** | 26.4.2 | IAM / OAuth2 |
 
@@ -118,7 +118,7 @@ sudo sysctl --system
 ├─────────────────────────────────────────────────────────────┤
 │  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ NGINX Gateway Fabric 2.3.0                           │  │
+│  │ NGINX Gateway Fabric 2.6.0                           │  │
 │  │ • NodePort 32616 (HTTPS) → 443 (host)                │  │
 │  │ • GatewayClass: nginx                                │  │
 │  │                                                      │  │
@@ -214,7 +214,7 @@ Ce script :
 - ✅ Configure le registry Docker local
 - ✅ Crée le cluster KinD `rhdemo` avec `kind-config.yaml`
 - ✅ Installe **Cilium 1.18** (CNI avec kube-proxy replacement)
-- ✅ Installe **NGINX Gateway Fabric 2.3.0** (Gateway API)
+- ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)
 - ✅ Configure le RBAC pour Jenkins

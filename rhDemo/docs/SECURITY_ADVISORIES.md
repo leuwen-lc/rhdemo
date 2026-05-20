@@ -831,40 +831,37 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL,HIGH nginx
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : À préciser (voir NVD)
 - **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric`
-- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
+- **Statut** : ✅ Corrigé — NGF 2.6.0 intègre `google.golang.org/grpc v1.80.0` (fix en v1.79.3)
 
 ### Description
 
-CVE-2026-33186 affecte NGINX Gateway Fabric. La version 2.4.2 (dernière disponible) ne corrige pas cette CVE.
+CVE-2026-33186 est un contournement d'autorisation dans gRPC (CVSS 9.1 Critical) : les en-têtes `:path` non canoniques (sans `/` initial) échappaient aux politiques d'autorisation basées sur le chemin. Affectait NGF 2.4.x (grpc v1.78.0). **Corrigé dans NGF 2.6.0** via la mise à jour grpc → v1.80.0.
 
 ### Images affectées
 
 | Image | Version | Correctif disponible | Statut |
 | --- | --- | --- | --- |
-| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 | Non | ~~⚠️ CVE présente~~ (obsolète) |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.6.0 | Oui (grpc v1.80.0) | ✅ Corrigé |
 
 ### Remédiation appliquée
 
-**Action** : Mise à jour NGF 2.4.0 → 2.4.2 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
+**Action** : Mise à jour NGF 2.4.2 → 2.6.0 (correctif CVE-2026-31789 + CVE-2026-33186). Exclusion `.trivyignore.yaml` supprimée.
 
 **Fichiers modifiés** :
 
-- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.4.2)
+- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.6.0)
 - `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
 - `docs/IMAGE_VERSIONS_MANAGEMENT.md`
 - `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
-- `.trivyignore.yaml` (exclusion CVE-2026-33186 avec justification)
-
-### Condition de clôture
-
-Retirer `CVE-2026-33186` du `.trivyignore.yaml` quand une version NGF intégrant le correctif est publiée.
+- `.trivyignore.yaml` (exclusion CVE-2026-33186 **supprimée** — CVE corrigée dans NGF 2.6.0)
 
 ### Validation
 
 ```bash
-# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
-trivy image --ignorefile rhDemo/.trivyignore.yaml \
-  ghcr.io/nginx/nginx-gateway-fabric:2.4.2 --severity CRITICAL,HIGH
+# Vérifier que le scan CI passe sans exclusion
+trivy image ghcr.io/nginx/nginx-gateway-fabric:2.6.0 --severity CRITICAL,HIGH
+# CVE-2026-33186 ne doit plus apparaître
 ```
 
 ### Timeline
@@ -874,6 +871,8 @@ trivy image --ignorefile rhDemo/.trivyignore.yaml \
 | 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
 | 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 (dernière disponible — ne corrige pas CVE-2026-33186) |
 | 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
+| 2026-05-20 | Mise à jour NGF 2.4.2 → 2.6.0 (grpc v1.78.0 → v1.80.0, CVE-2026-33186 corrigée) |
+| 2026-05-20 | Exclusion `.trivyignore.yaml` supprimée — CVE résolue upstream |
 
 ### Références
 

@@ -19,7 +19,7 @@ Ce document décrit les deux options de gestion des certificats TLS pour l'envir
 
 ## Architecture TLS avec NGINX Gateway Fabric
 
-Depuis la migration vers **NGINX Gateway Fabric 2.4.2**, la terminaison TLS est centralisée au niveau du `shared-gateway` dans le namespace `nginx-gateway`. Les Ingress Kubernetes ne sont plus utilisés.
+Depuis la migration vers **NGINX Gateway Fabric 2.6.0**, la terminaison TLS est centralisée au niveau du `shared-gateway` dans le namespace `nginx-gateway`. Les Ingress Kubernetes ne sont plus utilisés.
 
 ```
 Internet → KinD (hostPort 443) → NodePort 32616 → shared-gateway (TLS terminé ici) → HTTPRoutes → Services
@@ -444,7 +444,7 @@ Avec un certificat auto-signé, cette erreur est normale pour les appels HTTPS s
 
 - [cert-manager Documentation](https://cert-manager.io/docs/)
 - [Let's Encrypt](https://letsencrypt.org/)
-- [NGINX Gateway Fabric 2.4.2](https://docs.nginx.com/nginx-gateway-fabric/) (correctif CVE-2026-33186)
+- [NGINX Gateway Fabric 2.6.0](https://docs.nginx.com/nginx-gateway-fabric/) (correctif CVE-2026-31789)
 - [Gateway API - Kubernetes](https://gateway-api.sigs.k8s.io/)
 - [Spring Security OAuth2 Client](https://docs.spring.io/spring-security/reference/servlet/oauth2/client/index.html)
 - [Keycloak OIDC Logout](https://www.keycloak.org/docs/latest/securing_apps/#logout)

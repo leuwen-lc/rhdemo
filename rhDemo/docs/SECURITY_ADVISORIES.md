@@ -4,6 +4,29 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-42154 — Prometheus Java clients (micrometer-registry-prometheus, prometheus-metrics-core)
+
+### Détection
+
+- **Date de détection** : 2026-05-20
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5)
+- **Composants affectés** : `io.micrometer:micrometer-registry-prometheus@1.16.5` et `io.prometheus:prometheus-metrics-core@1.4.3`
+
+### Description
+
+Le endpoint `/api/v1/read` du **serveur Prometheus** (binaire Go) ne valide pas la taille déclarée dans les requêtes snappy-compressées avant d'allouer de la mémoire. Un attaquant non authentifié peut envoyer un petit payload provoquant une allocation mémoire massive, épuisant la mémoire disponible et crashant le processus Prometheus (DoS). Corrigé dans les versions serveur 3.5.3 et 3.11.3.
+
+**Faux positif** : OWASP Dependency-Check associe incorrectement cette CVE aux bibliothèques Java `micrometer-registry-prometheus` et `prometheus-metrics-core`, qui sont des **clients** exportant des métriques VERS Prometheus. Elles n'implémentent pas l'endpoint `/api/v1/read` du serveur Prometheus (Go) et ne sont pas affectées.
+
+### Remédiation
+
+- **Action** : Suppression (faux positif) dans `owasp-suppressions.xml`
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Deux suppressions ajoutées par `packageUrl regex` ciblant `io.micrometer/micrometer-registry-prometheus` et `io.prometheus/prometheus-metrics-core`, valides pour toutes versions futures (la CVE concerne le serveur Go, pas le client Java)
+
+---
+
 ## CVE-2026-41293, CVE-2026-43512, CVE-2026-43515, CVE-2026-41284, CVE-2026-43513 & CVE-2026-42498 — Apache Tomcat
 
 ### Détection
@@ -100,13 +123,18 @@ De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service c
 
 **CVE-2026-22753** (CVSS 7.5) — Fuite d'informations sensibles dans les réponses d'erreur Spring Security 7.0.4 dans certaines configurations OAuth2.
 
-### Remédiation
+### Remédiation initiale (2026-04-27)
 
 - **Action** : Suppression OWASP temporaire (pas de version corrigée disponible — Spring Security 7.0.5+ attendu)
-- **Fichier modifié** : `rhDemo/owasp-suppressions.xml` (créé)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
 - **Détail** : Suppression par `packageUrl` regex `^pkg:maven/org\.springframework\.security/.*@7\.0\.4$` pour les 3 CVE
 - **Atténuations en place** : Nginx reverse proxy, pattern BFF (tokens non exposés côté client), Network Policies Kubernetes (egress bloqué), Keycloak IAM
-- **Action requise** : Retirer les suppressions dès que Spring Security 7.0.5+ est disponible et upgrader via `<spring-security.version>`
+
+### Clôture (2026-05-20)
+
+- **Action** : Suppressions retirées — Spring Security 7.0.5 désormais embarqué via Spring Boot 4.0.6 (BOM)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Les 3 suppressions CVE-2026-22747, CVE-2026-22754, CVE-2026-22753 supprimées ; corrigées nativement par le BOM Spring Boot 4.0.6 → Spring Security 7.0.5
 
 ---
 

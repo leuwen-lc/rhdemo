@@ -4,26 +4,26 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## CVE-2026-42154 — Prometheus Java clients (micrometer-registry-prometheus, prometheus-metrics-core)
+## CVE-2026-42154 — Prometheus Java clients (micrometer-registry-prometheus, prometheus-metrics-*)
 
 ### Détection
 
 - **Date de détection** : 2026-05-20
 - **Outil** : OWASP Dependency-Check
 - **Sévérité** : HIGH (CVSS: 7.5)
-- **Composants affectés** : `io.micrometer:micrometer-registry-prometheus@1.16.5` et `io.prometheus:prometheus-metrics-core@1.4.3`
+- **Composants affectés** : `io.micrometer:micrometer-registry-prometheus@1.16.5` et tous les modules `io.prometheus:prometheus-metrics-*@1.4.3` (core, model, config, exposition-formats, exposition-textformats, tracer-common)
 
 ### Description
 
 Le endpoint `/api/v1/read` du **serveur Prometheus** (binaire Go) ne valide pas la taille déclarée dans les requêtes snappy-compressées avant d'allouer de la mémoire. Un attaquant non authentifié peut envoyer un petit payload provoquant une allocation mémoire massive, épuisant la mémoire disponible et crashant le processus Prometheus (DoS). Corrigé dans les versions serveur 3.5.3 et 3.11.3.
 
-**Faux positif** : OWASP Dependency-Check associe incorrectement cette CVE aux bibliothèques Java `micrometer-registry-prometheus` et `prometheus-metrics-core`, qui sont des **clients** exportant des métriques VERS Prometheus. Elles n'implémentent pas l'endpoint `/api/v1/read` du serveur Prometheus (Go) et ne sont pas affectées.
+**Faux positif** : OWASP Dependency-Check associe incorrectement cette CVE aux bibliothèques Java `micrometer-registry-prometheus` et `prometheus-metrics-*`, qui sont des **clients** exportant des métriques VERS Prometheus. Elles n'implémentent pas l'endpoint `/api/v1/read` du serveur Prometheus (Go) et ne sont pas affectées.
 
 ### Remédiation
 
 - **Action** : Suppression (faux positif) dans `owasp-suppressions.xml`
 - **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
-- **Détail** : Deux suppressions ajoutées par `packageUrl regex` ciblant `io.micrometer/micrometer-registry-prometheus` et `io.prometheus/prometheus-metrics-core`, valides pour toutes versions futures (la CVE concerne le serveur Go, pas le client Java)
+- **Détail** : Suppression par `packageUrl regex` `^pkg:maven/io\.micrometer/micrometer-registry-prometheus@.*$` et `^pkg:maven/io\.prometheus/prometheus-metrics-[^@]+@.*$` — couvre tous les sous-modules actuels et futurs de la bibliothèque Java Prometheus client
 
 ---
 

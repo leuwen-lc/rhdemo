@@ -55,8 +55,8 @@
     </suppress>
 
     <suppress>
-        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas le client Java prometheus-metrics-core.</notes>
-        <packageUrl regex="true">^pkg:maven/io\.prometheus/prometheus-metrics-core@.*$</packageUrl>
+        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas les clients Java prometheus-metrics-* (core, model, config, exposition-formats, etc.).</notes>
+        <packageUrl regex="true">^pkg:maven/io\.prometheus/prometheus-metrics-[^@]+@.*$</packageUrl>
         <cve>CVE-2026-42154</cve>
     </suppress>
 

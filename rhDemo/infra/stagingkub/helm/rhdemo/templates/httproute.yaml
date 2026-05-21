@@ -32,7 +32,7 @@ spec:
     - type: RequestHeaderModifier
       requestHeaderModifier:
         remove:
-        - Forwarded
+          - Forwarded
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}

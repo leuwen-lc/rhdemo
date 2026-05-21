@@ -42,7 +42,7 @@ jenkins:
                 type=volume,source=rhdemo-maven-repository,destination=/home/jenkins/.m2
                 type=volume,source=rhdemo-trivy-cache,destination=/home/jenkins/.cache/trivy
                 type=volume,source=rhdemo-wdm-cache,destination=/home/jenkins/.cache/selenium
-                type=bind,source=/home/leno-vo/git/repository/rhDemo/infra/jenkins-docker/certs/registry/registry.crt,destination=/etc/ssl/certs/registry.crt,readonly
+                type=bind,source=${REPOSITORY_PATH}/rhDemo/infra/jenkins-docker/certs/registry/registry.crt,destination=/etc/ssl/certs/registry.crt,readonly
               network: "rhdemo-jenkins-network"
               extraGroupsString: "984"
               environmentsString: |

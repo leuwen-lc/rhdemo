@@ -51,7 +51,7 @@ if [ -z "$PLUGIN_VERSIONS" ]; then
     exit 1
 fi
 
-echo "✅ ${#PLUGIN_VERSIONS} plugins lus"
+echo "✅ $(echo "$PLUGIN_VERSIONS" | wc -l) plugins lus"
 
 # ────────────────────────────────────────────────────────────────
 # Mise à jour de plugins.txt

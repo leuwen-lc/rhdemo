@@ -1,10 +1,10 @@
-# Procédure standard : PR `evolutions-post-1.1.6` -> `master`, release `1.1.7-RELEASE`, tag, puis retour en `-SNAPSHOT`
+# Procédure standard : PR `evolutions-post-1.1.7` -> `master`, release `1.1.8-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte (modifier les versions par remplacement global):
 
-- Branche source (exemple) : `evolutions-post-1.1.6`
+- Branche source (exemple) : `evolutions-post-1.1.7`
 - Branche cible : `master`
-- Tag Git (exemple) : `1.1.7-RELEASE`
+- Tag Git (exemple) : `1.1.8-RELEASE`
 - Après la release, `master` repasse en `-SNAPSHOT`
 
 ## Prérequis
@@ -20,12 +20,12 @@ git fetch origin
 ```
 
 ```bash
-git checkout evolutions-post-1.1.6
+git checkout evolutions-post-1.1.7
 # Bascule sur la branche de travail à livrer.
 ```
 
 ```bash
-git pull --rebase origin evolutions-post-1.1.6
+git pull --rebase origin evolutions-post-1.1.7
 # Met à jour la branche avec le distant en rejouant les commits au-dessus (historique plus propre qu’un merge).
 ```
 
@@ -48,10 +48,10 @@ git merge origin/master
 
 ---
 
-## 3) Passer la version Maven en `1.1.7-RELEASE` (dans les POM)
+## 3) Passer la version Maven en `1.1.8-RELEASE` (dans les POM)
 
 1. Modifie les `pom.xml` (3 modules) :
-   - Remplacer par exemple `1.1.6-SNAPSHOT` par `1.1.7-RELEASE`.
+   - Remplacer par exemple `1.1.8-SNAPSHOT` par `1.1.8-RELEASE`.
 
 Puis :
 
@@ -66,12 +66,12 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore(release): passage à la version 1.1.7-RELEASE"
+git commit -m "chore(release): passage à la version 1.1.8-RELEASE"
 # Crée un commit traçable qui fige la version release dans les POM.
 ```
 
 ```bash
-git push origin evolutions-post-1.1.6
+git push origin evolutions-post-1.1.7
 # Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
 ```
 
@@ -83,7 +83,7 @@ Sur GitHub :
 
 - (Demandeur) Créer une PR :
   - **base** : `master`
-  - **compare** : `evolutions-post-1.1.6`
+  - **compare** : `evolutions-post-1.1.7`
 - Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
 - Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
 
@@ -108,12 +108,12 @@ git pull origin master
 ```
 
 ```bash
-git tag -a 1.1.7-RELEASE -m "Release 1.1.7-RELEASE"
+git tag -a 1.1.8-RELEASE -m "Release 1.1.8-RELEASE"
 # Crée un tag annoté sur le commit courant (celui de master) pour marquer officiellement la release.
 ```
 
 ```bash
-git push origin 1.1.7-RELEASE
+git push origin 1.1.8-RELEASE
 # Publie le tag vers le remote pour le rendre visible à tous (et déclencher d’éventuels pipelines de release).
 ```
 
@@ -123,7 +123,7 @@ git push origin 1.1.7-RELEASE
 
 Décide de la version de développement suivante :
 
-- `1.1.6-SNAPSHOT` (exemple)
+- `1.1.7-SNAPSHOT` (exemple)
 
 1. Modifier les `pom.xml` pour mettre la prochaine version `-SNAPSHOT`.
 
@@ -140,7 +140,7 @@ git add **/pom.xml
 ```
 
 ```bash
-git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.7-RELEASE"
+git commit -m "chore: retour à 1.1.7-SNAPSHOT après 1.1.8-RELEASE"
 # Committe le retour en version de développement pour éviter que master reste bloqué en version release.
 ```
 

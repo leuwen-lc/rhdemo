@@ -56,19 +56,19 @@ public class SecurityConfig {
 	        .policyDirectives(cspPolicyBuilder.buildCspDirectives())
 	    )
 	)
-	.authorizeHttpRequests(auth -> ( auth
-            .requestMatchers("/error*","/logout").permitAll()
-            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
-                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-            // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)
-                    .requestMatchers("/actuator/prometheus").permitAll()
-            // Autres endpoints actuator réservés aux admins
-            .requestMatchers("/actuator/**").hasRole("admin")
-            // Documentation OpenAPI/Swagger restreinte aux admins (désactivée en stagingkub via springdoc config)
-            .requestMatchers("/api-docs/**").hasRole("admin")
-            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
-            // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
-            .anyRequest().authenticated())
+	.authorizeHttpRequests(auth -> auth
+	        .requestMatchers("/error*", "/logout").permitAll()
+	        // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+	        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+	        // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)
+	        .requestMatchers("/actuator/prometheus").permitAll()
+	        // Autres endpoints actuator réservés aux admins
+	        .requestMatchers("/actuator/**").hasRole("admin")
+	        // Documentation OpenAPI/Swagger restreinte aux admins (désactivée en stagingkub via springdoc config)
+	        .requestMatchers("/api-docs/**").hasRole("admin")
+	        .requestMatchers("/front").hasAnyRole("consult", "MAJ")
+	        // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
+	        .anyRequest().authenticated())
 	.oauth2Login(oauth2 -> oauth2
 		    .userInfoEndpoint(userInfo -> userInfo
 			        .userAuthoritiesMapper(this.keycloakmapper)))

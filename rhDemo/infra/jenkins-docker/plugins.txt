@@ -118,7 +118,7 @@ pipeline-rest-api:2.41
 pipeline-stage-step:345.va_96187909426
 pipeline-stage-tags-metadata:2.2277.v00573e73ddf1
 plain-credentials:199.v9f8e1f741799
-plugin-util-api:7.1330.v47b_46ee2047a_
+plugin-util-api:7.1341.v039f146993d9
 prism-api:1.30.0-727.vc475481f034d
 resource-disposer:0.25
 scm-api:728.vc30dcf7a_0df5

@@ -81,7 +81,7 @@ durable-task:664.v2b_e7a_dfff66c
 echarts-api:6.0.0-1287.vfd24c22a_3d00
 eddsa-api:0.3.0.1-29.v67e9a_1c969b_b_
 font-awesome-api:7.2.0-990.vf220b_2a_496f9
-forensics-api:4.1881.v79c6e496c613
+forensics-api:4.1891.v5e60f3377506
 git-client:6.6.0
 gson-api:2.13.2-198.v45e4a_55d9b_a_a_
 instance-identity:203.v15e81a_1b_7a_38

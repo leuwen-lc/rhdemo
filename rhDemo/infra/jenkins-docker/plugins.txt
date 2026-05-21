@@ -83,7 +83,7 @@ eddsa-api:0.3.0.1-29.v67e9a_1c969b_b_
 font-awesome-api:7.2.0-990.vf220b_2a_496f9
 forensics-api:4.1881.v79c6e496c613
 git-client:6.6.0
-gson-api:2.13.2-198.v45e4a_55d9b_a_a_
+gson-api:2.14.0-201.v8eefe5515533
 instance-identity:203.v15e81a_1b_7a_38
 ionicons-api:94.vcc3065403257
 jackson-annotations2-api:2.21-7.v4777a_f3a_a_d47

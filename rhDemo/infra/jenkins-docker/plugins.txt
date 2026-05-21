@@ -26,7 +26,7 @@ jdk-tool:83.v417146707a_3d                          # tools { jdk 'JDK21' }
 
 # Qualité du code
 sonar:2.18.2                                        # withSonarQubeEnv, waitForQualityGate
-coverage:3.3212.vd0f86de315fe                       # recordCoverage(tools: [[parser: 'JACOCO']])
+coverage:3.3240.vb_5a_8809f7523                       # recordCoverage(tools: [[parser: 'JACOCO']])
 
 # Tests & Rapports
 junit:1403.vd9d1413fd205                            # junit 'target/surefire-reports/*.xml'

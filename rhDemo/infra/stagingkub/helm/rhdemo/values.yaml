@@ -139,6 +139,8 @@ keycloak:
   httpEnabled: true
   healthEnabled: true
   metricsEnabled: true
+  hostnameStrict: true
+  hostnameBackchannelDynamic: true
 
   logLevel: info
 

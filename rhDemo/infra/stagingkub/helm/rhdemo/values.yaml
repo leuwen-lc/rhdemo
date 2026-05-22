@@ -133,7 +133,8 @@ keycloak:
       key: password
 
   # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
-  hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+  # URL complète requise par --hostname-backchannel-dynamic=true (Keycloak 26 production mode)
+  hostname: https://keycloak-stagingkub.intra.leuwen-lc.fr
 
   proxyHeaders: xforwarded
   httpEnabled: true
@@ -175,7 +176,7 @@ rhdemo:
   enabled: true
   image:
     repository: rhdemo-api
-    tag: "1.1.0-SNAPSHOT"
+    tag: "1.1.9-SNAPSHOT"
     pullPolicy: IfNotPresent
 
   replicaCount: 1

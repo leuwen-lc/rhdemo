@@ -44,6 +44,7 @@ spec:
         - --db-username={{ .Values.keycloak.database.user }}
         - --proxy-headers={{ .Values.keycloak.proxyHeaders }}
         - --http-enabled={{ .Values.keycloak.httpEnabled }}
+        - "--https-port=-1"
         - --health-enabled={{ .Values.keycloak.healthEnabled }}
         - --metrics-enabled={{ .Values.keycloak.metricsEnabled }}
         - --hostname-strict={{ .Values.keycloak.hostnameStrict }}

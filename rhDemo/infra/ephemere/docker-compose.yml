@@ -51,7 +51,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.6.2@sha256:7d6aed77093ca34b511f10c12ae708d68f6ba7bb89118178d525b24d52c6ec31}
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.6.2@sha256:3e58dc82a9b72f364f37dac17f99fcaf53d0052a3c1ad7f00b069a1ed43201c0}
     container_name: keycloak-ephemere
     restart: unless-stopped
     command:

@@ -103,7 +103,7 @@ json-path-api:3.0.0-218.vcd4dd1355de2
 jsoup:1.22.2-95.vc5d00f1eb_42d
 matrix-project:870.v9db_fcfc2f45b_
 mina-sshd-api-common:2.17.1-187.v0341274c2905
-mina-sshd-api-core:2.16.0-184.v1e0e8b_e8e813
+mina-sshd-api-core:2.17.1-187.v0341274c2905
 okhttp-api:5.3.2-200.vedb_720a_cf1f8
 oss-symbols-api:442.v99039087229b_
 pipeline-build-step:584.vdb_a_2cc3a_d07a_

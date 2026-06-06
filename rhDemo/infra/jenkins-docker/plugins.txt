@@ -116,7 +116,7 @@ pipeline-model-definition:2.2289.v6f731d0a_02da_
 pipeline-model-extensions:2.2289.v6f731d0a_02da_
 pipeline-rest-api:2.41
 pipeline-stage-step:345.va_96187909426
-pipeline-stage-tags-metadata:2.2277.v00573e73ddf1
+pipeline-stage-tags-metadata:2.2289.v6f731d0a_02da_
 plain-credentials:199.v9f8e1f741799
 plugin-util-api:7.1341.v039f146993d9
 prism-api:1.30.0-727.vc475481f034d

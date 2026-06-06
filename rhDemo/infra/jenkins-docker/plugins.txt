@@ -111,7 +111,7 @@ pipeline-graph-analysis:254.v0f63a_a_447dca_
 pipeline-groovy-lib:797.v90ea_a_9b_e45a_0
 pipeline-input-step:551.vdff487c5998c
 pipeline-milestone-step:152.v6e22b_8cfc66c
-pipeline-model-api:2.2277.v00573e73ddf1
+pipeline-model-api:2.2289.v6f731d0a_02da_
 pipeline-model-definition:2.2277.v00573e73ddf1
 pipeline-model-extensions:2.2277.v00573e73ddf1
 pipeline-rest-api:2.41

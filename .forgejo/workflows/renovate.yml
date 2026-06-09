@@ -1,0 +1,20 @@
+name: Renovate
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # chaque nuit à 3h
+  workflow_dispatch:
+
+jobs:
+  renovate:
+    runs-on: docker
+    container:
+      image: renovate/renovate
+    steps:
+      - name: Run Renovate
+        env:
+          RENOVATE_PLATFORM: forjero
+          RENOVATE_ENDPOINT: https://codeberg.org
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
+        run: renovate

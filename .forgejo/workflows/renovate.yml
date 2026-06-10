@@ -28,5 +28,4 @@ jobs:
           RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
           RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
           GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
-          LOG_LEVEL: debug
         run: renovate

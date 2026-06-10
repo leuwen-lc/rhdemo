@@ -4,6 +4,29 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-41842 & CVE-2026-41850 & CVE-2026-41851 — Spring Framework DoS
+
+### Détection
+
+- **Date de détection** : 2026-06-10
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5)
+- **Composants affectés** : `org.springframework:spring-core` en version `7.0.7`
+
+### Description
+
+Trois vecteurs de Denial of Service dans Spring Framework 7.0.0–7.0.7 :
+- **CVE-2026-41851 / CVE-2026-41850** : DoS via expressions SpEL fournies par un utilisateur déclenchant une croissance de cache non bornée ou une consommation CPU excessive lors de l'évaluation.
+- **CVE-2026-41842** : DoS lors de la résolution de ressources statiques dans Spring MVC/WebFlux.
+
+### Remédiation
+
+- **Action** : Upgrade Spring Framework `7.0.7` → `7.0.8` via surcharge de la propriété BOM Spring Boot
+- **Fichier modifié** : `pom.xml`
+- **Détail** : propriété Maven `<spring-framework.version>7.0.8</spring-framework.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.0.6 qui bundlait 7.0.7)
+
+---
+
 ## CVE-2026-31789 — OpenSSL heap buffer overflow (nginx 1.29.x Alpine)
 
 ### Détection

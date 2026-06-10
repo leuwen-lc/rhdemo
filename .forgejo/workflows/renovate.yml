@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Run Renovate
         env:
-          RENOVATE_PLATFORM: forjero
+          RENOVATE_PLATFORM: forgejo
           RENOVATE_ENDPOINT: https://codeberg.org
           RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
           RENOVATE_REPOSITORIES: leuwen-lc/rhdemo

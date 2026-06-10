@@ -79,15 +79,31 @@ git push origin evolutions-post-1.1.7
 
 ## 4) Ouvrir et merger la Pull Request sur GitHub
 
-Sur GitHub :
+Sur Codeberg :
 
 - (Demandeur) Créer une PR :
-  - **base** : `master`
-  - **compare** : `evolutions-post-1.1.7`
+  - **fusionner dans** : `master`
+  - **tirer les modifications depuis** : `evolutions-post-1.1.6`
 - Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
 - Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
 
 > Stratégie de merge : Squash/Merge
+>
+> Attention pour pouvoir signer le squash merge il faut le faire en local  
+>
+> 1. Ouvrir la PR normalement sur Codeberg :
+  evolutions-post-1.1.8 → master (pour la revue, les
+  commentaires, les checks CI)
+
+  1. Ne pas cliquer sur le bouton Merge de l'interface —
+  faire le merge signé en local :
+  git fetch origin
+  git checkout master
+  git merge --squash origin/evolutions-post-1.1.8
+  git commit -S -m "release: merge evolutions-post-1.1.8"
+  git push origin master
+>
+
 ---
 
 ## 5) Tagger la release sur le commit de `master` (après merge)

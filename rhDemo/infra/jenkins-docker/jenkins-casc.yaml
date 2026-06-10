@@ -224,7 +224,7 @@ jobs:
             scm {
               git {
                 remote {
-                  url('https://github.com/leuwen-lc/rhdemo.git')
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
                 branches('*/master')
@@ -310,7 +310,7 @@ jobs:
             scm {
               git {
                 remote {
-                  url('https://github.com/leuwen-lc/rhdemo.git')
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
                 branches('*/master')

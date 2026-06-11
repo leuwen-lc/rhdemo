@@ -17,7 +17,7 @@ Contexte (modifier les versions par remplacement global):
 ## Étapes automatisées vs manuelles
 
 | Étape | Outil | Description |
-|-------|-------|-------------|
+| ----- | ----- | ----------- |
 | Sync + align master + bump RELEASE + push | `release.sh pre-merge` | Automatisé |
 | Squash merge signé | `git` local | **Manuel** (nécessite clé GPG/SSH locale) |
 | Tag + push tag + bump SNAPSHOT + push | `release.sh post-merge` | Automatisé |
@@ -34,6 +34,7 @@ rhDemo/scripts/release.sh pre-merge 1.1.8-RELEASE evolutions-post-1.1.7
 ```
 
 Le script effectue dans l'ordre :
+
 1. Vérifie que le répertoire de travail est propre
 2. Bascule sur la branche si nécessaire
 3. `git pull --rebase origin evolutions-post-1.1.7`
@@ -77,6 +78,7 @@ rhDemo/scripts/release.sh post-merge 1.1.8-RELEASE 1.1.9-SNAPSHOT
 ```
 
 Le script effectue dans l'ordre :
+
 1. Vérifie que le répertoire de travail est propre et que la branche est `master`
 2. `git pull origin master`
 3. Contrôle que `pom.xml` est bien en `1.1.8-RELEASE` (cohérence avec le squash merge)

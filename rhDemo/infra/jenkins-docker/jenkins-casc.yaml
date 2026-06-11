@@ -259,7 +259,7 @@ jobs:
 
         triggers {
           pollSCM {
-            scmpoll_spec('H/15 * * * *')
+            scmpoll_spec('H/5 * * * *')
             ignorePostCommitHooks(false)
           }
         }

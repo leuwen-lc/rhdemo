@@ -10,6 +10,7 @@
     "evolutions-post-1.1.8"
   ],
   "minimumReleaseAge": "7 days",
+  "rebaseWhen": "behind-base-branch",
   "packageRules": [
     {
       "matchUpdateTypes": [

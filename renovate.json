@@ -4,8 +4,6 @@
     "config:recommended"
   ],
   "gitAuthor": "Renovate Bot <leuwenlc+renovate@gmail.com>",
-  "allowedUnsafeExecutions": [],
-  "allowScripts": false,
   "baseBranchPatterns": [
     "evolutions-post-1.1.8"
   ],

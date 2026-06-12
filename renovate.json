@@ -4,23 +4,17 @@
     "config:recommended"
   ],
   "gitAuthor": "Renovate Bot <leuwenlc+renovate@gmail.com>",
-  "allowedUnsafeExecutions": [],
-  "allowScripts": false,
   "baseBranchPatterns": [
     "evolutions-post-1.1.8"
   ],
   "minimumReleaseAge": "7 days",
+  "rebaseWhen": "behind-base-branch",
   "packageRules": [
     {
       "matchUpdateTypes": [
         "major"
       ],
       "dependencyDashboardApproval": true
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true,
-      "automergeType": "branch"
     },
     {
       "matchPackageNames": ["rhdemo-api"],

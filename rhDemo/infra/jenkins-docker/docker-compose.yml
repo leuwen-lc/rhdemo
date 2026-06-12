@@ -171,7 +171,7 @@ services:
   # puis configurer Docker daemon (voir instructions dans le script)
   # ═══════════════════════════════════════════════════════════════════
   registry:
-    image: registry:2
+    image: registry:3
     container_name: kind-registry
     restart: unless-stopped
 

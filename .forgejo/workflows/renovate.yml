@@ -11,21 +11,19 @@ jobs:
     container:
       image: renovate/renovate:43.217.1
     steps:
-      - name: Import GPG key
+      - name: Run Renovate
+        env:
+          RENOVATE_GPG_KEY: ${{ secrets.RENOVATE_GPG_KEY }}
+          RENOVATE_PLATFORM: forgejo
+          RENOVATE_ENDPOINT: https://codeberg.org
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
+          GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
         run: |
           echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --import
           KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)
           git config --global user.signingkey "$KEY_ID"
           git config --global commit.gpgsign true
           echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-        env:
-          RENOVATE_GPG_KEY: ${{ secrets.RENOVATE_GPG_KEY }}
-
-      - name: Run Renovate
-        env:
-          RENOVATE_PLATFORM: forgejo
-          RENOVATE_ENDPOINT: https://codeberg.org
-          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
-          RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
-          GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
-        run: renovate
+          renovate
+          [ -n "$GITHUB_STEP_SUMMARY" ] && echo "Renovate completed" >> "$GITHUB_STEP_SUMMARY" || true

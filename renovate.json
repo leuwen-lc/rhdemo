@@ -8,6 +8,7 @@
     "evolutions-post-1.1.8"
   ],
   "prCreation": "immediate",
+  "ignoredManagers": ["jenkins"],
   "minimumReleaseAge": "7 days",
   "rebaseWhen": "behind-base-branch",
   "packageRules": [
@@ -17,7 +18,7 @@
       ],
       "dependencyDashboardApproval": true
     },
-{
+    {
       "matchPackageNames": ["rhdemo-api"],
       "enabled": false
     }

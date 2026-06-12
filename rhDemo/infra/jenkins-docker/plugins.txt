@@ -48,7 +48,7 @@ build-timeout:1.40                                  # timeout(time: 2, unit: 'HO
 ws-cleanup:0.49                                     # Nettoyage workspace
 
 # Configuration as Code
-configuration-as-code:2077.v41f1011a_5110           # jenkins-casc.yaml
+configuration-as-code:2081.v2d0940662a_34           # jenkins-casc.yaml
 job-dsl:3654.vdf58f53e2d15                          # Définition des jobs RHDemo-CI/CD
 
 # Utilitaires

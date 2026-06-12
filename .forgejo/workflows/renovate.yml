@@ -8,24 +8,30 @@ on:
 jobs:
   renovate:
     runs-on: codeberg-small
-    container:
-      image: renovate/renovate:43.217.1
     steps:
-      - name: Import GPG key
+      - name: Run Renovate
+        env:
+          RENOVATE_GPG_KEY: ${{ secrets.RENOVATE_GPG_KEY }}
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_GH_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
         run: |
+          cat > /tmp/renovate-run.sh << 'SCRIPT'
+          #!/bin/sh
           echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --import
           KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)
           git config --global user.signingkey "$KEY_ID"
           git config --global commit.gpgsign true
           echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-        env:
-          RENOVATE_GPG_KEY: ${{ secrets.RENOVATE_GPG_KEY }}
-
-      - name: Run Renovate
-        env:
-          RENOVATE_PLATFORM: forgejo
-          RENOVATE_ENDPOINT: https://codeberg.org
-          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
-          RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
-          GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
-        run: renovate
+          renovate
+          SCRIPT
+          chmod +x /tmp/renovate-run.sh
+          podman run --rm \
+            -e RENOVATE_PLATFORM=forgejo \
+            -e RENOVATE_ENDPOINT=https://codeberg.org \
+            -e RENOVATE_TOKEN="${RENOVATE_TOKEN}" \
+            -e RENOVATE_REPOSITORIES=leuwen-lc/rhdemo \
+            -e GITHUB_COM_TOKEN="${RENOVATE_GH_TOKEN}" \
+            -e RENOVATE_GPG_KEY="${RENOVATE_GPG_KEY}" \
+            -v /tmp/renovate-run.sh:/renovate-run.sh:ro \
+            --entrypoint /renovate-run.sh \
+            renovate/renovate:43.217.1

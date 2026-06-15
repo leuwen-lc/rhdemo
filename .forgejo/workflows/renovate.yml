@@ -7,7 +7,7 @@ on:
 
 jobs:
   renovate:
-    runs-on: codeberg-small
+    runs-on: codeberg-medium
     timeout-minutes: 60
     container:
       image: renovate/renovate:43.217.1
@@ -25,10 +25,6 @@ jobs:
           RENOVATE_ONBOARDING: "false"
         run: |
           set -euo pipefail
-
-          # Pré-créer les fichiers attendus par le runner act (évite timeout Podman sur archive inexistante)
-          mkdir -p /var/run/act/workflow
-          touch /var/run/act/workflow/SUMMARY.md /var/run/act/workflow/pathcmd.txt
 
           export GNUPGHOME="${HOME}/.gnupg"
           mkdir -p "$GNUPGHOME"

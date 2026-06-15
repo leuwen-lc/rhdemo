@@ -9,8 +9,6 @@ jobs:
   renovate:
     runs-on: codeberg-small
     timeout-minutes: 60
-    container:
-      image: renovate/renovate:43.217.1
     steps:
       - name: Run Renovate
         env:
@@ -26,10 +24,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Pré-créer les fichiers attendus par le runner act (évite timeout Podman sur archive inexistante)
-          mkdir -p /var/run/act/workflow
-          touch /var/run/act/workflow/SUMMARY.md /var/run/act/workflow/pathcmd.txt
-
           export GNUPGHOME="${HOME}/.gnupg"
           mkdir -p "$GNUPGHOME"
           chmod 700 "$GNUPGHOME"
@@ -44,4 +38,4 @@ jobs:
           git config --global commit.gpgsign true
           git config --global gpg.program gpg
 
-          renovate
+          npx --yes renovate@43

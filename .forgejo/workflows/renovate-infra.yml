@@ -1,14 +1,13 @@
-name: Renovate
+name: Renovate - Infrastructure
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # chaque nuit à 3h
+    - cron: '0 3 * * *'  # chaque nuit à 3h00
   workflow_dispatch:
 
 jobs:
   renovate:
-    runs-on: codeberg-medium
-    timeout-minutes: 60
+    runs-on: codeberg-small
     container:
       image: renovate/renovate:43.217.1
     steps:
@@ -23,6 +22,7 @@ jobs:
           LOG_LEVEL: info
           RENOVATE_REQUIRE_CONFIG: "optional"
           RENOVATE_ONBOARDING: "false"
+          RENOVATE_ENABLED_MANAGERS: '["docker-compose","dockerfile","github-actions","helm-values"]'
         run: |
           set -euo pipefail
 

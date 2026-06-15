@@ -4,6 +4,30 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-40988 & CVE-2026-41003 & CVE-2026-41694 — Spring Security SAML DoS + XSS + déchiffrement oracle
+
+### Détection
+
+- **Date de détection** : 2026-06-15
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSS: 7.5) pour CVE-2026-40988 ; MEDIUM (5.4 / 5.3) pour les deux autres
+- **Composants affectés** : `spring-security-core` et `spring-security-oauth2-resource-server` en version `7.0.5`
+
+### Description
+
+Trois vulnérabilités dans Spring Security 7.0.0–7.0.5 :
+- **CVE-2026-40988** (CVSS 7.5 HIGH) : DoS via SAML2 REDIRECT binding — un payload SAML compressé est décompressé en mémoire sans limite, permettant une consommation mémoire non bornée.
+- **CVE-2026-41003** (CVSS 5.4 MEDIUM) : XSS via `RelyingPartyRegistration` — un attaquant capable d'influencer les valeurs de ce bean peut injecter du code dans les formulaires HTML générés par les filtres Spring Security.
+- **CVE-2026-41694** (CVSS 5.3 MEDIUM) : Oracle de déchiffrement SAML — Spring Security accepte des réponses SAML chiffrées sans signature valide, permettant d'utiliser le SP comme oracle de déchiffrement.
+
+### Remédiation
+
+- **Action** : Upgrade Spring Security `7.0.5` → `7.0.6` via surcharge de la propriété BOM Spring Boot
+- **Fichier modifié** : `pom.xml`
+- **Détail** : propriété Maven `<spring-security.version>7.0.6</spring-security.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.0.6 qui bundlait 7.0.5). Spring Security 7.1.0 (GA) a été écarté au profit du patch minimal 7.0.6 pour rester aligné avec la série Spring Boot 4.0.x.
+
+---
+
 ## CVE-2026-41842 & CVE-2026-41850 & CVE-2026-41851 — Spring Framework DoS
 
 ### Détection

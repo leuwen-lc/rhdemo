@@ -42,6 +42,8 @@
 		<postgresql.version>42.7.11</postgresql.version>
 		<!-- Fix CVE-2026-41842, CVE-2026-41850, CVE-2026-41851 — Spring Framework DoS (SpEL + static resources) -->
 		<spring-framework.version>7.0.8</spring-framework.version>
+		<!-- Fix CVE-2026-40988, CVE-2026-41003, CVE-2026-41694 — Spring Security SAML DoS + XSS + déchiffrement oracle -->
+		<spring-security.version>7.0.6</spring-security.version>
 	</properties>
 
 	<!-- Gestion centralisée des versions de dépendances transitives -->

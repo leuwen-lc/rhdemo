@@ -22,8 +22,9 @@
       "enabled": false
     },
     {
-      "matchManagers": ["jenkins"],
+      "matchManagers": ["jenkins", "maven-wrapper"],
       "enabled": false
     }
-  ]
+  ],
+  "gitExtraCloneFlags": ["--depth=1"]
 }

@@ -23,10 +23,12 @@ jobs:
           LOG_LEVEL: info
           RENOVATE_REQUIRE_CONFIG: "optional"
           RENOVATE_ONBOARDING: "false"
-          RENOVATE_PR_HOURLY_LIMIT: "2"
-          RENOVATE_BRANCH_CONCURRENCY: "3"
         run: |
           set -euo pipefail
+
+          # Pré-créer les fichiers attendus par le runner act (évite timeout Podman sur archive inexistante)
+          mkdir -p /var/run/act/workflow
+          touch /var/run/act/workflow/SUMMARY.md /var/run/act/workflow/pathcmd.txt
 
           export GNUPGHOME="${HOME}/.gnupg"
           mkdir -p "$GNUPGHOME"

@@ -7,7 +7,7 @@ on:
 
 jobs:
   renovate:
-    runs-on: codeberg-small
+    runs-on: codeberg-medium
     timeout-minutes: 60
     container:
       image: renovate/renovate:43.217.1

@@ -9,6 +9,8 @@ jobs:
   renovate:
     runs-on: codeberg-small
     timeout-minutes: 60
+    container:
+      image: renovate/renovate:43.217.1
     steps:
       - name: Run Renovate
         env:
@@ -38,4 +40,4 @@ jobs:
           git config --global commit.gpgsign true
           git config --global gpg.program gpg
 
-          npx --yes renovate@43
+          renovate

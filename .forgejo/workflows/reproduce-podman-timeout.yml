@@ -1,0 +1,13 @@
+name: Reproduce post-step archive timeout
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: codeberg-small
+    container:
+      image: alpine:latest
+    steps:
+      - name: Minimal step
+        run: echo "hello"

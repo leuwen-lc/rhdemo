@@ -2,14 +2,14 @@
 
 ## Problématique runner Codeberg (context deadline exceeded)
 
-Les runners Codeberg annulent tout job dépassant ~5 minutes avec l'erreur
+Les runners 'codeberg-small' annulent tout job dépassant ~5 minutes avec l'erreur
 "context deadline exceeded" lors de l'archivage Podman post-step
 (`SUMMARY.md`, `pathcmd.txt`). C'est une limitation de leur infrastructure,
 pas un bug du workflow (confirmé par reproduction minimale : `echo "hello"`
 passe, tout ce qui dépasse ~5 min échoue).
 
 **Solution actuelle :** les runners `codeberg-medium` permettent d'exécuter
-Renovate en un seul passage (~51 deps après désactivation de `jenkins` et
+Renovate en un seul passage (moins de 10 minutes ~51 deps après désactivation de `jenkins` et
 `maven-wrapper` dans `renovate.json`).
 
 ## Si codeberg-medium commence à échouer : scinder en deux workflows

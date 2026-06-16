@@ -20,11 +20,16 @@ Trois vulnérabilités dans Spring Security 7.0.0–7.0.5 :
 - **CVE-2026-41003** (CVSS 5.4 MEDIUM) : XSS via `RelyingPartyRegistration` — un attaquant capable d'influencer les valeurs de ce bean peut injecter du code dans les formulaires HTML générés par les filtres Spring Security.
 - **CVE-2026-41694** (CVSS 5.3 MEDIUM) : Oracle de déchiffrement SAML — Spring Security accepte des réponses SAML chiffrées sans signature valide, permettant d'utiliser le SP comme oracle de déchiffrement.
 
-### Remédiation
+### Remédiation initiale (2026-06-15)
 
 - **Action** : Upgrade Spring Security `7.0.5` → `7.0.6` via surcharge de la propriété BOM Spring Boot
 - **Fichier modifié** : `pom.xml`
-- **Détail** : propriété Maven `<spring-security.version>7.0.6</spring-security.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.0.6 qui bundlait 7.0.5). Spring Security 7.1.0 (GA) a été écarté au profit du patch minimal 7.0.6 pour rester aligné avec la série Spring Boot 4.0.x.
+- **Détail** : propriété Maven `<spring-security.version>7.0.6</spring-security.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.0.6 qui bundlait 7.0.5). Spring Security 7.1.0 (GA) avait été écarté au profit du patch minimal 7.0.6 pour rester aligné avec la série Spring Boot 4.0.x.
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<spring-security.version>` supprimé — Spring Boot 4.1.0 bundle nativement Spring Security 7.1.0 qui intègre ces correctifs.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -43,11 +48,16 @@ Trois vecteurs de Denial of Service dans Spring Framework 7.0.0–7.0.7 :
 - **CVE-2026-41851 / CVE-2026-41850** : DoS via expressions SpEL fournies par un utilisateur déclenchant une croissance de cache non bornée ou une consommation CPU excessive lors de l'évaluation.
 - **CVE-2026-41842** : DoS lors de la résolution de ressources statiques dans Spring MVC/WebFlux.
 
-### Remédiation
+### Remédiation initiale (2026-06-10)
 
 - **Action** : Upgrade Spring Framework `7.0.7` → `7.0.8` via surcharge de la propriété BOM Spring Boot
 - **Fichier modifié** : `pom.xml`
 - **Détail** : propriété Maven `<spring-framework.version>7.0.8</spring-framework.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.0.6 qui bundlait 7.0.7)
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<spring-framework.version>` supprimé — Spring Boot 4.1.0 bundle nativement Spring Framework 7.0.8.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -85,11 +95,16 @@ Heap buffer overflow dans OpenSSL sur les systèmes 32 bits lors du traitement d
 
 Bypass du sandbox Thymeleaf permettant l'exécution d'expressions potentiellement dangereuses dans des contextes sandboxés. Forme une chaîne patch-on-patch avec CVE-2026-40478 (fixé en 3.1.4) : un second contournement a été découvert, corrigé en 3.1.5.RELEASE. Exploitable uniquement si des variables non maîtrisées atteignent le moteur de template.
 
-### Remédiation
+### Remédiation initiale (2026-05-20)
 
 - **Action** : Montée de version `3.1.4.RELEASE` → `3.1.5.RELEASE`
 - **Fichier modifié** : `pom.xml`
-- **Détail** : Propriété Maven `<thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>` (commentaire CVE mis à jour)
+- **Détail** : Propriété Maven `<thymeleaf.version>3.1.5.RELEASE</thymeleaf.version>`
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<thymeleaf.version>` supprimé — Spring Boot 4.1.0 bundle nativement Thymeleaf 3.1.5.RELEASE.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -159,11 +174,16 @@ Six vulnérabilités affectant Apache Tomcat 11.0.0-M1 à 11.0.21 (embarqué via
 
 Toutes corrigées dans la version 11.0.22.
 
-### Remédiation
+### Remédiation initiale (2026-05-19)
 
 - **Action** : Upgrade `tomcat-embed-core` vers `11.0.22`
 - **Fichier modifié** : `pom.xml`
-- **Détail** : Propriété Maven `<tomcat.version>11.0.22</tomcat.version>` (ligne 36)
+- **Détail** : Propriété Maven `<tomcat.version>11.0.22</tomcat.version>`
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<tomcat.version>` supprimé — Spring Boot 4.1.0 bundle nativement Tomcat 11.0.22.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -210,11 +230,16 @@ Toutes ces vulnérabilités sont présentes dans le JavaScript embarqué dans le
 
 De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service côté client lors de l'authentification SCRAM-SHA-256. Un serveur malveillant peut instruire le driver d'effectuer une authentification SCRAM avec un nombre d'itérations PBKDF2 très élevé, saturant indéfiniment le CPU client. Le timeout `loginTimeout` ne suffisait pas à stopper le thread de connexion, qui continuait à consommer du CPU même après expiration.
 
-### Remédiation
+### Remédiation initiale (2026-05-11)
 
 - **Action** : Upgrade vers `42.7.11`
 - **Fichier modifié** : `pom.xml`
 - **Détail** : Propriété Maven `<postgresql.version>42.7.11</postgresql.version>` ajoutée dans `<properties>` — Spring Boot BOM respecte cette surcharge
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<postgresql.version>` supprimé — Spring Boot 4.1.0 bundle nativement PostgreSQL JDBC 42.7.11.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -265,11 +290,16 @@ De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service c
 
 **CVE-2026-34481** (CVSS 6.3) — Mauvaise gestion de certains patterns de formatage dans Log4j API 2.25.3.
 
-### Remédiation
+### Remédiation initiale (2026-04-27)
 
 - **Action** : Upgrade `org.apache.logging.log4j:log4j-api` vers `2.25.4`
 - **Fichier modifié** : `rhDemo/pom.xml`
 - **Détail** : Propriété Maven `<log4j2.version>2.25.4</log4j2.version>` dans `<properties>` (override du BOM Spring Boot)
+
+### Clôture (2026-06-16)
+
+- **Action** : Override `<log4j2.version>` supprimé — Spring Boot 4.1.0 bundle nativement Log4j2 2.25.4.
+- **Fichier modifié** : `pom.xml`
 
 ---
 
@@ -796,9 +826,10 @@ cd rhDemo && ./mvnw dependency:tree | grep tools.jackson
 ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
 ```
 
-### Condition de clôture
+### Clôture (2026-06-16)
 
-Retirer les entrées `dependencyManagement` pour Jackson lorsque Spring Boot intègre nativement Jackson >= 3.1.0 dans son BOM (mise à jour de `spring-boot-starter-parent`).
+- **Action** : Bloc `<dependencyManagement>` Jackson supprimé — Spring Boot 4.1.0 bundle nativement le Jackson BOM 3.1.4 (`tools.jackson:jackson-bom:3.1.4`).
+- **Fichier modifié** : `pom.xml`
 
 ### Timeline
 
@@ -982,9 +1013,9 @@ cd rhDemo && ./mvnw dependency:tree | grep tomcat-embed
 ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
 ```
 
-### Condition de clôture
+### Clôture
 
-Retirer `<tomcat.version>11.0.21</tomcat.version>` du `pom.xml` quand Spring Boot intègre nativement Tomcat >= 11.0.21 dans son parent POM.
+Résolu par la remédiation CVE-2026-41293/43512/43515/41284/43513/42498 ci-dessus (upgrade vers 11.0.22, puis suppression de l'override lors du passage à Spring Boot 4.1.0).
 
 ### Timeline
 
@@ -1036,4 +1067,4 @@ Retirer `<tomcat.version>11.0.21</tomcat.version>` du `pom.xml` quand Spring Boo
 
 ---
 
-**Dernière mise à jour** : 2026-04-19 (CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — tomcat-embed-core 11.0.21)
+**Dernière mise à jour** : 2026-06-16 (migration Spring Boot 4.1.0 — suppression de 8 overrides absorbés nativement par le BOM)

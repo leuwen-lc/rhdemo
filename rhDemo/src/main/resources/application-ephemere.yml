@@ -49,6 +49,13 @@ server:
         http-only: true  # Empêche l'accès JavaScript au cookie de session
         same-site: lax  # Protection CSRF supplémentaire
 
+# Désactivation de la documentation API SpringDoc en ephemere
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
 # Logging pour debug
 logging:
   level:

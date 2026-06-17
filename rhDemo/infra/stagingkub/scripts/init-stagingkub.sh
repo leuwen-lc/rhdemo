@@ -640,6 +640,12 @@ KUBECONFIG_EOF
         echo -e "${RED}    ✗ Création des SnippetsFilters refusée${NC}"
     fi
 
+    if kubectl auth can-i create ratelimitpolicies.gateway.nginx.org -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des RateLimitPolicies (NGF)${NC}"
+    else
+        echo -e "${RED}    ✗ Création des RateLimitPolicies refusée${NC}"
+    fi
+
     # Vérifier le NON-accès aux autres namespaces
     if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès à kube-system (sécurité OK)${NC}"

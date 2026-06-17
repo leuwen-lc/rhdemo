@@ -142,3 +142,8 @@ rules:
   - apiGroups: ["gateway.nginx.org"]
     resources: ["observabilitypolicies", "observabilitypolicies/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # RateLimitPolicy : rate limiting par route (NGF natif)
+  - apiGroups: ["gateway.nginx.org"]
+    resources: ["ratelimitpolicies", "ratelimitpolicies/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

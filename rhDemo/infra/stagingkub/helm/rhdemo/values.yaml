@@ -318,8 +318,8 @@ gateway:
       zoneSize: "10m"
     keycloak:
       key: "$binary_remote_addr"
-      rate: "5r/m"
-      burst: 2
+      rate: "30r/m"
+      burst: 20
       zoneSize: "10m"
       noDelay: true
 

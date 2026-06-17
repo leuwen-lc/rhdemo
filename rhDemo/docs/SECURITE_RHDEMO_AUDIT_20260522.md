@@ -563,18 +563,18 @@ Les points suivants sont des limitations connues, documentées dans le `CLAUDE.m
 - `nginx.conf` : 3 zones `limit_req_zone` dans le bloc `http`, clé `$binary_remote_addr` — limite **par adresse IP** (chaque IP a son propre compteur, un utilisateur légitime actif ne pénalise pas les autres) :
   - `rhdemo_global` : 60 r/m — navigation SPA complète
   - `rhdemo_api` : 30 r/m — endpoints REST `/api/`
-  - `keycloak_login` : 5 r/m — vhost Keycloak (navigateur uniquement, les appels Spring Boot → Keycloak contournent Nginx)
+  - `keycloak_login` : 30 r/m — vhost Keycloak (navigateur uniquement, les appels Spring Boot → Keycloak contournent Nginx)
 - `rhdemo.conf` : `location /api/` séparée avec `burst=30 nodelay` (valeur volontairement élevée pour absorber les séquences d'appels des tests Selenium CI) ; `location /` avec `burst=20`
-- `keycloak.conf` : `limit_req zone=keycloak_login burst=2 nodelay` — rejet immédiat, complète la brute-force protection native du realm Keycloak
+- `keycloak.conf` : `limit_req zone=keycloak_login burst=20 nodelay` — `burst=20` couvre le chargement de la page de login (HTML+CSS+JS+fonts ≈ 15-20 requêtes) sans bloquer un utilisateur légitime
 - Code de rejet : `limit_req_status 429`
 
 **Correction apportée — Stagingkub (NGF) :**
 - Nouveau template `ratelimitpolicy.yaml` utilisant le CRD natif `gateway.nginx.org/v1alpha1` — pas de SnippetsFilter requis
 - `rhdemo-rate-limit` cible `rhdemo-route` : 60 r/m, burst=20
-- `keycloak-rate-limit` cible `keycloak-route` : 5 r/m, burst=2, noDelay
+- `keycloak-rate-limit` cible `keycloak-route` : 30 r/m, burst=20, noDelay
 - Valeurs externalisées dans `gateway.rateLimit` de `values.yaml` (ajustables via `helm upgrade --set`)
 
-**Note :** La brute-force protection native du realm Keycloak (failureFactor, waitIncrementSeconds) relève du finding H1 et n'est pas encore configurée dans `rhDemoInitKeycloak`.
+**Choix du seuil Keycloak :** Une approche ciblée sur `login-actions/` uniquement (Nginx `location ~`) a été envisagée mais non retenue pour stagingkub (le CRD NGF `RateLimitPolicy` ne supporte pas le filtrage par chemin). Les deux environnements sont alignés sur `30r/m burst=20`. Les tests Selenium constituent une validation en conditions réelles de ce seuil. La brute-force protection native du realm Keycloak (failureFactor, waitIncrementSeconds) reste la seconde ligne de défense (finding H1).
 
 ---
 

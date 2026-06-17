@@ -1,0 +1,57 @@
+{{- if and .Values.gateway.enabled .Values.gateway.rateLimit.enabled }}
+# ═══════════════════════════════════════════════════════════════
+# RateLimitPolicy — Protection contre le brute-force et le scan
+# ═══════════════════════════════════════════════════════════════
+# Utilise le CRD natif NGF (gateway.nginx.org/v1alpha1).
+# Chaque policy cible un HTTPRoute du namespace rhdemo-stagingkub.
+#
+# Valeurs : voir gateway.rateLimit dans values.yaml
+# ═══════════════════════════════════════════════════════════════
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: rhdemo-rate-limit
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rate-limit
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: rhdemo-route
+  rateLimit:
+    rejectCode: {{ .Values.gateway.rateLimit.rejectCode }}
+    logLevel: {{ .Values.gateway.rateLimit.logLevel }}
+    local:
+      rules:
+        - key: {{ .Values.gateway.rateLimit.rhdemo.key | quote }}
+          rate: {{ .Values.gateway.rateLimit.rhdemo.rate | quote }}
+          burst: {{ .Values.gateway.rateLimit.rhdemo.burst }}
+          zoneSize: {{ .Values.gateway.rateLimit.rhdemo.zoneSize | quote }}
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: keycloak-rate-limit
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "rhdemo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rate-limit
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: keycloak-route
+  rateLimit:
+    rejectCode: {{ .Values.gateway.rateLimit.rejectCode }}
+    logLevel: {{ .Values.gateway.rateLimit.logLevel }}
+    local:
+      rules:
+        - key: {{ .Values.gateway.rateLimit.keycloak.key | quote }}
+          rate: {{ .Values.gateway.rateLimit.keycloak.rate | quote }}
+          burst: {{ .Values.gateway.rateLimit.keycloak.burst }}
+          zoneSize: {{ .Values.gateway.rateLimit.keycloak.zoneSize | quote }}
+          noDelay: {{ .Values.gateway.rateLimit.keycloak.noDelay }}
+{{- end }}

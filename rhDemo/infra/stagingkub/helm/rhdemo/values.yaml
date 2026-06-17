@@ -293,6 +293,28 @@ gateway:
           serviceName: keycloak
           servicePort: 8080
 
+  # RateLimitPolicy (NGF natif gateway.nginx.org/v1alpha1)
+  # Clé : $binary_remote_addr → limite PAR ADRESSE IP (chaque IP a son propre compteur).
+  # Un utilisateur légitime actif ne pénalise pas les autres.
+  # Cible : attaquant sur une IP unique (scanner, brute-force) — botnet hors scope.
+  # Chaque policy cible un HTTPRoute. Les valeurs sont plus strictes qu'en ephemere
+  # car les tests Selenium ne s'exécutent pas sur stagingkub.
+  rateLimit:
+    enabled: true
+    logLevel: warn
+    rejectCode: 429
+    rhdemo:
+      key: "$binary_remote_addr"
+      rate: "60r/m"
+      burst: 20
+      zoneSize: "10m"
+    keycloak:
+      key: "$binary_remote_addr"
+      rate: "5r/m"
+      burst: 2
+      zoneSize: "10m"
+      noDelay: true
+
   # ProxySettingsPolicy : buffers proxy pour Keycloak (NGF 2.4+)
   # Les gros cookies OAuth2 nécessitent des buffers plus grands
   # Cible l'HTTPRoute keycloak-route directement (pas besoin de SnippetsFilter)

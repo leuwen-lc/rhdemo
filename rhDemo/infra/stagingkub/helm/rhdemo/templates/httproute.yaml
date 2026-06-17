@@ -1,10 +1,17 @@
 {{- if .Values.gateway.enabled }}
 {{- range .Values.gateway.routes }}
+{{- $route := . }}
 # ═══════════════════════════════════════════════════════════════
 # HTTPRoute: {{ .name }}
 # ═══════════════════════════════════════════════════════════════
 # Route le trafic vers le service backend.
 # S'attache au shared-gateway dans nginx-gateway (cross-namespace).
+#
+# Headers de sécurité STATIQUES (RequestHeaderModifier) :
+#   Les headers à valeur fixe sont injectés ici par NGF — équivalent des
+#   add_header Nginx en ephemere.
+#   Pour rhdemo : les headers DYNAMIQUES (CSP avec URL Keycloak) restent dans
+#   Spring Security (SecurityConfig.java). Pour keycloak : tous les headers sont statiques.
 # ═══════════════════════════════════════════════════════════════
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -33,6 +40,15 @@ spec:
       requestHeaderModifier:
         remove:
           - Forwarded
+        set:
+          - name: Cross-Origin-Opener-Policy
+            value: {{ $route.securityHeaders.coop | default "same-origin" | quote }}
+          - name: Cross-Origin-Resource-Policy
+            value: {{ $route.securityHeaders.corp | default "same-origin" | quote }}
+          {{- if $route.securityHeaders.coep }}
+          - name: Cross-Origin-Embedder-Policy
+            value: {{ $route.securityHeaders.coep | quote }}
+          {{- end }}
     backendRefs:
     - name: {{ .serviceName }}
       port: {{ .servicePort }}

@@ -279,6 +279,10 @@ gateway:
   routes:
     - name: rhdemo-route
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      securityHeaders:
+        coop: "same-origin"
+        corp: "same-origin"
+        coep: "require-corp"  # Safe : tous les assets sont bundlés (pas de ressource cross-origin)
       rules:
         - path: /
           pathType: PathPrefix
@@ -287,6 +291,10 @@ gateway:
 
     - name: keycloak-route
       hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      securityHeaders:
+        coop: "same-origin"
+        corp: "same-origin"
+        # coep omis : le thème Keycloak peut référencer des ressources sans header CORP
       rules:
         - path: /
           pathType: PathPrefix

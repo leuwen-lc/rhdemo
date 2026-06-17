@@ -543,6 +543,21 @@ Les points suivants sont des limitations connues, documentées dans le `CLAUDE.m
 
 **Résultat :** Keycloak stagingkub démarre désormais en mode production. La validation stricte du hostname est active. Les mécanismes de sécurité propres au mode `start` (validation hostname, contraintes TLS, comportements de sécurité par défaut renforcés) sont rétablis.
 
+### M4 — Swagger/OpenAPI Accessible dans le Profil Ephemere — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `application-ephemere.yml` : ajout du bloc `springdoc` désactivant l'interface Swagger et les api-docs, identique à ce qui existait déjà dans `application-stagingkub.yml`
+
+```yaml
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+```
+
+---
+
 ### M3 — Headers COOP / COEP / CORP Absents (CWE-693) — Résolu le 2026-06-17
 
 **Correction apportée — Ephemere (Nginx) :**

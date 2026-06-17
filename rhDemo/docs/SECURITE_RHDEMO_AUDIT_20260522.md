@@ -118,15 +118,24 @@ resourceserver:
   jwt:
     jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
     # Pas d'issuer-uri → le claim 'iss' n'est pas validé
+```
 
-# ✅ Configuration sécurisée
+**Mécanisme Spring Boot (important pour le fix) :**  
+Quand `jwk-set-uri` et `issuer-uri` sont tous deux configurés, Spring Boot :
+1. utilise `jwk-set-uri` pour récupérer les clés JWK (aucune discovery OIDC, aucun appel vers `issuer-uri`)
+2. configure un `JwtClaimValidator` qui vérifie `token.iss.equals(issuer-uri)` — **pure comparaison de chaîne**
+
+La valeur d'`issuer-uri` doit donc correspondre au claim `iss` présent dans les tokens. Keycloak inscrit dans `iss` la valeur de `KC_HOSTNAME_URL` — c'est-à-dire l'**URL publique**, pas l'URL interne. Utiliser l'URL interne (`http://keycloak-ephemere:8080/...`) provoquerait une régression immédiate (validation `iss` toujours en échec).
+
+```yaml
+# ✅ Configuration sécurisée (ephemere)
 resourceserver:
   jwt:
     jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
-    issuer-uri: http://keycloak-ephemere:8080/realms/RHDemo
+    issuer-uri: https://keycloak.ephemere.local:58443/realms/RHDemo   # URL publique = valeur du claim iss
 ```
 
-**Attention :** Dans le contexte BFF, l'`issuer-uri` doit pointer vers l'URL **interne** (accessible depuis le container Spring Boot), pas l'URL publique HTTPS. À configurer également dans `application-stagingkub.yml`.
+**Note :** `application-stagingkub.yml` a déjà le bon pattern (public URL en `issuer-uri`, URL interne en `jwk-set-uri`).
 
 **Risque :** Token confusion entre realms — faible si les clés sont bien isolées par realm, mais non-conformité ASVS qui doit être corrigée.
 
@@ -520,6 +529,27 @@ Les points suivants sont des limitations connues, documentées dans le `CLAUDE.m
 | Mot de passe admin Keycloak | SOPS (ephemere) / K8s Secret (stagingkub) | ✅ |
 | Clé AGE SOPS | Jenkins credential (Secret file) | Pas de rotation automatique — surveiller |
 | ZAP API Key | Générée par build (`/dev/urandom`) | ✅ Ephémère par build |
+
+---
+
+## ✅ Ensemble des Findings Remédiés
+
+### H1 — Keycloak `start-dev` en Stagingkub (CWE-1173) — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `keycloak-deployment.yaml` ligne 41 : `start-dev` remplacé par `start` (mode production Keycloak)
+- `values.yaml` ligne 143 : `hostnameStrict: true` — validation stricte du hostname activée
+- Argument `--hostname-strict={{ .Values.keycloak.hostnameStrict }}` transmis au démarrage
+
+**Résultat :** Keycloak stagingkub démarre désormais en mode production. La validation stricte du hostname est active. Les mécanismes de sécurité propres au mode `start` (validation hostname, contraintes TLS, comportements de sécurité par défaut renforcés) sont rétablis.
+
+### M1 — JWT `issuer-uri` Absent (CWE-347) — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `application-ephemere.yml` : ajout de `issuer-uri: https://keycloak.ephemere.local:58443/realms/RHDemo`
+- `application-stagingkub.yml` : déjà corrigé antérieurement avec le même pattern (URL publique)
+
+**Point d'attention documenté dans le finding :** l'`issuer-uri` doit impérativement être l'URL **publique** de Keycloak (valeur de `KC_HOSTNAME_URL`), et non l'URL interne. Keycloak inscrit `KC_HOSTNAME_URL` dans le claim `iss` des tokens ; une URL interne causerait un échec systématique de la validation. Spring Boot n'effectue aucun appel HTTP vers `issuer-uri` quand `jwk-set-uri` est également configuré — la valeur sert uniquement de référence pour la comparaison du claim `iss`.
 
 ---
 

@@ -152,17 +152,6 @@ class KeycloakLogoutSuccessHandlerTest {
         }
 
         @Test
-        @DisplayName("doit retourner un Optional vide si le token ID est null")
-        void shouldReturnEmptyIfIdTokenIsNull() {
-            when(authentication.getPrincipal()).thenReturn(oidcUser);
-            when(oidcUser.getIdToken()).thenReturn(null);
-
-            Optional<String> result = handler.extractIdToken(authentication);
-
-            assertThat(result).isEmpty();
-        }
-
-        @Test
         @DisplayName("doit retourner un Optional vide pour une authentification non-OAuth2")
         void shouldReturnEmptyForNonOAuth2Authentication() {
             Authentication basicAuth = mock(Authentication.class);

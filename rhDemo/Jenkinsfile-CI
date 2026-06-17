@@ -774,6 +774,8 @@ YMLEOF
                         echo "📋 Copie des configurations nginx..."
                         docker cp nginx/nginx.conf ${env.CONTAINER_NGINX}:/etc/nginx/nginx.conf
                         docker cp nginx/conf.d/. ${env.CONTAINER_NGINX}:/etc/nginx/conf.d/
+                        docker exec ${env.CONTAINER_NGINX} mkdir -p /etc/nginx/html
+                        docker cp nginx/html/. ${env.CONTAINER_NGINX}:/etc/nginx/html/
 
                         if [ -d "certs" ]; then
                             docker cp certs/. ${env.CONTAINER_NGINX}:/etc/nginx/ssl/

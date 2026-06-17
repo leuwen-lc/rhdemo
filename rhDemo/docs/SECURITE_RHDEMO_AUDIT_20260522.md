@@ -543,6 +543,27 @@ Les points suivants sont des limitations connues, documentées dans le `CLAUDE.m
 
 **Résultat :** Keycloak stagingkub démarre désormais en mode production. La validation stricte du hostname est active. Les mécanismes de sécurité propres au mode `start` (validation hostname, contraintes TLS, comportements de sécurité par défaut renforcés) sont rétablis.
 
+### M2 — Absence de Rate Limiting (CWE-307, CWE-770) — Résolu le 2026-06-17
+
+**Correction apportée — Ephemere (Nginx) :**
+- `nginx.conf` : 3 zones `limit_req_zone` dans le bloc `http`, clé `$binary_remote_addr` — limite **par adresse IP** (chaque IP a son propre compteur, un utilisateur légitime actif ne pénalise pas les autres) :
+  - `rhdemo_global` : 60 r/m — navigation SPA complète
+  - `rhdemo_api` : 30 r/m — endpoints REST `/api/`
+  - `keycloak_login` : 5 r/m — vhost Keycloak (navigateur uniquement, les appels Spring Boot → Keycloak contournent Nginx)
+- `rhdemo.conf` : `location /api/` séparée avec `burst=30 nodelay` (valeur volontairement élevée pour absorber les séquences d'appels des tests Selenium CI) ; `location /` avec `burst=20`
+- `keycloak.conf` : `limit_req zone=keycloak_login burst=2 nodelay` — rejet immédiat, complète la brute-force protection native du realm Keycloak
+- Code de rejet : `limit_req_status 429`
+
+**Correction apportée — Stagingkub (NGF) :**
+- Nouveau template `ratelimitpolicy.yaml` utilisant le CRD natif `gateway.nginx.org/v1alpha1` — pas de SnippetsFilter requis
+- `rhdemo-rate-limit` cible `rhdemo-route` : 60 r/m, burst=20
+- `keycloak-rate-limit` cible `keycloak-route` : 5 r/m, burst=2, noDelay
+- Valeurs externalisées dans `gateway.rateLimit` de `values.yaml` (ajustables via `helm upgrade --set`)
+
+**Note :** La brute-force protection native du realm Keycloak (failureFactor, waitIncrementSeconds) relève du finding H1 et n'est pas encore configurée dans `rhDemoInitKeycloak`.
+
+---
+
 ### M1 — JWT `issuer-uri` Absent (CWE-347) — Résolu le 2026-06-17
 
 **Correction apportée :**

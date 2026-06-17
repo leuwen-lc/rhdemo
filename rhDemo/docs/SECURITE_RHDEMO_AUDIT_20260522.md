@@ -543,6 +543,20 @@ Les points suivants sont des limitations connues, documentées dans le `CLAUDE.m
 
 **Résultat :** Keycloak stagingkub démarre désormais en mode production. La validation stricte du hostname est active. Les mécanismes de sécurité propres au mode `start` (validation hostname, contraintes TLS, comportements de sécurité par défaut renforcés) sont rétablis.
 
+### M3 — Headers COOP / COEP / CORP Absents (CWE-693) — Résolu le 2026-06-17
+
+**Correction apportée — Ephemere (Nginx) :**
+- `rhdemo.conf` : ajout de `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`, `Cross-Origin-Resource-Policy: same-origin` — COEP safe car tous les assets Vue.js/Element Plus sont bundlés (aucune ressource cross-origin)
+- `keycloak.conf` : ajout de COOP et CORP uniquement — COEP omis car le thème Keycloak peut référencer des ressources internes sans header CORP, ce qui casserait la page de login
+
+**Correction apportée — Stagingkub (NGF) :**
+- `httproute.yaml` : headers injectés via `RequestHeaderModifier` (API native Gateway, sans SnippetsFilter) — même distinction rhdemo (COOP+CORP+COEP) / keycloak (COOP+CORP)
+- `values.yaml` : section `securityHeaders` par route, COEP conditionnel (`{{- if $route.securityHeaders.coep }}`)
+
+**Répartition documentée :** commentaire ajouté dans `SecurityConfig.java`, `rhdemo.conf`, `keycloak.conf` et `httproute.yaml` expliquant que les headers statiques (valeurs fixes) sont gérés par Nginx/NGF, et les headers dynamiques (CSP avec URL Keycloak variable par environnement) par Spring Security.
+
+---
+
 ### M2 — Absence de Rate Limiting (CWE-307, CWE-770) — Résolu le 2026-06-17
 
 **Correction apportée — Ephemere (Nginx) :**

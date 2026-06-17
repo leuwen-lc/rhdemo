@@ -7,7 +7,7 @@ services:
     container_name: rhdemo-dev-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: dbrhdemo
       POSTGRES_USER: dbrhdemo
@@ -45,7 +45,7 @@ services:
     environment:
       # Admin Keycloak
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set}
 
       # Hostname configuration
       KC_HOSTNAME_URL: http://localhost:6090

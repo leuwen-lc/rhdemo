@@ -56,13 +56,13 @@ springdoc:
   api-docs:
     enabled: false
 
-# Logging pour debug
 logging:
   level:
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.security.oauth2: TRACE
-    org.springframework.web.client: DEBUG
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.springframework.security.oauth2: INFO
+    org.springframework.web.client: INFO
 
 # Endpoints Actuator disponibles
 management:

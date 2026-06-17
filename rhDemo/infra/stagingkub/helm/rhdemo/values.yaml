@@ -283,6 +283,8 @@ gateway:
         coop: "same-origin"
         corp: "same-origin"
         coep: "require-corp"  # Safe : tous les assets sont bundlés (pas de ressource cross-origin)
+        hsts: "max-age=31536000; includeSubDomains; preload"
+        permissionsPolicy: "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=(), accelerometer=(), gyroscope=(), magnetometer=()"
       rules:
         - path: /
           pathType: PathPrefix
@@ -295,6 +297,7 @@ gateway:
         coop: "same-origin"
         corp: "same-origin"
         # coep omis : le thème Keycloak peut référencer des ressources sans header CORP
+        hsts: "max-age=31536000; includeSubDomains; preload"
       rules:
         - path: /
           pathType: PathPrefix

@@ -7,9 +7,10 @@
 # Route le trafic vers le service backend.
 # S'attache au shared-gateway dans nginx-gateway (cross-namespace).
 #
-# Headers de sécurité STATIQUES (RequestHeaderModifier) :
+# Headers de sécurité STATIQUES (ResponseHeaderModifier) :
 #   Les headers à valeur fixe sont injectés ici par NGF — équivalent des
-#   add_header Nginx en ephemere.
+#   add_header Nginx en ephemere. ResponseHeaderModifier modifie la réponse
+#   vers le navigateur (RequestHeaderModifier ne sert qu'à supprimer Forwarded).
 #   Pour rhdemo : les headers DYNAMIQUES (CSP avec URL Keycloak) restent dans
 #   Spring Security (SecurityConfig.java). Pour keycloak : tous les headers sont statiques.
 # ═══════════════════════════════════════════════════════════════
@@ -40,6 +41,8 @@ spec:
       requestHeaderModifier:
         remove:
           - Forwarded
+    - type: ResponseHeaderModifier
+      responseHeaderModifier:
         set:
           - name: Cross-Origin-Opener-Policy
             value: {{ $route.securityHeaders.coop | default "same-origin" | quote }}
@@ -48,6 +51,14 @@ spec:
           {{- if $route.securityHeaders.coep }}
           - name: Cross-Origin-Embedder-Policy
             value: {{ $route.securityHeaders.coep | quote }}
+          {{- end }}
+          {{- if $route.securityHeaders.hsts }}
+          - name: Strict-Transport-Security
+            value: {{ $route.securityHeaders.hsts | quote }}
+          {{- end }}
+          {{- if $route.securityHeaders.permissionsPolicy }}
+          - name: Permissions-Policy
+            value: {{ $route.securityHeaders.permissionsPolicy | quote }}
           {{- end }}
     backendRefs:
     - name: {{ .serviceName }}

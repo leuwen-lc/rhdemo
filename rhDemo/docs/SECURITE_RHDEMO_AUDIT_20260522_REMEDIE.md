@@ -565,7 +565,7 @@ springdoc:
 - `keycloak.conf` : ajout de COOP et CORP uniquement — COEP omis car le thème Keycloak peut référencer des ressources internes sans header CORP, ce qui casserait la page de login
 
 **Correction apportée — Stagingkub (NGF) :**
-- `httproute.yaml` : headers injectés via `RequestHeaderModifier` (API native Gateway, sans SnippetsFilter) — même distinction rhdemo (COOP+CORP+COEP) / keycloak (COOP+CORP)
+- `httproute.yaml` : headers injectés via `ResponseHeaderModifier` (API native Gateway, sans SnippetsFilter) — `RequestHeaderModifier` ne sert qu'à supprimer le header `Forwarded` client ; les headers de sécurité vers le navigateur requièrent `ResponseHeaderModifier` — même distinction rhdemo (COOP+CORP+COEP) / keycloak (COOP+CORP)
 - `values.yaml` : section `securityHeaders` par route, COEP conditionnel (`{{- if $route.securityHeaders.coep }}`)
 
 **Répartition documentée :** commentaire ajouté dans `SecurityConfig.java`, `rhdemo.conf`, `keycloak.conf` et `httproute.yaml` expliquant que les headers statiques (valeurs fixes) sont gérés par Nginx/NGF, et les headers dynamiques (CSP avec URL Keycloak variable par environnement) par Spring Security.
@@ -600,6 +600,63 @@ springdoc:
 - `application-stagingkub.yml` : déjà corrigé antérieurement avec le même pattern (URL publique)
 
 **Point d'attention documenté dans le finding :** l'`issuer-uri` doit impérativement être l'URL **publique** de Keycloak (valeur de `KC_HOSTNAME_URL`), et non l'URL interne. Keycloak inscrit `KC_HOSTNAME_URL` dans le claim `iss` des tokens ; une URL interne causerait un échec systématique de la validation. Spring Boot n'effectue aucun appel HTTP vers `issuer-uri` quand `jwk-set-uri` est également configuré — la valeur sert uniquement de référence pour la comparaison du claim `iss`.
+
+---
+
+### F1 — Port PostgreSQL Exposé sur l'Hôte en Dev — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `infra/dev/docker-compose.yml` : `"5432:5432"` → `"127.0.0.1:5432:5432"` — PostgreSQL accessible uniquement depuis localhost, pas depuis le réseau local.
+
+---
+
+### F2 — HSTS sans Directive `preload` — Résolu le 2026-06-17
+
+**Correction apportée — Stagingkub (NGF) :**
+- `values.yaml` : ajout du champ `hsts: "max-age=31536000; includeSubDomains; preload"` dans `securityHeaders` pour les deux routes (`rhdemo-route` et `keycloak-route`)
+- `httproute.yaml` : bloc conditionnel `{{- if $route.securityHeaders.hsts }}` déjà présent, applique la valeur via `ResponseHeaderModifier`
+
+**Note :** Le domaine interne `.intra.leuwen-lc.fr` ne peut pas figurer dans la preload list publique (HSTS Preload List), mais la directive est une bonne pratique et prépare le terrain si le domaine devient public.
+
+---
+
+### F3 — `Permissions-Policy` Incomplète — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `infra/ephemere/nginx/conf.d/rhdemo.conf` : directive étendue avec `payment=(), usb=(), interest-cohort=(), accelerometer=(), gyroscope=(), magnetometer=()`
+- `infra/stagingkub/helm/rhdemo/values.yaml` : champ `permissionsPolicy` ajouté dans `securityHeaders` pour `rhdemo-route` avec la même liste complète
+- `httproute.yaml` : bloc conditionnel `{{- if $route.securityHeaders.permissionsPolicy }}` déjà présent
+
+---
+
+### F4 — `readOnlyRootFilesystem` Absent du Déploiement Kubernetes — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `templates/rhdemo-app-deployment.yaml` : ajout de `readOnlyRootFilesystem: true` dans le `securityContext` du container
+- Volume `emptyDir` monté sur `/tmp` pour les fichiers temporaires JVM (Spring Boot, classpath scanner)
+
+---
+
+### F5 — Logs DEBUG/TRACE dans le Profil Ephemere — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `application-ephemere.yml` : tous les niveaux de log réduits à `INFO` — `root`, `org.springframework.web`, `org.springframework.security`, `org.springframework.security.oauth2`, `org.springframework.web.client`
+- Les tokens, codes d'autorisation et claims JWT ne transitent plus dans les logs Jenkins.
+
+---
+
+### F6 — Mot de Passe Keycloak par Défaut `admin` en Dev — Résolu le 2026-06-17
+
+**Correction apportée :**
+- `infra/dev/docker-compose.yml` : `${KEYCLOAK_ADMIN_PASSWORD:-admin}` → `${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set}` — Docker Compose échoue au démarrage si la variable n'est pas définie, empêchant toute exécution accidentelle avec le mot de passe par défaut.
+
+---
+
+### I1 — `security.txt` Absent (RFC 9116) — Résolu le 2026-06-17
+
+**Correction apportée :**
+- Création de `src/main/resources/static/.well-known/security.txt` avec les champs RFC 9116 obligatoires : `Contact`, `Expires`, `Preferred-Languages`
+- Le fichier est servi statiquement par Spring Boot à l'URL `/.well-known/security.txt`
 
 ---
 

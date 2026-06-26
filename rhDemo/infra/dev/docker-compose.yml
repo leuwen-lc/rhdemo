@@ -32,7 +32,7 @@ services:
   # Keycloak - Serveur d'authentification (dev local avec H2)
   # ═══════════════════════════════════════════════════════════════
   keycloak-dev:
-    image: quay.io/keycloak/keycloak:26.6.3@sha256:9939b2d0db3650287651a41bb6c65960317e05644e2d23dd7a4511e7855f74dc
+    image: quay.io/keycloak/keycloak:26.6.3@sha256:29b2ce19cc0b4815d4c3f043fdae70d9df3089b3f917d0f39eafce4428298ac5
     container_name: keycloak-dev
     restart: unless-stopped
     ports:

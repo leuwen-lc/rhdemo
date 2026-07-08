@@ -48,6 +48,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 RHDEMO_DIR="${REPO_ROOT}/rhDemo"
 MVNW="${RHDEMO_DIR}/mvnw"
+JENKINS_CASC="${REPO_ROOT}/rhDemo/infra/jenkins-docker/jenkins-casc.yaml"
 
 POM_FILES=(
     "${REPO_ROOT}/rhDemo/pom.xml"
@@ -92,14 +93,30 @@ bump_version() {
     done
 }
 
+bump_casc_branch() {
+    local new_branch="$1"
+    log "Mise à jour jenkins-casc.yaml : branche CI/CD → ${new_branch}"
+    [ -f "${JENKINS_CASC}" ] || error "jenkins-casc.yaml introuvable : ${JENKINS_CASC}"
+    if grep -q "evolutions-post-" "${JENKINS_CASC}"; then
+        sed -i "s|branches('\*/evolutions-post-[0-9.]*')|branches('*/${new_branch}')|g" "${JENKINS_CASC}"
+        success "jenkins-casc.yaml → branche ${new_branch}"
+    else
+        warn "Aucune référence 'evolutions-post-*' trouvée dans jenkins-casc.yaml"
+    fi
+}
+
 commit_poms_and_push() {
     local message="$1"
     local branch="$2"
+    shift 2
     log "Commit : \"${message}\""
     git -C "${REPO_ROOT}" add \
         rhDemo/pom.xml \
         rhDemoAPITestIHM/pom.xml \
         rhDemoInitKeycloak/pom.xml
+    for extra in "$@"; do
+        git -C "${REPO_ROOT}" add "${extra}"
+    done
     git -C "${REPO_ROOT}" commit -m "${message}"
     log "Push vers origin/${branch}..."
     git -C "${REPO_ROOT}" push origin "${branch}"
@@ -288,13 +305,15 @@ cmd_post_merge() {
     git -C "${REPO_ROOT}" push origin "${release_version}"
     success "Tag '${release_version}' publié sur Codeberg"
 
+    local evolution_branch="evolutions-post-${release_version/-RELEASE/}"
+
     step "4/5 — Retour en SNAPSHOT : ${release_version} → ${next_snapshot}"
     bump_version "${release_version}" "${next_snapshot}"
+    bump_casc_branch "${evolution_branch}"
 
     step "5/5 — Commit et push"
-    commit_poms_and_push "chore: retour à ${next_snapshot} après ${release_version}" "master"
-
-    local evolution_branch="evolutions-post-${release_version/-RELEASE/}"
+    commit_poms_and_push "chore: retour à ${next_snapshot} après ${release_version}" "master" \
+        "rhDemo/infra/jenkins-docker/jenkins-casc.yaml"
 
     echo ""
     echo -e "${GREEN}══════════════════════════════════════════════${NC}"

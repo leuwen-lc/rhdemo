@@ -4,6 +4,34 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-53434 & CVE-2026-55276 & CVE-2026-53404 — Apache Tomcat (embed)
+
+### Détection
+
+- **Date de détection** : 2026-07-08 (build Jenkins RHDemo-CI #643)
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : CRITICAL (CVSS: 9.1) pour CVE-2026-53434 et CVE-2026-55276 ; HIGH (CVSS: 7.3) pour CVE-2026-53404
+- **Composants affectés** : `org.apache.tomcat.embed:tomcat-embed-core` en version `11.0.22` (dépendance transitive de `spring-boot-starter-web`)
+
+### Description
+
+Trois vulnérabilités dans Apache Tomcat jusqu'à la version 11.0.22 (ainsi que les branches 10.1.x et 9.0.x) :
+- **CVE-2026-53434** (CVSS 9.1 CRITICAL, CWE-390) : détection incorrecte de condition d'erreur lors de la configuration des CRL sur un connecteur basé FFM.
+- **CVE-2026-55276** (CVSS 9.1 CRITICAL, CWE-670) : flux de contrôle toujours incorrect — les rôles spéciaux et les contraintes d'autorisation vides ne sont pas inclus lors de la journalisation du `web.xml` effectif.
+- **CVE-2026-53404** (CVSS 7.3 HIGH, CWE-670) : flux de contrôle toujours incorrect dans le rewrite valve — si la première condition d'un chaînage OR correspond, les conditions non-OR suivantes sont ignorées.
+
+Trois autres CVE MEDIUM (CVE-2026-55955, CVE-2026-55956, CVE-2026-50229, CVSS 6.1–6.5) affectent le même composant et sont corrigées par la même mise à jour, sans être bloquantes pour le quality gate (CVSS < 7).
+
+Spring Boot 4.1.0 (version courante du parent) pin `tomcat.version=11.0.22` et n'a pas encore de patch (4.1.1) intégrant le correctif.
+
+### Remédiation (2026-07-08)
+
+- **Action** : Upgrade Apache Tomcat `11.0.22` → `11.0.24` (dernière version disponible sur Maven Central ; le correctif minimal requis par l'éditeur est `11.0.23`) via surcharge de la propriété BOM Spring Boot
+- **Fichier modifié** : `pom.xml`
+- **Détail** : propriété Maven `<tomcat.version>11.0.24</tomcat.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.1.0 qui bundlait 11.0.22).
+
+---
+
 ## CVE-2026-40988 & CVE-2026-41003 & CVE-2026-41694 — Spring Security SAML DoS + XSS + déchiffrement oracle
 
 ### Détection

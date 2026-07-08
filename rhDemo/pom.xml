@@ -353,8 +353,9 @@
 
 					<!-- Configuration NVD (National Vulnerability Database) -->
 					<!-- La clé est passée via -DnvdApiKey en ligne de commande -->
-					<nvdMaxRetryCount>3</nvdMaxRetryCount>
-					<nvdApiDelay>2000</nvdApiDelay>
+					<!-- Valeurs augmentées suite à des 503 répétés du NVD lors des resyncs complets -->
+					<nvdMaxRetryCount>10</nvdMaxRetryCount>
+					<nvdApiDelay>8000</nvdApiDelay>
 
 					<!-- Cache pour améliorer les performances -->
 					<!-- IMPORTANT: Cache en dehors de target/ pour éviter suppression à chaque clean -->

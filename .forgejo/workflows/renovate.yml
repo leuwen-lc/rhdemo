@@ -10,7 +10,7 @@ jobs:
     runs-on: codeberg-medium
     timeout-minutes: 60
     container:
-      image: renovate/renovate:43.229.1
+      image: renovate/renovate:43.249.5
     steps:
       - name: Run Renovate
         env:

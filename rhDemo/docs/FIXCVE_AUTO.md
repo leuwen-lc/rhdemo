@@ -48,6 +48,7 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 ### 2. Clé AGE personnelle
 
 Doit déjà exister (utilisée par ailleurs pour les secrets du projet) :
+
 ```bash
 ls -la ~/.config/sops/age/keys.txt
 ```
@@ -59,6 +60,7 @@ Ce fichier vit **hors du dépôt git**, chiffré avec votre clé AGE personnelle
 - un token Codeberg **dédié et restreint à ce seul dépôt** (fine-grained access token, scope écriture sur `rhdemo` uniquement — ne pas réutiliser un token à portée large).
 
 Création :
+
 ```bash
 mkdir -p ~/.config/rhdemo-fixcve && chmod 700 ~/.config/rhdemo-fixcve
 
@@ -81,6 +83,7 @@ chmod 600 ~/.config/rhdemo-fixcve/credentials.sops.yaml
 ```
 
 Vérification (affiche le déchiffré sans rien écrire sur disque) :
+
 ```bash
 SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d ~/.config/rhdemo-fixcve/credentials.sops.yaml
 ```
@@ -98,7 +101,9 @@ Déjà en place : `~/.config/rhdemo-fixcve/git-askpass.sh` (aucun secret dedans,
 ```bash
 crontab -e
 ```
+
 Ajouter :
+
 ```cron
 */15 * * * * /home/leno-vo/git/repository/rhDemo/scripts/fixcve-auto-poll.sh >> /home/leno-vo/.config/rhdemo-fixcve/poll.log 2>&1
 ```
@@ -108,6 +113,7 @@ Ajouter :
 `poll.log` est alimenté à chaque cycle (toutes les 15 min) et grossirait indéfiniment sans rotation. Config `logrotate` en espace utilisateur (pas de `sudo` requis), déjà en place : `~/.config/rhdemo-fixcve/logrotate.conf` (hebdomadaire, 4 générations conservées compressées, taille max 10 Mo).
 
 Ligne cron associée (exécution quotidienne à 3h) :
+
 ```cron
 0 3 * * * /usr/sbin/logrotate --state /home/leno-vo/.config/rhdemo-fixcve/logrotate.state /home/leno-vo/.config/rhdemo-fixcve/logrotate.conf
 ```
@@ -119,7 +125,9 @@ Ligne cron associée (exécution quotidienne à 3h) :
 ```bash
 crontab -e   # supprimer ou commenter la ligne fixcve-auto-poll.sh
 ```
+
 Ou, sans toucher au cron, forcer une halte immédiate :
+
 ```bash
 jq '.status="halted"' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
 ```
@@ -127,6 +135,7 @@ jq '.status="halted"' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tm
 ## Reprise après une halte manuelle
 
 Après avoir traité manuellement la cause des rollbacks répétés (visible dans `rhDemo/docs/fixcve-audit.jsonl`, événements `automation_halted`) :
+
 ```bash
 jq '.status="idle" | .consecutive_rollbacks=0' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
 ```

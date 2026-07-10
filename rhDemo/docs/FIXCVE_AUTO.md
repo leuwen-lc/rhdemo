@@ -122,6 +122,18 @@ Après avoir traité manuellement la cause des rollbacks répétés (visible dan
 jq '.status="idle" | .consecutive_rollbacks=0' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
 ```
 
+## Lecture des logs
+
+Deux fichiers distincts, deux usages différents :
+
+- **`~/.config/rhdemo-fixcve/poll.log`** — sortie brute (stdout/stderr) de **chaque** exécution du cron, toutes les 15 min, y compris les cycles où rien ne se passe. Utile pour vérifier que le cron tourne bien :
+
+  ```bash
+  tail -f ~/.config/rhdemo-fixcve/poll.log
+  ```
+
+- **`rhDemo/docs/fixcve-audit.jsonl`** — uniquement les événements notables (remédiation appliquée, build hors périmètre, validation, rollback, halte). Versionné dans git, à consulter avec la commande ci-dessous.
+
 ## Lecture du journal d'audit
 
 ```bash

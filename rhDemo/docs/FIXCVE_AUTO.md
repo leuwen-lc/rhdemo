@@ -4,11 +4,13 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 
 ⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessous — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
 
+⚠️ **Limitation connue — `--dangerously-skip-permissions`** : la conception initiale prévoyait un scope d'outils restreint (`--permission-mode dontAsk` + règles `permissions.allow`), pour que Claude n'ait accès qu'à un périmètre précis (curl Jenkins, git commit/push, quelques commandes). En pratique, ce mode **refuse toute commande Bash réseau même avec des règles d'autorisation explicites** (testé et reproduit sur Claude Code `2.1.205`, en contradiction avec la documentation officielle). Seul `--dangerously-skip-permissions` fonctionne actuellement, ce qui retire tout scoping : pendant l'exécution de `/fixcve-auto`, Claude peut exécuter n'importe quelle commande, pas seulement celles prévues. Comme `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy), c'est une surface d'injection de prompt à garder à l'esprit — les garde-fous **git** ci-dessous (working tree propre, rollback automatique, halte après rollbacks) sont donc la seule protection réellement en place, pas le scoping des outils. À réévaluer si Anthropic corrige `dontAsk`, ou si Claude Code introduit un mode headless réellement scoped.
+
 ---
 
 ## Architecture
 
-```
+```text
 crontab (toutes les 15 min)
    └─> rhDemo/scripts/fixcve-auto-poll.sh   (bash + jq + curl, PAS de LLM)
          │
@@ -28,7 +30,7 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 ## Garde-fous
 
 | Garde-fou | Détail |
-|---|---|
+| --- | --- |
 | **Working tree propre requis** | Si des modifications locales non committées existent, le script ne touche à rien (évite d'interférer avec un travail en cours). |
 | **Branche à jour requise** | Si la branche locale est en retard/divergente par rapport à `origin`, le script s'arrête (pas de merge/rebase automatique). |
 | **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau, `git revert` immédiat + push. |
@@ -56,6 +58,7 @@ ls -la ~/.config/sops/age/keys.txt
 ### 3. Credentials chiffrés : `~/.config/rhdemo-fixcve/credentials.sops.yaml`
 
 Ce fichier vit **hors du dépôt git**, chiffré avec votre clé AGE personnelle (donc lisible uniquement sur cette machine, avec cette clé). Il contient :
+
 - le compte Jenkins dédié à l'automatisation (`claude`, **pas** `admin` — voir `.claude/skills/fixcve/SKILL.md`),
 - un token Codeberg **dédié et restreint à ce seul dépôt** (fine-grained access token, scope écriture sur `rhdemo` uniquement — ne pas réutiliser un token à portée large).
 

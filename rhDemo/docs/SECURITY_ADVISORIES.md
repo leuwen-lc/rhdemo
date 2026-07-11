@@ -4,6 +4,29 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-54291 — PostgreSQL JDBC Driver (pgjdbc), downgrade SCRAM channel binding
+
+### Détection
+
+- **Date de détection** : 2026-07-11 (build Jenkins RHDemo-CI #645)
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH (CVSSv4: 8.2 — CVSSv3.1: 5.9 MEDIUM)
+- **Composant affecté** : `org.postgresql:postgresql` en version `42.7.11` (dépendance runtime de `rhdemoAPI`)
+
+### Description
+
+Dans les versions 42.7.4 à 42.7.11 de pgjdbc, une connexion configurée avec `channelBinding=require` peut être silencieusement rétrogradée de SCRAM-SHA-256-PLUS (avec channel binding) vers SCRAM-SHA-256 simple (sans channel binding), perdant ainsi la protection contre les attaques de type man-in-the-middle que ce paramètre est censé garantir. Un attaquant capable d'intercepter la connexion TLS peut déclencher cette rétrogradation à l'aide d'un certificat dont l'algorithme de signature ne dispose d'aucun hash `tls-server-end-point` pour le channel binding, car la bibliothèque embarquée `com.ongres.scram:scram-client` retourne un tableau d'octets vide au lieu d'échouer, et `ScramAuthenticator` de pgJDBC vérifie uniquement que le serveur a annoncé un mécanisme PLUS, sans rejeter le binding vide ni vérifier que le mécanisme négocié utilise effectivement le channel binding.
+
+Corrigé en version `42.7.12`.
+
+### Remédiation automatique (2026-07-11, build #645)
+
+- **Action** : Upgrade `org.postgresql:postgresql` `42.7.11` → `42.7.13` (dernière version stable disponible sur Maven Central, supérieure au correctif minimal `42.7.12`) via surcharge de la propriété BOM Spring Boot
+- **Fichier modifié** : `pom.xml`
+- **Détail** : propriété Maven `<postgresql.version>42.7.13</postgresql.version>` ajoutée dans `<properties>` (surcharge le BOM Spring Boot 4.1.0 qui bundlait 42.7.11).
+
+---
+
 ## CVE-2026-53434 & CVE-2026-55276 & CVE-2026-53404 — Apache Tomcat (embed)
 
 ### Détection

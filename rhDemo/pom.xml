@@ -32,6 +32,8 @@
 		<springdoc-openapi.version>3.0.3</springdoc-openapi.version>
 		<!-- Fix CVE-2026-53434, CVE-2026-55276, CVE-2026-53404 : Spring Boot 4.1.0 pin tomcat 11.0.22 -->
 		<tomcat.version>11.0.24</tomcat.version>
+		<!-- Fix CVE-2026-54291 : downgrade SCRAM channel binding sur pgjdbc -->
+		<postgresql.version>42.7.13</postgresql.version>
 	</properties>
 
 	<dependencies>

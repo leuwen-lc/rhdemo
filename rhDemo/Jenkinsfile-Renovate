@@ -1,0 +1,178 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Pipeline Renovate Automerge - RHDemo
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
+ * ouvertes sur la branche evolutions-post-1.1.8 :
+ *   1. Liste les PRs Renovate ouvertes via l'API Forgejo
+ *   2. Pour chaque PR : build Maven + tests + OWASP Dependency-Check
+ *   3. CI verte  -> merge automatique via l'API Forgejo + commentaire
+ *      CI rouge  -> commentaire d'échec, PR conservée ouverte
+ *
+ * Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
+ * Selenium/ZAP et SonarQube ne sont pas exécutés ici (déjà couverts par
+ * RHDemo-CI sur master après merge) — objectif : validation rapide (~10 min).
+ *
+ * 📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+pipeline {
+    agent { label 'builder' }
+
+    options {
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+        disableConcurrentBuilds()
+    }
+
+    tools {
+        jdk 'JDK25'
+        maven 'Maven3'
+    }
+
+    environment {
+        FORGEJO_API = 'https://codeberg.org/api/v1'
+        REPO        = 'leuwen-lc/rhdemo'
+        BASE_BRANCH = 'evolutions-post-1.1.8'
+    }
+
+    stages {
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    lib.printSectionHeader("Pipeline Renovate Automerge - RHDemo")
+                    echo "Build: #${env.BUILD_NUMBER}"
+                }
+                checkout scm
+            }
+        }
+
+        stage('📋 Lister les PRs Renovate') {
+            steps {
+                withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+                    script {
+                        def httpCode = sh(
+                            script: """
+                                set +x
+                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                  "${FORGEJO_API}/repos/${REPO}/pulls?state=open&limit=50" \
+                                  -o /tmp/renovate-prs-\${BUILD_NUMBER}.json
+                            """,
+                            returnStatus: true
+                        )
+                        if (httpCode != 0) error("Impossible de lister les PRs Forgejo (curl exit ${httpCode})")
+
+                        // jq (pas de python3 dans l'image agent) — filtre sur head.ref (nom de
+                        // branche brut, pas head.label qui est préfixé "owner:branche" et casserait
+                        // le split ci-dessous). Séparateur "|" : le sha ne peut pas en contenir.
+                        env.RENOVATE_PRS = sh(
+                            script: """
+                                jq -r --arg base "${BASE_BRANCH}" '
+                                    [ .[]
+                                      | select((.head.ref // "") | test("renovate"; "i"))
+                                      | select(.base.ref == \$base)
+                                      | "\\(.number)|\\(.head.ref)|\\(.head.sha)"
+                                    ] | join(" ")
+                                ' /tmp/renovate-prs-${BUILD_NUMBER}.json
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        if (!env.RENOVATE_PRS) {
+                            echo "Aucune PR Renovate ouverte sur ${BASE_BRANCH} — rien à faire."
+                        } else {
+                            echo "PRs Renovate trouvées : ${env.RENOVATE_PRS}"
+                        }
+
+                        sh "rm -f /tmp/renovate-prs-${BUILD_NUMBER}.json"
+                    }
+                }
+            }
+        }
+
+        stage('🔀 Valider et merger chaque PR') {
+            when { expression { env.RENOVATE_PRS?.trim() } }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                    usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                ]) {
+                    script {
+                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                        def failures = []
+
+                        env.RENOVATE_PRS.split(' ').each { prEntry ->
+                            def parts    = prEntry.split('\\|')
+                            def prNumber = parts[0]
+                            def branchRef = parts[1]
+
+                            echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
+
+                            sh "git fetch origin '${branchRef}'"
+                            sh 'git checkout FETCH_HEAD'
+
+                            def ciStatus = sh(
+                                script: '''
+                                    cd rhDemo
+                                    set -e
+                                    ./mvnw clean compile -DskipTests
+                                    ./mvnw verify
+                                    ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                ''',
+                                returnStatus: true
+                            )
+
+                            if (ciStatus == 0) {
+                                echo "CI OK pour PR #${prNumber} — merge en cours"
+                                def mergeStatus = sh(
+                                    script: """
+                                        set +x
+                                        curl -sf -X POST \
+                                          -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                          -H "Content-Type: application/json" \
+                                          -d '{"Do":"merge","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
+                                          "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
+                                    """,
+                                    returnStatus: true
+                                )
+                                if (mergeStatus != 0) {
+                                    echo "WARN: merge API échoué pour PR #${prNumber} (conflit possible ?)"
+                                    failures << prNumber
+                                    lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                        "CI Jenkins OK mais merge échoué (conflit possible). Intervention manuelle requise. Build : ${env.BUILD_URL}")
+                                } else {
+                                    lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                        "CI Jenkins validée — PR mergée automatiquement. Build : ${env.BUILD_URL}")
+                                }
+                            } else {
+                                echo "CI KO pour PR #${prNumber} — PR conservée ouverte"
+                                failures << prNumber
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                    "CI Jenkins échouée — voir build ${env.BUILD_URL}. Mise à jour à revoir manuellement.")
+                            }
+
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
+                        }
+
+                        if (failures) {
+                            unstable("${failures.size()} PR(s) en échec : ${failures.join(', ')}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "git checkout ${env.BASE_BRANCH} || true"
+            cleanWs()
+        }
+    }
+}

@@ -154,6 +154,14 @@ tool:
 #    - ID: kubeconfig-stagingkub
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
+#
+# 5. forgejo-api-token
+#    - Type: Secret text
+#    - ID: forgejo-api-token
+#    - Secret: token dédié Codeberg, scope "repository" uniquement (pas d'accès admin)
+#    - Généré sur: https://codeberg.org/user/settings/applications
+#    - Usage: RHDemo-Renovate (liste/merge des PRs Renovate + commentaires)
+#    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -341,6 +349,66 @@ jobs:
             }
           }
           disableConcurrentBuilds()
+        }
+      }
+
+  # ─────────────────────────────────────────────────────────────────
+  # PIPELINE RENOVATE - Validation et automerge des PRs Renovate
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-Renovate') {
+        displayName('RHDemo - Renovate Automerge')
+        description('''Valide et merge automatiquement les PRs Renovate (patch/minor)
+
+        Phases :
+        • Liste les PRs Renovate ouvertes via l\'API Forgejo
+        • Build Maven + Tests unitaires/intégration + OWASP Dependency-Check par PR
+        • Merge automatique via l\'API Forgejo si CI verte, sinon commentaire d\'échec
+
+        Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
+
+        📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md''')
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
+                }
+                branches('*/evolutions-post-1.1.8')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-Renovate')
+            lightweight(true)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('15')
+                daysToKeepStr('30')
+                artifactNumToKeepStr('5')
+                artifactDaysToKeepStr('30')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+
+        triggers {
+          // Se déclenche après Renovate (3h), marge de 1h pour la création des PRs
+          cron('H 4 * * *')
         }
       }
 

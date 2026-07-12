@@ -191,23 +191,27 @@ pipeline {
 
                             if (ciStatus == 0) {
                                 echo "CI OK pour PR #${prNumber} — merge en cours"
-                                def mergeStatus = sh(
+                                def mergeHttpCode = sh(
                                     script: """
                                         set +x
-                                        curl -sf -X POST \
+                                        curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
                                           -H "Authorization: token \${FORGEJO_TOKEN}" \
                                           -H "Content-Type: application/json" \
                                           -d '{"Do":"merge","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
                                           "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
                                     """,
-                                    returnStatus: true
-                                )
+                                    returnStdout: true
+                                ).trim()
+                                def mergeStatus = (mergeHttpCode ==~ /2\d\d/) ? 0 : 1
                                 if (mergeStatus != 0) {
-                                    echo "WARN: merge API échoué pour PR #${prNumber} (conflit possible ?)"
+                                    echo "WARN: merge API échoué pour PR #${prNumber} (HTTP ${mergeHttpCode})"
+                                    sh "cat /tmp/forgejo-merge-response-${prNumber}.json 2>/dev/null || true"
+                                    sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
                                     failures << prNumber
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
-                                        "CI Jenkins OK mais merge échoué (conflit possible). Intervention manuelle requise. Build : ${env.BUILD_URL}")
+                                        "CI Jenkins OK mais merge échoué (HTTP ${mergeHttpCode} — conflit possible ou droits insuffisants). Intervention manuelle requise. Build : ${env.BUILD_URL}")
                                 } else {
+                                    sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                         "CI Jenkins validée — PR mergée automatiquement. Build : ${env.BUILD_URL}")
                                 }

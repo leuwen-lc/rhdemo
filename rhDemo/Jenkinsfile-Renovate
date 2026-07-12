@@ -6,8 +6,11 @@
  * Valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
  * ouvertes sur la branche evolutions-post-1.1.8 :
  *   1. Liste les PRs Renovate ouvertes via l'API Forgejo
- *   2. Pour chaque PR : build Maven + tests + OWASP Dependency-Check
- *   3. CI verte  -> merge automatique via l'API Forgejo + commentaire
+ *   2. Pour chaque PR : si la branche est en retard sur la base, squash merge
+ *      de la base + push (évite qu'un correctif déjà mergé sur la base fasse
+ *      échouer la CI pour une raison sans rapport avec la PR)
+ *   3. Build Maven + tests + OWASP Dependency-Check
+ *   4. CI verte  -> merge automatique via l'API Forgejo + commentaire
  *      CI rouge  -> commentaire d'échec, PR conservée ouverte
  *
  * Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
@@ -115,6 +118,65 @@ pipeline {
 
                             sh "git fetch origin '${branchRef}'"
                             sh 'git checkout FETCH_HEAD'
+                            // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
+                            // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
+                            // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
+                            def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                            sh "git fetch origin ${BASE_BRANCH}"
+
+                            // Une branche Renovate non rebasée depuis longtemps peut hériter
+                            // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
+                            // entre-temps) et faire échouer la CI pour une raison sans rapport
+                            // avec son propre changement. On la met à jour par squash merge
+                            // avant de lancer les tests.
+                            def upToDate = sh(
+                                script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                                returnStatus: true
+                            ) == 0
+
+                            def syncFailed = false
+                            if (!upToDate) {
+                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (squash merge)"
+                                def syncStatus = sh(
+                                    script: """
+                                        set -e
+                                        git config user.email "jenkins-renovate@leuwen-lc.fr"
+                                        git config user.name "Jenkins Renovate Bot"
+                                        git merge --squash origin/${BASE_BRANCH}
+                                        if ! git diff --cached --quiet; then
+                                            git commit -m "chore: synchronisation avec ${BASE_BRANCH} (squash automatique CI Renovate)"
+                                        fi
+                                    """,
+                                    returnStatus: true
+                                )
+
+                                if (syncStatus != 0) {
+                                    echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
+                                    sh 'git merge --abort 2>/dev/null || true'
+                                    sh "git reset --hard ${prTipSha}"
+                                    sh 'git clean -fd'
+                                    syncFailed = true
+                                } else {
+                                    def pushStatus = sh(
+                                        script: """
+                                            set +x
+                                            git push "https://\${FORGEJO_TOKEN}@codeberg.org/${REPO}.git" "HEAD:refs/heads/${branchRef}"
+                                        """,
+                                        returnStatus: true
+                                    )
+                                    if (pushStatus != 0) {
+                                        echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
+                                        syncFailed = true
+                                    }
+                                }
+                            }
+
+                            if (syncFailed) {
+                                failures << prNumber
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                    "Conflit lors de la synchronisation automatique avec ${BASE_BRANCH} — rebase manuel nécessaire.")
+                                return
+                            }
 
                             def ciStatus = sh(
                                 script: '''

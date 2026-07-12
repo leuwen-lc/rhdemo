@@ -385,6 +385,9 @@ Les deux Jenkinsfiles gardent leur structure déclarative propre mais appellent 
 >    séquence que `RHDemo-CI` : `mvnw clean compile -DskipTests` puis `mvnw verify` puis le goal OWASP
 >    explicite `org.owasp:dependency-check-maven:check` (credentials `nvd-api-key` /
 >    `ossindex-credentials`, déjà existants — sinon OWASP n'est jamais exécuté en mode Renovate).
+>
+> Ajout ultérieur : synchronisation automatique de la branche PR avec la base par squash merge
+> avant les tests, quand elle est en retard (voir point 3 de « Limites connues » ci-dessous).
 
 ### 1. Credential Jenkins : token API Forgejo
 
@@ -499,6 +502,56 @@ pipeline {
 
                             sh "git fetch origin '${branchRef}'"
                             sh 'git checkout FETCH_HEAD'
+                            // FETCH_HEAD est écrasé par le prochain "git fetch" (celui de la base) —
+                            // on capture le SHA de la PR avant, pour pouvoir y revenir en cas de conflit.
+                            def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                            sh "git fetch origin ${BASE_BRANCH}"
+
+                            // Branche en retard sur la base ? Un correctif de sécurité mergé entre-temps
+                            // (ex: CVE fixée) ferait sinon échouer la CI pour une raison sans rapport
+                            // avec le changement de la PR. Squash merge de la base + push avant de tester.
+                            def upToDate = sh(
+                                script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                                returnStatus: true
+                            ) == 0
+
+                            def syncFailed = false
+                            if (!upToDate) {
+                                def syncStatus = sh(
+                                    script: """
+                                        set -e
+                                        git config user.email "jenkins-renovate@leuwen-lc.fr"
+                                        git config user.name "Jenkins Renovate Bot"
+                                        git merge --squash origin/${BASE_BRANCH}
+                                        if ! git diff --cached --quiet; then
+                                            git commit -m "chore: synchronisation avec ${BASE_BRANCH} (squash automatique CI Renovate)"
+                                        fi
+                                    """,
+                                    returnStatus: true
+                                )
+                                if (syncStatus != 0) {
+                                    sh 'git merge --abort 2>/dev/null || true'
+                                    sh "git reset --hard ${prTipSha}"
+                                    sh 'git clean -fd'
+                                    syncFailed = true
+                                } else {
+                                    def pushStatus = sh(
+                                        script: """
+                                            set +x
+                                            git push "https://\${FORGEJO_TOKEN}@codeberg.org/${REPO}.git" "HEAD:refs/heads/${branchRef}"
+                                        """,
+                                        returnStatus: true
+                                    )
+                                    if (pushStatus != 0) { syncFailed = true }
+                                }
+                            }
+
+                            if (syncFailed) {
+                                failures << prNumber
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                    "Conflit lors de la synchronisation automatique avec ${BASE_BRANCH} — rebase manuel nécessaire.")
+                                return
+                            }
 
                             // Même séquence que RHDemo-CI (hors Selenium/ZAP/Sonar/publication) :
                             // pas de flags Maven inexistants, OWASP exécuté explicitement.
@@ -628,6 +681,8 @@ Ajouter `automerge: false` explicitement pour les mises à jour **major** (déj�
 
 2. **Conflits entre PRs** : Si deux PRs modifient le même fichier (rare pour des dépendances), la seconde peut conflictiquer après merge de la première. Le pipeline détecte l'échec du merge API et laisse la PR ouverte.
 
-3. **Pas de rebase automatique** : Si la branche PR est en retard sur `evolutions-post-1.1.8` après un merge précédent, Renovate doit la rebaser (configuré via `rebaseWhen: "behind-base-branch"` dans `renovate.json`).
+3. ~~Pas de rebase automatique~~ **Résolu** : le pipeline vérifie désormais (`git merge-base --is-ancestor`) si la branche PR est en retard sur `evolutions-post-1.1.8` avant de lancer les tests. Si oui, il fait un `git merge --squash` de la base dans la branche PR, commit, et pousse sur Codeberg avant de lancer la CI — ça évite qu'un correctif déjà mergé sur la base (ex: CVE fixée entre-temps) fasse échouer la CI d'une PR sans rapport avec ce correctif.
+   - En cas de conflit lors du squash merge, la PR est marquée en échec avec un commentaire dédié ("rebase manuel nécessaire") plutôt que de faire planter le build.
+   - Ce commit de synchronisation est indépendant du `rebaseWhen: "behind-base-branch"` de Renovate (qui continue de fonctionner en parallèle, côté nocturne) — les deux mécanismes se recouvrent partiellement mais ne rentrent pas en conflit : si Renovate rebase la branche entre-temps (force-push), le prochain run Jenkins repart d'un état propre.
 
 4. **Pas de déclenchement CD** : Ce pipeline ne déclenche pas le CD après merge. Le CI principal (`RHDemo-CI`) doit être étendu pour surveiller aussi `evolutions-post-1.1.8` (ou un cron nocturne séparé).

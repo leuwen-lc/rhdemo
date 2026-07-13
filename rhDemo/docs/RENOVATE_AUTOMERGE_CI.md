@@ -695,6 +695,15 @@ version Debian probablement ancienne (le build frontend Vue.js utilise sa propre
 Node 20.10.0 via `frontend-maven-plugin`, jamais le Node système). Utiliser l'image officielle
 évite tout problème de version Node à gérer côté agent.
 
+**Piège GPG rencontré** : `GNUPGHOME` a d'abord été mis à un chemin custom (`/tmp/gnupg`), mais
+les commits Renovate échouaient avec `gpg: skipped "<KEY_ID>": No secret key` — un nouveau
+trousseau vide apparaissait dans `/home/ubuntu/.gnupg`. Renovate sandboxe l'environnement des
+sous-processus git qu'il lance pour committer et ne propage pas un `GNUPGHOME` custom vers ces
+sous-processus, qui retombent alors sur l'emplacement par défaut (`$HOME/.gnupg`). Fix : utiliser
+`GNUPGHOME="${HOME}/.gnupg"` (comme le faisait déjà l'ancien workflow Codeberg Actions) plutôt
+qu'un chemin custom, pour que l'import atterrisse là où les sous-processus de Renovate le
+chercheront par défaut.
+
 ### Credentials Jenkins nécessaires (en plus de `forgejo-api-token`)
 
 - **`renovate-gpg-key`** (Secret text) : clé GPG privée exportée en base64, même valeur que

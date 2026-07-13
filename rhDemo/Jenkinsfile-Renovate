@@ -74,6 +74,11 @@ pipeline {
                     // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
+                    // GNUPGHOME="${HOME}/.gnupg" (pas un chemin custom type /tmp/gnupg) : Renovate
+                    // sandboxe l'environnement des sous-processus git qu'il lance pour committer
+                    // et ne propage pas forcément un GNUPGHOME custom, retombant alors sur son
+                    // défaut ($HOME/.gnupg) — la clé doit donc être importée à cet emplacement par
+                    // défaut précisément, sans quoi git commit échoue avec "gpg: No secret key".
                     sh '''
                         docker run --rm -i \
                           -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN \
@@ -85,7 +90,7 @@ pipeline {
                           -e RENOVATE_ONBOARDING=false \
                           "${RENOVATE_IMAGE}" bash -s <<'RENOVATE_SCAN_EOF'
 set -euo pipefail
-export GNUPGHOME=/tmp/gnupg
+export GNUPGHOME="${HOME}/.gnupg"
 mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
 printf 'pinentry-mode loopback\n' >> "$GNUPGHOME/gpg.conf"
 echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --batch --import

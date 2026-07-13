@@ -158,10 +158,28 @@ tool:
 # 5. forgejo-api-token
 #    - Type: Secret text
 #    - ID: forgejo-api-token
-#    - Secret: token dédié Codeberg, scope "repository" uniquement (pas d'accès admin)
+#    - Secret: token dédié Codeberg, scopes "repository" + "issue" (read/write, pas d'accès admin)
+#      — le scope "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
+#      "repository" seul ne suffit pas.
 #    - Généré sur: https://codeberg.org/user/settings/applications
-#    - Usage: RHDemo-Renovate (liste/merge des PRs Renovate + commentaires)
+#    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires,
+#      et sert aussi de RENOVATE_TOKEN pour le scan Renovate lui-même (création de PRs/branches)
 #    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
+#
+# 6. renovate-gpg-key (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-gpg-key
+#    - Secret: clé GPG privée exportée en base64 (même valeur que le secret Codeberg Actions
+#      RENOVATE_GPG_KEY), utilisée pour signer les commits Renovate
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate"
+#
+# 7. renovate-github-token (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-github-token
+#    - Secret: token GitHub read-only (repos publics), pour les lookups de changelogs/release
+#      notes des dépendances hébergées sur GitHub (même valeur que le secret Codeberg Actions
+#      RENOVATE_GH_TOKEN)
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -358,9 +376,11 @@ jobs:
   - script: |
       pipelineJob('RHDemo-Renovate') {
         displayName('RHDemo - Renovate Automerge')
-        description('''Valide et merge automatiquement les PRs Renovate (patch/minor)
+        description('''Scan Renovate + valide et merge automatiquement les PRs Renovate (patch/minor)
 
         Phases :
+        • Scan Renovate (image officielle, rapatrié depuis Codeberg Actions — pool de
+          runners codeberg-medium indisponible de façon récurrente)
         • Liste les PRs Renovate ouvertes via l\'API Forgejo
         • Build Maven + Tests unitaires/intégration + OWASP Dependency-Check par PR
         • Merge automatique via l\'API Forgejo si CI verte, sinon commentaire d\'échec
@@ -407,8 +427,9 @@ jobs:
         }
 
         triggers {
-          // Se déclenche après Renovate (3h), marge de 1h pour la création des PRs
-          cron('H 4 * * *')
+          // Scan Renovate désormais inclus dans ce job (plus de dépendance à Codeberg
+          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate
+          cron('H 3 * * *')
         }
       }
 

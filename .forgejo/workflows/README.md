@@ -1,5 +1,15 @@
 # Forgejo Actions — Renovate
 
+> **Statut : rapatrié vers Jenkins.** Le scan Renovate tourne désormais dans le job
+> `RHDemo-Renovate` (cron 3h, `rhDemo/Jenkinsfile-Renovate`), suite à l'indisponibilité
+> récurrente du pool de runners `codeberg-medium` (pas seulement un timeout — plus de
+> container disponible du tout). `renovate.yml` reste dans ce dépôt en secours manuel
+> (`workflow_dispatch` uniquement, cron désactivé) si Jenkins devient indisponible.
+> Voir [`rhDemo/docs/RENOVATE_AUTOMERGE_CI.md`](../../rhDemo/docs/RENOVATE_AUTOMERGE_CI.md).
+>
+> Le contenu ci-dessous reste pertinent si on doit un jour retourner à une exécution
+> côté Codeberg Actions (secours du secours).
+
 ## Problématique runner Codeberg (context deadline exceeded)
 
 Les runners 'codeberg-small' annulent tout job dépassant ~5 minutes avec l'erreur

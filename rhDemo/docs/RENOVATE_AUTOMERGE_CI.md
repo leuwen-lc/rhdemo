@@ -657,6 +657,65 @@ Ajouter `automerge: false` explicitement pour les mises à jour **major** (déj�
 
 ---
 
+## Rapatriement du scan Renovate depuis Codeberg Actions
+
+**Statut : implémenté.** Le scan Renovate (précédemment `.forgejo/workflows/renovate.yml` sur
+Codeberg Actions) tourne désormais dans le même job Jenkins `RHDemo-Renovate`, en amont des
+stages de validation/merge — un seul pipeline, un seul cron (3h), plus de dépendance à
+Codeberg Actions pour cette automatisation.
+
+### Pourquoi
+
+Le pool de runners `codeberg-medium` est devenu indisponible de façon récurrente ("plus de
+container disponible"), un problème de **capacité** distinct du timeout `codeberg-small`
+(~5 min, "context deadline exceeded") déjà documenté dans
+[`.forgejo/workflows/README.md`](../../.forgejo/workflows/README.md) — ce dernier a un
+fallback (split en deux workflows `codeberg-small`) qui reste disponible en secours, mais ne
+règle pas un manque de capacité généralisé côté Codeberg Actions. Rapatrier vers Jenkins
+élimine complètement la dépendance à un système de CI externe pour cette automatisation,
+cohérent avec la philosophie du projet (indépendance vis-à-vis des grandes plateformes).
+
+### Implémentation
+
+Nouveau stage `🔄 Scan Renovate` dans `Jenkinsfile-Renovate`, avant le listing des PRs :
+l'image officielle `renovate/renovate:43.249.5` est lancée en conteneur frère (`docker run`,
+via docker-socket-proxy — même mécanisme que pour l'environnement ephemere), avec le même
+script d'import GPG et les mêmes variables d'environnement que l'ancien workflow Forgejo.
+
+**Piège Docker-outside-of-Docker évité** : un conteneur frère lancé depuis l'agent Jenkins ne
+partage pas le système de fichiers de l'agent — un bind-mount vers un chemin de l'agent ne
+pointerait nulle part côté hôte Docker réel (c'est pourquoi l'environnement ephemere utilise
+`docker cp` pour ses secrets). La clé GPG est donc passée en base64 via variable
+d'environnement (`RENOVATE_GPG_KEY`) et importée à l'intérieur du conteneur Renovate lui-même,
+sans jamais toucher le système de fichiers de l'agent — aucun bind-mount nécessaire.
+
+**Pourquoi pas `npm install -g renovate` sur l'image agent** : Renovate 43.x exige une version
+de Node récente, alors que le `nodejs`/`npm` installé via `apt` dans `Dockerfile.agent` est une
+version Debian probablement ancienne (le build frontend Vue.js utilise sa propre installation
+Node 20.10.0 via `frontend-maven-plugin`, jamais le Node système). Utiliser l'image officielle
+évite tout problème de version Node à gérer côté agent.
+
+### Credentials Jenkins nécessaires (en plus de `forgejo-api-token`)
+
+- **`renovate-gpg-key`** (Secret text) : clé GPG privée exportée en base64, même valeur que
+  l'ancien secret Codeberg Actions `RENOVATE_GPG_KEY`.
+- **`renovate-github-token`** (Secret text) : token GitHub read-only (dépôts publics), pour les
+  lookups de changelogs/release notes des dépendances hébergées sur GitHub, même valeur que
+  l'ancien secret Codeberg Actions `RENOVATE_GH_TOKEN`.
+- **`forgejo-api-token`** (existant) sert aussi de `RENOVATE_TOKEN` pour Renovate lui-même
+  (création de branches/PRs), en plus de son usage pour lister/synchroniser/merger les PRs et
+  poster des commentaires. Un token dédié par acteur (Renovate vs validation/merge) aurait été
+  plus strict côté isolation des responsabilités (comme pour `/fixcve-auto`), mais le choix a
+  été fait de réutiliser le token existant (déjà scope `repository` + `issue`) pour limiter le
+  nombre de secrets à gérer.
+
+### Devenir de `.forgejo/workflows/renovate.yml`
+
+Le cron a été retiré (`on: workflow_dispatch` uniquement) — le workflow reste dans le dépôt
+comme secours manuel si Jenkins devient indisponible, plutôt que d'être supprimé.
+
+---
+
 ## Périmètre d'automerge
 
 | Type de mise à jour | Traitement |
@@ -691,3 +750,5 @@ Ajouter `automerge: false` explicitement pour les mises à jour **major** (déj�
    - **Incident connu** : la première version (squash) a poussé un commit corrompu (ancêtre commun perdu) sur `renovate/renovate-renovate-43.x` avant d'être corrigée. Cette branche spécifique continuera de conflictuer sur tout fichier déjà présent des deux côtés tant qu'elle n'aura pas été rebasée proprement par Renovate (`@renovate rebase` en commentaire de PR, ou passage nocturne).
 
 4. **Pas de déclenchement CD** : Ce pipeline ne déclenche pas le CD après merge. Le CI principal (`RHDemo-CI`) doit être étendu pour surveiller aussi `evolutions-post-1.1.8` (ou un cron nocturne séparé).
+
+5. **Pipeline unique scan + validation** : le scan Renovate et la validation/merge sont dans le même job (choix assumé lors du rapatriement depuis Codeberg Actions). Si le scan Renovate échoue (image indisponible, erreur de config...), toute la validation/merge de ce cycle est également sautée — pas d'isolation entre les deux responsabilités. Alternative possible : scinder en deux jobs (`RHDemo-Renovate-Scan` + `RHDemo-Renovate`) si l'isolation des pannes devient un problème en pratique.

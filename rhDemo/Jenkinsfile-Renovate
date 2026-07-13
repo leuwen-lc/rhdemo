@@ -3,14 +3,17 @@
  * Pipeline Renovate Automerge - RHDemo
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
+ * Scanne les dépendances avec Renovate (rapatrié depuis Codeberg Actions —
+ * pool de runners codeberg-medium indisponible de façon récurrente), puis
+ * valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
  * ouvertes sur la branche evolutions-post-1.1.8 :
- *   1. Liste les PRs Renovate ouvertes via l'API Forgejo
- *   2. Pour chaque PR : si la branche est en retard sur la base, merge de la
+ *   1. Scan Renovate (image officielle renovate/renovate, commits signés GPG)
+ *   2. Liste les PRs Renovate ouvertes via l'API Forgejo
+ *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
  *      base + push (évite qu'un correctif déjà mergé sur la base fasse
  *      échouer la CI pour une raison sans rapport avec la PR)
- *   3. Build Maven + tests + OWASP Dependency-Check
- *   4. CI verte  -> merge automatique via l'API Forgejo + commentaire
+ *   4. Build Maven + tests + OWASP Dependency-Check
+ *   5. CI verte  -> merge automatique via l'API Forgejo + commentaire
  *      CI rouge  -> commentaire d'échec, PR conservée ouverte
  *
  * Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
@@ -37,9 +40,10 @@ pipeline {
     }
 
     environment {
-        FORGEJO_API = 'https://codeberg.org/api/v1'
-        REPO        = 'leuwen-lc/rhdemo'
-        BASE_BRANCH = 'evolutions-post-1.1.8'
+        FORGEJO_API     = 'https://codeberg.org/api/v1'
+        REPO            = 'leuwen-lc/rhdemo'
+        BASE_BRANCH     = 'evolutions-post-1.1.8'
+        RENOVATE_IMAGE  = 'renovate/renovate:43.249.5'
     }
 
     stages {
@@ -51,6 +55,46 @@ pipeline {
                     echo "Build: #${env.BUILD_NUMBER}"
                 }
                 checkout scm
+            }
+        }
+
+        stage('🔄 Scan Renovate') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'renovate-gpg-key', variable: 'RENOVATE_GPG_KEY'),
+                    string(credentialsId: 'renovate-github-token', variable: 'GITHUB_COM_TOKEN')
+                ]) {
+                    // Image officielle Renovate en conteneur frère (via docker-socket-proxy),
+                    // comme pour ephemere. Clé GPG passée en base64 via variable d'environnement
+                    // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
+                    // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
+                    // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
+                    // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
+                    sh '''
+                        docker run --rm -i \
+                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN \
+                          -e RENOVATE_TOKEN="${FORGEJO_TOKEN}" \
+                          -e RENOVATE_PLATFORM=forgejo \
+                          -e RENOVATE_ENDPOINT=https://codeberg.org \
+                          -e RENOVATE_REPOSITORIES="${REPO}" \
+                          -e LOG_LEVEL=info \
+                          -e RENOVATE_REQUIRE_CONFIG=optional \
+                          -e RENOVATE_ONBOARDING=false \
+                          "${RENOVATE_IMAGE}" bash -s <<'RENOVATE_SCAN_EOF'
+set -euo pipefail
+export GNUPGHOME=/tmp/gnupg
+mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
+printf 'pinentry-mode loopback\n' >> "$GNUPGHOME/gpg.conf"
+echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --batch --import
+KEY_ID="$(gpg --list-secret-keys --keyid-format LONG --with-colons | awk -F: '/^sec:/ { print $5; exit }')"
+git config --global user.signingkey "$KEY_ID"
+git config --global commit.gpgsign true
+git config --global gpg.program gpg
+renovate
+RENOVATE_SCAN_EOF
+                    '''
+                }
             }
         }
 

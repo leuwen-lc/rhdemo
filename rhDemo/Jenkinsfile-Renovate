@@ -6,8 +6,8 @@
  * Valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
  * ouvertes sur la branche evolutions-post-1.1.8 :
  *   1. Liste les PRs Renovate ouvertes via l'API Forgejo
- *   2. Pour chaque PR : si la branche est en retard sur la base, squash merge
- *      de la base + push (évite qu'un correctif déjà mergé sur la base fasse
+ *   2. Pour chaque PR : si la branche est en retard sur la base, merge de la
+ *      base + push (évite qu'un correctif déjà mergé sur la base fasse
  *      échouer la CI pour une raison sans rapport avec la PR)
  *   3. Build Maven + tests + OWASP Dependency-Check
  *   4. CI verte  -> merge automatique via l'API Forgejo + commentaire
@@ -127,8 +127,16 @@ pipeline {
                             // Une branche Renovate non rebasée depuis longtemps peut hériter
                             // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
                             // entre-temps) et faire échouer la CI pour une raison sans rapport
-                            // avec son propre changement. On la met à jour par squash merge
+                            // avec son propre changement. On la met à jour par un merge classique
                             // avant de lancer les tests.
+                            //
+                            // Un merge --squash a été essayé puis abandonné : il ne crée pas de
+                            // commit de fusion (un seul parent), donc git perd la trace de ce qui a
+                            // déjà été synchronisé. Chaque sync suivante recalcule alors un
+                            // merge-base bien plus ancien que le dernier sync réussi, ce qui
+                            // provoque de faux conflits dès qu'un fichier est retouché côté base
+                            // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
+                            // Un merge classique préserve la filiation : chaque sync est incrémentale.
                             def upToDate = sh(
                                 script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
                                 returnStatus: true
@@ -136,16 +144,13 @@ pipeline {
 
                             def syncFailed = false
                             if (!upToDate) {
-                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (squash merge)"
+                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
                                 def syncStatus = sh(
                                     script: """
                                         set -e
                                         git config user.email "jenkins-renovate@leuwen-lc.fr"
                                         git config user.name "Jenkins Renovate Bot"
-                                        git merge --squash origin/${BASE_BRANCH}
-                                        if ! git diff --cached --quiet; then
-                                            git commit -m "chore: synchronisation avec ${BASE_BRANCH} (squash automatique CI Renovate)"
-                                        fi
+                                        git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
                                     """,
                                     returnStatus: true
                                 )

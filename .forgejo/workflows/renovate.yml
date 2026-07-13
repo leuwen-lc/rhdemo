@@ -5,11 +5,6 @@ name: Renovate
 # Cron désactivé — ce workflow reste disponible en secours manuel uniquement
 # (workflow_dispatch) si Jenkins est indisponible.
 # Voir rhDemo/docs/RENOVATE_AUTOMERGE_CI.md
-# Scan Renovate rapatrié vers Jenkins (job RHDemo-Renovate, cron 3h) suite à
-# l'indisponibilité récurrente du pool de runners codeberg-medium.
-# Cron désactivé — ce workflow reste disponible en secours manuel uniquement
-# (workflow_dispatch) si Jenkins est indisponible.
-# Voir rhDemo/docs/RENOVATE_AUTOMERGE_CI.md
 on:
   workflow_dispatch:
 
@@ -17,12 +12,9 @@ jobs:
   renovate:
     runs-on: codeberg-medium
     timeout-minutes: 60
-    runs-on: codeberg-medium
-    timeout-minutes: 60
     container:
       image: renovate/renovate:43.252.5
     steps:
-      - name: Run Renovate
       - name: Run Renovate
         env:
           RENOVATE_GPG_KEY: ${{ secrets.RENOVATE_GPG_KEY }}
@@ -31,27 +23,6 @@ jobs:
           RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
           RENOVATE_REPOSITORIES: leuwen-lc/rhdemo
           GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GH_TOKEN }}
-          LOG_LEVEL: info
-          RENOVATE_REQUIRE_CONFIG: "optional"
-          RENOVATE_ONBOARDING: "false"
-        run: |
-          set -euo pipefail
-
-          export GNUPGHOME="${HOME}/.gnupg"
-          mkdir -p "$GNUPGHOME"
-          chmod 700 "$GNUPGHOME"
-          printf 'pinentry-mode loopback\n' >> "$GNUPGHOME/gpg.conf"
-
-          echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --batch --import
-
-          KEY_ID="$(gpg --list-secret-keys --keyid-format LONG --with-colons | awk -F: '/^sec:/ { print $5; exit }')"
-          test -n "$KEY_ID"
-
-          git config --global user.signingkey "$KEY_ID"
-          git config --global commit.gpgsign true
-          git config --global gpg.program gpg
-
-          renovate
           LOG_LEVEL: info
           RENOVATE_REQUIRE_CONFIG: "optional"
           RENOVATE_ONBOARDING: "false"

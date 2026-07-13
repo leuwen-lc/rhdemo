@@ -6,7 +6,7 @@
  * Scanne les dépendances avec Renovate (rapatrié depuis Codeberg Actions —
  * pool de runners codeberg-medium indisponible de façon récurrente), puis
  * valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
- * ouvertes sur la branche evolutions-post-1.1.8 :
+ * ouvertes sur la branche evolutions-post-1.1.9 :
  *   1. Scan Renovate (image officielle renovate/renovate, commits signés GPG)
  *   2. Liste les PRs Renovate ouvertes via l'API Forgejo
  *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
@@ -42,7 +42,7 @@ pipeline {
     environment {
         FORGEJO_API     = 'https://codeberg.org/api/v1'
         REPO            = 'leuwen-lc/rhdemo'
-        BASE_BRANCH     = 'evolutions-post-1.1.8'
+        BASE_BRANCH     = 'evolutions-post-1.1.9'
         RENOVATE_IMAGE  = 'renovate/renovate:43.249.5'
     }
 

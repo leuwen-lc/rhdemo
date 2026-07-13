@@ -5,7 +5,7 @@
   ],
   "gitAuthor": "Renovate Bot <leuwenlc+renovate@gmail.com>",
   "baseBranchPatterns": [
-    "evolutions-post-1.1.8"
+    "evolutions-post-1.1.9"
   ],
   "prCreation": "immediate",
   "minimumReleaseAge": "7 days",

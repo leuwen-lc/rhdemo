@@ -162,8 +162,7 @@ tool:
 #      — le scope "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
 #      "repository" seul ne suffit pas.
 #    - Généré sur: https://codeberg.org/user/settings/applications
-#    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires,
-#      et sert aussi de RENOVATE_TOKEN pour le scan Renovate lui-même (création de PRs/branches)
+#    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires
 #    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
 #
 # 6. renovate-gpg-key (Secret text)
@@ -180,6 +179,18 @@ tool:
 #      notes des dépendances hébergées sur GitHub (même valeur que le secret Codeberg Actions
 #      RENOVATE_GH_TOKEN)
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
+#
+# 8. renovate-forgejo-token (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-forgejo-token
+#    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
+#      Renovate lui-même, distinct de forgejo-api-token)
+#    - Pourquoi un token séparé : forgejo-api-token (scopes repository+issue) ne suffit pas pour
+#      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
+#      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
+#      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
+#      déterminer/régénérer le scope exact requis.
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
 
 
 # ═══════════════════════════════════════════════════════════════════

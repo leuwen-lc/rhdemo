@@ -702,12 +702,14 @@ Node 20.10.0 via `frontend-maven-plugin`, jamais le Node système). Utiliser l'i
 - **`renovate-github-token`** (Secret text) : token GitHub read-only (dépôts publics), pour les
   lookups de changelogs/release notes des dépendances hébergées sur GitHub, même valeur que
   l'ancien secret Codeberg Actions `RENOVATE_GH_TOKEN`.
-- **`forgejo-api-token`** (existant) sert aussi de `RENOVATE_TOKEN` pour Renovate lui-même
-  (création de branches/PRs), en plus de son usage pour lister/synchroniser/merger les PRs et
-  poster des commentaires. Un token dédié par acteur (Renovate vs validation/merge) aurait été
-  plus strict côté isolation des responsabilités (comme pour `/fixcve-auto`), mais le choix a
-  été fait de réutiliser le token existant (déjà scope `repository` + `issue`) pour limiter le
-  nombre de secrets à gérer.
+- **`renovate-forgejo-token`** (Secret text) : même valeur que l'ancien secret Codeberg Actions
+  `RENOVATE_TOKEN`, dédié à Renovate lui-même (variable `RENOVATE_TOKEN` du stage "Scan Renovate").
+  **Distinct de `forgejo-api-token`** — essayé en premier par souci de simplicité (un secret de
+  moins), mais l'initialisation de Renovate échoue avec `"Authentication failure"` avec les
+  scopes `repository` + `issue` de `forgejo-api-token` : elle a besoin d'un scope `user`
+  supplémentaire, absent de ce token. Réutiliser le token qui fonctionnait déjà côté Codeberg
+  Actions pour Renovate règle le problème sans avoir à déterminer/régénérer le scope exact requis,
+  et rejoint au passage l'isolation des responsabilités déjà appliquée pour `/fixcve-auto`.
 
 ### Devenir de `.forgejo/workflows/renovate.yml`
 

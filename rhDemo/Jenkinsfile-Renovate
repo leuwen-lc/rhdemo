@@ -61,7 +61,7 @@ pipeline {
         stage('🔄 Scan Renovate') {
             steps {
                 withCredentials([
-                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'renovate-forgejo-token', variable: 'RENOVATE_TOKEN'),
                     string(credentialsId: 'renovate-gpg-key', variable: 'RENOVATE_GPG_KEY'),
                     string(credentialsId: 'renovate-github-token', variable: 'GITHUB_COM_TOKEN')
                 ]) {
@@ -70,11 +70,13 @@ pipeline {
                     // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
                     // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
                     // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
+                    // Token dédié (pas forgejo-api-token) : l'initialisation de Renovate a besoin
+                    // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
+                    // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
                     sh '''
                         docker run --rm -i \
-                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN \
-                          -e RENOVATE_TOKEN="${FORGEJO_TOKEN}" \
+                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN \
                           -e RENOVATE_PLATFORM=forgejo \
                           -e RENOVATE_ENDPOINT=https://codeberg.org \
                           -e RENOVATE_REPOSITORIES="${REPO}" \

@@ -64,9 +64,13 @@ Le script effectue dans l'ordre :
 git fetch origin
 git checkout master
 git merge --squash origin/evolutions-post-1.1.7
-git commit -S -m "release: merge evolutions-post-1.1.7"
+git commit -S -m "release: merge evolutions-post-1.1.7" -m "$(cat .git/SQUASH_MSG)"
 git push origin master
 ```
+
+> `-m "$(cat .git/SQUASH_MSG)"` reprend dans le corps du commit la liste des commits squashés
+> (générée automatiquement par `git merge --squash` dans `.git/SQUASH_MSG`) — sans ça, un `-m`
+> unique écrase ce template et le détail des commits d'origine est perdu.
 
 ---
 

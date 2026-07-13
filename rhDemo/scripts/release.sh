@@ -16,7 +16,7 @@
 #   3. Merger en squash signé en local (manuel — nécessite clé GPG/SSH locale) :
 #        git fetch origin && git checkout master
 #        git merge --squash origin/evolutions-post-1.1.8
-#        git commit -S -m "release: merge evolutions-post-1.1.8"
+#        git commit -S -m "release: merge evolutions-post-1.1.8" -m "$(cat .git/SQUASH_MSG)"
 #        git push origin master
 #   4. Sur master après le merge :
 #        ./release.sh post-merge 1.1.9-RELEASE 1.2.0-SNAPSHOT
@@ -263,7 +263,7 @@ cmd_pre_merge() {
     echo -e "     ${BLUE}git fetch origin${NC}"
     echo -e "     ${BLUE}git checkout master${NC}"
     echo -e "     ${BLUE}git merge --squash origin/${branch}${NC}"
-    echo -e "     ${BLUE}git commit -S -m \"release: merge ${branch}\"${NC}"
+    echo -e "     ${BLUE}git commit -S -m \"release: merge ${branch}\" -m \"\$(cat .git/SQUASH_MSG)\"${NC}"
     echo -e "     ${BLUE}git push origin master${NC}"
     echo ""
     echo "  5. Lancer la phase post-merge :"

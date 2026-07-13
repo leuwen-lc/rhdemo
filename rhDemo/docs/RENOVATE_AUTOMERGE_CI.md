@@ -600,7 +600,10 @@ pipeline {
                         }
 
                         if (failures) {
-                            unstable("${failures.size()} PR(s) en échec : ${failures.join(', ')}")
+                            // FAILURE (pas unstable) : les builds UNSTABLE ne comptent pas dans le
+                            // rapport météo/"aucun build récent n'a échoué" de Jenkins.
+                            currentBuild.result = 'FAILURE'
+                            echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
                         }
                     }
                 }

@@ -85,9 +85,10 @@ Le script effectue dans l'ordre :
 4. `git tag -a 1.1.8-RELEASE -m "Release 1.1.8-RELEASE"`
 5. `git push origin 1.1.8-RELEASE`
 6. Bumpe les 3 `pom.xml` : `1.1.8-RELEASE` → `1.1.9-SNAPSHOT`
-7. Met à jour `jenkins-casc.yaml` : branche CI/CD → `evolutions-post-1.1.8`
-8. Commit `chore: retour à 1.1.9-SNAPSHOT après 1.1.8-RELEASE`
-9. Push
+7. Met à jour `jenkins-casc.yaml` : branche CI/CD → `evolutions-post-1.1.8` (RHDemo-CI, RHDemo-CD et RHDemo-Renovate — un seul pattern générique couvre les 3 jobs)
+8. Met à jour `Jenkinsfile-Renovate` (`BASE_BRANCH`) et `renovate.json` (`baseBranchPatterns`) → `evolutions-post-1.1.8`
+9. Commit `chore: retour à 1.1.9-SNAPSHOT après 1.1.8-RELEASE`
+10. Push
 
 ---
 

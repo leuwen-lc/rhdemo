@@ -49,6 +49,8 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 RHDEMO_DIR="${REPO_ROOT}/rhDemo"
 MVNW="${RHDEMO_DIR}/mvnw"
 JENKINS_CASC="${REPO_ROOT}/rhDemo/infra/jenkins-docker/jenkins-casc.yaml"
+JENKINSFILE_RENOVATE="${REPO_ROOT}/rhDemo/Jenkinsfile-Renovate"
+RENOVATE_JSON="${REPO_ROOT}/renovate.json"
 
 POM_FILES=(
     "${REPO_ROOT}/rhDemo/pom.xml"
@@ -98,10 +100,32 @@ bump_casc_branch() {
     log "Mise à jour jenkins-casc.yaml : branche CI/CD → ${new_branch}"
     [ -f "${JENKINS_CASC}" ] || error "jenkins-casc.yaml introuvable : ${JENKINS_CASC}"
     if grep -q "evolutions-post-" "${JENKINS_CASC}"; then
+        # Un seul pattern générique : couvre RHDemo-CI, RHDemo-CD et RHDemo-Renovate
+        # (les 3 jobs déclarent leur checkout avec branches('*/evolutions-post-X.Y.Z'))
         sed -i "s|branches('\*/evolutions-post-[0-9.]*')|branches('*/${new_branch}')|g" "${JENKINS_CASC}"
         success "jenkins-casc.yaml → branche ${new_branch}"
     else
         warn "Aucune référence 'evolutions-post-*' trouvée dans jenkins-casc.yaml"
+    fi
+}
+
+bump_renovate_branch() {
+    local new_branch="$1"
+
+    log "Mise à jour Jenkinsfile-Renovate : BASE_BRANCH → ${new_branch}"
+    if [ -f "${JENKINSFILE_RENOVATE}" ] && grep -q "evolutions-post-" "${JENKINSFILE_RENOVATE}"; then
+        sed -i "s|evolutions-post-[0-9]\+\.[0-9]\+\.[0-9]\+|${new_branch}|g" "${JENKINSFILE_RENOVATE}"
+        success "Jenkinsfile-Renovate → ${new_branch}"
+    else
+        warn "Aucune référence 'evolutions-post-*' trouvée dans Jenkinsfile-Renovate"
+    fi
+
+    log "Mise à jour renovate.json : baseBranchPatterns → ${new_branch}"
+    if [ -f "${RENOVATE_JSON}" ] && grep -q "evolutions-post-" "${RENOVATE_JSON}"; then
+        sed -i "s|evolutions-post-[0-9]\+\.[0-9]\+\.[0-9]\+|${new_branch}|g" "${RENOVATE_JSON}"
+        success "renovate.json → baseBranchPatterns ${new_branch}"
+    else
+        warn "Aucune référence 'evolutions-post-*' trouvée dans renovate.json"
     fi
 }
 
@@ -310,10 +334,13 @@ cmd_post_merge() {
     step "4/5 — Retour en SNAPSHOT : ${release_version} → ${next_snapshot}"
     bump_version "${release_version}" "${next_snapshot}"
     bump_casc_branch "${evolution_branch}"
+    bump_renovate_branch "${evolution_branch}"
 
     step "5/5 — Commit et push"
     commit_poms_and_push "chore: retour à ${next_snapshot} après ${release_version}" "master" \
-        "rhDemo/infra/jenkins-docker/jenkins-casc.yaml"
+        "rhDemo/infra/jenkins-docker/jenkins-casc.yaml" \
+        "rhDemo/Jenkinsfile-Renovate" \
+        "renovate.json"
 
     echo ""
     echo -e "${GREEN}══════════════════════════════════════════════${NC}"

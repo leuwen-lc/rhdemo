@@ -45,30 +45,33 @@ public class SecurityConfig {
 	    // Ignorer CSRF pour les endpoints publics et actuator
 	    .ignoringRequestMatchers("/error*", "/api-docs", "/actuator/**") //NOSONAR - désactivation CSRF pour pages spécifiques peu sensibles ou modules annexes prets à l'emploi
 	)
-	// Configuration des headers de sécurité
+	// Répartition des headers de sécurité :
+	//   Headers STATIQUES (valeurs fixes) → Nginx / NGF HTTPRoute
+	//     X-Frame-Options, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy,
+	//     COOP, CORP, COEP
+	//   Headers DYNAMIQUES (valeur construite à partir de la config Spring) → ici
+	//     Content-Security-Policy : embarque l'URL Keycloak (change selon l'environnement)
+	// Les headers statiques sont désactivés ci-dessous pour éviter la duplication avec Nginx.
 	.headers(headers -> headers
-	    // Désactiver X-Frame-Options car géré par nginx (évite les headers dupliqués)
 	    .frameOptions(frame -> frame.disable())
-	    // Désactiver HSTS car géré par nginx (évite les headers dupliqués)
 	    .httpStrictTransportSecurity(hsts -> hsts.disable())
-	    // Configurer Content-Security-Policy (CSP) pour protéger contre XSS et injections
 	    .contentSecurityPolicy(csp -> csp
 	        .policyDirectives(cspPolicyBuilder.buildCspDirectives())
 	    )
 	)
-	.authorizeHttpRequests(auth -> ( auth
-            .requestMatchers("/error*","/logout").permitAll()
-            // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
-                    .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-            // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)
-                    .requestMatchers("/actuator/prometheus").permitAll()
-            // Autres endpoints actuator réservés aux admins
-            .requestMatchers("/actuator/**").hasRole("admin")
-            // Documentation OpenAPI/Swagger restreinte aux admins (désactivée en stagingkub via springdoc config)
-            .requestMatchers("/api-docs/**").hasRole("admin")
-            .requestMatchers("/front")).hasAnyRole("consult","MAJ")
-            // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
-            .anyRequest().authenticated())
+	.authorizeHttpRequests(auth -> auth
+	        .requestMatchers("/error*", "/logout").permitAll()
+	        // Endpoints actuator health accessibles sans authentification (pour Kubernetes probes)
+	        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+	        // Endpoint prometheus accessible sans authentification (scraping Prometheus interne, protégé par NetworkPolicy)
+	        .requestMatchers("/actuator/prometheus").permitAll()
+	        // Autres endpoints actuator réservés aux admins
+	        .requestMatchers("/actuator/**").hasRole("admin")
+	        // Documentation OpenAPI/Swagger restreinte aux admins (désactivée en stagingkub via springdoc config)
+	        .requestMatchers("/api-docs/**").hasRole("admin")
+	        .requestMatchers("/front").hasAnyRole("consult", "MAJ")
+	        // Pour les requêtes REST les filtres de roles sont directement au niveau des méthodes du controleur
+	        .anyRequest().authenticated())
 	.oauth2Login(oauth2 -> oauth2
 		    .userInfoEndpoint(userInfo -> userInfo
 			        .userAuthoritiesMapper(this.keycloakmapper)))

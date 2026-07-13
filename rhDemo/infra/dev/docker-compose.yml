@@ -3,11 +3,11 @@ services:
   # Base de données PostgreSQL pour l'application RHDemo (dev local)
   # ═══════════════════════════════════════════════════════════════
   rhdemo-db-dev:
-    image: postgres:18.3-alpine3.22@sha256:5af62d454ff2a5e88b2bcc9ec3a44b56267a8c6d5086a1e58135ee64230d4870
+    image: postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0
     container_name: rhdemo-dev-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: dbrhdemo
       POSTGRES_USER: dbrhdemo
@@ -32,7 +32,7 @@ services:
   # Keycloak - Serveur d'authentification (dev local avec H2)
   # ═══════════════════════════════════════════════════════════════
   keycloak-dev:
-    image: quay.io/keycloak/keycloak:26.6.2@sha256:a5f5b927218053d0f4180f2ba3741623b932fe6a575b46cf9e6122cf08b80385
+    image: quay.io/keycloak/keycloak:26.6.3@sha256:29b2ce19cc0b4815d4c3f043fdae70d9df3089b3f917d0f39eafce4428298ac5
     container_name: keycloak-dev
     restart: unless-stopped
     ports:
@@ -45,7 +45,7 @@ services:
     environment:
       # Admin Keycloak
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set}
 
       # Hostname configuration
       KC_HOSTNAME_URL: http://localhost:6090

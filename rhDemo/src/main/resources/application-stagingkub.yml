@@ -39,8 +39,11 @@ spring:
           # JWKS en HTTP interne pour validation des signatures JWT
           jwk-set-uri: http://keycloak:8080/realms/RHDemo/protocol/openid-connect/certs
 
-          # NE PAS configurer issuer-uri ici non plus
-          # Spring utilisera l'issuer présent dans le token JWT pour validation
+          # issuer-uri configuré conjointement avec jwk-set-uri :
+          # Spring utilise jwk-set-uri pour résoudre les clés (pas de découverte OIDC)
+          # et la VALEUR de issuer-uri comme claim attendu dans les tokens JWT.
+          # Cela active la validation du claim "iss" sans télécharger /.well-known/openid-configuration.
+          issuer-uri: https://keycloak-stagingkub.intra.leuwen-lc.fr/realms/RHDemo
 
 # Configuration serveur pour reverse proxy
 server:

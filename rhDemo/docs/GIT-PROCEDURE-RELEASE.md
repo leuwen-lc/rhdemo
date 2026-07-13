@@ -1,10 +1,10 @@
-# Procédure standard : PR `evolutions-post-1.1.6` -> `master`, release `1.1.7-RELEASE`, tag, puis retour en `-SNAPSHOT`
+# Procédure standard : PR `evolutions-post-1.1.7` -> `master`, release `1.1.8-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte (modifier les versions par remplacement global):
 
-- Branche source (exemple) : `evolutions-post-1.1.6`
+- Branche source (exemple) : `evolutions-post-1.1.7`
 - Branche cible : `master`
-- Tag Git (exemple) : `1.1.7-RELEASE`
+- Tag Git (exemple) : `1.1.8-RELEASE`
 - Après la release, `master` repasse en `-SNAPSHOT`
 
 ## Prérequis
@@ -12,155 +12,91 @@ Contexte (modifier les versions par remplacement global):
 - chaine CI/CD complète au vert avec options sonarqube et selenium
 - README.md racine mis à jour en particulier la section changelog pour la nouvelle version
 
-## 1) Synchroniser le repo local avec le distant
+---
+
+## Étapes automatisées vs manuelles
+
+| Étape | Outil | Description |
+| ----- | ----- | ----------- |
+| Sync + align master + bump RELEASE + push | `release.sh pre-merge` | Automatisé |
+| Squash merge signé | `git` local | **Manuel** (nécessite clé GPG/SSH locale) |
+| Tag + push tag + bump SNAPSHOT + push | `release.sh post-merge` | Automatisé |
+
+Script : [`rhDemo/scripts/release.sh`](../scripts/release.sh)
+
+---
+
+## 1) Préparer la branche (automatisé)
+
+```bash
+cd <racine du dépôt>
+rhDemo/scripts/release.sh pre-merge 1.1.8-RELEASE evolutions-post-1.1.7
+```
+
+Le script effectue dans l'ordre :
+
+1. Vérifie que le répertoire de travail est propre
+2. Bascule sur la branche si nécessaire
+3. `git pull --rebase origin evolutions-post-1.1.7`
+4. `git fetch origin && git merge origin/master` (alignement avec master)
+5. Bumpe les 3 `pom.xml` : `1.1.8-SNAPSHOT` → `1.1.8-RELEASE`
+6. Commit `chore(release): passage à la version 1.1.8-RELEASE`
+7. Push
+
+> Si des conflits surviennent à l'étape 4, le script s'arrête avec les instructions pour les résoudre manuellement.
+
+---
+
+## 2) Vérifier la CI et ouvrir la PR sur Codeberg
+
+- Attendre que le **statut de commit Jenkins CI** soit vert sur Codeberg
+- Créer la PR : `evolutions-post-1.1.7` → `master`
+- Faire relire la PR (checks, conventions, etc.)
+
+---
+
+## 3) Merger en squash signé en local (manuel)
+
+> Seule étape qui reste manuelle : le squash merge signé requiert la clé GPG/SSH locale.
+> Ne pas utiliser le bouton Merge de l'interface Codeberg.
 
 ```bash
 git fetch origin
-# Récupère toutes les dernières références (branches/tags) depuis le remote, sans modifier la branche courante.
-```
-
-```bash
-git checkout evolutions-post-1.1.6
-# Bascule sur la branche de travail à livrer.
-```
-
-```bash
-git pull --rebase origin evolutions-post-1.1.6
-# Met à jour la branche avec le distant en rejouant les commits au-dessus (historique plus propre qu’un merge).
-```
-
----
-
-## 2) Ré-aligner la branche avec `master`
-
-```bash
-git fetch origin
-# Rafraîchit les références distantes (dont origin/master) avant de rebaser.
-```
-
-```bash
-git merge origin/master
-# Merge les commits de master pour minimiser les surprises au moment du merge de la PR.
-# Pas de rebase pour éviter de devoir donner un droit git force sur la branche 
-```
-
-> Si conflits : les résoudre, puis faire `git add ...`
-
----
-
-## 3) Passer la version Maven en `1.1.7-RELEASE` (dans les POM)
-
-1. Modifie les `pom.xml` (3 modules) :
-   - Remplacer par exemple `1.1.6-SNAPSHOT` par `1.1.7-RELEASE`.
-
-Puis :
-
-```bash
-git status
-# Afficher les fichiers modifiés pour vérifier que seuls les POM attendus ont changé.
-```
-
-```bash
-git add **/pom.xml
-# Ajoute à l’index les POM (racine + modules) pour préparer le commit de version.
-```
-
-```bash
-git commit -m "chore(release): passage à la version 1.1.7-RELEASE"
-# Crée un commit traçable qui fige la version release dans les POM.
-```
-
-```bash
-git push origin evolutions-post-1.1.6
-# Pousse la branche mise à jour (avec le commit de version) vers le remote pour l’utiliser dans la Pull Request.
-```
-
----
-
-## 4) Ouvrir et merger la Pull Request sur GitHub
-
-Sur Codeberg :
-
-- (Demandeur) Créer une PR :
-  - **fusionner dans** : `master`
-  - **tirer les modifications depuis** : `evolutions-post-1.1.6`
-- Validateur : Vérifier que la CI est verte avec les options SonarQube et Selenium et que la PR est conforme (checks, conventions, etc.).
-- Validateur : merger la PR dès que les règles du dépôt le permettent (branch protection, approvals, etc.).
-
-> Stratégie de merge : Squash/Merge
->
-> Attention pour pouvoir signer le squash merge il faut le faire en local  
->
-> 1. Ouvrir la PR normalement sur Codeberg :
-  evolutions-post-1.1.8 → master (pour la revue, les
-  commentaires, les checks CI)
-
-  1. Ne pas cliquer sur le bouton Merge de l'interface —
-  faire le merge signé en local :
-  git fetch origin
-  git checkout master
-  git merge --squash origin/evolutions-post-1.1.8
-  git commit -S -m "release: merge evolutions-post-1.1.8"
-  git push origin master
->
-
----
-
-## 5) Tagger la release sur le commit de `master` (après merge)
-
-```bash
-git fetch origin
-# Récupère les dernières mises à jour du remote (dont le merge de la PR sur master).
-```
-
-```bash
 git checkout master
-# Basculer sur la branche master en local.
-```
-
-```bash
-git pull origin master
-# Met à jour master local avec le dernier état de master distant (incluant le merge de la PR).
-```
-
-```bash
-git tag -a 1.1.7-RELEASE -m "Release 1.1.7-RELEASE"
-# Crée un tag annoté sur le commit courant (celui de master) pour marquer officiellement la release.
-```
-
-```bash
-git push origin 1.1.7-RELEASE
-# Publie le tag vers le remote pour le rendre visible à tous (et déclencher d’éventuels pipelines de release).
+git merge --squash origin/evolutions-post-1.1.7
+git commit -S -m "release: merge evolutions-post-1.1.7"
+git push origin master
 ```
 
 ---
 
-## 6) Repasser `master` en `-SNAPSHOT` après la release
-
-Décide de la version de développement suivante :
-
-- `1.1.6-SNAPSHOT` (exemple)
-
-1. Modifier les `pom.xml` pour mettre la prochaine version `-SNAPSHOT`.
-
-Puis :
+## 4) Tagger et repasser en SNAPSHOT (automatisé)
 
 ```bash
-git status
-# Vérifie les fichiers modifiés avant de committer le retour en SNAPSHOT.
+cd <racine du dépôt>
+rhDemo/scripts/release.sh post-merge 1.1.8-RELEASE 1.1.9-SNAPSHOT
 ```
 
-```bash
-git add **/pom.xml
-# Ajoute les POM modifiés à l’index (préparation du commit “back to snapshot”).
-```
+Le script effectue dans l'ordre :
+
+1. Vérifie que le répertoire de travail est propre et que la branche est `master`
+2. `git pull origin master`
+3. Contrôle que `pom.xml` est bien en `1.1.8-RELEASE` (cohérence avec le squash merge)
+4. `git tag -a 1.1.8-RELEASE -m "Release 1.1.8-RELEASE"`
+5. `git push origin 1.1.8-RELEASE`
+6. Bumpe les 3 `pom.xml` : `1.1.8-RELEASE` → `1.1.9-SNAPSHOT`
+7. Met à jour `jenkins-casc.yaml` : branche CI/CD → `evolutions-post-1.1.8` (RHDemo-CI, RHDemo-CD et RHDemo-Renovate — un seul pattern générique couvre les 3 jobs)
+8. Met à jour `Jenkinsfile-Renovate` (`BASE_BRANCH`) et `renovate.json` (`baseBranchPatterns`) → `evolutions-post-1.1.8`
+9. Commit `chore: retour à 1.1.9-SNAPSHOT après 1.1.8-RELEASE`
+10. Push
+
+---
+
+## 5) Créer la branche d'évolution suivante
+
+Le script affiche la commande à la fin, exemple :
 
 ```bash
-git commit -m "chore: retour à 1.1.6-SNAPSHOT après 1.1.7-RELEASE"
-# Committe le retour en version de développement pour éviter que master reste bloqué en version release.
-```
-
-```bash
-git push origin master
-# Publie le commit sur master.
+git checkout -b evolutions-post-1.1.8
+git push origin evolutions-post-1.1.8
 ```

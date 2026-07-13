@@ -71,6 +71,9 @@ services:
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
 
+      # Chemin hôte du dépôt (pour montage cert registry dans les agents)
+      - REPOSITORY_PATH=${REPOSITORY_PATH:?Définir REPOSITORY_PATH dans .env (chemin absolu vers la racine du dépôt)}
+
       # Credentials depuis .env (tokens gérés dans l'interface Jenkins)
       - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:?Définir JENKINS_ADMIN_PASSWORD dans .env avant de démarrer}
@@ -96,7 +99,7 @@ services:
   # SONARQUBE - Analyse qualité du code
   # ═══════════════════════════════════════════════════════════════════
   sonarqube:
-    image: sonarqube:26.5.0.122743-community
+    image: sonarqube:26.6.0.123539-community
     container_name: rhdemo-sonarqube
     restart: unless-stopped
     stop_grace_period: 30s  # Temps d'arrêt gracieux
@@ -140,7 +143,7 @@ services:
   # SONARQUBE DATABASE - PostgreSQL
   # ═══════════════════════════════════════════════════════════════════
   sonarqube-db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: rhdemo-sonarqube-db
     restart: unless-stopped
 
@@ -168,7 +171,7 @@ services:
   # puis configurer Docker daemon (voir instructions dans le script)
   # ═══════════════════════════════════════════════════════════════════
   registry:
-    image: registry:2
+    image: registry:3
     container_name: kind-registry
     restart: unless-stopped
 

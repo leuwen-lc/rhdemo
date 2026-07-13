@@ -96,6 +96,6 @@ Classes exclues du calcul de couverture (déclaré dans `sonar-project.propertie
 ## Voir aussi
 
 - `docs/TESTS_REFONTE.md` — Refonte des tests : suppressions, refactorings, exclusions Sonar.
-- `docs/TESTS_SECURITY_COVERAGE.md` — Couverture des tests de sécurité.
+- `docs/TESTS_SECURITE_COUVERTURE.md` — Couverture des tests de sécurité.
 - `docs/DATA_TESTID_GUIDE.md` — Marqueurs `data-testid` pour Selenium.
 - `rhDemoAPITestIHM/` — Tests E2E Selenium (projet séparé, hors couverture JaCoCo).

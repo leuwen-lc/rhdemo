@@ -42,7 +42,7 @@ jenkins:
                 type=volume,source=rhdemo-maven-repository,destination=/home/jenkins/.m2
                 type=volume,source=rhdemo-trivy-cache,destination=/home/jenkins/.cache/trivy
                 type=volume,source=rhdemo-wdm-cache,destination=/home/jenkins/.cache/selenium
-                type=bind,source=/home/leno-vo/git/repository/rhDemo/infra/jenkins-docker/certs/registry/registry.crt,destination=/etc/ssl/certs/registry.crt,readonly
+                type=bind,source=${REPOSITORY_PATH}/rhDemo/infra/jenkins-docker/certs/registry/registry.crt,destination=/etc/ssl/certs/registry.crt,readonly
               network: "rhdemo-jenkins-network"
               extraGroupsString: "984"
               environmentsString: |
@@ -154,6 +154,43 @@ tool:
 #    - ID: kubeconfig-stagingkub
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
+#
+# 5. forgejo-api-token
+#    - Type: Secret text
+#    - ID: forgejo-api-token
+#    - Secret: token dédié Codeberg, scopes "repository" + "issue" (read/write, pas d'accès admin)
+#      — le scope "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
+#      "repository" seul ne suffit pas.
+#    - Généré sur: https://codeberg.org/user/settings/applications
+#    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires
+#    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
+#
+# 6. renovate-gpg-key (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-gpg-key
+#    - Secret: clé GPG privée exportée en base64 (même valeur que le secret Codeberg Actions
+#      RENOVATE_GPG_KEY), utilisée pour signer les commits Renovate
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate"
+#
+# 7. renovate-github-token (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-github-token
+#    - Secret: token GitHub read-only (repos publics), pour les lookups de changelogs/release
+#      notes des dépendances hébergées sur GitHub (même valeur que le secret Codeberg Actions
+#      RENOVATE_GH_TOKEN)
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate"
+#
+# 8. renovate-forgejo-token (Secret text)
+#    - Type: Secret text
+#    - ID: renovate-forgejo-token
+#    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
+#      Renovate lui-même, distinct de forgejo-api-token)
+#    - Pourquoi un token séparé : forgejo-api-token (scopes repository+issue) ne suffit pas pour
+#      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
+#      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
+#      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
+#      déterminer/régénérer le scope exact requis.
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -224,10 +261,10 @@ jobs:
             scm {
               git {
                 remote {
-                  url('https://github.com/leuwen-lc/rhdemo.git')
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/master')
+                branches('*/evolutions-post-1.1.8')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -259,7 +296,7 @@ jobs:
 
         triggers {
           pollSCM {
-            scmpoll_spec('H/15 * * * *')
+            scmpoll_spec('H/5 * * * *')
             ignorePostCommitHooks(false)
           }
         }
@@ -310,10 +347,10 @@ jobs:
             scm {
               git {
                 remote {
-                  url('https://github.com/leuwen-lc/rhdemo.git')
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/master')
+                branches('*/evolutions-post-1.1.8')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -341,6 +378,69 @@ jobs:
             }
           }
           disableConcurrentBuilds()
+        }
+      }
+
+  # ─────────────────────────────────────────────────────────────────
+  # PIPELINE RENOVATE - Validation et automerge des PRs Renovate
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-Renovate') {
+        displayName('RHDemo - Renovate Automerge')
+        description('''Scan Renovate + valide et merge automatiquement les PRs Renovate (patch/minor)
+
+        Phases :
+        • Scan Renovate (image officielle, rapatrié depuis Codeberg Actions — pool de
+          runners codeberg-medium indisponible de façon récurrente)
+        • Liste les PRs Renovate ouvertes via l\'API Forgejo
+        • Build Maven + Tests unitaires/intégration + OWASP Dependency-Check par PR
+        • Merge automatique via l\'API Forgejo si CI verte, sinon commentaire d\'échec
+
+        Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
+
+        📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md''')
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
+                }
+                branches('*/evolutions-post-1.1.8')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-Renovate')
+            lightweight(true)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('15')
+                daysToKeepStr('30')
+                artifactNumToKeepStr('5')
+                artifactDaysToKeepStr('30')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+
+        triggers {
+          // Scan Renovate désormais inclus dans ce job (plus de dépendance à Codeberg
+          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate
+          cron('H 3 * * *')
         }
       }
 

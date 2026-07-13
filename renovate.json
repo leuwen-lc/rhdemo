@@ -18,6 +18,13 @@
       "dependencyDashboardApproval": true
     },
     {
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ],
+      "automerge": false
+    },
+    {
       "matchPackageNames": ["rhdemo-api"],
       "enabled": false
     },

@@ -1,0 +1,304 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Pipeline Renovate Automerge - RHDemo
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Scanne les dépendances avec Renovate (rapatrié depuis Codeberg Actions —
+ * pool de runners codeberg-medium indisponible de façon récurrente), puis
+ * valide et merge automatiquement les PRs Renovate (patch/minor uniquement)
+ * ouvertes sur la branche evolutions-post-1.1.8 :
+ *   1. Scan Renovate (image officielle renovate/renovate, commits signés GPG)
+ *   2. Liste les PRs Renovate ouvertes via l'API Forgejo
+ *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
+ *      base + push (évite qu'un correctif déjà mergé sur la base fasse
+ *      échouer la CI pour une raison sans rapport avec la PR)
+ *   4. Build Maven + tests + OWASP Dependency-Check
+ *   5. CI verte  -> merge automatique via l'API Forgejo + commentaire
+ *      CI rouge  -> commentaire d'échec, PR conservée ouverte
+ *
+ * Les PRs major restent bloquées côté Renovate (dependencyDashboardApproval).
+ * Selenium/ZAP et SonarQube ne sont pas exécutés ici (déjà couverts par
+ * RHDemo-CI sur master après merge) — objectif : validation rapide (~10 min).
+ *
+ * 📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+pipeline {
+    agent { label 'builder' }
+
+    options {
+        timeout(time: 2, unit: 'HOURS')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+        disableConcurrentBuilds()
+    }
+
+    tools {
+        jdk 'JDK25'
+        maven 'Maven3'
+    }
+
+    environment {
+        FORGEJO_API     = 'https://codeberg.org/api/v1'
+        REPO            = 'leuwen-lc/rhdemo'
+        BASE_BRANCH     = 'evolutions-post-1.1.8'
+        RENOVATE_IMAGE  = 'renovate/renovate:43.249.5'
+    }
+
+    stages {
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    lib.printSectionHeader("Pipeline Renovate Automerge - RHDemo")
+                    echo "Build: #${env.BUILD_NUMBER}"
+                }
+                checkout scm
+            }
+        }
+
+        stage('🔄 Scan Renovate') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'renovate-forgejo-token', variable: 'RENOVATE_TOKEN'),
+                    string(credentialsId: 'renovate-gpg-key', variable: 'RENOVATE_GPG_KEY'),
+                    string(credentialsId: 'renovate-github-token', variable: 'GITHUB_COM_TOKEN')
+                ]) {
+                    // Image officielle Renovate en conteneur frère (via docker-socket-proxy),
+                    // comme pour ephemere. Clé GPG passée en base64 via variable d'environnement
+                    // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
+                    // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
+                    // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
+                    // Token dédié (pas forgejo-api-token) : l'initialisation de Renovate a besoin
+                    // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
+                    // "Authentication failure" avant même de lister les dépôts.
+                    // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
+                    // GNUPGHOME="${HOME}/.gnupg" (pas un chemin custom type /tmp/gnupg) : Renovate
+                    // sandboxe l'environnement des sous-processus git qu'il lance pour committer
+                    // et ne propage pas forcément un GNUPGHOME custom, retombant alors sur son
+                    // défaut ($HOME/.gnupg) — la clé doit donc être importée à cet emplacement par
+                    // défaut précisément, sans quoi git commit échoue avec "gpg: No secret key".
+                    sh '''
+                        docker run --rm -i \
+                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN \
+                          -e RENOVATE_PLATFORM=forgejo \
+                          -e RENOVATE_ENDPOINT=https://codeberg.org \
+                          -e RENOVATE_REPOSITORIES="${REPO}" \
+                          -e LOG_LEVEL=info \
+                          -e RENOVATE_REQUIRE_CONFIG=optional \
+                          -e RENOVATE_ONBOARDING=false \
+                          "${RENOVATE_IMAGE}" bash -s <<'RENOVATE_SCAN_EOF'
+set -euo pipefail
+export GNUPGHOME="${HOME}/.gnupg"
+mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
+printf 'pinentry-mode loopback\n' >> "$GNUPGHOME/gpg.conf"
+echo "$RENOVATE_GPG_KEY" | base64 -d | gpg --batch --import
+KEY_ID="$(gpg --list-secret-keys --keyid-format LONG --with-colons | awk -F: '/^sec:/ { print $5; exit }')"
+git config --global user.signingkey "$KEY_ID"
+git config --global commit.gpgsign true
+git config --global gpg.program gpg
+renovate
+RENOVATE_SCAN_EOF
+                    '''
+                }
+            }
+        }
+
+        stage('📋 Lister les PRs Renovate') {
+            steps {
+                withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+                    script {
+                        def httpCode = sh(
+                            script: """
+                                set +x
+                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                  "${FORGEJO_API}/repos/${REPO}/pulls?state=open&limit=50" \
+                                  -o /tmp/renovate-prs-\${BUILD_NUMBER}.json
+                            """,
+                            returnStatus: true
+                        )
+                        if (httpCode != 0) error("Impossible de lister les PRs Forgejo (curl exit ${httpCode})")
+
+                        // jq (pas de python3 dans l'image agent) — filtre sur head.ref (nom de
+                        // branche brut, pas head.label qui est préfixé "owner:branche" et casserait
+                        // le split ci-dessous). Séparateur "|" : le sha ne peut pas en contenir.
+                        env.RENOVATE_PRS = sh(
+                            script: """
+                                jq -r --arg base "${BASE_BRANCH}" '
+                                    [ .[]
+                                      | select((.head.ref // "") | test("renovate"; "i"))
+                                      | select(.base.ref == \$base)
+                                      | "\\(.number)|\\(.head.ref)|\\(.head.sha)"
+                                    ] | join(" ")
+                                ' /tmp/renovate-prs-${BUILD_NUMBER}.json
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        if (!env.RENOVATE_PRS) {
+                            echo "Aucune PR Renovate ouverte sur ${BASE_BRANCH} — rien à faire."
+                        } else {
+                            echo "PRs Renovate trouvées : ${env.RENOVATE_PRS}"
+                        }
+
+                        sh "rm -f /tmp/renovate-prs-${BUILD_NUMBER}.json"
+                    }
+                }
+            }
+        }
+
+        stage('🔀 Valider et merger chaque PR') {
+            when { expression { env.RENOVATE_PRS?.trim() } }
+            steps {
+                withCredentials([
+                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                    usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                ]) {
+                    script {
+                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                        def failures = []
+
+                        env.RENOVATE_PRS.split(' ').each { prEntry ->
+                            def parts    = prEntry.split('\\|')
+                            def prNumber = parts[0]
+                            def branchRef = parts[1]
+
+                            echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
+
+                            sh "git fetch origin '${branchRef}'"
+                            sh 'git checkout FETCH_HEAD'
+                            // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
+                            // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
+                            // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
+                            def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                            sh "git fetch origin ${BASE_BRANCH}"
+
+                            // Une branche Renovate non rebasée depuis longtemps peut hériter
+                            // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
+                            // entre-temps) et faire échouer la CI pour une raison sans rapport
+                            // avec son propre changement. On la met à jour par un merge classique
+                            // avant de lancer les tests.
+                            //
+                            // Un merge --squash a été essayé puis abandonné : il ne crée pas de
+                            // commit de fusion (un seul parent), donc git perd la trace de ce qui a
+                            // déjà été synchronisé. Chaque sync suivante recalcule alors un
+                            // merge-base bien plus ancien que le dernier sync réussi, ce qui
+                            // provoque de faux conflits dès qu'un fichier est retouché côté base
+                            // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
+                            // Un merge classique préserve la filiation : chaque sync est incrémentale.
+                            def upToDate = sh(
+                                script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                                returnStatus: true
+                            ) == 0
+
+                            def syncFailed = false
+                            if (!upToDate) {
+                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
+                                def syncStatus = sh(
+                                    script: """
+                                        set -e
+                                        git config user.email "jenkins-renovate@leuwen-lc.fr"
+                                        git config user.name "Jenkins Renovate Bot"
+                                        git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
+                                    """,
+                                    returnStatus: true
+                                )
+
+                                if (syncStatus != 0) {
+                                    echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
+                                    sh 'git merge --abort 2>/dev/null || true'
+                                    sh "git reset --hard ${prTipSha}"
+                                    sh 'git clean -fd'
+                                    syncFailed = true
+                                } else {
+                                    def pushStatus = sh(
+                                        script: """
+                                            set +x
+                                            git push "https://\${FORGEJO_TOKEN}@codeberg.org/${REPO}.git" "HEAD:refs/heads/${branchRef}"
+                                        """,
+                                        returnStatus: true
+                                    )
+                                    if (pushStatus != 0) {
+                                        echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
+                                        syncFailed = true
+                                    }
+                                }
+                            }
+
+                            if (syncFailed) {
+                                failures << prNumber
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                    "Conflit lors de la synchronisation automatique avec ${BASE_BRANCH} — rebase manuel nécessaire.")
+                                return
+                            }
+
+                            def ciStatus = sh(
+                                script: '''
+                                    cd rhDemo
+                                    set -e
+                                    ./mvnw clean compile -DskipTests
+                                    ./mvnw verify
+                                    ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                ''',
+                                returnStatus: true
+                            )
+
+                            if (ciStatus == 0) {
+                                echo "CI OK pour PR #${prNumber} — merge en cours"
+                                def mergeHttpCode = sh(
+                                    script: """
+                                        set +x
+                                        curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
+                                          -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                          -H "Content-Type: application/json" \
+                                          -d '{"Do":"merge","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
+                                          "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+                                def mergeStatus = (mergeHttpCode ==~ /2\d\d/) ? 0 : 1
+                                if (mergeStatus != 0) {
+                                    echo "WARN: merge API échoué pour PR #${prNumber} (HTTP ${mergeHttpCode})"
+                                    sh "cat /tmp/forgejo-merge-response-${prNumber}.json 2>/dev/null || true"
+                                    sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
+                                    failures << prNumber
+                                    lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                        "CI Jenkins OK mais merge échoué (HTTP ${mergeHttpCode} — conflit possible ou droits insuffisants). Intervention manuelle requise. Build : ${env.BUILD_URL}")
+                                } else {
+                                    sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
+                                    lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                        "CI Jenkins validée — PR mergée automatiquement. Build : ${env.BUILD_URL}")
+                                }
+                            } else {
+                                echo "CI KO pour PR #${prNumber} — PR conservée ouverte"
+                                failures << prNumber
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                    "CI Jenkins échouée — voir build ${env.BUILD_URL}. Mise à jour à revoir manuellement.")
+                            }
+
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
+                        }
+
+                        if (failures) {
+                            // FAILURE (pas unstable) : Jenkins n'inclut pas les builds UNSTABLE dans
+                            // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
+                            // passerait alors inaperçue sur le tableau de bord du job.
+                            currentBuild.result = 'FAILURE'
+                            echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "git checkout ${env.BASE_BRANCH} || true"
+            cleanWs()
+        }
+    }
+}

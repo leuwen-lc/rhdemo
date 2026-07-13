@@ -38,14 +38,17 @@ spec:
         image: {{ .Values.global.images.keycloak }}
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         args:
-        - start-dev
+        - start
         - --db=postgres
         - --db-url=jdbc:postgresql://{{ .Values.keycloak.database.host }}:{{ .Values.keycloak.database.port }}/{{ .Values.keycloak.database.name }}
         - --db-username={{ .Values.keycloak.database.user }}
         - --proxy-headers={{ .Values.keycloak.proxyHeaders }}
         - --http-enabled={{ .Values.keycloak.httpEnabled }}
+        - "--https-port=-1"
         - --health-enabled={{ .Values.keycloak.healthEnabled }}
         - --metrics-enabled={{ .Values.keycloak.metricsEnabled }}
+        - --hostname-strict={{ .Values.keycloak.hostnameStrict }}
+        - --hostname-backchannel-dynamic={{ .Values.keycloak.hostnameBackchannelDynamic }}
         ports:
         - name: http
           containerPort: {{ .Values.keycloak.service.port }}

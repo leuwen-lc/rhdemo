@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ElMessage } from 'element-plus';
 
 const api = axios.create({
   baseURL: '/api',
@@ -39,6 +40,9 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   response => response,
   error => {
+    if (error.response && error.response.status === 429) {
+      ElMessage.error('Trop de requêtes — veuillez patienter quelques secondes.');
+    }
     if (error.response && error.response.status === 403) {
       console.error('Erreur CSRF - veuillez recharger la page');
     }

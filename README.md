@@ -143,6 +143,23 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
+### Version 1.1.9
+
+Sécurité :
+- Automatisation complète de remédiation CVE (fixcve-auto) : un script de polling détecte les échecs Trivy/OWASP-DC sur le pipeline CI et invoque Claude Code pour appliquer, committer et pousser un correctif sans validation humaine, avec rollback automatique et journal d'audit (voir rhDemo/docs/FIXCVE_AUTO.md)
+- Remédiations de l'audit du 22/05 : PostgreSQL dev limité à localhost, HSTS avec preload, Permissions-Policy étendue, readOnlyRootFilesystem sur rhdemo-app, security.txt, validation du claim iss JWT en ephemere (voir rhDemo/docs/SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md)
+- Rate limiting Nginx (ephemere) et NGF RateLimitPolicy (stagingkub) sur l'API et le login Keycloak, avec page d'erreur 429 personnalisée et notification Axios côté frontend
+- Ajout des headers COOP/CORP/COEP
+- Diverses CVE corrigées au fil de l'eau (postgresql-jdbc, Apache Tomcat, Spring Security, Spring Framework) (cf rhDemo/docs/SECURITY_ADVISORIES.md)
+
+CI/CD :
+- Automerge des PRs Renovate (patch/minor) : pipeline Jenkins dédié qui liste les PRs, resynchronise la branche avec la base si elle est en retard, build/teste/scanne OWASP, puis merge automatiquement si la CI passe (voir rhDemo/docs/RENOVATE_AUTOMERGE_CI.md)
+- Rapatriement du scan Renovate lui-même depuis Codeberg Actions vers Jenkins, suite à l'indisponibilité récurrente du pool de runners codeberg-medium
+
+Versions :
+- Montée de version Spring Boot 4.0.6 → 4.1.0
+- Diverses mises à jour au fil des CVE et des PR Renovate (Keycloak, PostgreSQL, Selenium, Vue.js, Jenkins et ses plugins...)
+
 ### Version 1.1.8
 
 Architecture logicielle :

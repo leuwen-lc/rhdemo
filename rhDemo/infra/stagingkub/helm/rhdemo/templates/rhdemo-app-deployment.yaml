@@ -107,6 +107,8 @@ spec:
         - name: secrets
           mountPath: {{ .Values.rhdemo.keycloak.secretsFile.mountPath }}
           readOnly: true
+        - name: tmp-dir
+          mountPath: /tmp
 
         livenessProbe:
           httpGet:
@@ -131,6 +133,7 @@ spec:
         securityContext:
           runAsUser: 1000
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
 
@@ -141,4 +144,6 @@ spec:
           items:
           - key: {{ .Values.rhdemo.keycloak.secretsFile.fileName }}
             path: {{ .Values.rhdemo.keycloak.secretsFile.fileName }}
+      - name: tmp-dir
+        emptyDir: {}
 {{- end }}

@@ -387,5 +387,30 @@ def withSecretsLoaded(String secretsPath, String command) {
     """
 }
 
+/**
+ * Poste un commentaire sur une issue/PR Forgejo via l'API REST
+ * Le message est transmis à jq via --arg pour un échappement JSON sûr
+ * (évite toute casse si le message contient des guillemets ou apostrophes)
+ *
+ * @param forgejoApi URL de base de l'API Forgejo (ex: https://codeberg.org/api/v1)
+ * @param repo Dépôt au format owner/repo
+ * @param issueNumber Numéro de la PR/issue
+ * @param message Contenu du commentaire
+ */
+def postForgejoComment(String forgejoApi, String repo, String issueNumber, String message) {
+    withEnv(["FORGEJO_COMMENT_BODY=${message}"]) {
+        sh """
+            set +x
+            PAYLOAD=\$(jq -n --arg body "\${FORGEJO_COMMENT_BODY}" '{body: \$body}')
+            curl -sf -X POST \\
+              -H "Authorization: token \${FORGEJO_TOKEN}" \\
+              -H "Content-Type: application/json" \\
+              -d "\${PAYLOAD}" \\
+              "${forgejoApi}/repos/${repo}/issues/${issueNumber}/comments" >/dev/null \\
+              || echo "⚠️  Commentaire Forgejo non posté sur #${issueNumber}"
+        """
+    }
+}
+
 // Retourner this pour permettre l'import
 return this

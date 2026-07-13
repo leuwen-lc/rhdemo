@@ -28,11 +28,13 @@ spring:
             user-name-attribute: preferred_username
       resourceserver:
         jwt:
-          # JWKS en HTTP interne pour validation des signatures JWT
+          # JWKS en HTTP interne pour validation des signatures JWT (pas de Discovery OIDC)
           jwk-set-uri: http://keycloak-ephemere:8080/realms/RHDemo/protocol/openid-connect/certs
 
-          # NE PAS configurer issuer-uri ici non plus
-          # Spring utilisera l'issuer présent dans le token JWT pour validation
+          # URL publique : Spring l'utilise comme valeur attendue du claim "iss" (comparaison de chaîne,
+          # aucun appel HTTP). jwk-set-uri reste la source des clés. Le claim "iss" des tokens Keycloak
+          # contient KC_HOSTNAME_URL (https://keycloak.ephemere.local:58443), pas l'URL interne.
+          issuer-uri: https://keycloak.ephemere.local:58443/realms/RHDemo
 
 # Configuration serveur pour reverse proxy
 server:
@@ -47,13 +49,20 @@ server:
         http-only: true  # Empêche l'accès JavaScript au cookie de session
         same-site: lax  # Protection CSRF supplémentaire
 
-# Logging pour debug
+# Désactivation de la documentation API SpringDoc en ephemere
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+
 logging:
   level:
-    org.springframework.web: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.security.oauth2: TRACE
-    org.springframework.web.client: DEBUG
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.springframework.security.oauth2: INFO
+    org.springframework.web.client: INFO
 
 # Endpoints Actuator disponibles
 management:

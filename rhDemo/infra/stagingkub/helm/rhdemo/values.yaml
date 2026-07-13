@@ -133,12 +133,15 @@ keycloak:
       key: password
 
   # Configuration hostname v2 (KC_HOSTNAME au lieu de KC_HOSTNAME_URL/KC_HOSTNAME_ADMIN_URL)
-  hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+  # URL complète requise par --hostname-backchannel-dynamic=true (Keycloak 26 production mode)
+  hostname: https://keycloak-stagingkub.intra.leuwen-lc.fr
 
   proxyHeaders: xforwarded
   httpEnabled: true
   healthEnabled: true
   metricsEnabled: true
+  hostnameStrict: true
+  hostnameBackchannelDynamic: true
 
   logLevel: info
 
@@ -173,7 +176,7 @@ rhdemo:
   enabled: true
   image:
     repository: rhdemo-api
-    tag: "1.1.0-SNAPSHOT"
+    tag: "1.1.9-SNAPSHOT"
     pullPolicy: IfNotPresent
 
   replicaCount: 1
@@ -276,6 +279,12 @@ gateway:
   routes:
     - name: rhdemo-route
       hostname: rhdemo-stagingkub.intra.leuwen-lc.fr
+      securityHeaders:
+        coop: "same-origin"
+        corp: "same-origin"
+        coep: "require-corp"  # Safe : tous les assets sont bundlés (pas de ressource cross-origin)
+        hsts: "max-age=31536000; includeSubDomains; preload"
+        permissionsPolicy: "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=(), accelerometer=(), gyroscope=(), magnetometer=()"
       rules:
         - path: /
           pathType: PathPrefix
@@ -284,11 +293,38 @@ gateway:
 
     - name: keycloak-route
       hostname: keycloak-stagingkub.intra.leuwen-lc.fr
+      securityHeaders:
+        coop: "same-origin"
+        corp: "same-origin"
+        # coep omis : le thème Keycloak peut référencer des ressources sans header CORP
+        hsts: "max-age=31536000; includeSubDomains; preload"
       rules:
         - path: /
           pathType: PathPrefix
           serviceName: keycloak
           servicePort: 8080
+
+  # RateLimitPolicy (NGF natif gateway.nginx.org/v1alpha1)
+  # Clé : $binary_remote_addr → limite PAR ADRESSE IP (chaque IP a son propre compteur).
+  # Un utilisateur légitime actif ne pénalise pas les autres.
+  # Cible : attaquant sur une IP unique (scanner, brute-force) — botnet hors scope.
+  # Chaque policy cible un HTTPRoute. Les valeurs sont plus strictes qu'en ephemere
+  # car les tests Selenium ne s'exécutent pas sur stagingkub.
+  rateLimit:
+    enabled: true
+    logLevel: warn
+    rejectCode: 429
+    rhdemo:
+      key: "$binary_remote_addr"
+      rate: "60r/m"
+      burst: 20
+      zoneSize: "10m"
+    keycloak:
+      key: "$binary_remote_addr"
+      rate: "30r/m"
+      burst: 20
+      zoneSize: "10m"
+      noDelay: true
 
   # ProxySettingsPolicy : buffers proxy pour Keycloak (NGF 2.4+)
   # Les gros cookies OAuth2 nécessitent des buffers plus grands

@@ -131,8 +131,7 @@ public class KeycloakLogoutSuccessHandler implements LogoutSuccessHandler {
      */
     Optional<String> extractIdToken(Authentication authentication) {
         if (authentication instanceof OAuth2AuthenticationToken oauthToken
-                && oauthToken.getPrincipal() instanceof OidcUser oidcUser
-                && oidcUser.getIdToken() != null) {
+                && oauthToken.getPrincipal() instanceof OidcUser oidcUser) {
             return Optional.of(oidcUser.getIdToken().getTokenValue());
         }
         return Optional.empty();

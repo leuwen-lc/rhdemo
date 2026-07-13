@@ -774,6 +774,8 @@ YMLEOF
                         echo "📋 Copie des configurations nginx..."
                         docker cp nginx/nginx.conf ${env.CONTAINER_NGINX}:/etc/nginx/nginx.conf
                         docker cp nginx/conf.d/. ${env.CONTAINER_NGINX}:/etc/nginx/conf.d/
+                        docker exec ${env.CONTAINER_NGINX} mkdir -p /etc/nginx/html
+                        docker cp nginx/html/. ${env.CONTAINER_NGINX}:/etc/nginx/html/
 
                         if [ -d "certs" ]; then
                             docker cp certs/. ${env.CONTAINER_NGINX}:/etc/nginx/ssl/
@@ -1883,12 +1885,18 @@ YMLEOF
         success {
             script {
                 echo "✅ Build réussi !"
-                if (params.PUBLISH_IMAGE) {
+                if (params.PUBLISH_IMAGE && env.FINAL_IMAGE_TAG) {
                     echo "📦 Image publiée: ${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
-                    echo "🚀 Prête pour le déploiement CD"
-                    echo ""
-                    echo "Pour déployer sur stagingkub, utilisez le pipeline Jenkinsfile-CD avec:"
-                    echo "   IMAGE_TAG=${env.FINAL_IMAGE_TAG}"
+                    echo "🚀 Déclenchement automatique du pipeline CD (build CI #${env.BUILD_NUMBER})..."
+                    // Passer CI_BUILD_NUMBER pour que le CD utilise copyArtifacts(specific(N))
+                    // et récupère le digest exact de ce build → chaîne de custody Cosign préservée
+                    build job: 'RHDemo-CD',
+                          parameters: [
+                              string(name: 'CI_BUILD_NUMBER', value: env.BUILD_NUMBER)
+                          ],
+                          wait: false,
+                          propagate: false
+                    echo "✅ Pipeline CD déclenché"
                 }
             }
         }

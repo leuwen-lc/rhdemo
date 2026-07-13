@@ -101,8 +101,9 @@ bump_casc_branch() {
     [ -f "${JENKINS_CASC}" ] || error "jenkins-casc.yaml introuvable : ${JENKINS_CASC}"
     if grep -q "evolutions-post-" "${JENKINS_CASC}"; then
         # Un seul pattern générique : couvre RHDemo-CI, RHDemo-CD et RHDemo-Renovate
-        # (les 3 jobs déclarent leur checkout avec branches('*/evolutions-post-X.Y.Z'))
-        sed -i "s|branches('\*/evolutions-post-[0-9.]*')|branches('*/${new_branch}')|g" "${JENKINS_CASC}"
+        # (les 3 jobs déclarent leur checkout avec branches('*/evolutions-post-X.Y.Z')).
+        # Pattern strict (X.Y.Z exact) : même niveau d'exigence que bump_renovate_branch.
+        sed -i "s|branches('\*/evolutions-post-[0-9]\+\.[0-9]\+\.[0-9]\+')|branches('*/${new_branch}')|g" "${JENKINS_CASC}"
         success "jenkins-casc.yaml → branche ${new_branch}"
     else
         warn "Aucune référence 'evolutions-post-*' trouvée dans jenkins-casc.yaml"
@@ -186,6 +187,8 @@ cmd_pre_merge() {
     fi
     [[ "${release_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+-RELEASE$ ]] || \
         error "La version release doit être au format X.Y.Z-RELEASE (ex: 1.1.9-RELEASE)"
+    [[ "${branch}" =~ ^evolutions-post-[0-9]+\.[0-9]+\.[0-9]+$ ]] || \
+        error "La branche '${branch}' ne suit pas la convention 'evolutions-post-X.Y.Z' (ex: evolutions-post-1.1.8).\nbump_casc_branch/bump_renovate_branch (post-merge) supposent ce format exact — vérifiez le nom de la branche avant de continuer."
 
     echo ""
     echo -e "${GREEN}══════════════════════════════════════════════${NC}"
@@ -330,6 +333,14 @@ cmd_post_merge() {
     success "Tag '${release_version}' publié sur Codeberg"
 
     local evolution_branch="evolutions-post-${release_version/-RELEASE/}"
+
+    # Vérification de cohérence : la branche d'évolution suivante n'est censée être créée
+    # qu'à l'étape 5 (après ce script). Si elle existe déjà localement, soit ce script a déjà
+    # tourné pour cette version, soit la branche a été créée en avance sous le même nom —
+    # dans les deux cas, écraser silencieusement la config CI/CD serait risqué.
+    if git -C "${REPO_ROOT}" show-ref --verify --quiet "refs/heads/${evolution_branch}"; then
+        confirm_or_abort "La branche '${evolution_branch}' existe déjà localement. Écraser la config CI/CD (jenkins-casc.yaml, Jenkinsfile-Renovate, renovate.json) pour pointer dessus quand même ?"
+    fi
 
     step "4/5 — Retour en SNAPSHOT : ${release_version} → ${next_snapshot}"
     bump_version "${release_version}" "${next_snapshot}"

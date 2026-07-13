@@ -1,8 +1,11 @@
 name: Renovate
 
+# Scan Renovate rapatrié vers Jenkins (job RHDemo-Renovate, cron 3h) suite à
+# l'indisponibilité récurrente du pool de runners codeberg-medium.
+# Cron désactivé — ce workflow reste disponible en secours manuel uniquement
+# (workflow_dispatch) si Jenkins est indisponible.
+# Voir rhDemo/docs/RENOVATE_AUTOMERGE_CI.md
 on:
-  schedule:
-    - cron: '0 3 * * *'  # chaque nuit à 3h
   workflow_dispatch:
 
 jobs:

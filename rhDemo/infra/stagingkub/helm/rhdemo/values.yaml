@@ -10,9 +10,13 @@ global:
   # Source unique pour toutes les images tierces du chart.
   # Format : image:tag@sha256:digest (tag conservé pour lisibilité)
   images:
+    # renovate: datasource=docker depName=postgres
     postgres: "postgres:18.2-alpine3.22@sha256:198c924aa928fecac4bddada3bf4634430aa137a5b1fb577c0d4b6d89a2b1599"
+    # renovate: datasource=docker depName=quay.io/keycloak/keycloak
     keycloak: "quay.io/keycloak/keycloak:26.6.2@sha256:a5f5b927218053d0f4180f2ba3741623b932fe6a575b46cf9e6122cf08b80385"
+    # renovate: datasource=docker depName=busybox
     busybox: "busybox:1.36@sha256:0ad610868746fa822202c2052bb37f61272524ff4a4a3921edeeec7cd0a88c10"
+    # renovate: datasource=docker depName=quay.io/prometheuscommunity/postgres-exporter
     postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.19.0@sha256:e8a170b85eab07c75c2b0f3aa2806be5c2fe5bba46fd0336914e1f36572cde08"
   imagePullPolicy: IfNotPresent
 

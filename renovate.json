@@ -32,5 +32,18 @@
       "matchManagers": ["jenkins", "maven-wrapper"],
       "enabled": false
     }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Images Docker pré-épinglées par tag+digest (format non standard non détecté par les managers helm-values/dockerfile natifs) : rhDemo/infra/stagingkub/helm/rhdemo/values.yaml et rhDemo/Jenkinsfile-CI",
+      "managerFilePatterns": [
+        "rhDemo/infra/stagingkub/helm/rhdemo/values.yaml",
+        "rhDemo/Jenkinsfile-CI"
+      ],
+      "matchStrings": [
+        "(?:#|//)\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s+[A-Za-z_][\\w-]*\\s*[:=]\\s*[\"']?[^\"'\\s:]+:(?<currentValue>[^@\"'\\s]+)@(?<currentDigest>sha256:[0-9a-fA-F]+)[\"']?"
+      ]
+    }
   ]
 }

@@ -85,7 +85,7 @@ pipeline {
                           -e RENOVATE_PLATFORM=forgejo \
                           -e RENOVATE_ENDPOINT=https://codeberg.org \
                           -e RENOVATE_REPOSITORIES="${REPO}" \
-                          -e LOG_LEVEL=debug \
+                          -e LOG_LEVEL=info \
                           -e RENOVATE_REQUIRE_CONFIG=optional \
                           -e RENOVATE_ONBOARDING=false \
                           "${RENOVATE_IMAGE}" bash -s <<'RENOVATE_SCAN_EOF'

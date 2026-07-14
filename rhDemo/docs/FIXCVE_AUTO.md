@@ -62,6 +62,30 @@ Ce fichier vit **hors du dépôt git**, chiffré avec votre clé AGE personnelle
 - le compte Jenkins dédié à l'automatisation (`claude`, **pas** `admin` — voir `.claude/skills/fixcve/SKILL.md`),
 - un token Codeberg **dédié et restreint à ce seul dépôt** (fine-grained access token, scope écriture sur `rhdemo` uniquement — ne pas réutiliser un token à portée large).
 
+**Compte Codeberg dédié (`fixcvebot-leuwen-lc`), pas le compte personnel.** Le token doit provenir
+d'un compte bot séparé, ajouté comme collaborateur **Write** (pas Admin) sur `leuwen-lc/rhdemo` —
+pas du compte personnel `leuwen-lc`, même avec un token scope-limité. Raisons, plus marquées ici
+que pour les autres automatisations du projet :
+- `fixcve-auto` tourne avec `--dangerously-skip-permissions` (voir « Limitation connue » en tête
+  de ce document) et parse du contenu externe non fiable (descriptions de CVE, rapports Trivy/
+  OWASP) — c'est la surface d'injection de prompt la plus exposée du projet. Le scope du token est
+  la seule vraie limite si une commande imprévue tentait un `git push` malveillant.
+- **Distinct aussi de `rhdemo-ci-bot`** (compte bot dédié au merge des PRs Renovate — voir
+  [`RENOVATE_AUTOMERGE_CI.md`](RENOVATE_AUTOMERGE_CI.md)). Les deux ont le même niveau d'accès
+  (write sur `rhdemo`), mais un profil de risque très différent : appels curl/git déterministes
+  d'un côté, agent LLM à outils non scopés sur du contenu non fiable de l'autre. En cas de commit
+  suspect, distinguer immédiatement "quelle automatisation" accélère le triage d'incident.
+- Email du compte bot : un alias Gmail `+` (ex. `leuwenlc+fixcvebot@gmail.com`) fonctionne pour
+  l'inscription (Codeberg n'exige qu'une adresse unique par compte, pas un domaine distinct), au
+  prix d'une récupération de compte qui reste liée à la même boîte mail que le compte personnel.
+
+**Prérequis avant de générer le token :**
+1. Créer le compte `fixcvebot-leuwen-lc` sur `https://codeberg.org` (email dédié ou alias `+`).
+2. L'ajouter comme collaborateur de `leuwen-lc/rhdemo` avec la permission **Write** (Settings >
+   Collaborators) — jamais Admin.
+3. Se connecter avec ce compte et générer un fine-grained access token sur
+   `https://codeberg.org/user/settings/applications`, scope écriture restreint à `rhdemo`.
+
 Création :
 
 ```bash
@@ -72,7 +96,7 @@ jenkins:
   user: claude
   token: METTRE_LE_VRAI_TOKEN_JENKINS_ICI
 codeberg:
-  user: leuwen-lc
+  user: fixcvebot-leuwen-lc
   token: METTRE_LE_VRAI_TOKEN_CODEBERG_ICI
 EOF
 
@@ -93,11 +117,29 @@ SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d ~/.config/rhdemo-fixcve/cr
 
 Le token Jenkins doit être un token **régénéré** si une ancienne valeur a pu fuiter (ex: fichier de config local en clair) — révoquer l'ancien dans Jenkins avant de créer le nouveau.
 
+**Migration depuis l'ancien token personnel** : si `credentials.sops.yaml` contient encore
+`codeberg.user: leuwen-lc`, régénérer le fichier avec la commande ci-dessus une fois le compte
+`fixcvebot-leuwen-lc` créé, puis révoquer l'ancien token sur
+`https://codeberg.org/user/settings/applications` (compte personnel).
+
 ### 4. `GIT_ASKPASS`
 
 Déjà en place : `~/.config/rhdemo-fixcve/git-askpass.sh` (aucun secret dedans, lit `CODEBERG_USER`/`CODEBERG_TOKEN` depuis l'environnement au moment du push).
 
-### 5. Installation du cron
+### 5. Identité des commits automatiques (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`)
+
+`REPO_DIR` (`fixcve-auto-poll.sh`) pointe directement sur la copie de travail principale — pas un
+clone isolé. Un `git config user.name/email` (même en local, sans `--global`) écrirait donc dans
+`.git/config` de ce dépôt et changerait l'identité de **vos propres commits manuels** aussi, pas
+seulement ceux de l'automatisation. `fixcve-auto-poll.sh` exporte à la place `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` — ces variables d'environnement ne
+s'appliquent qu'aux commits faits par ce process (et par le sous-processus `claude -p` qu'il
+invoke, qui les hérite), sans toucher au fichier de config. Résultat : les commits de
+`fixcve-auto-poll.sh` et ceux appliqués par `/fixcve-auto` (upgrade de version, suppression de
+CVE) apparaissent sous l'identité `RHDemo FixCVE Bot`, distincte de vos commits manuels et de
+`RHDemo CI Bot` (Renovate).
+
+### 6. Installation du cron
 
 **Ne pas installer sans avoir relu `rhDemo/scripts/fixcve-auto-poll.sh` et compris les garde-fous ci-dessus.**
 
@@ -111,7 +153,7 @@ Ajouter :
 */15 * * * * /home/leno-vo/git/repository/rhDemo/scripts/fixcve-auto-poll.sh >> /home/leno-vo/.config/rhdemo-fixcve/poll.log 2>&1
 ```
 
-### 6. Rotation de `poll.log`
+### 7. Rotation de `poll.log`
 
 `poll.log` est alimenté à chaque cycle (toutes les 15 min) et grossirait indéfiniment sans rotation. Config `logrotate` en espace utilisateur (pas de `sudo` requis), déjà en place : `~/.config/rhdemo-fixcve/logrotate.conf` (hebdomadaire, 4 générations conservées compressées, taille max 10 Mo).
 

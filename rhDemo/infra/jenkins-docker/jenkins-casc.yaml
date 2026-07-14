@@ -155,13 +155,29 @@ tool:
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
 #
-# 5. forgejo-api-token
+# 5. ci-bot-forgejo-token
 #    - Type: Secret text
-#    - ID: forgejo-api-token
-#    - Secret: token dédié Codeberg, scopes "repository" + "issue" (read/write, pas d'accès admin)
-#      — le scope "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
+#    - ID: ci-bot-forgejo-token
+#    - Secret: token du compte Codeberg dédié "rhdemo-ci-bot" (PAS le compte personnel
+#      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope
+#      "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
 #      "repository" seul ne suffit pas.
-#    - Généré sur: https://codeberg.org/user/settings/applications
+#    - Prérequis avant de générer le token :
+#        1. Créer le compte "rhdemo-ci-bot" sur https://codeberg.org
+#        2. L'ajouter comme collaborateur du repo leuwen-lc/rhdemo avec la permission
+#           "Write" (pas "Admin") : Settings > Collaborators
+#        3. Se connecter avec ce compte et générer le token sur
+#           https://codeberg.org/user/settings/applications
+#    - Pourquoi un compte dédié plutôt qu'un token scope-limité sur le compte personnel :
+#      un token hérite de l'identité qui l'a créé — même scope-limité, une fuite du
+#      credential Jenkins authentifie l'attaquant "en tant que vous" sur Codeberg (accès aux
+#      autres repos/org du compte). Un compte bot dédié limite le blast radius au repo où il
+#      est collaborateur, rend les merges automatiques identifiables dans l'historique
+#      Forgejo (pas confondus avec vos actions manuelles), et découple le cycle de vie du
+#      token de celui de votre compte perso (rotation MDP/2FA ne casse pas la CI).
+#    - Distinct de renovate-forgejo-token (compte bot Renovate, qui propose les PRs) : deux
+#      identités séparées pour "propose" (Renovate) vs "valide/merge" (ci-bot), comme une
+#      revue à deux acteurs même si le second est automatisé.
 #    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires
 #    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
 #
@@ -184,8 +200,8 @@ tool:
 #    - Type: Secret text
 #    - ID: renovate-forgejo-token
 #    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
-#      Renovate lui-même, distinct de forgejo-api-token)
-#    - Pourquoi un token séparé : forgejo-api-token (scopes repository+issue) ne suffit pas pour
+#      Renovate lui-même, distinct de ci-bot-forgejo-token)
+#    - Pourquoi un token séparé : ci-bot-forgejo-token (scopes repository+issue) ne suffit pas pour
 #      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
 #      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
 #      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à

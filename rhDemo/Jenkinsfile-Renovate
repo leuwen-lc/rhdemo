@@ -70,7 +70,7 @@ pipeline {
                     // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
                     // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
                     // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
-                    // Token dédié (pas forgejo-api-token) : l'initialisation de Renovate a besoin
+                    // Token dédié (pas ci-bot-forgejo-token) : l'initialisation de Renovate a besoin
                     // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
@@ -107,7 +107,11 @@ RENOVATE_SCAN_EOF
 
         stage('📋 Lister les PRs Renovate') {
             steps {
-                withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+                // ci-bot-forgejo-token : compte Codeberg dédié "rhdemo-ci-bot" (collaborateur
+                // write-only sur le repo), distinct du compte personnel et du bot Renovate
+                // (renovate-forgejo-token) — merges/comments/sync attribués à cette identité,
+                // pas à un compte humain. Voir docs/RENOVATE_AUTOMERGE_CI.md section 1.
+                withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                     script {
                         def httpCode = sh(
                             script: """
@@ -152,7 +156,7 @@ RENOVATE_SCAN_EOF
             when { expression { env.RENOVATE_PRS?.trim() } }
             steps {
                 withCredentials([
-                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN'),
                     string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
                     usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
                 ]) {
@@ -199,8 +203,8 @@ RENOVATE_SCAN_EOF
                                 def syncStatus = sh(
                                     script: """
                                         set -e
-                                        git config user.email "jenkins-renovate@leuwen-lc.fr"
-                                        git config user.name "Jenkins Renovate Bot"
+                                        git config user.email "ci-bot@leuwen-lc.fr"
+                                        git config user.name "RHDemo CI Bot"
                                         git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
                                     """,
                                     returnStatus: true

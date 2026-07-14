@@ -152,7 +152,7 @@ stage('🔀 Merge PR Renovate') {
         }
     }
     steps {
-        withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+        withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
             sh """
                 curl -sf -X POST \
                   -H "Authorization: token \${FORGEJO_TOKEN}" \
@@ -393,12 +393,39 @@ Les deux Jenkinsfiles gardent leur structure déclarative propre mais appellent 
 
 ### 1. Credential Jenkins : token API Forgejo
 
-Créer manuellement dans Jenkins UI un credential de type **Secret text** :
-- **ID** : `forgejo-api-token`
-- **Description** : Token API Forgejo pour merge automatique des PRs Renovate
-- **Valeur** : token **dédié** généré sur `https://codeberg.org/user/settings/applications` avec
-  scope `repository` uniquement — distinct du token Codeberg déjà utilisé par `/fixcve-auto`
-  (`~/.config/rhdemo-fixcve/credentials.sops.yaml`), pour isoler les deux automatisations.
+**Compte dédié, pas le compte personnel.** Le token qui liste/synchronise/merge les PRs et poste
+les commentaires est généré sur un compte Codeberg bot dédié (`rhdemo-ci-bot`), pas sur le compte
+personnel `leuwen-lc`. Raisons :
+- **Blast radius** : un token hérite de l'identité qui l'a créé, même avec un scope réduit. Une
+  fuite du credential Jenkins authentifierait l'attaquant "en tant que vous" sur Codeberg (accès
+  aux autres repos/organisations du compte). Un compte bot collaborateur d'un seul repo, avec
+  permission "Write" (pas "Admin"), limite les dégâts à ce repo.
+- **Audit** : les merges automatiques apparaissent dans l'historique Forgejo sous l'identité
+  `rhdemo-ci-bot`, distincts de vos actions manuelles — utile pour distinguer "c'est la CI qui a
+  mergé" de "c'est moi qui ai mergé".
+- **Cycle de vie découplé** : rotation de mot de passe/2FA sur le compte personnel ne casse pas
+  la CI.
+- **Séparation des rôles** : ce compte est distinct du bot Renovate (`renovate-forgejo-token`,
+  compte qui *propose* les PRs) — c'est une identité différente qui *valide/merge* après CI verte,
+  comme une revue à deux acteurs même si le second est entièrement automatisé.
+
+**Étapes de mise en place :**
+1. Créer le compte `rhdemo-ci-bot` sur `https://codeberg.org` (email dédié, pas votre email perso).
+2. L'ajouter comme collaborateur de `leuwen-lc/rhdemo` avec la permission **Write** (Settings >
+   Collaborators) — jamais Admin, le pipeline n'a pas besoin de gérer les settings du repo.
+3. Se connecter avec ce compte et générer un token sur
+   `https://codeberg.org/user/settings/applications` avec les scopes `repository` + `issue`
+   (le scope `issue` est nécessaire pour les commentaires de PR — `repository` seul ne suffit pas).
+4. Créer dans Jenkins UI un credential **Secret text** :
+   - **ID** : `ci-bot-forgejo-token`
+   - **Description** : Token Forgejo du compte bot dédié `rhdemo-ci-bot` — liste/synchronise/merge
+     les PRs Renovate + commentaires
+   - **Valeur** : le token généré à l'étape 3
+5. Supprimer l'ancien credential `forgejo-api-token` (compte personnel) une fois la migration
+   validée, et révoquer le token correspondant sur `https://codeberg.org/user/settings/applications`.
+
+Ce token reste distinct de celui déjà utilisé par `/fixcve-auto`
+(`~/.config/rhdemo-fixcve/credentials.sops.yaml`), pour isoler les deux automatisations.
 
 ### 2. Fichier `Jenkinsfile-Renovate`
 
@@ -442,7 +469,7 @@ pipeline {
 
         stage('📋 Lister les PRs Renovate') {
             steps {
-                withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+                withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                     script {
                         def httpCode = sh(
                             script: """
@@ -487,7 +514,7 @@ pipeline {
             when { expression { env.RENOVATE_PRS?.trim() } }
             steps {
                 withCredentials([
-                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
+                    string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN'),
                     string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
                     usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
                 ]) {
@@ -704,7 +731,7 @@ sous-processus, qui retombent alors sur l'emplacement par défaut (`$HOME/.gnupg
 qu'un chemin custom, pour que l'import atterrisse là où les sous-processus de Renovate le
 chercheront par défaut.
 
-### Credentials Jenkins nécessaires (en plus de `forgejo-api-token`)
+### Credentials Jenkins nécessaires (en plus de `ci-bot-forgejo-token`)
 
 - **`renovate-gpg-key`** (Secret text) : clé GPG privée exportée en base64, même valeur que
   l'ancien secret Codeberg Actions `RENOVATE_GPG_KEY`.
@@ -712,13 +739,16 @@ chercheront par défaut.
   lookups de changelogs/release notes des dépendances hébergées sur GitHub, même valeur que
   l'ancien secret Codeberg Actions `RENOVATE_GH_TOKEN`.
 - **`renovate-forgejo-token`** (Secret text) : même valeur que l'ancien secret Codeberg Actions
-  `RENOVATE_TOKEN`, dédié à Renovate lui-même (variable `RENOVATE_TOKEN` du stage "Scan Renovate").
-  **Distinct de `forgejo-api-token`** — essayé en premier par souci de simplicité (un secret de
+  `RENOVATE_TOKEN`, dédié au compte bot Renovate lui-même — distinct du compte `rhdemo-ci-bot`
+  (variable `RENOVATE_TOKEN` du stage "Scan Renovate").
+  **Distinct de `ci-bot-forgejo-token`** — essayé en premier par souci de simplicité (un secret de
   moins), mais l'initialisation de Renovate échoue avec `"Authentication failure"` avec les
-  scopes `repository` + `issue` de `forgejo-api-token` : elle a besoin d'un scope `user`
+  scopes `repository` + `issue` de `ci-bot-forgejo-token` : elle a besoin d'un scope `user`
   supplémentaire, absent de ce token. Réutiliser le token qui fonctionnait déjà côté Codeberg
   Actions pour Renovate règle le problème sans avoir à déterminer/régénérer le scope exact requis,
-  et rejoint au passage l'isolation des responsabilités déjà appliquée pour `/fixcve-auto`.
+  et rejoint au passage l'isolation des responsabilités déjà appliquée pour `/fixcve-auto`. Les deux
+  comptes bot (`rhdemo-ci-bot` et celui de Renovate) restent malgré tout des identités distinctes
+  — voir section 1 pour le raisonnement (séparation propose/merge).
 
 ### Devenir de `.forgejo/workflows/renovate.yml`
 
@@ -741,9 +771,12 @@ comme secours manuel si Jenkins devient indisponible, plutôt que d'être suppri
 
 ## Sécurité
 
-- Le token Forgejo doit avoir uniquement le scope `repository` (pas d'accès admin)
+- Le token Forgejo (`ci-bot-forgejo-token`) appartient au compte bot dédié `rhdemo-ci-bot`, pas au
+  compte personnel — voir section 1 pour le raisonnement (blast radius, audit, cycle de vie)
+- Le compte `rhdemo-ci-bot` est collaborateur du repo avec la permission **Write** uniquement
+  (pas Admin) ; le token n'a que les scopes `repository` + `issue` (pas d'accès admin)
 - Le token est stocké comme credential Jenkins chiffré (jamais en clair dans les fichiers)
-- Le pipeline vérifie que la PR cible bien `evolutions-post-1.1.8` avant de merger
+- Le pipeline vérifie que la PR cible bien `evolutions-post-1.1.9` avant de merger
 - Les PRs major ne passent jamais par ce pipeline (bloquées côté Renovate)
 
 ---

@@ -48,21 +48,6 @@ personnel `leuwen-lc`. Raisons :
   compte qui *propose* les PRs) — c'est une identité différente qui *valide/merge* après CI verte,
   comme une revue à deux acteurs même si le second est entièrement automatisé.
 
-**Étapes de mise en place :**
-1. Créer le compte `rhdemo-ci-bot` sur `https://codeberg.org` (email dédié, pas votre email perso).
-2. L'ajouter comme collaborateur de `leuwen-lc/rhdemo` avec la permission **Write** (Settings >
-   Collaborators) — jamais Admin, le pipeline n'a pas besoin de gérer les settings du repo.
-3. Se connecter avec ce compte et générer un token sur
-   `https://codeberg.org/user/settings/applications` avec les scopes `repository` + `issue`
-   (le scope `issue` est nécessaire pour les commentaires de PR — `repository` seul ne suffit pas).
-4. Créer dans Jenkins UI un credential **Secret text** :
-   - **ID** : `ci-bot-forgejo-token`
-   - **Description** : Token Forgejo du compte bot dédié `rhdemo-ci-bot` — liste/synchronise/merge
-     les PRs Renovate + commentaires
-   - **Valeur** : le token généré à l'étape 3
-5. Supprimer l'ancien credential `forgejo-api-token` (compte personnel) une fois la migration
-   validée, et révoquer le token correspondant sur `https://codeberg.org/user/settings/applications`.
-
 Ce token reste distinct de celui déjà utilisé par `/fixcve-auto`
 (`~/.config/rhdemo-fixcve/credentials.sops.yaml`), pour isoler les deux automatisations.
 

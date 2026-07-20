@@ -94,6 +94,11 @@ Le script effectue dans l'ordre :
 9. Commit `chore: retour à 1.1.9-SNAPSHOT après 1.1.8-RELEASE`
 10. Push
 
+> ⚠️ Après le bump, le polling Git de `RHDemo-CI` reste ancré sur l'ancienne branche (le plugin Git
+> compare au dernier `BuildData` enregistré, pas au `BranchSpec` courant) tant qu'aucun build n'a
+> tourné sur la nouvelle branche — les polls suivants concluent alors « aucun changement » même après
+> des merges Renovate. Lancer un **Build Now** manuel sur `RHDemo-CI` une fois l'étape 5 faite.
+
 ---
 
 ## 5) Créer la branche d'évolution suivante

@@ -127,12 +127,20 @@ RENOVATE_SCAN_EOF
                         // jq (pas de python3 dans l'image agent) — filtre sur head.ref (nom de
                         // branche brut, pas head.label qui est préfixé "owner:branche" et casserait
                         // le split ci-dessous). Séparateur "|" : le sha ne peut pas en contenir.
+                        // select(.head.repo.full_name == $repo) : rejette explicitement les PRs
+                        // dont la branche source vit dans un fork. Sans ce filtre, seul un accident
+                        // d'implémentation protégeait le pipeline (le "git fetch origin" ci-dessous
+                        // échoue de toute façon sur une branche qui n'existe pas dans le dépôt
+                        // principal) — un accident n'est pas un contrôle de sécurité voulu, donc on
+                        // le rend explicite : seules les branches poussées directement dans
+                        // leuwen-lc/rhdemo (donc par quelqu'un ayant déjà l'accès Write) sont éligibles.
                         env.RENOVATE_PRS = sh(
                             script: """
-                                jq -r --arg base "${BASE_BRANCH}" '
+                                jq -r --arg base "${BASE_BRANCH}" --arg repo "${REPO}" '
                                     [ .[]
                                       | select((.head.ref // "") | test("renovate"; "i"))
                                       | select(.base.ref == \$base)
+                                      | select(.head.repo.full_name == \$repo)
                                       | "\\(.number)|\\(.head.ref)|\\(.head.sha)"
                                     ] | join(" ")
                                 ' /tmp/renovate-prs-${BUILD_NUMBER}.json
@@ -155,90 +163,105 @@ RENOVATE_SCAN_EOF
         stage('🔀 Valider et merger chaque PR') {
             when { expression { env.RENOVATE_PRS?.trim() } }
             steps {
-                withCredentials([
-                    string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN'),
-                    string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
-                    usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
-                ]) {
-                    script {
-                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
-                        def failures = []
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    def failures = []
 
-                        env.RENOVATE_PRS.split(' ').each { prEntry ->
-                            def parts    = prEntry.split('\\|')
-                            def prNumber = parts[0]
-                            def branchRef = parts[1]
+                    env.RENOVATE_PRS.split(' ').each { prEntry ->
+                        def parts    = prEntry.split('\\|')
+                        def prNumber = parts[0]
+                        def branchRef = parts[1]
 
-                            echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
+                        echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
 
-                            sh "git fetch origin '${branchRef}'"
-                            sh 'git checkout FETCH_HEAD'
-                            // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
-                            // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
-                            // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
-                            def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                            sh "git fetch origin ${BASE_BRANCH}"
+                        sh "git fetch origin '${branchRef}'"
+                        sh 'git checkout FETCH_HEAD'
+                        // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
+                        // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
+                        // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
+                        def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                        sh "git fetch origin ${BASE_BRANCH}"
 
-                            // Une branche Renovate non rebasée depuis longtemps peut hériter
-                            // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
-                            // entre-temps) et faire échouer la CI pour une raison sans rapport
-                            // avec son propre changement. On la met à jour par un merge classique
-                            // avant de lancer les tests.
-                            //
-                            // Un merge --squash a été essayé puis abandonné : il ne crée pas de
-                            // commit de fusion (un seul parent), donc git perd la trace de ce qui a
-                            // déjà été synchronisé. Chaque sync suivante recalcule alors un
-                            // merge-base bien plus ancien que le dernier sync réussi, ce qui
-                            // provoque de faux conflits dès qu'un fichier est retouché côté base
-                            // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
-                            // Un merge classique préserve la filiation : chaque sync est incrémentale.
-                            def upToDate = sh(
-                                script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                        // Une branche Renovate non rebasée depuis longtemps peut hériter
+                        // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
+                        // entre-temps) et faire échouer la CI pour une raison sans rapport
+                        // avec son propre changement. On la met à jour par un merge classique
+                        // avant de lancer les tests.
+                        //
+                        // Un merge --squash a été essayé puis abandonné : il ne crée pas de
+                        // commit de fusion (un seul parent), donc git perd la trace de ce qui a
+                        // déjà été synchronisé. Chaque sync suivante recalcule alors un
+                        // merge-base bien plus ancien que le dernier sync réussi, ce qui
+                        // provoque de faux conflits dès qu'un fichier est retouché côté base
+                        // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
+                        // Un merge classique préserve la filiation : chaque sync est incrémentale.
+                        def upToDate = sh(
+                            script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                            returnStatus: true
+                        ) == 0
+
+                        def syncFailed = false
+                        if (!upToDate) {
+                            echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
+                            def syncStatus = sh(
+                                script: """
+                                    set -e
+                                    git config user.email "ci-bot@leuwen-lc.fr"
+                                    git config user.name "RHDemo CI Bot"
+                                    git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
+                                """,
                                 returnStatus: true
-                            ) == 0
+                            )
 
-                            def syncFailed = false
-                            if (!upToDate) {
-                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
-                                def syncStatus = sh(
-                                    script: """
-                                        set -e
-                                        git config user.email "ci-bot@leuwen-lc.fr"
-                                        git config user.name "RHDemo CI Bot"
-                                        git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
-                                    """,
-                                    returnStatus: true
-                                )
-
-                                if (syncStatus != 0) {
-                                    echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
-                                    sh 'git merge --abort 2>/dev/null || true'
-                                    sh "git reset --hard ${prTipSha}"
-                                    sh 'git clean -fd'
-                                    syncFailed = true
-                                } else {
-                                    def pushStatus = sh(
+                            if (syncStatus != 0) {
+                                echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
+                                sh 'git merge --abort 2>/dev/null || true'
+                                sh "git reset --hard ${prTipSha}"
+                                sh 'git clean -fd'
+                                syncFailed = true
+                            } else {
+                                // FORGEJO_TOKEN scopé au seul push de synchronisation, pas au reste de
+                                // l'itération : voir la note de sécurité sur le bloc de build ci-dessous.
+                                def pushStatus = withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                    sh(
                                         script: """
                                             set +x
                                             git push "https://\${FORGEJO_TOKEN}@codeberg.org/${REPO}.git" "HEAD:refs/heads/${branchRef}"
                                         """,
                                         returnStatus: true
                                     )
-                                    if (pushStatus != 0) {
-                                        echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
-                                        syncFailed = true
-                                    }
+                                }
+                                if (pushStatus != 0) {
+                                    echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
+                                    syncFailed = true
                                 }
                             }
+                        }
 
-                            if (syncFailed) {
-                                failures << prNumber
+                        if (syncFailed) {
+                            failures << prNumber
+                            withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                                 lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                     "Conflit lors de la synchronisation automatique avec ${BASE_BRANCH} — rebase manuel nécessaire.")
-                                return
                             }
+                            return
+                        }
 
-                            def ciStatus = sh(
+                        // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
+                        // bloc : c'est ici que tourne du code non revu (le contenu de la mise à jour
+                        // de dépendance proposée par la PR, via les plugins Maven exécutés par
+                        // "mvnw verify"/OWASP). Si ce token était en variable d'environnement à ce
+                        // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
+                        // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
+                        // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
+                        // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
+                        // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
+                        // sont exposés ici.
+                        def ciStatus = withCredentials([
+                            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                            usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                        ]) {
+                            sh(
                                 script: '''
                                     cd rhDemo
                                     set -e
@@ -248,7 +271,9 @@ RENOVATE_SCAN_EOF
                                 ''',
                                 returnStatus: true
                             )
+                        }
 
+                        withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                             if (ciStatus == 0) {
                                 echo "CI OK pour PR #${prNumber} — merge en cours"
                                 def mergeHttpCode = sh(
@@ -281,18 +306,18 @@ RENOVATE_SCAN_EOF
                                 lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                     "CI Jenkins échouée — voir build ${env.BUILD_URL}. Mise à jour à revoir manuellement.")
                             }
-
-                            junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
-                            junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                         }
 
-                        if (failures) {
-                            // FAILURE (pas unstable) : Jenkins n'inclut pas les builds UNSTABLE dans
-                            // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
-                            // passerait alors inaperçue sur le tableau de bord du job.
-                            currentBuild.result = 'FAILURE'
-                            echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
-                        }
+                        junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
+                        junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
+                    }
+
+                    if (failures) {
+                        // FAILURE (pas unstable) : Jenkins n'inclut pas les builds UNSTABLE dans
+                        // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
+                        // passerait alors inaperçue sur le tableau de bord du job.
+                        currentBuild.result = 'FAILURE'
+                        echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
                     }
                 }
             }

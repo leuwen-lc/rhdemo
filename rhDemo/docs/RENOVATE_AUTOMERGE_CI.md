@@ -57,7 +57,9 @@ Voir [`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate) pour le script complet �
 **Scan Renovate** (image officielle `renovate/renovate`, cf. section dédiée plus bas),
 **Lister les PRs Renovate** (API Forgejo + filtre `jq` sur `head.ref`/`base.ref`/`head.repo.full_name`),
 et **Valider et merger chaque PR** (fetch de la branche, synchronisation avec la base si en retard,
-build Maven + OWASP, puis merge API si la CI passe).
+build Maven + OWASP, puis merge API en squash si la CI passe — un seul commit par PR sur
+`evolutions-post-1.1.9`, historique linéaire ; nécessite « Allow squash merging » activé côté
+réglages du dépôt Codeberg).
 
 Le credential `ci-bot-forgejo-token` (accès Write) est scopé au strict nécessaire dans ce dernier
 stage : il n'est jamais exposé en variable d'environnement pendant l'exécution du build

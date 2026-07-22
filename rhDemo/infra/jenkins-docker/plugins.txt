@@ -2,7 +2,7 @@
 # PLUGINS JENKINS - Liste verrouillée pour RHDemo CI/CD
 # ═══════════════════════════════════════════════════════════════════
 #
-# Versions pinnées depuis l'instance Jenkins le 2026-07-14.
+# Versions pinnées depuis l'instance Jenkins le 2026-07-22.
 # Pour mettre à jour : ./start-jenkins.sh --clean-plugins
 # Puis régénérer avec : docker compose exec jenkins jenkins-plugin-cli --list
 #
@@ -18,7 +18,7 @@ workflow-aggregator:608.v67378e9d3db_1              # pipeline {}, stages, steps
 pipeline-stage-view:2.41                            # Visualisation des stages
 credentials:1506.v948b_b_b_7dec44                      # Gestion des credentials
 credentials-binding:728.v902a_273b_8947              # withCredentials([file(...)])
-matrix-auth:3.2.10                                   # Stratégie globalMatrix (droits par utilisateur)
+matrix-auth:3.3                                   # Stratégie globalMatrix (droits par utilisateur)
 
 # Build & Outils Java
 maven-plugin:3.27                                   # tools { maven 'Maven3' }
@@ -29,7 +29,7 @@ sonar:2.18.3                                        # withSonarQubeEnv, waitForQ
 coverage:3.3256.va_c056a_db_61b_3                       # recordCoverage(tools: [[parser: 'JACOCO']])
 
 # Tests & Rapports
-junit:1413.v736fa_5b_61d80                            # junit 'target/surefire-reports/*.xml'
+junit:1415.vcb_3245e24402                            # junit 'target/surefire-reports/*.xml'
 htmlpublisher:427.1                                   # publishHTML([...]) pour Trivy, ZAP, OWASP
 
 # Sécurité
@@ -40,7 +40,8 @@ docker-plugin:1324.v2fb_b_df97fe1d                 # Agents éphémères Docker 
 docker-workflow:634.vedc7242b_eda_7                 # Commandes Docker dans pipeline
 
 # Notifications
-mailer:534.v1b_36f5864073                           # Configuration email JCasC
+mailer:534.v1b_36f5864073                           # Dépendance de email-ext
+email-ext:2038.v7b_8817a_499d9                      # emailext() step, notifications RHDemo-CI (credential SMTP)
 
 # Pipeline options
 timestamper:1.30                                    # options { timestamps() }
@@ -75,7 +76,7 @@ commons-lang3-api:3.20.0-109.ve43756e2d2b_4
 commons-text-api:1.15.0-218.va_61573470393
 data-tables-api:2.3.8-1570.v1cb_1cd2a_0fb_c
 display-url-api:2.217.va_6b_de84cc74b_
-docker-commons:472.vee120e23d3a_c
+docker-commons:477.v289085a_b_6896
 docker-java-api:3.7.1-136.v5d70f77a_c3d6
 durable-task:686.v80ff80875b_82
 echarts-api:6.0.0-1287.vfd24c22a_3d00
@@ -98,7 +99,7 @@ jaxb:2.3.9-143.v5979df3304e6
 joda-time-api:2.14.2-193.v422b_efce56e0
 jquery3-api:3.7.1-687.v68d468e40b_30
 jsch:0.2.16-95.v3eecb_55fa_b_78
-json-api:20260522-217.v0b_18b_8cd4672
+json-api:20260719-223.va_81f828cdb_58
 json-path-api:3.0.0-218.vcd4dd1355de2
 jsoup:1.22.2-95.vc5d00f1eb_42d
 matrix-project:870.v9db_fcfc2f45b_
@@ -106,7 +107,7 @@ mina-sshd-api-common:2.17.1-187.v0341274c2905
 mina-sshd-api-core:2.17.1-187.v0341274c2905
 okhttp-api:5.3.2-200.vedb_720a_cf1f8
 oss-symbols-api:465.v25d9fdc88c26
-pipeline-build-step:584.vdb_a_2cc3a_d07a_
+pipeline-build-step:599.v4b_67ea_11b_152
 pipeline-graph-analysis:254.v0f63a_a_447dca_
 pipeline-groovy-lib:798.v5cc688825312
 pipeline-input-step:560.v56198a_642157

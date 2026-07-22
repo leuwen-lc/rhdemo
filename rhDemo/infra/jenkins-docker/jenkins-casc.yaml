@@ -212,10 +212,18 @@ tool:
 #    - Type: Username with password
 #    - ID: smtp-infomaniak-credentials
 #    - Username: lcpro@etik.com
-#    - Password: mot de passe du compte mail Infomaniak — géré et mis à jour manuellement par
-#      l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
-#    - Usage: RHDemo-CI — notification email de succès/échec (post { success/failure })
-#    - Serveur SMTP: mail.infomaniak.com:465 (SSL/TLS implicite), voir bloc "unclassified.mailer"
+#    - Password: mot de passe IMAP/SMTP de l'adresse mail Infomaniak — géré et mis à jour
+#      manuellement par l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
+#    - Usage: notification email de succès/échec de RHDemo-CI (step emailext, plugin email-ext)
+#    - Serveur SMTP: mail.infomaniak.com:465 (SSL/TLS implicite)
+#    - Pourquoi pas géré par JCasC : le plugin Mailer basique (hudson.tasks.SMTPAuthentication)
+#      n'accepte que username/password en clair via JCasC, pas credentialsId — testé, provoque un
+#      UnknownAttributesException fatal au boot. Le plugin email-ext gère bien un vrai credential
+#      en interne (StandardUsernamePasswordCredentials), mais le configurateur JCasC ne sait pas
+#      piloter ce champ non plus (bug connu : jenkinsci/configuration-as-code-plugin#679). D'où
+#      une configuration entièrement manuelle via Manage Jenkins > System > Extended E-mail
+#      Notification (host mail.infomaniak.com:465 SSL, credential ci-dessus) — JCasC ne gérant
+#      pas ce bloc, il ne l'écrase pas non plus au redémarrage.
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -229,15 +237,10 @@ unclassified:
         serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
         credentialsId: "jenkins-sonar-token"
 
-  # Configuration SMTP (notifications email RHDemo-CI) — credential smtp-infomaniak-credentials
-  # géré manuellement dans Jenkins UI, voir section CREDENTIALS ci-dessus
-  mailer:
-    smtpHost: "mail.infomaniak.com"
-    smtpPort: "465"
-    useSsl: true
-    charset: "UTF-8"
-    authentication:
-      credentialsId: "smtp-infomaniak-credentials"
+  # Configuration SMTP (notifications email RHDemo-CI) : plugin email-ext, configuré
+  # entièrement à la main via Manage Jenkins > System > Extended E-mail Notification —
+  # voir credential #9 (smtp-infomaniak-credentials) dans la section CREDENTIALS ci-dessus.
+  # Pas de bloc JCasC ici : le configurateur ne gère pas le champ credentialsId de ce plugin.
 
   # Configuration Location
   location:

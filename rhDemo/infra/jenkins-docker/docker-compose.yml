@@ -154,6 +154,12 @@ services:
       - POSTGRES_USER=sonar
       - POSTGRES_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
       - POSTGRES_DB=sonar
+      # PG18+ : le point de montage historique /var/lib/postgresql/data n'est plus le PGDATA par
+      # défaut de l'image (nouveau layout style pg_ctlcluster, sous-répertoire par version majeure).
+      # Sans cette variable, l'entrypoint refuse de démarrer sur un point de montage unique même
+      # vide ("there appears to be PostgreSQL data in ... (unused mount/volume)"). On force
+      # explicitement l'ancien comportement pour ne pas changer le point de montage du volume.
+      - PGDATA=/var/lib/postgresql/data
 
     networks:
       - jenkins-network

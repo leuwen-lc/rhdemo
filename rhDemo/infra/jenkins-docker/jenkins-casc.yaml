@@ -539,6 +539,8 @@ jobs:
               logRotator {
                 numToKeepStr('30')
                 daysToKeepStr('90')
+                artifactNumToKeepStr('-1')
+                artifactDaysToKeepStr('-1')
               }
             }
           }

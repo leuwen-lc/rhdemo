@@ -19,7 +19,7 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["daemonsets"]
-    resourceNames: ["cilium"]
+    resourceNames: ["cilium", "cilium-envoy"]
     verbs: ["get", "list", "watch", "update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "deployments/scale"]
@@ -30,7 +30,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    resourceNames: ["cilium-config"]
+    resourceNames: ["cilium-config", "cilium-envoy-config"]
     verbs: ["get", "list", "watch", "update", "patch"]
   - apiGroups: [""]
     resources: ["secrets"]
@@ -54,18 +54,29 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
-  # Role/RoleBinding namespacés `cilium-operator-ztunnel` (RBAC propre à
-  # l'operator Cilium pour gérer les DaemonSets ztunnel — cf. chart >=1.19,
-  # toujours rendu même si ztunnel/ambient mesh n'est pas activé). Jamais de
-  # `create` ici (RBAC Kubernetes ne permet pas de restreindre `create` par
-  # `resourceNames` : l'accorder ouvrirait la création d'un Role/RoleBinding
-  # arbitraire dans kube-system, pas seulement celui-ci) — même principe que
-  # `create` interdit sur ClusterRole/ClusterRoleBinding ci-dessous. La
-  # création initiale de ces deux objets est donc une opération admin
-  # ponctuelle (comme pour la release Cilium elle-même).
+  # Role/RoleBinding namespacés gérés par la release Helm : `cilium-config-agent`
+  # (lecture de cilium-config par l'agent, présent depuis l'install initiale)
+  # et `cilium-operator-ztunnel` (RBAC propre à l'operator pour gérer les
+  # DaemonSets ztunnel — cf. chart >=1.19, toujours rendu même si ztunnel/
+  # ambient mesh n'est pas activé). Jamais de `create` ici (RBAC Kubernetes ne
+  # permet pas de restreindre `create` par `resourceNames` : l'accorder
+  # ouvrirait la création d'un Role/RoleBinding arbitraire dans kube-system,
+  # pas seulement ceux-ci) — même principe que `create` interdit sur
+  # ClusterRole/ClusterRoleBinding ci-dessous. La création initiale de ces
+  # objets est donc une opération admin ponctuelle (comme pour la release
+  # Cilium elle-même).
+  #
+  # Liste vérifiée exhaustivement sur le cluster réel (kind-rhdemo) après
+  # l'upgrade 1.19.5, pas devinée depuis le chart seul :
+  # `kubectl get <kind> -n kube-system -o json | jq '.items[] | select(
+  # .metadata.annotations."meta.helm.sh/release-name"=="cilium") | .metadata.name'`
+  # pour daemonsets/deployments/configmaps/secrets/serviceaccounts/roles/
+  # rolebindings — seule source fiable, une v1.19 a déjà ajouté un objet non
+  # documenté dans le chart (cilium-operator-ztunnel) sans que `helm template`
+  # seul ne l'ait fait ressortir clairement au moment de l'audit initial.
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
-    resourceNames: ["cilium-operator-ztunnel"]
+    resourceNames: ["cilium-config-agent", "cilium-operator-ztunnel"]
     verbs: ["get", "list", "watch", "update", "patch"]
   # Note volontaire : aucun droit sur customresourcedefinitions.cilium.io
   # (Cilium les gère lui-même, cf. commentaire ci-dessus) ni sur les

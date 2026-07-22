@@ -157,6 +157,17 @@ d'abord été implémenté sans cette connexion, ce qui a fait échouer silencie
 les premiers dry-run de composants d'infra — les PR concernées étaient restées ouvertes plutôt que
 mergées à tort, mais sans jamais avoir réellement validé quoi que ce soit.
 
+**Incident corrigé — test de connectivité `kubectl cluster-info`** : une fois le réseau `kind`
+joint, le bloc appelait `kubectl cluster-info` comme simple sanity check avant le dry-run réel.
+Cette commande interroge en interne les Services de `kube-system` (label
+`kubernetes.io/cluster-service=true`, pour afficher les adresses KubeDNS/etc.) — un `list services`
+que `jenkins-infra-upgrader` n'a délibérément pas (cf. `rbac/README.md`). Conséquence observée :
+les 3 PR d'infra ouvertes (Cilium, kube-prometheus-stack minor et major) ont échoué avec
+`services is forbidden ... in the namespace "kube-system"`, un faux-positif RBAC qui n'avait rien à
+voir avec le composant réellement testé. `Jenkinsfile-CD` documentait déjà ce piège pour
+`jenkins-deployer` ; remplacé par `kubectl config current-context` (purement local, aucun appel
+API), comme le fait déjà `Jenkinsfile-Stagingkub-Upgrade-Deploy`.
+
 **Cas limite** : si le cluster stagingkub n'est pas démarré au moment du scan, la validation
 dry-run échoue proprement (message explicite, PR conservée ouverte) plutôt que de bloquer le
 traitement des autres PR de la même exécution.

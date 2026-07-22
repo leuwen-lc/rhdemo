@@ -314,7 +314,14 @@ RENOVATE_SCAN_EOF
                                         mkdir -p $HOME/.kube
                                         cp "$KUBECONFIG_FILE" $HOME/.kube/config
                                         chmod 600 $HOME/.kube/config
-                                        kubectl cluster-info > /dev/null
+                                        # "kubectl cluster-info" interroge en interne les Services de
+                                        # kube-system (list, label kubernetes.io/cluster-service=true)
+                                        # pour afficher les adresses KubeDNS/etc. — jenkins-infra-upgrader
+                                        # n'a délibérément pas ce droit (cf. rbac/README.md). Utiliser
+                                        # "config current-context" à la place (purement local, lit le
+                                        # kubeconfig, aucun appel API) : même vérification de sanité que
+                                        # Jenkinsfile-Stagingkub-Upgrade-Deploy, sans ce faux-positif RBAC.
+                                        kubectl config current-context > /dev/null
 
                                         SCRIPT="''' + componentFile + '''"
                                         chmod +x "$SCRIPT"

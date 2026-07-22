@@ -20,6 +20,11 @@
  * Selenium/ZAP et SonarQube ne sont pas exécutés ici (déjà couverts par
  * RHDemo-CI sur master après merge) — objectif : validation rapide (~10 min).
  *
+ * La validation appliquée à chaque PR dépend des fichiers modifiés (Maven+OWASP,
+ * Kubernetes dry-run, ou Trivy scan ciblé) — algorithme complet et raisons
+ * détaillées dans docs/RENOVATE_AUTOMERGE_CI.md, section "Aiguillage de la
+ * validation selon les fichiers modifiés".
+ *
  * 📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -247,25 +252,38 @@ RENOVATE_SCAN_EOF
                             return
                         }
 
-                        // Branchement de la validation selon les fichiers modifiés (Option 3,
-                        // cf. docs/STAGINGKUB_REBUILD_PIPELINE.md étape 4) : une PR Renovate qui ne
-                        // touche qu'un script scripts/components/*.sh ou kind-config.yaml n'a rien à
-                        // gagner d'un `mvnw verify`/OWASP (aucun rapport avec l'infra stagingkub) —
-                        // elle reçoit une validation Kubernetes dry-run à la place. Un seul listing
-                        // Forgejo, un seul job qui merge (pas de second job séparé, cf. étude).
+                        // Aiguillage de la validation selon les fichiers modifiés — algorithme
+                        // complet et raisons documentées dans docs/RENOVATE_AUTOMERGE_CI.md,
+                        // section "Aiguillage de la validation selon les fichiers modifiés".
+                        // Un seul listing Forgejo, un seul job qui merge (pas de second job séparé).
                         def changedFiles = sh(
                             script: 'git diff --name-only origin/' + BASE_BRANCH + '...HEAD',
                             returnStdout: true
                         ).trim()
+                        echo "Fichiers modifiés par PR #${prNumber} :\n${changedFiles}"
+
                         def isInfraComponentPr = changedFiles.split('\n').any {
                             it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/ ||
                             it == 'rhDemo/infra/stagingkub/kind-config.yaml'
                         }
+                        // Images Docker épinglées par digest (repo:tag@sha256:digest) suivies par
+                        // customManager Renovate — cf. RENOVATE_AUTOMERGE_CI.md. Uniquement si la PR
+                        // ne touche QUE ces fichiers (sinon fallback Maven, cf. chemin par défaut).
+                        def pinnedImageFiles = ['rhDemo/Jenkinsfile-CI', 'rhDemo/infra/stagingkub/helm/rhdemo/values.yaml']
+                        def isPinnedImagePr = !isInfraComponentPr &&
+                            changedFiles.split('\n').every { it in pinnedImageFiles }
+
+                        if (isInfraComponentPr) {
+                            echo "→ PR #${prNumber} : chemin retenu = Kubernetes dry-run (composant d'infra stagingkub détecté dans les fichiers modifiés)"
+                        } else if (isPinnedImagePr) {
+                            def matchedFiles = pinnedImageFiles.findAll { f -> changedFiles.split('\n').contains(f) }
+                            echo "→ PR #${prNumber} : chemin retenu = Trivy scan ciblé (image(s) Docker épinglée(s) détectée(s) dans : ${matchedFiles.join(', ')})"
+                        } else {
+                            echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (chemin par défaut — aucun motif d'infra stagingkub ni d'image épinglée reconnu)"
+                        }
 
                         def ciStatus
                         if (isInfraComponentPr) {
-                            echo "PR #${prNumber} : composant d'infrastructure stagingkub détecté — validation Kubernetes dry-run"
-
                             def componentFile = changedFiles.split('\n').find {
                                 it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/
                             }
@@ -294,6 +312,42 @@ RENOVATE_SCAN_EOF
                                     ''',
                                     returnStatus: true
                                 )
+                            }
+                        } else if (isPinnedImagePr) {
+                            // Extraction de l'image ajoutée par le diff (motif repo:tag@sha256:digest),
+                            // peu importe quelle variable Jenkinsfile-CI / clé values.yaml a changé —
+                            // voir docs/RENOVATE_AUTOMERGE_CI.md.
+                            def changedImages = sh(
+                                script: """
+                                    git diff origin/${BASE_BRANCH}...HEAD -- ${pinnedImageFiles.join(' ')} \
+                                      | grep -E '^\\+' | grep -v '^\\+\\+\\+' \
+                                      | grep -oE '"[a-zA-Z0-9./_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]+"' \
+                                      | tr -d '"' | sort -u
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            if (!changedImages) {
+                                echo "ERREUR: aucune image reconnue (repo:tag@sha256:digest) dans le diff de PR #${prNumber} — validation refusée plutôt que de retomber silencieusement sur Maven"
+                                ciStatus = 1
+                            } else {
+                                echo "Image(s) à scanner : ${changedImages.replaceAll('\n', ', ')}"
+
+                                sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
+                                sh '''
+                                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
+                                    mkdir -p "${TRIVY_CACHE_DIR}"
+                                    export TRIVY_CACHE_DIR
+                                    trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                                '''
+
+                                changedImages.split('\n').each { image ->
+                                    def reportName = (image =~ /([^\/:]+):[^:]+$/)[0][1]
+                                    echo "→ Scan Trivy : ${image} (rapport ${reportName})"
+                                    lib.generateTrivyReport(image, reportName)
+                                }
+
+                                ciStatus = lib.aggregateTrivyResults() ? 0 : 1
                             }
                         } else {
                             // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
@@ -384,7 +438,7 @@ RENOVATE_SCAN_EOF
                             }
                         }
 
-                        if (!isInfraComponentPr) {
+                        if (!isInfraComponentPr && !isPinnedImagePr) {
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                         }

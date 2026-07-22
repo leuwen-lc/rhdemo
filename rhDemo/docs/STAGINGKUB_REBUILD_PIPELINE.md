@@ -100,24 +100,34 @@ Aucune des versions d'infrastructure (Cilium, NGF, kube-prometheus-stack, Loki, 
 
 Avec ces ajouts, **seule la version de Kubernetes elle-même (`kindest/node`) reste hors périmètre de la mise à jour en place** (étape 6) — Cilium, les CRDs Gateway API/NGF, kube-prometheus-stack et Promtail suivent le même chemin que Loki/Grafana, chacun avec son garde-fou documenté et son niveau de risque explicité (RBAC nommé partout ; protection `escalate` native pour les objets `ClusterRole`/`ClusterRoleBinding` ; liste `resourceNames` + refus de `create` pour les CRDs et les webhooks d'admission, sans équivalent natif à `escalate`) plutôt qu'une exclusion de principe.
 
-## Étape 4 — Articulation avec `Jenkinsfile-Renovate` existant (pas de second scan)
+## Étape 4 — Déclenchement du job `RHDemo-Stagingkub-Upgrade-Deploy` après merge
 
-Point important : le **scan** Renovate (stage `🔄 Scan Renovate` de `Jenkinsfile-Renovate`, qui invoque le CLI `renovate`) ne tourne **qu'une fois** — il est piloté par un unique `renovate.json`. Les `customManagers` de l'étape 2 font que ce même scan détecte désormais *aussi* les nouvelles versions Cilium/NGF/observabilité/`kindest/node`, dans le même run, aux côtés des dépendances Maven/npm/Docker déjà suivies. **Il n'y a pas de job Renovate supplémentaire.**
+> **Aiguillage de la validation Renovate** (quelle PR reçoit quelle validation — Maven+OWASP,
+> Kubernetes dry-run, ou Trivy scan ciblé — et selon quels fichiers modifiés) : voir
+> [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md), section « Aiguillage de la validation selon
+> les fichiers modifiés ». Ce document-ci ne couvre que ce qui concerne spécifiquement le pipeline
+> `RHDemo-Stagingkub-Upgrade-Deploy` lui-même (déclenché post-merge pour les PR de composants
+> d'infra stagingkub).
 
-Ce qui devait en revanche être décidé, c'est comment étendre la boucle **"lister + valider + merger chaque PR"** (second stage de `Jenkinsfile-Renovate`), sachant que sa validation habituelle (`mvnw verify` + OWASP Dependency-Check) n'a aucun sens pour une PR qui ne touche qu'un script Helm de `scripts/components/`.
+**Validation avant merge, application réelle après merge** — même séparation que le couple
+`Jenkinsfile-CI`/`Jenkinsfile-CD` pour l'application (une PR non encore mergée ne déploie jamais sur
+stagingkub) :
 
-- **Étendu `Jenkinsfile-Renovate` lui-même (retenu)** : dans la boucle existante "pour chaque PR", la validation est branchée sur les fichiers modifiés (`git diff --name-only` contre la base, information déjà disponible à ce stade du pipeline) :
-  - PR touchant `pom.xml`/`package.json`/images `Jenkinsfile-CI` → validation Maven+OWASP actuelle, strictement inchangée.
-  - PR touchant `rhDemo/infra/stagingkub/scripts/components/*.sh` ou `kind-config.yaml` → validation Kubernetes (détaillée ci-dessous).
-  - Un seul appel à l'API Forgejo pour lister les PR ouvertes, un seul job qui merge : pas de duplication du listing, pas de risque que deux jobs se disputent la même PR.
-- Un second job séparé avec son propre listing Forgejo filtré sur un chemin/label disjoint a été écarté : il aurait dupliqué le code de listing/merge (`postForgejoComment`, boucle de synchronisation, squash-merge) déjà présent dans `rhDemoLib.groovy`/`Jenkinsfile-Renovate`, et introduit un risque de recouvrement si le filtre n'est pas strictement exclusif de celui de `Jenkinsfile-Renovate`.
-
-**Validation avant merge, application réelle après merge** — même séparation que le couple `Jenkinsfile-CI`/`Jenkinsfile-CD` pour l'application (une PR non encore mergée ne déploie jamais sur stagingkub) :
-
-1. *Pendant la validation de la PR* (avant merge, dans la boucle étendue de `Jenkinsfile-Renovate`) : installation du même kubeconfig RBAC que celui utilisé après merge (credential dédié `kubeconfig-stagingkub-infra-upgrader`, ServiceAccount `jenkins-infra-upgrader` — jamais `kubeconfig-stagingkub`/`jenkins-deployer`, réservé à `Jenkinsfile-CD`, cf. étape 3), puis `helm upgrade --install <release> ... --dry-run=server` / `kubectl apply --dry-run=server` pour les CRDs, contre le cluster stagingkub réel. Point d'attention : un `--dry-run=server` **nécessite les mêmes autorisations RBAC qu'une exécution réelle** — Kubernetes vérifie l'autorisation avant d'évaluer le drapeau dry-run, il n'existe pas de mode "lecture seule" à ce stade. La garantie de sécurité vient de l'absence de persistance server-side (la requête est évaluée puis annulée), pas d'un credential moins privilégié. CI verte → merge automatique (squash, même API Forgejo qu'aujourd'hui) ; CI rouge → commentaire d'échec, PR conservée ouverte, comme le comportement actuel.
-2. *Après le merge réussi* : déclenchement du job `RHDemo-Stagingkub-Upgrade-Deploy` (`Jenkinsfile-Stagingkub-Upgrade-Deploy`, déclaré en JCasC dans `jenkins-casc.yaml`, sur le même modèle que `RHDemo-CI`/`RHDemo-CD`/`RHDemo-Renovate`), via `build job: 'RHDemo-Stagingkub-Upgrade-Deploy', wait: false` juste après l'appel de merge Forgejo réussi. Ce job exécute le vrai `install-or-upgrade-<composant>.sh` sur stagingkub (`--atomic` déjà intégré dans le script, cf. étape 1 — pas un argument à passer), avec rollback Helm automatique en cas d'échec, puis les mêmes vérifications que `Jenkinsfile-CD` (`kubectl rollout status`, health check applicatif — en particulier revérifier que `rhdemo-app` et `keycloak` restent joignables après un upgrade NGF, le Gateway partagé étant un point de passage commun à toute l'application).
-3. Ces deux jobs tournent sur le **même agent éphémère que les autres pipelines** (pas de `docker.sock`, toujours pas de `kind` installé) — cette option n'élargit jamais le modèle d'agent, uniquement la portée RBAC Kubernetes, de façon nommée et auditée.
-4. Cas limite géré explicitement : si le cluster stagingkub n'est pas démarré au moment du scan (contrairement à l'app, ce chemin dépend d'un cluster vivant), la validation dry-run échoue proprement (message explicite, PR conservée ouverte) plutôt que de bloquer tout le traitement des autres PR (app) de la même exécution de `Jenkinsfile-Renovate`.
+1. *Après le merge réussi* d'une PR de composant d'infra : déclenchement du job
+   `RHDemo-Stagingkub-Upgrade-Deploy` (`Jenkinsfile-Stagingkub-Upgrade-Deploy`, déclaré en JCasC dans
+   `jenkins-casc.yaml`, sur le même modèle que `RHDemo-CI`/`RHDemo-CD`/`RHDemo-Renovate`), via
+   `build job: 'RHDemo-Stagingkub-Upgrade-Deploy', wait: false` juste après l'appel de merge Forgejo
+   réussi. Ce job exécute le vrai `install-or-upgrade-<composant>.sh` sur stagingkub (`--atomic` déjà
+   intégré dans le script, cf. étape 1 — pas un argument à passer), avec rollback Helm automatique en
+   cas d'échec, puis les mêmes vérifications que `Jenkinsfile-CD` (`kubectl rollout status`, health
+   check applicatif — en particulier revérifier que `rhdemo-app` et `keycloak` restent joignables
+   après un upgrade NGF, le Gateway partagé étant un point de passage commun à toute l'application).
+2. Ce job utilise le credential dédié `kubeconfig-stagingkub-infra-upgrader` (ServiceAccount
+   `jenkins-infra-upgrader` — jamais `kubeconfig-stagingkub`/`jenkins-deployer`, réservé à
+   `Jenkinsfile-CD`, cf. étape 3).
+3. Ce job tourne sur le **même agent éphémère que les autres pipelines** (pas de `docker.sock`,
+   toujours pas de `kind` installé) — cette option n'élargit jamais le modèle d'agent, uniquement la
+   portée RBAC Kubernetes, de façon nommée et auditée.
 
 ## Étape 5 — Validation avant activation de l'automerge
 
@@ -134,6 +144,6 @@ Avant de brancher l'automerge Renovate sur ces fichiers, dérouler manuellement 
 - **Scripts** : `rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-{cilium,ngf,kube-prometheus-stack,loki,promtail,grafana}.sh`, `scripts/vendor-gateway-api-crds.sh` (+ manifeste vendoré `gateway-api-crds/v2.6.0/crds.yaml`). `init-stagingkub.sh`/`install-observability.sh` refactorés pour les appeler.
 - **RBAC** : `rhDemo/infra/stagingkub/rbac/jenkins-infra-upgrader-*.yaml` + `rbac/README.md`.
 - **Renovate** : `renovate.json` étendu (customManagers infra + `kind-config.yaml`).
-- **Jenkins** : `Jenkinsfile-Stagingkub-Upgrade-Deploy` (nouveau), `Jenkinsfile-Renovate` (branchement validation Maven vs Kubernetes dry-run), `jenkins-casc.yaml` (job `RHDemo-Stagingkub-Upgrade-Deploy`).
+- **Jenkins** : `Jenkinsfile-Stagingkub-Upgrade-Deploy` (nouveau), `Jenkinsfile-Renovate` (bascule vers Kubernetes dry-run pour les composants d'infra — algorithme complet documenté dans [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)), `jenkins-casc.yaml` (job `RHDemo-Stagingkub-Upgrade-Deploy`).
 - **Observabilité** : `prometheus-values.yaml` — admission webhooks désactivés.
 - **Non testé** : aucun cluster stagingkub réel n'était disponible pour valider l'exécution de bout en bout (preflight Cilium, ordre des stages Jenkins, job JCasC) — seules les vérifications statiques (syntaxe, rendu Helm, dry-run client RBAC) ont pu être faites.

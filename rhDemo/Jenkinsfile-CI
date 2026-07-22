@@ -54,7 +54,7 @@ pipeline {
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.6.2@sha256:3e58dc82a9b72f364f37dac17f99fcaf53d0052a3c1ad7f00b069a1ed43201c0"
         // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
         // renovate: datasource=docker depName=ghcr.io/nginx/nginx-gateway-fabric
-        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.0@sha256:9f209a203cd0ed7af53b2b3f03ae8c115a10924456c725e9a38ca4fcf665af44"
+        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.7@sha256:bc1e0677ab0c077fc12851dbd2311fce9358d0f6f3140035f8dc5e5ede7b9cc1"
 
         // Configuration des tests
         TEST_PORT = '9000'

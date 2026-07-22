@@ -230,9 +230,63 @@ RENOVATE_SCAN_EOF
 
                             if (syncStatus != 0) {
                                 echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
+
+                                // Un conflit peut simplement signifier que cette PR est dépassée :
+                                // une autre PR Renovate pour la MÊME dépendance a déjà mergé une
+                                // version plus récente sur la base pendant que celle-ci attendait
+                                // (cas vécu : PR kube-prometheus-stack minor en conflit après le
+                                // merge de la PR major correspondante). Détection, fichier par
+                                // fichier en conflit : comparer la valeur "VAR=\"X.Y.Z\"" (format
+                                // utilisé par tous les scripts scripts/components/*.sh trackés par
+                                // Renovate) entre la base actuelle et cette PR — si la base est déjà
+                                // à une version égale ou supérieure sur TOUS les fichiers en conflit,
+                                // la PR ne peut plus rien apporter : fermeture automatique plutôt
+                                // qu'un échec nécessitant une intervention humaine. Si un seul
+                                // fichier ne matche pas ce format (valeur vide d'un côté ou de
+                                // l'autre), on ne prend aucun risque : traitement en échec classique.
+                                def conflictedFiles = sh(
+                                    script: 'git diff --name-only --diff-filter=U',
+                                    returnStdout: true
+                                ).trim()
+
+                                def superseded = conflictedFiles && conflictedFiles.split('\n').every { f ->
+                                    def baseValue = sh(
+                                        script: "git show origin/${BASE_BRANCH}:'${f}' 2>/dev/null | grep -oE '\"[0-9]+(\\.[0-9]+)+' | tr -d '\"' | head -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    def prValue = sh(
+                                        script: "git show ${prTipSha}:'${f}' 2>/dev/null | grep -oE '\"[0-9]+(\\.[0-9]+)+' | tr -d '\"' | head -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    if (!baseValue || !prValue) return false
+                                    def newest = sh(
+                                        script: "printf '%s\\n%s\\n' '${baseValue}' '${prValue}' | sort -V | tail -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    return newest == baseValue
+                                }
+
                                 sh 'git merge --abort 2>/dev/null || true'
                                 sh "git reset --hard ${prTipSha}"
                                 sh 'git clean -fd'
+
+                                if (superseded) {
+                                    echo "PR #${prNumber} dépassée (dépendance déjà à une version égale ou supérieure sur ${BASE_BRANCH}) — fermeture automatique"
+                                    withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                        lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                            "PR fermée automatiquement : la dépendance est déjà à une version égale ou plus récente sur ${BASE_BRANCH} (probablement supersédée par une autre PR déjà mergée). Build : ${env.BUILD_URL}")
+                                        sh """
+                                            set +x
+                                            curl -s -o /dev/null -w "%{http_code}" -X PATCH \\
+                                              -H "Authorization: token \${FORGEJO_TOKEN}" \\
+                                              -H "Content-Type: application/json" \\
+                                              -d '{"state":"closed"}' \\
+                                              "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}"
+                                        """
+                                    }
+                                    return
+                                }
+
                                 syncFailed = true
                             } else {
                                 // FORGEJO_TOKEN scopé au seul push de synchronisation, pas au reste de

@@ -290,6 +290,18 @@ gateway:
         hsts: "max-age=31536000; includeSubDomains; preload"
         permissionsPolicy: "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=(), accelerometer=(), gyroscope=(), magnetometer=()"
       rules:
+        # /actuator/health doit être routé en priorité vers le port management
+        # (9001, management.server.port) : l'application démarre deux
+        # connecteurs Tomcat séparés (9000 app, 9001 actuator), et /actuator/health
+        # n'est mappé sur aucun contrôleur du port 9000 — sans cette règle,
+        # la requête tombe dans GlobalExceptionHandler côté port 9000 (500
+        # "Une erreur interne s'est produite" au lieu du JSON actuator natif).
+        # Priorité garantie par Gateway API : le match le plus spécifique
+        # (/actuator/health) l'emporte sur PathPrefix / quel que soit l'ordre.
+        - path: /actuator/health
+          pathType: PathPrefix
+          serviceName: rhdemo-app
+          servicePort: 9001
         - path: /
           pathType: PathPrefix
           serviceName: rhdemo-app

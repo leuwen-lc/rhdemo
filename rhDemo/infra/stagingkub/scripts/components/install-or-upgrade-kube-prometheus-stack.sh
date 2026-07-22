@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 
 # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
-KUBE_PROMETHEUS_STACK_VERSION="81.5.1"  # App: Prometheus Operator v0.88.1
+KUBE_PROMETHEUS_STACK_VERSION="87.16.1"  # App: Prometheus Operator v0.88.1
 
 MONITORING_NS="monitoring"
 

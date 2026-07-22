@@ -21,7 +21,7 @@ VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 # une branche de maintenance dédiée à GEL. Bascule vers le fork communautaire,
 # seule continuation réelle du chart OSS.
 # renovate: datasource=helm depName=loki registryUrl=https://grafana-community.github.io/helm-charts
-LOKI_VERSION="7.0.0"  # App: Loki 3.6.7
+LOKI_VERSION="18.5.0"  # App: Loki 3.6.7
 
 LOKI_NS="loki-stack"
 

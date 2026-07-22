@@ -40,6 +40,17 @@ rules:
     resources: ["serviceaccounts"]
     resourceNames: ["cilium", "cilium-operator", "cilium-envoy"]
     verbs: ["get", "list", "watch", "update", "patch"]
+  # Compromis assumé : pas de `resourceNames` ici, contrairement à toutes les
+  # autres règles de ce fichier. Les pods du DaemonSet Cilium ont un nom
+  # généré (suffixe aléatoire) qui change à chaque rollout/redémarrage — un
+  # `resourceNames` figé casserait la lecture de logs dès le premier
+  # redéploiement. Conséquence acceptée : lecture (get/list/watch, jamais
+  # d'écriture) de TOUS les pods et logs de kube-system (kube-apiserver, etcd,
+  # coredns, kube-proxy, kindnet...), pas seulement ceux de Cilium — vérifié
+  # avec `kubectl auth can-i get pods -n kube-system --as=...` (retourne
+  # "yes"). Risque limité à une fuite de confidentialité en lecture seule
+  # (contenu de logs d'autres composants système), jamais à une élévation de
+  # privilège ou une action d'écriture.
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
@@ -48,7 +59,8 @@ rules:
   # ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` (portés par
   # jenkins-infra-upgrader-clusterrole.yaml, cluster-scoped par nature).
   #
-  # Aucune règle générique (`resourceNames` absent) sur kube-system : toute
+  # Hormis la règle pods/pods-log ci-dessus (seule exception documentée),
+  # aucune règle générique (`resourceNames` absent) sur kube-system : toute
   # nouvelle ressource nommée introduite par une future version de Cilium
   # nécessite un ajout explicite et revu ici, jamais un accès par défaut.
 ---

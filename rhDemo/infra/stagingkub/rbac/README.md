@@ -93,6 +93,18 @@ déjà lui-même. Si une future version de Cilium a besoin d'étendre son propre
 ClusterRole, l'upgrade échoue proprement (rollback `--atomic`) plutôt que de
 réussir silencieusement avec des droits élargis.
 
+**Compromis assumé et documenté — lecture des pods/logs `kube-system`** : la
+règle `pods`/`pods/log` de `jenkins-infra-upgrader-kube-system-role.yaml` est
+la seule de tout ce Role sans `resourceNames` (contrairement au principe
+énoncé plus haut). Les pods du DaemonSet Cilium portent un nom généré
+(suffixe aléatoire, change à chaque rollout) — un `resourceNames` figé
+casserait la lecture de logs dès le premier redémarrage. Conséquence acceptée
+et vérifiée (`kubectl auth can-i get pods -n kube-system --as=...` → `yes`) :
+`jenkins-infra-upgrader` peut lire (jamais écrire) les pods et logs de
+**tout** `kube-system` (kube-apiserver, etcd, coredns, kube-proxy...), pas
+seulement ceux de Cilium. Risque limité à une fuite de confidentialité en
+lecture seule, sans élévation de privilège ni action d'écriture possible.
+
 ### CRDs cluster-scoped couvertes (`customresourcedefinitions`)
 
 Liste vérifiée par `helm show crds` / `kubectl kustomize` sur les charts

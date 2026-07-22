@@ -44,7 +44,9 @@ else
     HELM_MODE_ARGS="--atomic --wait --timeout 3m"
 fi
 
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+# --force-update : voir install-or-upgrade-promtail.sh (alias "grafana" partagé
+# avec install-or-upgrade-loki.sh, qui pointe désormais vers un dépôt différent).
+helm repo add grafana https://grafana.github.io/helm-charts --force-update >/dev/null 2>&1 || true
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true

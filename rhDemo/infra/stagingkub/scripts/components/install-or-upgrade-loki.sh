@@ -12,8 +12,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 
-# renovate: datasource=helm depName=loki registryUrl=https://grafana.github.io/helm-charts
-LOKI_VERSION="6.52.0"  # App: Loki 3.6.4
+# Depuis la chart 7.0.0, le dépôt https://grafana.github.io/helm-charts ne
+# publie plus que la variante Grafana Enterprise Logs (GEL) — le chart OSS a
+# été forké vers grafana-community/helm-charts (annoncé dans le CHANGELOG.md
+# amont, effectif au 16/03/2026). enterprise.enabled est à false par défaut
+# dans le chart GEL, donc rester sur l'ancien dépôt ne casserait pas le
+# déploiement actuel, mais figerait les correctifs/évolutions OSS futurs sur
+# une branche de maintenance dédiée à GEL. Bascule vers le fork communautaire,
+# seule continuation réelle du chart OSS.
+# renovate: datasource=helm depName=loki registryUrl=https://grafana-community.github.io/helm-charts
+LOKI_VERSION="7.0.0"  # App: Loki 3.6.7
 
 LOKI_NS="loki-stack"
 
@@ -36,7 +44,7 @@ else
     HELM_MODE_ARGS="--atomic --wait --timeout 3m"
 fi
 
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+helm repo add grafana https://grafana-community.github.io/helm-charts --force-update >/dev/null 2>&1 || true
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true

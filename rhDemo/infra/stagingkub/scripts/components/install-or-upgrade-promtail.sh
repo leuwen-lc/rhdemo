@@ -38,7 +38,12 @@ else
     HELM_MODE_ARGS="--atomic --wait --timeout 2m"
 fi
 
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
+# --force-update : l'alias "grafana" est aussi utilisé par install-or-upgrade-loki.sh
+# qui pointe désormais vers un dépôt différent (fork communautaire) — sans ce
+# flag, un "helm repo add" avec une URL différente de l'alias existant échoue
+# silencieusement (repris par le "|| true"), laissant l'alias sur la mauvaise URL
+# si les scripts s'enchaînent sur le même agent.
+helm repo add grafana https://grafana.github.io/helm-charts --force-update >/dev/null 2>&1 || true
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true

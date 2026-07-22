@@ -17,7 +17,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STAGINGKUB_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# renovate: datasource=helm depName=nginx-gateway-fabric registryUrl=oci://ghcr.io/nginx/charts
+# Le datasource "helm" de Renovate ne sait pas résoudre un registryUrl oci://
+# (il tente un index.yaml HTTP classique, inexistant sur un registre OCI —
+# erreur "cannot parse url" observée en production). Pour un chart publié en
+# OCI, le datasource "docker" avec le chemin complet en depName fonctionne
+# (même mécanisme que NGF_IMAGE dans Jenkinsfile-CI).
+# renovate: datasource=docker depName=ghcr.io/nginx/charts/nginx-gateway-fabric
 NGF_VERSION="2.6.0"
 
 NGF_NAMESPACE="nginx-gateway"

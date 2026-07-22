@@ -14,9 +14,10 @@ set -e
 # de version est refusé. Un job de preflight-check est exécuté avant
 # l'upgrade réel pour valider la compatibilité des CRDs Cilium.
 #
-# À vérifier lors de la première exécution réelle (pas testable hors
-# cluster) : la syntaxe exacte du preflight Helm ci-dessous, à recaler
-# sur la documentation Cilium 1.18.x si nécessaire.
+# Vérifié lors de la première exécution réelle (upgrade 1.18.6 → 1.19.5) :
+# `helm upgrade` seul échoue avec "has no deployed releases" puisque la
+# release cilium-preflight n'existe jamais entre deux upgrades (supprimée en
+# fin de step) — `--install` est donc requis.
 #
 # Mode validation (HELM_DRY_RUN=true) : utilisé par la boucle de
 # validation pré-merge de Jenkinsfile-Renovate — `helm upgrade
@@ -76,7 +77,7 @@ if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "$CILIUM_VERSION" ]; the
         echo -e "${YELLOW}  - Mode validation : preflight-check (mutant) ignoré${NC}"
     else
         echo -e "${YELLOW}  - Exécution du preflight-check Cilium (${CURRENT_VERSION} → ${CILIUM_VERSION})...${NC}"
-        helm upgrade cilium-preflight cilium/cilium --version "${CILIUM_VERSION}" \
+        helm upgrade --install cilium-preflight cilium/cilium --version "${CILIUM_VERSION}" \
             --namespace "${CILIUM_HELM_NAMESPACE}" \
             --create-namespace \
             --set namespaceOverride="${CILIUM_NAMESPACE}" \
@@ -95,6 +96,11 @@ if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "$CILIUM_VERSION" ]; the
     fi
 fi
 
+# ─── operator.replicas=1 : le chart Cilium fixe 2 réplicas par défaut, mais
+# le cluster KinD n'a qu'un seul nœud control-plane — la 2e réplique ne peut
+# jamais se scheduler (conflit de port), donc `--wait` attend une
+# disponibilité 2/2 qui n'arrivera jamais et finit par expirer (vérifié lors
+# de la première exécution réelle : timeout 5 min, rollback --atomic propre).
 # ─── Upgrade/installation réelle (ou validation dry-run=server) ───
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
@@ -111,6 +117,7 @@ helm upgrade --install cilium cilium/cilium --version "${CILIUM_VERSION}" \
     --set k8sServicePort="${CILIUM_K8S_API_PORT}" \
     --set hubble.enabled=false \
     --set ipam.mode=kubernetes \
+    --set operator.replicas=1 \
     ${HELM_MODE_ARGS}
 
 if [ "$HELM_DRY_RUN" = "true" ]; then

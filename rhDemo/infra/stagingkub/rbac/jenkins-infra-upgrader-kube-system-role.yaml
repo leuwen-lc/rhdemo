@@ -54,6 +54,19 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
+  # Role/RoleBinding namespacés `cilium-operator-ztunnel` (RBAC propre à
+  # l'operator Cilium pour gérer les DaemonSets ztunnel — cf. chart >=1.19,
+  # toujours rendu même si ztunnel/ambient mesh n'est pas activé). Jamais de
+  # `create` ici (RBAC Kubernetes ne permet pas de restreindre `create` par
+  # `resourceNames` : l'accorder ouvrirait la création d'un Role/RoleBinding
+  # arbitraire dans kube-system, pas seulement celui-ci) — même principe que
+  # `create` interdit sur ClusterRole/ClusterRoleBinding ci-dessous. La
+  # création initiale de ces deux objets est donc une opération admin
+  # ponctuelle (comme pour la release Cilium elle-même).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames: ["cilium-operator-ztunnel"]
+    verbs: ["get", "list", "watch", "update", "patch"]
   # Note volontaire : aucun droit sur customresourcedefinitions.cilium.io
   # (Cilium les gère lui-même, cf. commentaire ci-dessus) ni sur les
   # ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` (portés par

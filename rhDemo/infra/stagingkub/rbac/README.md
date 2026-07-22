@@ -46,6 +46,7 @@ Fichiers : `jenkins-infra-upgrader-serviceaccount.yaml`,
 `jenkins-infra-upgrader-monitoring-role.yaml`,
 `jenkins-infra-upgrader-kube-system-role.yaml`,
 `jenkins-infra-upgrader-cilium-release-role.yaml`,
+`jenkins-infra-upgrader-cilium-secrets-role.yaml`,
 `jenkins-infra-upgrader-clusterrole.yaml`.
 
 Ce ServiceAccount existe pour une raison précise : absorber les mises à jour
@@ -121,6 +122,33 @@ Helm vit dans `cilium-release`. Ce namespace est mono-usage (aucune ressource
 Cilium n'y est créée) : un accès `secrets` sans `resourceNames`
 (`jenkins-infra-upgrader-cilium-release-role.yaml`) y est donc sans risque,
 même logique que `nginx-gateway`/`loki-stack` ci-dessous.
+
+**Namespace `cilium-secrets` — créé par le chart lui-même.** Le chart Cilium
+crée ce namespace pour la synchro de secrets TLS (Ingress/Gateway API/Envoy
+SDS), fonctionnalité présente dans le chart mais non utilisée ici. Il ne
+contient que deux `Role`/`RoleBinding` gérés par la release (`cilium-tlsinterception-secrets`,
+`cilium-operator-tlsinterception-secrets`) — inventaire vérifié
+exhaustivement sur le cluster réel, pas deviné. Même traitement que les
+Role/RoleBinding de `kube-system` : accès nommé, jamais de `create`
+(`jenkins-infra-upgrader-cilium-secrets-role.yaml`).
+
+**Méthode d'audit à privilégier pour Cilium** : ne pas se fier uniquement à
+`helm template`/aux commentaires du chart pour lister les objets à couvrir —
+plusieurs objets (`cilium-envoy`, `cilium-envoy-config`, `cilium-config-agent`,
+les Role/RoleBinding de `cilium-secrets`) sont passés inaperçus lors de
+l'audit initial et n'ont été détectés qu'au premier upgrade réel en échec.
+Commande fiable pour lister exhaustivement ce qu'une release Helm possède
+réellement sur le cluster (à répéter à chaque montée de version majeure/mineure
+de Cilium, avant de faire confiance au chart) :
+
+```bash
+kubectl get <kind> --all-namespaces -o json | jq -r '.items[]
+  | select(.metadata.annotations."meta.helm.sh/release-name"=="cilium")
+  | "\(.metadata.namespace // "-") \(.metadata.name)"'
+```
+
+à exécuter pour chaque `<kind>` namespacé pertinent (daemonsets, deployments,
+configmaps, secrets, serviceaccounts, services, roles, rolebindings...).
 
 ### CRDs cluster-scoped couvertes (`customresourcedefinitions`)
 

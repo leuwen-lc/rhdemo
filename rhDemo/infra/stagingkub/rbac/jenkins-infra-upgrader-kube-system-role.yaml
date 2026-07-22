@@ -4,7 +4,8 @@
 # l'agent/operator, via SA propre — vérifié en inspectant le chart Cilium
 # 1.18.6 (aucun dossier crds/, aucune CRD dans `helm template --include-crds`).
 # jenkins-infra-upgrader n'a donc besoin QUE des objets que la release Helm
-# gère directement (DaemonSet, Deployment, ConfigMap, ServiceAccounts), et
+# gère directement (DaemonSet, Deployment, ConfigMap, Service, ServiceAccounts,
+# Role/RoleBinding), et
 # UNIQUEMENT ceux nommément listés ci-dessous — jamais un accès générique à
 # kube-system (voir jenkins-infra-upgrader-clusterrole.yaml pour le
 # ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` eux-mêmes).
@@ -39,6 +40,10 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     resourceNames: ["cilium", "cilium-operator", "cilium-envoy"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["cilium-envoy"]
     verbs: ["get", "list", "watch", "update", "patch"]
   # Compromis assumé : pas de `resourceNames` ici, contrairement à toutes les
   # autres règles de ce fichier. Les pods du DaemonSet Cilium ont un nom

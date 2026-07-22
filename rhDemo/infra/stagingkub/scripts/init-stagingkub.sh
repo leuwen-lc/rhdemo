@@ -551,6 +551,7 @@ KUBECONFIG_EOF
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-monitoring-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-kube-system-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-release-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-secrets-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-clusterrole.yaml"
     echo -e "${GREEN}✅ Ressources RBAC jenkins-infra-upgrader appliquées${NC}"
 

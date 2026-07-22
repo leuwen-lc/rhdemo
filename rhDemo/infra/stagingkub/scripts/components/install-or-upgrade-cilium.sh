@@ -28,7 +28,7 @@ set -e
 HELM_DRY_RUN="${HELM_DRY_RUN:-false}"
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
-CILIUM_VERSION="1.18.6"
+CILIUM_VERSION="1.19.5"
 
 # Namespace où vivent réellement les ressources Cilium (DaemonSet, Deployment,
 # ConfigMap, ServiceAccounts...) — inchangé, c'est toujours kube-system.

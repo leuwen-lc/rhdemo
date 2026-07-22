@@ -1,6 +1,5 @@
-# Configuration Loki moderne (chart grafana/loki)
-# Chart: grafana/loki 6.52.0 (Loki 3.6.4)
-# Version figée dans install-observability.sh
+# Configuration Loki moderne (chart grafana-community/loki)
+# Version figée dans install-or-upgrade-loki.sh
 
 ###########################################
 # Mode de déploiement
@@ -91,6 +90,20 @@ write:
 
 backend:
   replicas: 0
+
+###########################################
+# Sidecar (rules dynamiques via ConfigMaps/Secrets labellisés)
+###########################################
+# Le chart crée par défaut (sidecar.rules.enabled: true) un ClusterRole
+# "loki-clusterrole" en lecture cluster-wide sur configmaps/secrets pour ce
+# sidecar — non utilisé ici (ruler.replicas: 0, pas de règles d'alerting
+# Loki chargées dynamiquement). Le désactiver rend le ClusterRole vide
+# (rules: []) et évite le rejet RBAC "attempting to grant permissions not
+# currently held" par le ServiceAccount CI jenkins-infra-upgrader, qui ne
+# détient volontairement pas de lecture cluster-wide sur les secrets.
+sidecar:
+  rules:
+    enabled: false
 
 ###########################################
 # Monitoring

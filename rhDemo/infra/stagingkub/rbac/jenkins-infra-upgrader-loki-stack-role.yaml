@@ -26,6 +26,21 @@ rules:
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["httproutes", "httproutes/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Role/RoleBinding "grafana" (chart grafana/grafana, rbac.namespaced: true,
+  # cf. grafana-values.yaml) : objets déjà créés par install-observability.sh
+  # (contexte admin kind-rhdemo) — jenkins-infra-upgrader n'a besoin que de
+  # les patcher lors des upgrades en place, jamais de les créer. Les règles
+  # qu'il peut y poser (configmaps/secrets get/watch/list) sont déjà
+  # détenues ci-dessus dans ce même namespace, donc aucune escalade RBAC.
+  # Jamais "jenkins-infra-upgrader-loki-stack-role" lui-même dans les
+  # resourceNames : ce Role ne doit jamais pouvoir se modifier lui-même.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames: ["grafana"]
+    verbs: ["update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

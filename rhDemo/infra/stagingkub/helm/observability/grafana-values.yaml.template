@@ -66,6 +66,13 @@ datasources:
 # Dashboards
 ###########################################
 # Activer le sidecar pour charger les dashboards depuis ConfigMaps
+# searchNamespace restreint à loki-stack (seul namespace où
+# deploy-grafana-dashboard.sh dépose des ConfigMaps grafana_dashboard) et
+# rbac.namespaced: true : le chart rend alors un Role/RoleBinding namespaced
+# au lieu d'un ClusterRole cluster-wide sur configmaps/secrets, déjà couvert
+# par les droits existants de jenkins-infra-upgrader dans loki-stack — évite
+# l'échec RBAC "attempting to grant permissions not currently held" rencontré
+# sur Loki sans élargir la lecture secrets du CI à tout le cluster.
 sidecar:
   dashboards:
     enabled: true
@@ -73,9 +80,12 @@ sidecar:
     labelValue: "1"
     folder: /tmp/dashboards
     defaultFolderName: General
-    searchNamespace: ALL
+    searchNamespace: loki-stack
     provider:
       foldersFromFilesStructure: true
+
+rbac:
+  namespaced: true
 
 # dashboardProviders removed - the sidecar automatically creates its own provider
 # to avoid duplicate dashboard loading

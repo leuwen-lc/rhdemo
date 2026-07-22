@@ -207,6 +207,15 @@ tool:
 #      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
 #      déterminer/régénérer le scope exact requis.
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
+#
+# 9. smtp-infomaniak-credentials
+#    - Type: Username with password
+#    - ID: smtp-infomaniak-credentials
+#    - Username: lcpro@etik.com
+#    - Password: mot de passe du compte mail Infomaniak — géré et mis à jour manuellement par
+#      l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
+#    - Usage: RHDemo-CI — notification email de succès/échec (post { success/failure })
+#    - Serveur SMTP: mail.infomaniak.com:465 (SSL/TLS implicite), voir bloc "unclassified.mailer"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -220,7 +229,15 @@ unclassified:
         serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
         credentialsId: "jenkins-sonar-token"
 
-  
+  # Configuration SMTP (notifications email RHDemo-CI) — credential smtp-infomaniak-credentials
+  # géré manuellement dans Jenkins UI, voir section CREDENTIALS ci-dessus
+  mailer:
+    smtpHost: "mail.infomaniak.com"
+    smtpPort: "465"
+    useSsl: true
+    charset: "UTF-8"
+    authentication:
+      credentialsId: "smtp-infomaniak-credentials"
 
   # Configuration Location
   location:

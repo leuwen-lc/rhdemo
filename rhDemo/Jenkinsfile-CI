@@ -88,6 +88,10 @@ pipeline {
         // Noms des réseaux Docker
         NETWORK_EPHEMERE = 'rhdemo-ephemere-network'
         NETWORK_JENKINS = 'rhdemo-jenkins-network'
+
+        // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials)
+        NOTIFICATION_EMAIL = 'lcpro@etik.com'
     }
 
     parameters {
@@ -1902,12 +1906,27 @@ YMLEOF
                           propagate: false
                     echo "✅ Pipeline CD déclenché"
                 }
+                // Best-effort : une panne SMTP ne doit pas faire échouer un build par ailleurs réussi.
+                try {
+                    mail to: env.NOTIFICATION_EMAIL,
+                         subject: "✅ RHDemo-CI #${env.BUILD_NUMBER} : succès",
+                         body: "Le pipeline RHDemo-CI #${env.BUILD_NUMBER} a réussi.\n\nDétails : ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
             }
         }
         failure {
             script {
                 echo "❌ Build échoué !"
                 echo "Consultez les logs pour plus de détails."
+                try {
+                    mail to: env.NOTIFICATION_EMAIL,
+                         subject: "❌ RHDemo-CI #${env.BUILD_NUMBER} : échec",
+                         body: "Le pipeline RHDemo-CI #${env.BUILD_NUMBER} a échoué.\n\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
             }
         }
     }

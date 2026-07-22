@@ -1,0 +1,48 @@
+# Role pour jenkins-infra-upgrader dans le namespace cilium-release
+# (stockage de l'état de la release Helm "cilium" — secrets
+# `sh.helm.release.v1.cilium.v<N>`, dont le nom change à chaque révision).
+#
+# Pourquoi un namespace séparé de kube-system : `helm list`/`helm upgrade
+# --install` ont besoin de lister ces secrets par label, or RBAC Kubernetes ne
+# permet pas de restreindre `list`/`get` sur des `secrets` par `resourceNames`
+# quand le nom n'est pas fixe. Accorder cet accès directement dans kube-system
+# exposerait TOUS ses secrets (tokens bootstrap, certs kubeadm...), pas
+# seulement ceux de Cilium. La release Cilium utilise donc
+# `--set namespaceOverride=kube-system` : les ressources réelles (DaemonSet,
+# Deployment, ConfigMap, ServiceAccounts) continuent de vivre dans kube-system
+# sous les droits nommés de jenkins-infra-upgrader-kube-system-role.yaml,
+# tandis que ce namespace ne contient QUE les secrets de suivi Helm.
+#
+# Namespace dédié et à usage unique (contrairement à kube-system, partagé
+# avec des objets système sensibles) : un accès secrets sans `resourceNames`
+# y est donc sans risque, au même titre que nginx-gateway/loki-stack
+# (cf. jenkins-infra-upgrader-nginx-gateway-role.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-cilium-release-role
+  namespace: cilium-release
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-cilium-release-rolebinding
+  namespace: cilium-release
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-cilium-release-role
+  apiGroup: rbac.authorization.k8s.io

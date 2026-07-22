@@ -29,7 +29,21 @@ HELM_DRY_RUN="${HELM_DRY_RUN:-false}"
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
 CILIUM_VERSION="1.18.6"
 
+# Namespace où vivent réellement les ressources Cilium (DaemonSet, Deployment,
+# ConfigMap, ServiceAccounts...) — inchangé, c'est toujours kube-system.
 CILIUM_NAMESPACE="kube-system"
+
+# Namespace où Helm stocke l'état de la release (secrets sh.helm.release.v1.*,
+# noms auto-incrémentés à chaque révision). Distinct de kube-system car RBAC
+# Kubernetes ne permet pas de restreindre `list`/`get` sur secrets par
+# resourceNames pour un nom qui change à chaque révision — accorder cet accès
+# dans kube-system exposerait tous ses secrets (tokens bootstrap, certs
+# kubeadm...) à jenkins-infra-upgrader. `namespaceOverride` (supporté par le
+# chart Cilium) redirige les ressources réelles vers kube-system tout en
+# gardant le stockage Helm dans ce namespace dédié à usage unique — voir
+# jenkins-infra-upgrader-cilium-release-role.yaml.
+CILIUM_HELM_NAMESPACE="cilium-release"
+
 CILIUM_K8S_API_SERVER="rhdemo-control-plane"
 CILIUM_K8S_API_PORT="6443"
 
@@ -46,7 +60,7 @@ fi
 helm repo update cilium > /dev/null
 
 # ─── Contrainte de version : pas de saut de plus d'une version mineure ───
-CURRENT_VERSION=$(helm list -n "${CILIUM_NAMESPACE}" -f '^cilium$' -o json 2>/dev/null | grep -o '"app_version":"[^"]*"' | cut -d'"' -f4 || true)
+CURRENT_VERSION=$(helm list -n "${CILIUM_HELM_NAMESPACE}" -f '^cilium$' -o json 2>/dev/null | grep -o '"app_version":"[^"]*"' | cut -d'"' -f4 || true)
 
 if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "$CILIUM_VERSION" ]; then
     CURRENT_MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f1-2 | tr -d '.')
@@ -63,7 +77,9 @@ if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "$CILIUM_VERSION" ]; the
     else
         echo -e "${YELLOW}  - Exécution du preflight-check Cilium (${CURRENT_VERSION} → ${CILIUM_VERSION})...${NC}"
         helm upgrade cilium-preflight cilium/cilium --version "${CILIUM_VERSION}" \
-            --namespace "${CILIUM_NAMESPACE}" \
+            --namespace "${CILIUM_HELM_NAMESPACE}" \
+            --create-namespace \
+            --set namespaceOverride="${CILIUM_NAMESPACE}" \
             --set preflight.enabled=true \
             --set agent=false \
             --set operator.enabled=false \
@@ -71,10 +87,10 @@ if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "$CILIUM_VERSION" ]; the
 
         kubectl rollout status daemonset/cilium-pre-flight-check -n "${CILIUM_NAMESPACE}" --timeout=180s || {
             echo -e "${RED}❌ Preflight-check Cilium en échec — upgrade annulé${NC}"
-            helm delete cilium-preflight -n "${CILIUM_NAMESPACE}" 2>/dev/null || true
+            helm delete cilium-preflight -n "${CILIUM_HELM_NAMESPACE}" 2>/dev/null || true
             exit 1
         }
-        helm delete cilium-preflight -n "${CILIUM_NAMESPACE}"
+        helm delete cilium-preflight -n "${CILIUM_HELM_NAMESPACE}"
         echo -e "${GREEN}  ✓ Preflight-check Cilium OK${NC}"
     fi
 fi
@@ -87,7 +103,9 @@ else
 fi
 
 helm upgrade --install cilium cilium/cilium --version "${CILIUM_VERSION}" \
-    --namespace "${CILIUM_NAMESPACE}" \
+    --namespace "${CILIUM_HELM_NAMESPACE}" \
+    --create-namespace \
+    --set namespaceOverride="${CILIUM_NAMESPACE}" \
     --set kubeProxyReplacement=true \
     --set k8sServiceHost="${CILIUM_K8S_API_SERVER}" \
     --set k8sServicePort="${CILIUM_K8S_API_PORT}" \

@@ -63,6 +63,15 @@ rules:
   # aucune règle générique (`resourceNames` absent) sur kube-system : toute
   # nouvelle ressource nommée introduite par une future version de Cilium
   # nécessite un ajout explicite et revu ici, jamais un accès par défaut.
+  #
+  # Volontairement absent : tout droit sur `secrets` sans `resourceNames`.
+  # Helm a besoin de lister ses propres secrets de suivi de release
+  # (`sh.helm.release.v1.cilium.v<N>`, nom non fixe) — impossible à restreindre
+  # par `resourceNames`. Plutôt que d'élargir cette règle à tout kube-system,
+  # la release Cilium utilise `--set namespaceOverride=kube-system` avec le
+  # stockage Helm dans un namespace dédié `cilium-release` (voir
+  # jenkins-infra-upgrader-cilium-release-role.yaml et
+  # install-or-upgrade-cilium.sh).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

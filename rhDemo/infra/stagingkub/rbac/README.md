@@ -8,7 +8,7 @@ distinctes :
 | ServiceAccount | Utilisé par | Portée |
 |---|---|---|
 | `jenkins-deployer` | `Jenkinsfile-CD` (déploiement applicatif) | Namespace `rhdemo-stagingkub` + lecture/écriture ServiceMonitors dans `monitoring` + PersistentVolumes (cluster-scoped) |
-| `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `kube-system` (restreint à Cilium), + CRDs/ClusterRoles cluster-scoped nommés |
+| `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `kube-system` (restreint à Cilium), `cilium-release` (stockage Helm de la release Cilium), + CRDs/ClusterRoles cluster-scoped nommés |
 
 Les deux credentials Jenkins correspondants (`kubeconfig-stagingkub` et
 `kubeconfig-stagingkub-infra-upgrader`) sont générés par
@@ -45,6 +45,7 @@ Fichiers : `jenkins-infra-upgrader-serviceaccount.yaml`,
 `jenkins-infra-upgrader-loki-stack-role.yaml`,
 `jenkins-infra-upgrader-monitoring-role.yaml`,
 `jenkins-infra-upgrader-kube-system-role.yaml`,
+`jenkins-infra-upgrader-cilium-release-role.yaml`,
 `jenkins-infra-upgrader-clusterrole.yaml`.
 
 Ce ServiceAccount existe pour une raison précise : absorber les mises à jour
@@ -104,6 +105,22 @@ et vérifiée (`kubectl auth can-i get pods -n kube-system --as=...` → `yes`) 
 **tout** `kube-system` (kube-apiserver, etcd, coredns, kube-proxy...), pas
 seulement ceux de Cilium. Risque limité à une fuite de confidentialité en
 lecture seule, sans élévation de privilège ni action d'écriture possible.
+
+**Namespace dédié `cilium-release` — état Helm de la release Cilium.** Helm a
+besoin de lister ses propres secrets de suivi de release
+(`sh.helm.release.v1.cilium.v<N>`), dont le nom change à chaque révision —
+impossible à couvrir par `resourceNames`, contrairement à `cilium-ca`/
+`hubble-*-certs` (secrets nommés fixes gérés par le chart). Plutôt qu'élargir
+`jenkins-infra-upgrader-kube-system-role.yaml` à un accès secrets générique
+(exposerait tous les secrets de `kube-system`, y compris tokens bootstrap et
+certs kubeadm), la release Cilium est installée avec
+`--namespace cilium-release --set namespaceOverride=kube-system` : les
+ressources réelles (DaemonSet, ConfigMap, ServiceAccounts) continuent de
+vivre dans `kube-system` sous les droits nommés ci-dessus, seul le stockage
+Helm vit dans `cilium-release`. Ce namespace est mono-usage (aucune ressource
+Cilium n'y est créée) : un accès `secrets` sans `resourceNames`
+(`jenkins-infra-upgrader-cilium-release-role.yaml`) y est donc sans risque,
+même logique que `nginx-gateway`/`loki-stack` ci-dessous.
 
 ### CRDs cluster-scoped couvertes (`customresourcedefinitions`)
 

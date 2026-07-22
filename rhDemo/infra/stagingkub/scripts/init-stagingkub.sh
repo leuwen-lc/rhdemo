@@ -534,7 +534,11 @@ KUBECONFIG_EOF
     echo -e "${YELLOW}▶ Configuration RBAC pour jenkins-infra-upgrader...${NC}"
 
     # Namespaces nécessaires (monitoring déjà créé ci-dessus)
-    for ns in nginx-gateway loki-stack; do
+    # cilium-release : stockage dédié de l'état Helm de la release Cilium
+    # (secrets sh.helm.release.v1.*), séparé de kube-system — voir
+    # jenkins-infra-upgrader-cilium-release-role.yaml et
+    # install-or-upgrade-cilium.sh.
+    for ns in nginx-gateway loki-stack cilium-release; do
         if ! kubectl get namespace "$ns" > /dev/null 2>&1; then
             echo -e "${YELLOW}  - Création du namespace '$ns'...${NC}"
             kubectl create namespace "$ns"
@@ -546,6 +550,7 @@ KUBECONFIG_EOF
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-loki-stack-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-monitoring-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-kube-system-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-release-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-clusterrole.yaml"
     echo -e "${GREEN}✅ Ressources RBAC jenkins-infra-upgrader appliquées${NC}"
 
@@ -622,6 +627,12 @@ KUBECONFIG_EOF
         echo -e "${RED}    ✗ Mise à jour de la CRD httproutes.gateway.networking.k8s.io refusée${NC}"
     fi
 
+    if kubectl auth can-i list secrets -n cilium-release --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Gestion des secrets de release Helm Cilium (cilium-release)${NC}"
+    else
+        echo -e "${RED}    ✗ Gestion des secrets de release Helm Cilium (cilium-release) refusée${NC}"
+    fi
+
     # Vérification des refus attendus (garde-fous)
     if ! kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès à rhdemo-stagingkub (aucun composant géré n'y vit — sécurité OK)${NC}"
@@ -629,10 +640,14 @@ KUBECONFIG_EOF
         echo -e "${YELLOW}    ⚠ Accès à rhdemo-stagingkub détecté (inattendu)${NC}"
     fi
 
-    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
-        echo -e "${GREEN}    ✓ Pas d'accès générique à kube-system (seuls les objets Cilium nommés sont accessibles)${NC}"
+    # Note : get/list/watch sur pods et pods/log EST générique dans kube-system
+    # (compromis assumé, cf. jenkins-infra-upgrader-kube-system-role.yaml) —
+    # ce garde-fou porte donc sur les secrets, jamais accessibles sans
+    # resourceNames dans kube-system (cf. namespace cilium-release ci-dessus).
+    if ! kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès générique aux secrets de kube-system (nommés uniquement)${NC}"
     else
-        echo -e "${YELLOW}    ⚠ Accès générique à kube-system détecté (inattendu)${NC}"
+        echo -e "${YELLOW}    ⚠ Accès générique aux secrets de kube-system détecté (inattendu)${NC}"
     fi
 
     if ! kubectl auth can-i create customresourcedefinitions --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then

@@ -50,6 +50,10 @@ pipeline {
         COMPONENTS_DIR = 'rhDemo/infra/stagingkub/scripts/components'
         APP_URL = 'https://rhdemo-stagingkub.intra.leuwen-lc.fr'
         KEYCLOAK_URL = 'https://keycloak-stagingkub.intra.leuwen-lc.fr'
+        // NodePort HTTPS fixe du Gateway partagé (patché par init-stagingkub.sh /
+        // install-or-upgrade-ngf.sh — voir kind-config.yaml, hostPort 443 -> containerPort 32616)
+        HTTPS_NODEPORT = '32616'
+        KIND_NODE_CONTAINER = 'rhdemo-control-plane'
     }
 
     stages {
@@ -105,6 +109,17 @@ pipeline {
                     echo "▶ Connexion de Jenkins au réseau kind..."
                     env.JENKINS_CONTAINER = sh(script: 'hostname', returnStdout: true).trim()
                     lib.dockerNetworkConnect(env.JENKINS_CONTAINER, 'kind')
+
+                    // Le nom d'hôte public (APP_URL/KEYCLOAK_URL) ne se résout pas
+                    // correctement depuis le conteneur Jenkins (résout en 127.0.0.1,
+                    // sans rapport avec le nom réel) — vérifié en conditions réelles.
+                    // On résout donc explicitement vers l'IP du nœud KinD sur le
+                    // réseau Docker 'kind' pour le healthcheck (cf. waitForHealthcheck resolve).
+                    env.KIND_NODE_IP = sh(
+                        script: "docker inspect ${env.KIND_NODE_CONTAINER} --format '{{.NetworkSettings.Networks.kind.IPAddress}}'",
+                        returnStdout: true
+                    ).trim()
+                    echo "▶ IP du nœud KinD (réseau kind) : ${env.KIND_NODE_IP}"
                 }
 
                 withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
@@ -149,15 +164,20 @@ pipeline {
                     echo "▶ Vérification que rhdemo-app et keycloak restent joignables..."
                     echo "   (le Gateway partagé NGF est un point de passage commun à toute l'application)"
 
+                    def appHost = env.APP_URL.replaceFirst('^https://', '')
+                    def keycloakHost = env.KEYCLOAK_URL.replaceFirst('^https://', '')
+
                     lib.waitForHealthcheck([
-                        url: "${env.APP_URL}/actuator/health",
+                        url: "https://${appHost}:${env.HTTPS_NODEPORT}/actuator/health",
+                        resolve: "${appHost}:${env.HTTPS_NODEPORT}:${env.KIND_NODE_IP}",
                         name: 'RHDemo App (via Gateway partagé)',
                         timeout: 60,
                         insecure: true
                     ])
 
                     lib.waitForHealthcheck([
-                        url: "${env.KEYCLOAK_URL}/realms/master",
+                        url: "https://${keycloakHost}:${env.HTTPS_NODEPORT}/realms/master",
+                        resolve: "${keycloakHost}:${env.HTTPS_NODEPORT}:${env.KIND_NODE_IP}",
                         name: 'Keycloak (via Gateway partagé)',
                         timeout: 60,
                         insecure: true

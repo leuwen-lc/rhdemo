@@ -41,6 +41,11 @@ def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
  *   - initialWait: Temps d'attente initial avant de commencer les checks (défaut: 0)
  *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: [200])
  *   - insecure: Ignorer les erreurs SSL pour HTTPS (défaut: false)
+ *   - resolve: Optionnel, "host:port:ip" (curl --resolve) — nécessaire quand le nom
+ *     d'hôte public ne se résout pas correctement depuis le conteneur Jenkins
+ *     (ex: résolution en 127.0.0.1 depuis un agent Docker, sans rapport avec le
+ *     nom d'hôte réel). Permet de forcer la connexion vers l'IP du nœud KinD
+ *     tout en gardant le Host/SNI corrects pour le Gateway.
  */
 def waitForHealthcheck(Map config) {
     def timeout = config.timeout ?: 60
@@ -48,6 +53,7 @@ def waitForHealthcheck(Map config) {
     def initialWait = config.initialWait ?: 0
     def acceptedCodes = config.acceptedCodes ?: [200]
     def insecure = config.insecure ? '-k' : ''
+    def resolve = config.resolve ? "--resolve ${config.resolve}" : ''
     def codesPattern = acceptedCodes.join('|')
 
     if (initialWait > 0) {
@@ -61,7 +67,7 @@ def waitForHealthcheck(Map config) {
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
             # Test depuis Jenkins (connecté au réseau Docker si nécessaire)
-            HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
+            HTTP_CODE=\$(curl ${insecure} ${resolve} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"

@@ -1,0 +1,70 @@
+# Role pour jenkins-infra-upgrader dans le namespace kube-system (Cilium).
+#
+# Cilium bootstrappe lui-même ses propres CRDs (cilium.io) au démarrage de
+# l'agent/operator, via SA propre — vérifié en inspectant le chart Cilium
+# 1.18.6 (aucun dossier crds/, aucune CRD dans `helm template --include-crds`).
+# jenkins-infra-upgrader n'a donc besoin QUE des objets que la release Helm
+# gère directement (DaemonSet, Deployment, ConfigMap, ServiceAccounts), et
+# UNIQUEMENT ceux nommément listés ci-dessous — jamais un accès générique à
+# kube-system (voir jenkins-infra-upgrader-clusterrole.yaml pour le
+# ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` eux-mêmes).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-kube-system-role
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    resourceNames: ["cilium"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    resourceNames: ["cilium-operator"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["cilium-config"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["cilium-ca", "hubble-server-certs", "hubble-relay-client-certs"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    resourceNames: ["cilium", "cilium-operator", "cilium-envoy"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Note volontaire : aucun droit sur customresourcedefinitions.cilium.io
+  # (Cilium les gère lui-même, cf. commentaire ci-dessus) ni sur les
+  # ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` (portés par
+  # jenkins-infra-upgrader-clusterrole.yaml, cluster-scoped par nature).
+  #
+  # Aucune règle générique (`resourceNames` absent) sur kube-system : toute
+  # nouvelle ressource nommée introduite par une future version de Cilium
+  # nécessite un ajout explicite et revu ici, jamais un accès par défaut.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-kube-system-rolebinding
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-kube-system-role
+  apiGroup: rbac.authorization.k8s.io

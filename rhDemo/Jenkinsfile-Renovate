@@ -247,30 +247,80 @@ RENOVATE_SCAN_EOF
                             return
                         }
 
-                        // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
-                        // bloc : c'est ici que tourne du code non revu (le contenu de la mise à jour
-                        // de dépendance proposée par la PR, via les plugins Maven exécutés par
-                        // "mvnw verify"/OWASP). Si ce token était en variable d'environnement à ce
-                        // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
-                        // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
-                        // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
-                        // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
-                        // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
-                        // sont exposés ici.
-                        def ciStatus = withCredentials([
-                            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
-                            usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
-                        ]) {
-                            sh(
-                                script: '''
-                                    cd rhDemo
-                                    set -e
-                                    ./mvnw clean compile -DskipTests
-                                    ./mvnw verify
-                                    ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
-                                ''',
-                                returnStatus: true
-                            )
+                        // Branchement de la validation selon les fichiers modifiés (Option 3,
+                        // cf. docs/STAGINGKUB_REBUILD_PIPELINE.md étape 4) : une PR Renovate qui ne
+                        // touche qu'un script scripts/components/*.sh ou kind-config.yaml n'a rien à
+                        // gagner d'un `mvnw verify`/OWASP (aucun rapport avec l'infra stagingkub) —
+                        // elle reçoit une validation Kubernetes dry-run à la place. Un seul listing
+                        // Forgejo, un seul job qui merge (pas de second job séparé, cf. étude).
+                        def changedFiles = sh(
+                            script: 'git diff --name-only origin/' + BASE_BRANCH + '...HEAD',
+                            returnStdout: true
+                        ).trim()
+                        def isInfraComponentPr = changedFiles.split('\n').any {
+                            it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/ ||
+                            it == 'rhDemo/infra/stagingkub/kind-config.yaml'
+                        }
+
+                        def ciStatus
+                        if (isInfraComponentPr) {
+                            echo "PR #${prNumber} : composant d'infrastructure stagingkub détecté — validation Kubernetes dry-run"
+
+                            def componentFile = changedFiles.split('\n').find {
+                                it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/
+                            }
+                            env.RENOVATE_TARGET_COMPONENT = componentFile ?
+                                (componentFile =~ /install-or-upgrade-(.+)\.sh/)[0][1] : ''
+
+                            // Le même kubeconfig RBAC que l'étape post-merge est utilisé ici : un
+                            // --dry-run=server exige les mêmes autorisations qu'une exécution réelle
+                            // (Kubernetes vérifie l'autorisation avant d'évaluer le drapeau dry-run) —
+                            // la garantie de sécurité vient de l'absence de persistance, pas d'un
+                            // credential moins privilégié. FORGEJO_TOKEN reste volontairement absent
+                            // de ce bloc : le script exécuté vient d'une PR non revue (même
+                            // raisonnement supply-chain que pour le bloc Maven ci-dessous).
+                            ciStatus = withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
+                                sh(
+                                    script: '''
+                                        set -e
+                                        mkdir -p $HOME/.kube
+                                        cp "$KUBECONFIG_FILE" $HOME/.kube/config
+                                        chmod 600 $HOME/.kube/config
+                                        kubectl cluster-info > /dev/null
+
+                                        SCRIPT="''' + componentFile + '''"
+                                        chmod +x "$SCRIPT"
+                                        HELM_DRY_RUN=true "$SCRIPT"
+                                    ''',
+                                    returnStatus: true
+                                )
+                            }
+                        } else {
+                            // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
+                            // bloc : c'est ici que tourne du code non revu (le contenu de la mise à jour
+                            // de dépendance proposée par la PR, via les plugins Maven exécutés par
+                            // "mvnw verify"/OWASP). Si ce token était en variable d'environnement à ce
+                            // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
+                            // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
+                            // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
+                            // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
+                            // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
+                            // sont exposés ici.
+                            ciStatus = withCredentials([
+                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                                usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                            ]) {
+                                sh(
+                                    script: '''
+                                        cd rhDemo
+                                        set -e
+                                        ./mvnw clean compile -DskipTests
+                                        ./mvnw verify
+                                        ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                    ''',
+                                    returnStatus: true
+                                )
+                            }
                         }
 
                         withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
@@ -306,6 +356,25 @@ RENOVATE_SCAN_EOF
                                     sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                         "CI Jenkins validée — PR mergée automatiquement. Build : ${env.BUILD_URL}")
+
+                                    // Merge réussi d'une PR d'infra : déclenche l'application réelle sur
+                                    // stagingkub (post-merge, jamais avant — cf. commentaire dry-run
+                                    // ci-dessus). N'échoue pas la boucle Renovate si ce déclenchement rate :
+                                    // la PR est déjà mergée, un échec de déploiement est de la responsabilité
+                                    // du job RHDemo-Stagingkub-Upgrade-Deploy (qui fait son propre rollback
+                                    // --atomic), pas de celle de Jenkinsfile-Renovate.
+                                    if (isInfraComponentPr && env.RENOVATE_TARGET_COMPONENT) {
+                                        try {
+                                            build(
+                                                job: 'RHDemo-Stagingkub-Upgrade-Deploy',
+                                                parameters: [string(name: 'COMPONENT', value: env.RENOVATE_TARGET_COMPONENT)],
+                                                wait: false
+                                            )
+                                            echo "▶ RHDemo-Stagingkub-Upgrade-Deploy déclenché pour le composant '${env.RENOVATE_TARGET_COMPONENT}'"
+                                        } catch (Exception e) {
+                                            echo "WARN: déclenchement de RHDemo-Stagingkub-Upgrade-Deploy échoué : ${e.message}"
+                                        }
+                                    }
                                 }
                             } else {
                                 echo "CI KO pour PR #${prNumber} — PR conservée ouverte"
@@ -315,8 +384,10 @@ RENOVATE_SCAN_EOF
                             }
                         }
 
-                        junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
-                        junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
+                        if (!isInfraComponentPr) {
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
+                            junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
+                        }
                     }
 
                     if (failures) {

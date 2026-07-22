@@ -480,3 +480,69 @@ jobs:
         }
       }
 
+  # ─────────────────────────────────────────────────────────────────
+  # PIPELINE STAGINGKUB UPGRADE DEPLOY - Mise à jour en place de l'infra
+  # (Option 3, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md)
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-Stagingkub-Upgrade-Deploy') {
+        displayName('RHDemo - Stagingkub Upgrade Deploy')
+        description('''Application réelle (post-merge) d\'une mise à jour en place d\'un
+        composant d\'infrastructure stagingkub : Cilium, NGINX Gateway Fabric,
+        kube-prometheus-stack, Loki, Promtail ou Grafana.
+
+        Déclenché uniquement après un merge réussi d\'une PR Renovate d\'infra par
+        RHDemo-Renovate (jamais avant — la validation pré-merge se fait en dry-run
+        dans RHDemo-Renovate, sans muter le cluster).
+
+        ServiceAccount dédié jenkins-infra-upgrader (credential
+        kubeconfig-stagingkub-infra-upgrader), distinct de jenkins-deployer/RHDemo-CD.
+        Rollback automatique porté par --atomic dans chaque script composant.
+
+        📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md''')
+
+        parameters {
+          string {
+            name('COMPONENT')
+            defaultValue('')
+            description('Composant à mettre à jour : cilium, ngf, kube-prometheus-stack, loki, promtail ou grafana. Si vide, déduit du dernier commit.')
+            trim(true)
+          }
+        }
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
+                }
+                branches('*/evolutions-post-1.1.9')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-Stagingkub-Upgrade-Deploy')
+            lightweight(true)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('30')
+                daysToKeepStr('90')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+      }
+

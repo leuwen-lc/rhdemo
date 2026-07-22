@@ -8,6 +8,7 @@
 - [Installation initiale](#installation-initiale)
 - [Déploiement](#déploiement)
 - [Configuration](#configuration)
+- [Mise à jour en place de l'infrastructure](#-mise-à-jour-en-place-de-linfrastructure)
 - [Persistance des données](#-persistance-des-données)
 - [Opérations courantes](#opérations-courantes)
 - [Troubleshooting](#troubleshooting)
@@ -169,6 +170,7 @@ sudo sysctl --system
 - **GatewayClass** : `nginx`
 - **shared-gateway** : Gateway partagé dans `nginx-gateway` (point d'entrée unique)
 - **shared-tls-cert** : Certificat TLS auto-signé dans `nginx-gateway`
+- **RBAC Jenkins** : deux ServiceAccounts distincts — `jenkins-deployer` (déploiement applicatif, `RHDemo-CD`) et `jenkins-infra-upgrader` (mise à jour en place de Cilium/NGF/observabilité, `RHDemo-Stagingkub-Upgrade-Deploy`), chacun avec son propre kubeconfig généré dans `jenkins-kubeconfig/` — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) et `rbac/README.md`
 
 **Application (par Helm chart) :**
 
@@ -217,7 +219,7 @@ Ce script :
 - ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)
-- ✅ Configure le RBAC pour Jenkins
+- ✅ Configure le RBAC pour Jenkins : `jenkins-deployer` (déploiement applicatif) **et** `jenkins-infra-upgrader` (mise à jour en place de l'infra, ServiceAccount dédié) — génère les deux kubeconfigs correspondants dans `jenkins-kubeconfig/`
 - ✅ Génère les certificats SSL
 - ✅ Ajoute les entrées DNS à `/etc/hosts`
 
@@ -307,8 +309,12 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `helm/rhdemo/Chart.yaml` | Métadonnées du chart Helm |
 | `helm/rhdemo/values.yaml` | Configuration par défaut |
 | `helm/rhdemo/templates/` | Templates Kubernetes |
-| `scripts/init-stagingkub.sh` | Script d'initialisation |
-| `rbac/` | Configuration RBAC Jenkins |
+| `helm/observability/*-values.yaml` | Values Helm pour kube-prometheus-stack, Loki, Promtail, Grafana |
+| `scripts/init-stagingkub.sh` | Script d'initialisation (reconstruction complète) |
+| `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
+| `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Promtail, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
+| `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) |
+| `rbac/` | Configuration RBAC Jenkins — `jenkins-deployer` et `jenkins-infra-upgrader`, voir `rbac/README.md` |
 
 ### Configuration Gateway API (values.yaml)
 
@@ -367,6 +373,33 @@ kubectl create secret generic rhdemo-app-secrets \
 # Redémarrer le pod pour charger les nouveaux secrets
 kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 ```
+
+---
+
+## 🔄 Mise à jour en place de l'infrastructure
+
+Absorber les mises à jour Renovate sur Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Promtail et Grafana **sans reconstruire le cluster** (pas de `kind delete`/`kind create`) : chaque composant est mis à jour en place via `helm upgrade`, exactement comme l'application elle-même (`Jenkinsfile-CD`).
+
+### Principe
+
+- `scripts/components/install-or-upgrade-<composant>.sh` : un script idempotent par composant (`helm upgrade --install --atomic`), appelé à la fois par `init-stagingkub.sh`/`install-observability.sh` (reconstruction complète) et par le pipeline Jenkins `RHDemo-Stagingkub-Upgrade-Deploy` (mise à jour en place) — une seule logique, jamais de divergence entre les deux chemins.
+- Les versions sont suivies par Renovate (`renovate.json`, balisage `# renovate: datasource=... depName=...` dans chaque script). Une PR Renovate sur un de ces fichiers est validée par `RHDemo-Renovate` via un `helm upgrade --dry-run=server` (aucune mutation du cluster), puis, une fois mergée, appliquée réellement par `RHDemo-Stagingkub-Upgrade-Deploy`.
+- RBAC : ServiceAccount **dédié** `jenkins-infra-upgrader` (distinct de `jenkins-deployer`), scopé par `resourceNames` sur `nginx-gateway`, `loki-stack`, `monitoring` et un sous-ensemble nommé de `kube-system` (Cilium) — jamais cluster-admin, jamais `docker.sock`/CLI `kind`.
+- **Seule la version de Kubernetes elle-même (`kindest/node`) reste hors périmètre** de la mise à jour en place — `kind` ne supporte pas le remplacement d'image de nœud en place, ce cas continue de passer par une reconstruction complète (`kind delete` + `init-stagingkub.sh` + `install-observability.sh`).
+
+### Exécuter une mise à jour manuellement (sans passer par Jenkins)
+
+```bash
+cd rhDemo/infra/stagingkub/scripts
+./components/install-or-upgrade-grafana.sh      # exemple : upgrade Grafana seul
+
+# Valider sans muter le cluster (même mécanisme que la validation pré-merge Jenkins)
+HELM_DRY_RUN=true ./components/install-or-upgrade-cilium.sh
+```
+
+### Documentation complète
+
+Étude détaillée (RBAC nommé par composant, articulation avec `Jenkinsfile-Renovate`, cas particuliers Cilium/CRDs Gateway API/kube-prometheus-stack) : [`docs/STAGINGKUB_REBUILD_PIPELINE.md`](../../docs/STAGINGKUB_REBUILD_PIPELINE.md).
 
 ---
 
@@ -645,6 +678,7 @@ kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 - [ ] shared-gateway créé dans `nginx-gateway` (par init-stagingkub.sh)
 - [ ] NodePort 32616 configuré sur `shared-gateway-nginx`
 - [ ] Certificat TLS `shared-tls-cert` créé
+- [ ] RBAC `jenkins-deployer` **et** `jenkins-infra-upgrader` appliqué, deux kubeconfigs générés dans `jenkins-kubeconfig/`
 - [ ] Secrets créés dans le namespace `rhdemo-stagingkub`
 - [ ] `/etc/hosts` mis à jour
 - [ ] Image Docker construite et poussée vers le registry

@@ -1,0 +1,45 @@
+# Role pour jenkins-infra-upgrader dans le namespace loki-stack
+# (releases Helm "loki", "promtail", "grafana"). Ressources namespaced
+# classiques ; Promtail n'a par ailleurs qu'un ClusterRole en LECTURE
+# SEULE (cf. jenkins-infra-upgrader-clusterrole.yaml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-loki-stack-role
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "serviceaccounts", "persistentvolumeclaims", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale", "statefulsets", "statefulsets/scale", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes", "httproutes/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-loki-stack-rolebinding
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-loki-stack-role
+  apiGroup: rbac.authorization.k8s.io

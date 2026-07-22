@@ -172,56 +172,13 @@ if ! kind get clusters | grep -q "^rhdemo$"; then
     echo -e "${GREEN}✅ Registry connecté avec alias 'kind-registry'${NC}"
 
     # ═══════════════════════════════════════════════════════════════
-    # Installation de Cilium 1.18 (CNI) via Helm
+    # Installation de Cilium (CNI) via le script composant partagé
     # ═══════════════════════════════════════════════════════════════
     # IMPORTANT: Cilium doit être installé AVANT d'attendre que le nœud soit prêt
     # car sans CNI, le nœud reste en état NotReady
-    echo -e "${YELLOW}▶ Installation de Cilium 1.18 (CNI) via Helm...${NC}"
-
-    # Ajouter le repo Helm Cilium si nécessaire
-    if ! helm repo list | grep -q "^cilium"; then
-        echo -e "${YELLOW}  - Ajout du repo Helm Cilium...${NC}"
-        helm repo add cilium https://helm.cilium.io/
-    fi
-    helm repo update cilium > /dev/null
-
-    # Récupérer l'API server endpoint du cluster KinD
-    CILIUM_K8S_API_SERVER="rhdemo-control-plane"
-    CILIUM_K8S_API_PORT="6443"
-
-    # Installer Cilium via Helm
-    # kubeProxyReplacement=true car kube-proxy est désactivé (kubeProxyMode: none)
-    echo -e "${YELLOW}  - Installation de Cilium 1.18.6 dans le cluster...${NC}"
-    helm install cilium cilium/cilium --version 1.18.6 \
-        --namespace kube-system \
-        --set kubeProxyReplacement=true \
-        --set k8sServiceHost=${CILIUM_K8S_API_SERVER} \
-        --set k8sServicePort=${CILIUM_K8S_API_PORT} \
-        --set hubble.enabled=false \
-        --set ipam.mode=kubernetes
-
-    # Attendre que les pods Cilium soient créés
-    echo -e "${YELLOW}  - Attente de la création des pods Cilium...${NC}"
-    for i in {1..60}; do
-        if kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | grep -q .; then
-            break
-        fi
-        echo -n "."
-        sleep 2
-    done
-    echo ""
-
-    # Attendre que Cilium soit prêt
-    echo -e "${YELLOW}  - Attente que Cilium soit opérationnel (jusqu'à 5 minutes)...${NC}"
-    kubectl wait --namespace kube-system \
-        --for=condition=ready pod \
-        --selector=k8s-app=cilium \
-        --timeout=300s
-
-    echo -e "${GREEN}✅ Cilium 1.18.6 installé et opérationnel${NC}"
+    "${SCRIPT_DIR}/components/install-or-upgrade-cilium.sh"
 
     CLUSTER_CREATED=true
-    CILIUM_INSTALLED=true
 else
     echo -e "${GREEN}✅ Cluster KinD 'rhdemo' trouvé${NC}"
 
@@ -238,19 +195,9 @@ else
         echo -e "${GREEN}✅ Alias 'kind-registry' configuré${NC}"
     fi
 
-    # Vérifier que Cilium est installé
-    echo -e "${YELLOW}▶ Vérification de Cilium...${NC}"
-    if kubectl get daemonset -n kube-system cilium &> /dev/null; then
-        echo -e "${GREEN}✅ Cilium déjà installé${NC}"
-        CILIUM_INSTALLED=false
-    else
-        echo -e "${YELLOW}⚠️  Cilium n'est pas installé dans le cluster existant${NC}"
-        echo -e "${YELLOW}   Le cluster a peut-être été créé avec l'ancienne configuration (kindnet)${NC}"
-        echo -e "${YELLOW}   Pour migrer vers Cilium, supprimez et recréez le cluster :${NC}"
-        echo -e "${YELLOW}   kind delete cluster --name rhdemo${NC}"
-        echo -e "${YELLOW}   ./init-stagingkub.sh${NC}"
-        CILIUM_INSTALLED=false
-    fi
+    # Cilium : même script composant, en upgrade cette fois (idempotent,
+    # convergence vers la version pinnée même si le cluster existait déjà)
+    "${SCRIPT_DIR}/components/install-or-upgrade-cilium.sh"
 
     CLUSTER_CREATED=false
 fi
@@ -311,7 +258,7 @@ EOF
 echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 
 # ═══════════════════════════════════════════════════════════════
-# Installation de NGINX Gateway Fabric 2.6.0 (remplace nginx-ingress)
+# Installation de NGINX Gateway Fabric via le script composant partagé
 # ═══════════════════════════════════════════════════════════════
 # NGINX Gateway Fabric implémente Gateway API (gateway.networking.k8s.io/v1)
 # Les headers X-Forwarded-* sont configurés automatiquement par NGF
@@ -319,83 +266,9 @@ echo -e "${GREEN}✅ ConfigMap local-registry-hosting créée${NC}"
 # Documentation: https://docs.nginx.com/nginx-gateway-fabric/
 # ═══════════════════════════════════════════════════════════════
 
-NGF_VERSION="2.6.0"
-# Digest vérifié et scanné (Trivy CI) — à mettre à jour lors de chaque montée de version
-# 2.6.0 : correctif CVE-2026-31789 (libcrypto3/libssl3 3.5.6-r0 Alpine 3.22)
-NGF_IMAGE_DIGEST="sha256:9f209a203cd0ed7af53b2b3f03ae8c115a10924456c725e9a38ca4fcf665af44"
 NGF_NAMESPACE="nginx-gateway"
 
-echo -e "${YELLOW}▶ Installation de NGINX Gateway Fabric ${NGF_VERSION}...${NC}"
-
-# Vérifier si NGF est déjà installé
-if kubectl get namespace ${NGF_NAMESPACE} &> /dev/null; then
-    echo -e "${GREEN}✅ NGINX Gateway Fabric déjà installé${NC}"
-    NGF_INSTALLED=false
-else
-    NGF_INSTALLED=true
-
-    # 1. Installer les CRDs Gateway API (standard)
-    echo -e "${YELLOW}  - Installation des CRDs Gateway API...${NC}"
-    kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v${NGF_VERSION}" | kubectl apply -f -
-    echo -e "${GREEN}    ✓ CRDs Gateway API installés${NC}"
-
-    # 2. Ajouter le repo Helm NGINX si nécessaire
-    if ! helm repo list 2>/dev/null | grep -q "^oci://ghcr.io/nginx"; then
-        echo -e "${YELLOW}  - Configuration du registry Helm OCI...${NC}"
-    fi
-
-    # 3. Installer NGINX Gateway Fabric via Helm OCI
-    echo -e "${YELLOW}  - Installation de NGINX Gateway Fabric via Helm...${NC}"
-    helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
-        --version ${NGF_VERSION} \
-        --create-namespace \
-        --namespace ${NGF_NAMESPACE} \
-        --set nginx.service.type=NodePort \
-        --set nginx.service.externalTrafficPolicy=Local \
-        --set 'nginx.service.ports[0].port=80' \
-        --set 'nginx.service.ports[0].nodePort=31792' \
-        --set 'nginx.service.ports[1].port=443' \
-        --set 'nginx.service.ports[1].nodePort=32616'
-
-    echo -e "${GREEN}    ✓ Helm release 'ngf' créée${NC}"
-fi
-
-# Attendre que NGINX Gateway Fabric soit prêt
-echo -e "${YELLOW}  - Attente du démarrage de NGINX Gateway Fabric (jusqu'à 3 minutes)...${NC}"
-
-# Attendre d'abord que le pod existe
-echo -n "    Attente de la création du pod"
-POD_FOUND=false
-for i in {1..120}; do
-    if kubectl get pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ${NGF_NAMESPACE} --no-headers 2>/dev/null | grep -q .; then
-        POD_FOUND=true
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
-echo ""
-
-if [ "$POD_FOUND" = false ]; then
-    echo -e "${RED}❌ Le pod NGINX Gateway Fabric n'a pas été créé${NC}"
-    kubectl get pods -n ${NGF_NAMESPACE}
-    exit 1
-fi
-
-# Attendre que le pod soit ready
-echo "    Attente que le pod soit prêt..."
-if kubectl wait --namespace ${NGF_NAMESPACE} \
-    --for=condition=ready pod \
-    --selector=app.kubernetes.io/name=nginx-gateway-fabric \
-    --timeout=120s > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ NGINX Gateway Fabric ${NGF_VERSION} installé et opérationnel${NC}"
-else
-    echo -e "${RED}❌ Timeout lors de l'attente de NGINX Gateway Fabric${NC}"
-    echo -e "${YELLOW}Vérification de l'état des pods...${NC}"
-    kubectl get pods -n ${NGF_NAMESPACE}
-    kubectl describe pod -l app.kubernetes.io/name=nginx-gateway-fabric -n ${NGF_NAMESPACE} | tail -50
-    exit 1
-fi
+"${SCRIPT_DIR}/components/install-or-upgrade-ngf.sh"
 
 # Vérifier que le GatewayClass 'nginx' est créé
 echo -e "${YELLOW}  - Vérification du GatewayClass...${NC}"
@@ -652,6 +525,127 @@ KUBECONFIG_EOF
     else
         echo -e "${YELLOW}    ⚠ Accès à kube-system détecté${NC}"
     fi
+
+    # ═══════════════════════════════════════════════════════════════
+    # CONFIGURATION RBAC POUR JENKINS-INFRA-UPGRADER (mise à jour en place
+    # des composants d'infra — Option 3, ServiceAccount dédié et distinct
+    # de jenkins-deployer, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md étape 3)
+    # ═══════════════════════════════════════════════════════════════
+    echo -e "${YELLOW}▶ Configuration RBAC pour jenkins-infra-upgrader...${NC}"
+
+    # Namespaces nécessaires (monitoring déjà créé ci-dessus)
+    for ns in nginx-gateway loki-stack; do
+        if ! kubectl get namespace "$ns" > /dev/null 2>&1; then
+            echo -e "${YELLOW}  - Création du namespace '$ns'...${NC}"
+            kubectl create namespace "$ns"
+        fi
+    done
+
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-serviceaccount.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-nginx-gateway-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-loki-stack-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-monitoring-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-kube-system-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-clusterrole.yaml"
+    echo -e "${GREEN}✅ Ressources RBAC jenkins-infra-upgrader appliquées${NC}"
+
+    echo -e "${YELLOW}  - Attente du token du ServiceAccount jenkins-infra-upgrader...${NC}"
+    for i in {1..30}; do
+        INFRA_SA_TOKEN=$(kubectl get secret jenkins-infra-upgrader-token -n rhdemo-stagingkub -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
+        if [ -n "$INFRA_SA_TOKEN" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -z "$INFRA_SA_TOKEN" ]; then
+        echo -e "${RED}❌ Impossible de récupérer le token du ServiceAccount jenkins-infra-upgrader après 30 secondes${NC}"
+        exit 1
+    fi
+
+    INFRA_CA_CERT=$(kubectl get secret jenkins-infra-upgrader-token -n rhdemo-stagingkub -o jsonpath='{.data.ca\.crt}')
+
+    INFRA_JENKINS_KUBECONFIG="$JENKINS_KUBECONFIG_DIR/kubeconfig-jenkins-infra-upgrader-rbac.yaml"
+    cat > "$INFRA_JENKINS_KUBECONFIG" <<KUBECONFIG_EOF
+# Kubeconfig RBAC pour jenkins-infra-upgrader (mise à jour en place des
+# composants d'infra — distinct de kubeconfig-jenkins-rbac.yaml/jenkins-deployer)
+# Généré automatiquement par init-stagingkub.sh
+#
+# IMPORTANT: Ce fichier doit être ajouté comme credential Jenkins
+# de type "Secret file" avec l'ID: kubeconfig-stagingkub-infra-upgrader
+#
+apiVersion: v1
+kind: Config
+preferences: {}
+
+clusters:
+  - name: kind-rhdemo
+    cluster:
+      certificate-authority-data: $INFRA_CA_CERT
+      server: $API_SERVER
+
+contexts:
+  - name: kind-rhdemo
+    context:
+      cluster: kind-rhdemo
+      namespace: rhdemo-stagingkub
+      user: jenkins-infra-upgrader
+
+current-context: kind-rhdemo
+
+users:
+  - name: jenkins-infra-upgrader
+    user:
+      token: $INFRA_SA_TOKEN
+KUBECONFIG_EOF
+
+    chmod 600 "$INFRA_JENKINS_KUBECONFIG"
+    echo -e "${GREEN}✅ Kubeconfig RBAC jenkins-infra-upgrader généré : $INFRA_JENKINS_KUBECONFIG${NC}"
+
+    # Vérification des permissions clés (accordées)
+    echo -e "${YELLOW}  - Vérification des permissions RBAC jenkins-infra-upgrader...${NC}"
+    if kubectl auth can-i update daemonsets/cilium -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Mise à jour du DaemonSet cilium (kube-system, nommé)${NC}"
+    else
+        echo -e "${RED}    ✗ Mise à jour du DaemonSet cilium refusée${NC}"
+    fi
+
+    if kubectl auth can-i create deployments -n nginx-gateway --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Gestion des Deployments (nginx-gateway)${NC}"
+    else
+        echo -e "${RED}    ✗ Gestion des Deployments (nginx-gateway) refusée${NC}"
+    fi
+
+    if kubectl auth can-i update customresourcedefinitions/httproutes.gateway.networking.k8s.io --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Mise à jour de la CRD httproutes.gateway.networking.k8s.io (nommée)${NC}"
+    else
+        echo -e "${RED}    ✗ Mise à jour de la CRD httproutes.gateway.networking.k8s.io refusée${NC}"
+    fi
+
+    # Vérification des refus attendus (garde-fous)
+    if ! kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès à rhdemo-stagingkub (aucun composant géré n'y vit — sécurité OK)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Accès à rhdemo-stagingkub détecté (inattendu)${NC}"
+    fi
+
+    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès générique à kube-system (seuls les objets Cilium nommés sont accessibles)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Accès générique à kube-system détecté (inattendu)${NC}"
+    fi
+
+    if ! kubectl auth can-i create customresourcedefinitions --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas de création libre de CRD (sécurité OK)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Création libre de CRD détectée (inattendu)${NC}"
+    fi
+
+    if ! kubectl auth can-i update clusterroles/jenkins-infra-upgrader-cluster-role --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'auto-modification de son propre ClusterRole (sécurité OK)${NC}"
+    else
+        echo -e "${RED}    ✗ Auto-modification de son propre ClusterRole possible — À CORRIGER${NC}"
+    fi
 else
     echo -e "${YELLOW}⚠️  Dossier RBAC non trouvé : $RBAC_DIR${NC}"
     echo -e "${YELLOW}   Les ressources RBAC ne seront pas créées${NC}"
@@ -761,13 +755,15 @@ echo -e "  • Voir les images : ${BLUE}curl http://localhost:5000/v2/_catalog${
 echo -e "  • Voir les tags : ${BLUE}curl http://localhost:5000/v2/rhdemo-api/tags/list${NC}"
 echo ""
 echo -e "${YELLOW}🔐 Configuration Jenkins (RBAC) :${NC}"
-echo -e "  Le kubeconfig RBAC a été généré avec des permissions limitées."
+echo -e "  Deux kubeconfigs RBAC ont été générés, avec des permissions limitées et distinctes."
 echo -e "  Pour configurer Jenkins :"
 echo -e ""
 echo -e "  1. ${BLUE}Accédez à Jenkins > Manage Jenkins > Credentials${NC}"
 echo -e "  2. ${BLUE}Ajoutez un credential de type 'Secret file'${NC}"
-echo -e "  3. ${BLUE}ID: kubeconfig-stagingkub${NC}"
-echo -e "  4. ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml${NC}"
+echo -e "  3. ${BLUE}ID: kubeconfig-stagingkub${NC} (déploiement applicatif, RHDemo-CD)"
+echo -e "     ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml${NC}"
+echo -e "  4. ${BLUE}ID: kubeconfig-stagingkub-infra-upgrader${NC} (mise à jour en place de l'infra, RHDemo-Stagingkub-Upgrade-Deploy)"
+echo -e "     ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-infra-upgrader-rbac.yaml${NC}"
 echo ""
 echo -e "  Documentation: ${BLUE}$RBAC_DIR/README.md${NC}"
 echo ""

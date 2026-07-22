@@ -10,6 +10,15 @@ resources:
   - jenkins-clusterrole.yaml
   - jenkins-clusterrolebinding.yaml
   - jenkins-monitoring-role.yaml
+  # ServiceAccount dédié à la mise à jour en place des composants d'infra
+  # (Option 3, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md) — distinct de
+  # jenkins-deployer ci-dessus.
+  - jenkins-infra-upgrader-serviceaccount.yaml
+  - jenkins-infra-upgrader-nginx-gateway-role.yaml
+  - jenkins-infra-upgrader-loki-stack-role.yaml
+  - jenkins-infra-upgrader-monitoring-role.yaml
+  - jenkins-infra-upgrader-kube-system-role.yaml
+  - jenkins-infra-upgrader-clusterrole.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: rhdemo

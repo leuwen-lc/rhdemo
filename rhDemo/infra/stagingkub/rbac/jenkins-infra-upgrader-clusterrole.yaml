@@ -1,0 +1,136 @@
+# ClusterRole pour jenkins-infra-upgrader - ressources cluster-scoped
+# strictement nécessaires à la mise à jour en place des composants
+# d'infrastructure (Cilium, NGINX Gateway Fabric, kube-prometheus-stack,
+# Loki, Promtail, Grafana). Voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md
+# (étape 3) pour le détail du raisonnement.
+#
+# Principes appliqués partout dans ce fichier :
+#   - jamais de `create` sur les CustomResourceDefinition ni sur les
+#     ClusterRole/ClusterRoleBinding (empêche l'installation de CRDs ou de
+#     bindings arbitraires) ;
+#   - `update`/`patch` toujours restreints par `resourceNames` à la liste
+#     exacte des objets déjà connus, jamais un accès générique ;
+#   - `jenkins-infra-upgrader-cluster-role` (ce ClusterRole lui-même) et
+#     `jenkins-infra-upgrader-cluster-rolebinding` n'apparaissent dans
+#     AUCUNE liste `resourceNames` ci-dessous : ce ServiceAccount ne peut
+#     jamais modifier ses propres droits ;
+#   - toute nouvelle ressource nommée (nouveau type de CRD, nouveau
+#     ClusterRole) introduite par une future version d'un composant
+#     nécessite un ajout explicite et revu ici (échec propre sinon,
+#     jamais un accès silencieusement élargi).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-infra-upgrader-cluster-role
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  # Namespaces : Helm --create-namespace / kubectl create namespace pour
+  # nginx-gateway, monitoring, loki-stack
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+
+  # Nodes : lecture seule, pour kubectl cluster-info / debug
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # CustomResourceDefinitions : lecture large (Helm doit pouvoir vérifier
+  # l'état des CRDs), écriture strictement restreinte par resourceNames à
+  # la liste exacte des CRDs Gateway API / NGF / kube-prometheus-stack.
+  # Cilium est volontairement absent de cette liste (bootstrappe ses
+  # propres CRDs lui-même, cf. jenkins-infra-upgrader-kube-system-role.yaml).
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    resourceNames:
+      # Gateway API (channel standard, vendorées — cf. gateway-api-crds/)
+      - backendtlspolicies.gateway.networking.k8s.io
+      - gatewayclasses.gateway.networking.k8s.io
+      - gateways.gateway.networking.k8s.io
+      - grpcroutes.gateway.networking.k8s.io
+      - httproutes.gateway.networking.k8s.io
+      - listenersets.gateway.networking.k8s.io
+      - referencegrants.gateway.networking.k8s.io
+      - tlsroutes.gateway.networking.k8s.io
+      # NGINX Gateway Fabric (embarquées dans le chart, cf. `helm show crds`)
+      - authenticationfilters.gateway.nginx.org
+      - clientsettingspolicies.gateway.nginx.org
+      - nginxgateways.gateway.nginx.org
+      - nginxproxies.gateway.nginx.org
+      - observabilitypolicies.gateway.nginx.org
+      - proxysettingspolicies.gateway.nginx.org
+      - ratelimitpolicies.gateway.nginx.org
+      - snippetsfilters.gateway.nginx.org
+      - snippetspolicies.gateway.nginx.org
+      - upstreamsettingspolicies.gateway.nginx.org
+      - wafpolicies.gateway.nginx.org
+      # kube-prometheus-stack (Prometheus Operator)
+      - alertmanagerconfigs.monitoring.coreos.com
+      - alertmanagers.monitoring.coreos.com
+      - podmonitors.monitoring.coreos.com
+      - probes.monitoring.coreos.com
+      - prometheusagents.monitoring.coreos.com
+      - prometheuses.monitoring.coreos.com
+      - prometheusrules.monitoring.coreos.com
+      - scrapeconfigs.monitoring.coreos.com
+      - servicemonitors.monitoring.coreos.com
+      - thanosrulers.monitoring.coreos.com
+    verbs: ["update", "patch"]
+
+  # ClusterRoles : mêmes principes, restreint aux objets déjà créés par les
+  # releases gérées ici (noms vérifiés par `helm template`/`helm show crds`
+  # sur les charts réels du projet).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    resourceNames:
+      - cilium
+      - cilium-operator
+      - ngf-nginx-gateway-fabric
+      - prometheus-kube-state-metrics
+      - prometheus-kube-prometheus-operator
+      - prometheus-kube-prometheus-prometheus
+      - promtail
+      - loki-clusterrole
+      - grafana-clusterrole
+    verbs: ["update", "patch"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    resourceNames:
+      - cilium
+      - cilium-operator
+      - ngf-nginx-gateway-fabric
+      - prometheus-kube-state-metrics
+      - prometheus-kube-prometheus-operator
+      - prometheus-kube-prometheus-prometheus
+      - promtail
+      - loki-clusterrolebinding
+      - grafana-clusterrolebinding
+    verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-infra-upgrader-cluster-rolebinding
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: ClusterRole
+  name: jenkins-infra-upgrader-cluster-role
+  apiGroup: rbac.authorization.k8s.io

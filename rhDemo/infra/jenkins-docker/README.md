@@ -89,8 +89,8 @@ docker info
                                 │
         ┌───────────────────────┴────────────────────────────────────┐
         │                                                            │
-   CI : connexion réseau dynamique             CD : kubectl + Helm
-   (agent éphémère)                            (kubeconfig-stagingkub)
+   CI : connexion réseau dynamique             CD + Upgrade infra : kubectl + Helm
+   (agent éphémère)                            (kubeconfig-stagingkub / -infra-upgrader)
         ▼                                                            ▼
 ┌───────────────────────────────┐    ┌──────────────────────────────────────┐
 │   rhdemo-ephemere-network     │    │   KinD Cluster kind-rhdemo (CD)      │
@@ -105,8 +105,17 @@ docker info
                                      │ • keycloak    (Deployment)           │
                                      │ • postgresql  (StatefulSet x2)       │
                                      │ • Nginx Ingress (NodePort 443)       │
+                                     │   ┌────────────────────────────────┐ │
+                                     │   │ ServiceAccount (distinct)       │ │
+                                     │   │ jenkins-infra-upgrader (RBAC)   │ │
+                                     │   │ Cilium/NGF/observabilité        │ │
+                                     │   │ (nginx-gateway, loki-stack,     │ │
+                                     │   │  monitoring, kube-system restr.)│ │
+                                     │   └────────────────────────────────┘ │
                                      └──────────────────────────────────────┘
 ```
+
+> Deux ServiceAccounts Kubernetes distincts pour `stagingkub`, générés par `init-stagingkub.sh` : `jenkins-deployer` (déploiement applicatif, `Jenkinsfile-CD`) et `jenkins-infra-upgrader` (mise à jour en place de l'infrastructure — Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Promtail, Grafana — `Jenkinsfile-Stagingkub-Upgrade-Deploy`). Voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 
 ### Volumes persistants
 
@@ -393,9 +402,16 @@ Le script met à jour les versions directement dans `plugins.txt` en préservant
 
 > `--clean-plugins` purge les plugins du volume Jenkins **et** force `docker build --no-cache` pour que `jenkins-plugin-cli` réinstalle exactement les versions du lockfile (sans cache Docker). Sans `--no-cache`, Docker réutiliserait la couche `RUN jenkins-plugin-cli` même si les versions ont changé.
 
-## 🔨 Création des pipelines CI et CD pour RHDemo
+## 🔨 Création des pipelines pour RHDemo
 
-Les pipelines sont créés automatiquement au démarrage dans la section `jobs:` dans `jenkins-casc.yaml`.
+Les pipelines sont créés automatiquement au démarrage dans la section `jobs:` de `jenkins-casc.yaml` :
+
+| Job | Jenkinsfile | Rôle |
+|-----|-------------|------|
+| `RHDemo-CI` | `Jenkinsfile-CI` | Build, tests, scans sécurité, déploiement ephemere, publication image |
+| `RHDemo-CD` | `Jenkinsfile-CD` | Déploiement de l'application sur stagingkub |
+| `RHDemo-Renovate` | `Jenkinsfile-Renovate` | Scan Renovate + automerge des PRs de dépendances (patch/minor) |
+| `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Promtail, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) |
 
 
 ## 🐳 Docker-in-Docker (DinD)
@@ -754,6 +770,18 @@ Le pipeline `RHDemo-Renovate` (job JCasC, cron `H 4 * * *`) scanne les dépendan
 **Pourquoi deux comptes bot distincts et pourquoi `renovate-forgejo-token` ne peut pas être fusionné avec `ci-bot-forgejo-token`** : voir [`docs/RENOVATE_AUTOMERGE_CI.md`](../../docs/RENOVATE_AUTOMERGE_CI.md) (sections 1 et « Credentials Jenkins nécessaires ») — en résumé, séparation propose/merge (deux identités distinctes côté audit Forgejo) et `ci-bot-forgejo-token` échoue avec `Authentication failure` au scan Renovate faute de scope `user`.
 
 **Sécurité** : `ci-bot-forgejo-token` (accès Write) n'est jamais exposé en variable d'environnement pendant le build Maven/OWASP de la PR — voir section « Sécurité » du même document.
+
+### Mise à jour en place de l'infrastructure stagingkub
+
+Pour les PRs Renovate qui touchent un composant d'infrastructure (`rhDemo/infra/stagingkub/scripts/components/*.sh` ou `kind-config.yaml`), `RHDemo-Renovate` bascule automatiquement sur une validation Kubernetes (`helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`) au lieu du build Maven+OWASP, puis déclenche `RHDemo-Stagingkub-Upgrade-Deploy` après le merge pour appliquer réellement la mise à jour sur le cluster.
+
+**Credential Jenkins à créer** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
+
+| ID | Kind | Contenu | Utilisé par |
+|----|------|---------|-------------|
+| `kubeconfig-stagingkub-infra-upgrader` | Secret file | Fichier `jenkins-kubeconfig/kubeconfig-jenkins-infra-upgrader-rbac.yaml`, généré par `init-stagingkub.sh` | `RHDemo-Renovate` (validation dry-run) + `RHDemo-Stagingkub-Upgrade-Deploy` (application réelle) |
+
+Ce credential porte les droits du ServiceAccount **dédié** `jenkins-infra-upgrader` — distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`, qui ne gagne aucun droit supplémentaire de ce fait. Détail du RBAC et de l'étude ayant motivé cette séparation : [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [infra/stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 
 ## 🔧 Dépannage
 

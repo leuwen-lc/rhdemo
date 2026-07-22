@@ -738,6 +738,23 @@ cosign verify --key cosign.pub \
     kind-registry:5000/rhdemo-api:<TAG>@<DIGEST>
 ```
 
+### Renovate - Automerge des PRs de dépendances
+
+Le pipeline `RHDemo-Renovate` (job JCasC, cron `H 4 * * *`) scanne les dépendances avec Renovate puis merge automatiquement les PRs patch/minor dont la CI passe. Il a besoin de 4 credentials Jenkins dédiés, en plus de `nvd-api-key` et `ossindex-credentials` déjà créés pour `Jenkinsfile-CI`.
+
+**Credentials Jenkins à créer** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
+
+| ID | Kind | Contenu | Utilisé par |
+|----|------|---------|-------------|
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot `rhdemo-ci-bot` (collaborateur **Write**, pas Admin), scopes `repository` + `issue` | Listing/sync/merge des PRs, commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + `user` | Stage `🔄 Scan Renovate` |
+| `renovate-gpg-key` | Secret text | Clé GPG privée dédiée, exportée en base64 (`gpg --export-secret-keys <KEY_ID> \| base64 -w0`) | Signature des commits Renovate |
+| `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) | Lookup changelogs/release notes GitHub |
+
+**Pourquoi deux comptes bot distincts et pourquoi `renovate-forgejo-token` ne peut pas être fusionné avec `ci-bot-forgejo-token`** : voir [`docs/RENOVATE_AUTOMERGE_CI.md`](../../docs/RENOVATE_AUTOMERGE_CI.md) (sections 1 et « Credentials Jenkins nécessaires ») — en résumé, séparation propose/merge (deux identités distinctes côté audit Forgejo) et `ci-bot-forgejo-token` échoue avec `Authentication failure` au scan Renovate faute de scope `user`.
+
+**Sécurité** : `ci-bot-forgejo-token` (accès Write) n'est jamais exposé en variable d'environnement pendant le build Maven/OWASP de la PR — voir section « Sécurité » du même document.
+
 ## 🔧 Dépannage
 
 ### Jenkins ne démarre pas

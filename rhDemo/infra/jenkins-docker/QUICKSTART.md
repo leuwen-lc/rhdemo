@@ -45,6 +45,19 @@ Jenkins est accessible sur **http://localhost:8080**.
 | `ossindex-credentials` | Username/password | Accélère les téléchargements OWASP Dependency-Check |
 | `smtp-credentials` (nom au choix) | **Username with password** (pas Secret text, sinon invisible dans la liste déroulante SMTP) | Notifications email `RHDemo-CI` — plugin email-ext, à configurer entièrement à la main dans Jenkins UI (pas via JCasC), voir `README.md` → section Email |
 
+### Pour Jenkinsfile-Renovate (pipeline `RHDemo-Renovate`, automerge des PRs de dépendances)
+
+Réutilise `nvd-api-key` et `ossindex-credentials` déjà créés ci-dessus. En plus, à créer :
+
+| ID | Kind | Comment obtenir |
+|----|------|-----------------|
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `rhdemo-ci-bot` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + **`user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) |
+| `renovate-gpg-key` | Secret text | Clé GPG privée dédiée à la signature des commits Renovate, exportée en base64 : `gpg --export-secret-keys <KEY_ID> \| base64 -w0` |
+| `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) pour les lookups de changelogs/release notes des dépendances hébergées sur GitHub |
+
+> Pourquoi deux comptes bot distincts (`rhdemo-ci-bot` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md` sections 1 et « Credentials Jenkins nécessaires ».
+
 ### Secrets SOPS (environnement ephemere)
 
 1. Installez SOPS et créez une clé age (voir `rhDemo/docs/SOPS_SETUP.md`)

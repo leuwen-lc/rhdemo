@@ -41,9 +41,15 @@ rules:
     resources: ["serviceaccounts"]
     resourceNames: ["cilium", "cilium-operator", "cilium-envoy"]
     verbs: ["get", "list", "watch", "update", "patch"]
+  # `cilium-envoy` (release Helm cilium) et `prometheus-kube-prometheus-coredns`
+  # (release Helm prometheus — kube-prometheus-stack, Service headless pour
+  # scraper les métriques CoreDNS). Vérifié exhaustivement sur le cluster réel :
+  # `prometheus-kube-prometheus-kubelet` (autre Service de kube-system) n'est
+  # PAS géré par Helm (annotation app.kubernetes.io/managed-by=prometheus-operator,
+  # reconcilié par l'Operator lui-même) — aucun droit RBAC nécessaire dessus ici.
   - apiGroups: [""]
     resources: ["services"]
-    resourceNames: ["cilium-envoy"]
+    resourceNames: ["cilium-envoy", "prometheus-kube-prometheus-coredns"]
     verbs: ["get", "list", "watch", "update", "patch"]
   # Compromis assumé : pas de `resourceNames` ici, contrairement à toutes les
   # autres règles de ce fichier. Les pods du DaemonSet Cilium ont un nom

@@ -147,6 +147,16 @@ garantie de sécurité vient de l'absence de persistance server-side, pas d'un c
 privilégié. `FORGEJO_TOKEN` reste absent de ce bloc (même raisonnement supply-chain que pour le
 bloc Maven : le script exécuté vient d'une PR non revue).
 
+**Prérequis réseau** : l'agent éphémère `builder` n'est attaché par défaut qu'à
+`rhdemo-jenkins-network` (cf. `jenkins-casc.yaml`), pas au réseau Docker `kind` du cluster KinD —
+sans connexion explicite, `kubectl`/`helm` échouent à résoudre `rhdemo-control-plane` (« server
+misbehaving »). Le stage connecte l'agent au réseau `kind` via `lib.dockerNetworkConnect` avant la
+boucle de traitement des PR (déconnexion symétrique dans `post { always {} }`) — même mécanisme
+que `Jenkinsfile-CD`/`Jenkinsfile-Stagingkub-Upgrade-Deploy`. **Incident corrigé** : ce bloc a
+d'abord été implémenté sans cette connexion, ce qui a fait échouer silencieusement (DNS, pas RBAC)
+les premiers dry-run de composants d'infra — les PR concernées étaient restées ouvertes plutôt que
+mergées à tort, mais sans jamais avoir réellement validé quoi que ce soit.
+
 **Cas limite** : si le cluster stagingkub n'est pas démarré au moment du scan, la validation
 dry-run échoue proprement (message explicite, PR conservée ouverte) plutôt que de bloquer le
 traitement des autres PR de la même exécution.

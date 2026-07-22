@@ -172,6 +172,16 @@ RENOVATE_SCAN_EOF
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
                     def failures = []
 
+                    // Le dry-run Kubernetes (composants d'infra stagingkub, cf. plus bas)
+                    // a besoin de résoudre "rhdemo-control-plane" : cet agent éphémère
+                    // n'est attaché qu'à rhdemo-jenkins-network par défaut (cf. jenkins-casc.yaml),
+                    // pas au réseau Docker "kind" du cluster KinD — sans cette connexion,
+                    // kubectl échoue en "server misbehaving" (résolution DNS), comme le fait
+                    // déjà Jenkinsfile-CD/Jenkinsfile-Stagingkub-Upgrade-Deploy. Déconnexion
+                    // symétrique dans le bloc post { always {} } de ce pipeline.
+                    env.JENKINS_CONTAINER = sh(script: 'hostname', returnStdout: true).trim()
+                    lib.dockerNetworkConnect(env.JENKINS_CONTAINER, 'kind')
+
                     env.RENOVATE_PRS.split(' ').each { prEntry ->
                         def parts    = prEntry.split('\\|')
                         def prNumber = parts[0]
@@ -458,6 +468,13 @@ RENOVATE_SCAN_EOF
 
     post {
         always {
+            script {
+                if (env.JENKINS_CONTAINER) {
+                    sh """
+                        docker network disconnect kind ${env.JENKINS_CONTAINER} 2>/dev/null && echo "✅ Agent déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter l'agent du réseau kind"
+                    """
+                }
+            }
             sh "git checkout ${env.BASE_BRANCH} || true"
             cleanWs()
         }

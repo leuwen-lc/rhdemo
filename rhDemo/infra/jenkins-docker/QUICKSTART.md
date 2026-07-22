@@ -43,7 +43,7 @@ Jenkins est accessible sur **http://localhost:8080**.
 | ID | Kind | Usage |
 |----|------|-------|
 | `ossindex-credentials` | Username/password | Accélère les téléchargements OWASP Dependency-Check |
-| `mail.credentials` | Username/password | Notifications email SMTP |
+| `smtp-credentials` (nom au choix) | **Username with password** (pas Secret text, sinon invisible dans la liste déroulante SMTP) | Notifications email `RHDemo-CI` — plugin email-ext, à configurer entièrement à la main dans Jenkins UI (pas via JCasC), voir `README.md` → section Email |
 
 ### Secrets SOPS (environnement ephemere)
 

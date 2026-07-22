@@ -257,11 +257,10 @@ jenkins-docker/
    ```env
    # Admin Jenkins
    JENKINS_ADMIN_PASSWORD=votre-mot-de-passe-securise
-
-   # Email notifications (optionnel)
-   SMTP_USER=votre-email@gmail.com
-   SMTP_PASSWORD=votre-mot-de-passe-app
    ```
+
+   Les notifications email (optionnelles) ne se configurent **pas** dans `.env` — voir la
+   section [Email](#email) plus bas.
 
 ### Configuration Jenkins as Code (JCasC)
 
@@ -357,7 +356,7 @@ Les plugins sont définis dans `plugins.txt` sous forme de **lockfile versionné
 | Tests | `junit`, `htmlpublisher` | Rapports Surefire, Trivy, ZAP, OWASP |
 | Sécurité | `dependency-check-jenkins-plugin` | Configuration outil OWASP Dependency-Check |
 | Docker | `docker-plugin`, `docker-workflow` | Agents éphémères Docker Cloud, commandes Docker |
-| Notifications | `mailer` | Configuration email JCasC |
+| Notifications | `mailer` (dépendance), `email-ext` | `emailext(...)` — notifications succès/échec RHDemo-CI, credential SMTP géré côté UI (pas JCasC, voir section [Email](#email)) |
 | Pipeline options | `timestamper`, `build-timeout`, `ws-cleanup` | Timestamps, timeout, nettoyage workspace |
 | Config as Code | `configuration-as-code`, `job-dsl` | `jenkins-casc.yaml`, définition des jobs |
 | Utilitaires | `pipeline-utility-steps`, `copyartifact` | `readJSON`, `readYaml`, récupération digest CI |
@@ -502,12 +501,43 @@ openssl s_client -connect localhost:5000 -servername localhost < /dev/null 2>/de
 
 ### Email
 
-Configuration dans `.env` :
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=votre-email@gmail.com
-SMTP_PASSWORD=votre-app-password
+Notifications de succès/échec de `RHDemo-CI` (step `emailext`, plugin **email-ext** — pas le
+Mailer basique, qui n'accepte qu'un couple username/password en clair sans passer par un
+credential Jenkins).
+
+**⚠️ Pas configurable via JCasC** : le configurateur `configuration-as-code` ne sait piloter ni
+le credential SMTP du plugin Mailer (`UnknownAttributesException` au boot si on essaie), ni celui
+d'email-ext (bug connu upstream, [configuration-as-code-plugin#679](https://github.com/jenkinsci/configuration-as-code-plugin/issues/679)).
+La configuration se fait donc entièrement à la main, une seule fois, via l'UI — `jenkins-casc.yaml`
+ne la gère pas et ne l'écrase donc pas au redémarrage.
+
+**1. Créer le credential SMTP** (Manage Jenkins → Credentials → (global) → Add Credentials) :
+- **Kind : `Username with password`** — ⚠️ pas `Secret text`. La liste déroulante SMTP
+  d'Extended E-mail Notification ne montre que les credentials de ce type précis ; un mauvais
+  choix ici est la cause la plus fréquente d'un credential invisible dans la page suivante,
+  même après l'avoir recréé plusieurs fois.
+- Username : votre adresse d'envoi, ex. `jenkinsadmin@gmail.com`
+- Password : le mot de passe SMTP de cette adresse (souvent différent du mot de passe principal
+  du compte — mot de passe d'application ou mot de passe IMAP/SMTP dédié selon le fournisseur)
+- ID : ex. `smtp-credentials`
+
+**2. Configurer le compte SMTP** (Manage Jenkins → System → Extended E-mail Notification) :
+- SMTP server : ex. `smtp.exemple-fournisseur.com`
+- Advanced → SMTP Port : selon le fournisseur (465 pour SSL implicite, 587 pour STARTTLS)
+- Use SSL / Use TLS : cocher celui qui correspond au port choisi (pas les deux)
+- Use OAuth2 : décoché, sauf fournisseur l'exigeant explicitement (incompatible avec un
+  credential Username/password classique)
+- Use SMTP Authentication : coché, credential = celui créé à l'étape 1
+- Manage Jenkins → System → Jenkins Location → *System Admin e-mail address* : renseigner une
+  adresse cohérente avec le domaine d'envoi — certains fournisseurs (Infomaniak notamment)
+  rejettent silencieusement les mails dont le `From` ne correspond à aucun domaine authentifié
+
+**3. Utilisation dans un pipeline**, voir `Jenkinsfile-CI` (`post { success/failure }`) pour un
+exemple réel avec gestion d'erreur (une panne SMTP ne doit pas faire échouer un build) :
+```groovy
+emailext to: 'destinataire@exemple.com',
+         subject: "Sujet",
+         body: "Corps du message"
 ```
 
 ### OWASP Dependency-Check

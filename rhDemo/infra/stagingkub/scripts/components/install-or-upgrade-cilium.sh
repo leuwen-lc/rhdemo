@@ -101,6 +101,14 @@ fi
 # jamais se scheduler (conflit de port), donc `--wait` attend une
 # disponibilité 2/2 qui n'arrivera jamais et finit par expirer (vérifié lors
 # de la première exécution réelle : timeout 5 min, rollback --atomic propre).
+#
+# ─── operator.affinity=null : même classe de problème rencontrée sur le
+# gateway Loki (cf. install-or-upgrade-loki.sh) — le chart pose par défaut un
+# podAntiAffinity requiredDuringScheduling sur cilium-operator ("In HA mode,
+# cilium-operator pods must not be scheduled on the same node"), incompatible
+# avec un cluster à un seul nœud : le pod surnuméraire du rolling update
+# (maxSurge) ne pourrait jamais se scheduler à côté de l'ancien. Neutralisé
+# préventivement avant qu'un bump de version Cilium ne déclenche le rollout.
 # ─── Upgrade/installation réelle (ou validation dry-run=server) ───
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
@@ -118,6 +126,7 @@ helm upgrade --install cilium cilium/cilium --version "${CILIUM_VERSION}" \
     --set hubble.enabled=false \
     --set ipam.mode=kubernetes \
     --set operator.replicas=1 \
+    --set operator.affinity=null \
     ${HELM_MODE_ARGS}
 
 if [ "$HELM_DRY_RUN" = "true" ]; then

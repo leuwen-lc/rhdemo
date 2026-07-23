@@ -80,6 +80,18 @@ resultsCache:
   allocatedMemory: 128  # MB alloués au cache memcached
 
 ###########################################
+# Gateway (routage HTTP vers le SingleBinary)
+###########################################
+# affinity: {} désactive le podAntiAffinity "requiredDuringScheduling" par
+# défaut du chart (hard, par hostname) : sur ce cluster KinD à un seul nœud,
+# le pod surplus du rolling update (maxSurge) ne peut jamais être scheduled
+# à côté de l'ancien pod tant que cette contrainte est active — deadlock
+# vécu en conditions réelles (pod loki-gateway restant Pending indéfiniment,
+# provoquant le timeout puis le rollback --atomic en cascade).
+gateway:
+  affinity: {}
+
+###########################################
 # Services désactivés (mode SingleBinary)
 ###########################################
 read:

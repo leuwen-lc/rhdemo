@@ -13,9 +13,20 @@ crds:
   create: false
 
 ###########################################
-# Configuration Alloy (langage Alloy, remplace la config YAML de Promtail)
+# Montage du système de fichiers hôte
 ###########################################
+# Contrairement au chart Promtail (spécialisé collecte de logs, qui montait
+# /var/log automatiquement), le chart Alloy est générique et ne monte rien
+# par défaut : sans ce flag, local.file_match/loki.source.file ci-dessous ne
+# trouvent aucun fichier (chemin /var/log/pods/... absent du conteneur),
+# malgré une découverte/relabeling par ailleurs correcte. Monte /var/log de
+# l'hôte en lecture seule — suffisant ici (nœud KinD en containerd, fichiers
+# réels sous /var/log/pods/, pas des symlinks vers /var/lib/docker/containers
+# comme avec Docker/dockershim, donc dockercontainers pas nécessaire).
 alloy:
+  mounts:
+    varlog: true
+
   configMap:
     content: |
       // Découverte des pods du namespace rhdemo-stagingkub (même périmètre que Promtail)

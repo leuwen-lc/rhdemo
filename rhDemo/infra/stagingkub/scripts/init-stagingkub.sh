@@ -507,10 +507,13 @@ KUBECONFIG_EOF
         echo -e "${RED}    ✗ Création des HTTPRoutes refusée${NC}"
     fi
 
-    if kubectl auth can-i create snippetsfilters.gateway.nginx.org -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
-        echo -e "${GREEN}    ✓ Création des SnippetsFilters (NGF)${NC}"
+    # ProxySettingsPolicy (NGF 2.4+) remplace SnippetsFilter pour les proxy
+    # buffers Keycloak — c'est la ressource réellement accordée dans
+    # jenkins-role.yaml et utilisée par templates/proxysettingspolicy.yaml.
+    if kubectl auth can-i create proxysettingspolicies.gateway.nginx.org -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Création des ProxySettingsPolicies (NGF)${NC}"
     else
-        echo -e "${RED}    ✗ Création des SnippetsFilters refusée${NC}"
+        echo -e "${RED}    ✗ Création des ProxySettingsPolicies refusée${NC}"
     fi
 
     if kubectl auth can-i create ratelimitpolicies.gateway.nginx.org -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-deployer > /dev/null 2>&1; then

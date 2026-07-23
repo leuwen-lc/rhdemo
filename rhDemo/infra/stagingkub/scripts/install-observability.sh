@@ -9,6 +9,7 @@
 #   - Loki (logs) + Alloy + Grafana
 #   - Configuration Grafana avec les deux datasources
 #   - Dashboards: Logs, Métriques Pods, Spring Boot Actuator, PostgreSQL
+#   - NetworkPolicies des namespaces monitoring/loki-stack
 #
 # Les commandes Helm par composant sont factorisées dans
 # scripts/components/install-or-upgrade-*.sh — ce script (chemin
@@ -37,6 +38,7 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../helm/observability"
 COMPONENTS_DIR="${SCRIPT_DIR}/components"
+NETPOL_SCRIPT="${SCRIPT_DIR}/../networkpolicies/apply-networkpolicies.sh"
 
 log() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -76,6 +78,7 @@ log "Vérification des fichiers de configuration..."
 [ -f "$VALUES_DIR/loki-modern-values.yaml" ] || error "Fichier loki-modern-values.yaml manquant"
 [ -f "$VALUES_DIR/alloy-values.yaml" ] || error "Fichier alloy-values.yaml manquant"
 [ -f "$VALUES_DIR/grafana-values.yaml" ] || error "Fichier grafana-values.yaml manquant"
+[ -f "$NETPOL_SCRIPT" ] || error "Script apply-networkpolicies.sh manquant"
 success "Fichiers de configuration OK"
 echo ""
 
@@ -112,7 +115,24 @@ echo ""
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
-# 3. Configuration DNS
+# 3. NetworkPolicies (namespaces externes : monitoring, loki-stack)
+# ═══════════════════════════════════════════════════════════════
+# Les charts installés ci-dessus ne créent aucune NetworkPolicy — sans cette
+# étape, les namespaces monitoring/loki-stack restent grands ouverts (pas de
+# default-deny) jusqu'à ce que quelqu'un pense à relancer le script à la
+# main. Appliqué en dernier, une fois tous les pods Running/Ready (chaque
+# install-or-upgrade-*.sh ci-dessus attend déjà la fin de son propre
+# rollout), pour ne jamais bloquer un pod en cours de démarrage.
+
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  NetworkPolicies (monitoring, loki-stack)${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo ""
+"${NETPOL_SCRIPT}"
+echo ""
+
+# ═══════════════════════════════════════════════════════════════
+# 4. Configuration DNS
 # ═══════════════════════════════════════════════════════════════
 
 DOMAIN="grafana-stagingkub.intra.leuwen-lc.fr"
@@ -129,7 +149,7 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
-# 4. Affichage final
+# 5. Affichage final
 # ═══════════════════════════════════════════════════════════════
 
 echo ""
@@ -211,4 +231,5 @@ echo ""
 echo -e "${GREEN}✅ La stack Observabilité est maintenant prête !${NC}"
 echo -e "${GREEN}✅ Prometheus collecte automatiquement les métriques des composants${NC}"
 echo -e "${GREEN}✅ Loki collecte déjà les logs de tous les pods${NC}"
+echo -e "${GREEN}✅ NetworkPolicies appliquées sur monitoring/loki-stack (Zero Trust)${NC}"
 echo ""

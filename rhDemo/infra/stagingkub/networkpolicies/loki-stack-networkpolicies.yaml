@@ -92,6 +92,14 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # Alloy (push logs) et Grafana (requêtes LogQL) passent tous les deux
+    # par le Service loki-gateway (nginx, port 8080 en interne — voir
+    # Service "loki-gateway" : port 80 -> targetPort 8080), jamais
+    # directement par le backend (port 3100). "loki" sélectionne ici à la
+    # fois le pod gateway ET le pod backend (single-binary) puisqu'ils
+    # partagent le label app.kubernetes.io/name: loki — d'où les deux ports
+    # dans chaque règle : 8080 pour joindre le pod gateway, 3100 pour le
+    # cas où quelque chose s'adresse directement au backend.
     # Alloy (push logs)
     - from:
         - namespaceSelector:
@@ -101,6 +109,8 @@ spec:
             matchLabels:
               app.kubernetes.io/name: alloy
       ports:
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 3100
     # Grafana (requêtes LogQL)
@@ -112,6 +122,8 @@ spec:
             matchLabels:
               app.kubernetes.io/name: grafana
       ports:
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 3100
     # Prometheus scraping (monitoring namespace)
@@ -130,6 +142,21 @@ spec:
         - protocol: TCP
           port: 3100
   egress:
+    # Gateway (nginx) -> backend single-binary : le gateway proxifie toutes
+    # les requêtes reçues ci-dessus vers le backend sur le port 3100, donc
+    # les pods sélectionnés par cette policy (gateway inclus) ont besoin
+    # d'egress vers eux-mêmes sur ce port. Couvre aussi loki-canary (mêmes
+    # labels), qui interroge le backend/gateway pour son propre self-check.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki-stack
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - protocol: TCP
+          port: 3100
     # DNS uniquement (pas de stockage externe)
     - to:
         - namespaceSelector:
@@ -179,7 +206,10 @@ spec:
         - protocol: TCP
           port: 12345  # Alloy metrics/health (http-metrics)
   egress:
-    # Push logs vers Loki
+    # Push logs vers Loki — via loki-gateway (nginx, port 8080 en interne,
+    # voir Service "loki-gateway"), pas directement vers le backend (3100) :
+    # url du endpoint loki.write dans alloy-values.yaml est
+    # http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -188,6 +218,8 @@ spec:
             matchLabels:
               app.kubernetes.io/name: loki
       ports:
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 3100
     # API Server Kubernetes: voir CiliumNetworkPolicy allow-apiserver-alloy
@@ -295,7 +327,8 @@ spec:
         - protocol: TCP
           port: 3000
   egress:
-    # Requêtes vers Loki (LogQL)
+    # Requêtes vers Loki (LogQL) — via loki-gateway (port 8080 en interne),
+    # datasource Grafana configurée sur http://loki-gateway:80.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -304,6 +337,8 @@ spec:
             matchLabels:
               app.kubernetes.io/name: loki
       ports:
+        - protocol: TCP
+          port: 8080
         - protocol: TCP
           port: 3100
     # Requêtes vers Prometheus (PromQL)

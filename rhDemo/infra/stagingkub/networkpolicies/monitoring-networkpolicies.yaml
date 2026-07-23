@@ -147,9 +147,8 @@ spec:
         - protocol: TCP
           port: 9100   # node-exporter
         - protocol: TCP
-          port: 8080   # kube-state-metrics
-        - protocol: TCP
-          port: 8443   # prometheus-operator
+          port: 8080   # kube-state-metrics + prometheus-operator (port "http",
+                       # prometheusOperator.tls.enabled: false dans prometheus-values.yaml)
         - protocol: TCP
           port: 10250  # kubelet metrics
     # Scrape kube-system (API server, kubelet, CoreDNS, etc.)
@@ -224,7 +223,8 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Prometheus (push alertes)
+    # Prometheus (push alertes + scrape du config-reloader sidecar,
+    # endpoint "reloader-web" du ServiceMonitor alertmanager)
     - from:
         - namespaceSelector:
             matchLabels:
@@ -235,6 +235,8 @@ spec:
       ports:
         - protocol: TCP
           port: 9093
+        - protocol: TCP
+          port: 8080
     # Cluster HA (mesh interne)
     - from:
         - namespaceSelector:
@@ -301,15 +303,20 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: prometheus-operator
+      # Label réel du pod (vérifié : kubectl get pod ... -o jsonpath=
+      # '{.metadata.labels.app\.kubernetes\.io/name}') — pas "prometheus-
+      # operator" seul, qui ne matchait aucun pod (policy sans effet).
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
   policyTypes:
     - Ingress
     - Egress
   ingress:
-    # Health checks kubelet et métriques internes
+    # Health checks kubelet et métriques internes. Port "http" du conteneur
+    # (8080) — plus 8443/https, désactivé par prometheusOperator.tls.enabled:
+    # false dans prometheus-values.yaml.
     - ports:
         - protocol: TCP
-          port: 8443
+          port: 8080
   egress:
     # API Server (gestion CRDs)
     # Note: L'API server est accessible via le service kubernetes.default
@@ -536,4 +543,48 @@ spec:
       toPorts:
         - ports:
             - port: "6443"
+              protocol: TCP
+---
+# ═══════════════════════════════════════════════════════════════
+# CiliumNetworkPolicy: Accès "host" pour Prometheus lui-même
+# ═══════════════════════════════════════════════════════════════
+# Contrairement à l'Operator et Kube State Metrics (qui n'ont besoin de
+# l'entité "host" que pour leurs propres watches internes vers l'API
+# Server), Prometheus SCRAPE directement plusieurs cibles qui vivent sur le
+# node hôte, pas dans un pod : le job "apiserver" (métriques du kube-
+# apiserver lui-même, port 6443), le job "kubelet" (métriques + cadvisor +
+# probes, port 10250 — c'est la source des métriques CPU/mémoire par pod du
+# dashboard "Métriques Pods") et le job "node-exporter" (hostNetwork, port
+# 9100). `prometheus-netpol` (NetworkPolicy standard, ci-dessus) autorise
+# déjà ces ports via des règles `namespaceSelector: kube-system`/
+# `monitoring`, mais ces règles sont sans effet ici : avec Cilium en
+# kubeProxyReplacement, l'API Server et le kubelet sur le node sont vus
+# comme l'entité "host", pas comme un pod appartenant à un namespace — same
+# raison que allow-apiserver-prometheus-operator ci-dessus. Sans cette
+# CiliumNetworkPolicy, les trois scrapes échouent en timeout ("context
+# deadline exceeded", paquets droppés silencieusement par le default-deny
+# Cilium, jamais un refus explicite).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-prometheus
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-observability
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+            - port: "10250"
+              protocol: TCP
+            - port: "9100"
               protocol: TCP

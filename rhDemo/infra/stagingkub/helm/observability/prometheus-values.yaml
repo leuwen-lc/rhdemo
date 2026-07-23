@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 # Configuration Prometheus pour stagingkub
 # ═══════════════════════════════════════════════════════════════
-# Chart: prometheus-community/kube-prometheus-stack 81.5.1 (Prometheus Operator v0.88.1)
+# Chart: prometheus-community/kube-prometheus-stack 87.16.1 (Prometheus Operator v0.88.1)
 # Version figée dans install-observability.sh
 #
 # Installation via kube-prometheus-stack (Prometheus + Operator + Grafana)
@@ -31,6 +31,35 @@ prometheusOperator:
   # désactiver supprime ce risque à la racine plutôt que de le gérer
   # par RBAC restreint.
   admissionWebhooks:
+    enabled: false
+
+  # prometheusOperator.tls (indépendant d'admissionWebhooks ci-dessus) fait
+  # servir l'Operator lui-même en HTTPS (healthz/metrics), avec un certificat
+  # généré par le job admissionWebhooks.patch — job désactivé du même coup
+  # par admissionWebhooks.enabled: false ci-dessus. Sans ce flag, le Secret
+  # "prometheus-kube-prometheus-admission" que le Deployment monte n'existe
+  # jamais : le pod reste bloqué en ContainerCreating (FailedMount) jusqu'au
+  # timeout Helm, --atomic déclenche alors un rollback.
+  #
+  # Impact sécurité de la désactivation (analyse actée) :
+  #   - Ne concerne que /healthz (probes kubelet) et /metrics (scrape
+  #     Prometheus via ServiceMonitor) de l'Operator lui-même — jamais
+  #     exposé hors cluster, aucun Service via NGINX Gateway Fabric.
+  #   - Trafic déjà filtré par la NetworkPolicy dédiée
+  #     "prometheus-operator-netpol" (networkpolicies/monitoring-networkpolicies.yaml).
+  #   - Cilium n'a pas de chiffrement transparent activé (ni WireGuard ni
+  #     IPsec) : tout le trafic pod-à-pod de ce cluster circule déjà en
+  #     clair au niveau réseau, TLS applicatif ou pas — ce flag n'introduit
+  #     donc pas un maillon plus faible que le reste.
+  #   - Cohérent avec le pattern déjà en place ailleurs dans la stack
+  #     (Grafana → Loki, Grafana → Prometheus : déjà en http:// simple).
+  #   - Donnée peu sensible (métriques opérationnelles de l'Operator, pas
+  #     de données métier/PII).
+  #   - Sans rapport avec le vrai contrôle de sécurité visé par
+  #     admissionWebhooks.enabled: false ci-dessus (risque de
+  #     Validating/MutatingWebhookConfiguration cluster-scoped) : ce
+  #     contrôle-là reste intact, inchangé par ce flag.
+  tls:
     enabled: false
 
   # Resources modérées pour environnement local

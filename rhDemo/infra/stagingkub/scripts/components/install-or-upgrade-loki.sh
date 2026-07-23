@@ -41,7 +41,7 @@ echo -e "${YELLOW}▶ Installation/mise à jour de Loki ${LOKI_VERSION}...${NC}"
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
-    HELM_MODE_ARGS="--atomic --wait --timeout 3m"
+    HELM_MODE_ARGS="--atomic --wait --timeout 5m"
 fi
 
 helm repo add grafana https://grafana-community.github.io/helm-charts --force-update >/dev/null 2>&1 || true

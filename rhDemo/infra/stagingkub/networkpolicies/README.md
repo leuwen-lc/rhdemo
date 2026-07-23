@@ -7,7 +7,7 @@ Ce dossier contient les Network Policies pour les namespaces qui ne sont pas gé
 | Fichier | Namespace | Composants protégés |
 |---------|-----------|---------------------|
 | `monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, Prometheus Operator, Node Exporter, Kube State Metrics |
-| `loki-stack-networkpolicies.yaml` | loki-stack | Loki, Promtail, Grafana |
+| `loki-stack-networkpolicies.yaml` | loki-stack | Loki, Alloy, Grafana |
 | `nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric |
 
 ## Stratégie
@@ -74,7 +74,7 @@ kubectl get networkpolicies -A | grep -E '(monitoring|loki-stack|nginx-gateway)'
 │  │  (Helm chart)       │  │                 │  │                         │ │
 │  │  - rhdemo-app       │  │  - Grafana ◄────┼──┼─ Prometheus             │ │
 │  │  - keycloak         │  │  - Loki ◄───────┼──┤                         │ │
-│  │  - postgresql x2    │  │  - Promtail     │  │  - AlertManager         │ │
+│  │  - postgresql x2    │  │  - Alloy        │  │  - AlertManager         │ │
 │  └─────────────────────┘  └─────────────────┘  │  - Node Exporter        │ │
 │                                                 │  - Kube State Metrics   │ │
 │                                                 └─────────────────────────┘ │
@@ -98,7 +98,7 @@ kubectl get networkpolicies -A | grep -E '(monitoring|loki-stack|nginx-gateway)'
 
 | Source | Destination | Port | Description |
 |--------|-------------|------|-------------|
-| Promtail | Loki | 3100 | Push logs |
+| Alloy | Loki | 3100 | Push logs |
 | Grafana | Loki | 3100 | Requêtes LogQL |
 | Grafana | monitoring/Prometheus | 9090 | Requêtes PromQL |
 | nginx-gateway | Grafana | 80 | Trafic utilisateur |

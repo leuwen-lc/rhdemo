@@ -60,7 +60,7 @@ Réutilise `nvd-api-key` et `ossindex-credentials` déjà créés ci-dessus. En 
 
 ### Pour la mise à jour en place de l'infra stagingkub (`RHDemo-Stagingkub-Upgrade-Deploy`)
 
-Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus-stack/Loki/Promtail/Grafana. À créer :
+Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus-stack/Loki/Alloy/Grafana. À créer :
 
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|

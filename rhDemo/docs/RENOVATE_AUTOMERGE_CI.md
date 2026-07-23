@@ -133,7 +133,7 @@ boucle existante, PR par PR.
 **Détection** : le diff touche `rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-*.sh`
 ou `rhDemo/infra/stagingkub/kind-config.yaml`.
 
-**Pourquoi** : ces fichiers pilotent Cilium/NGF/kube-prometheus-stack/Loki/Promtail/Grafana —
+**Pourquoi** : ces fichiers pilotent Cilium/NGF/kube-prometheus-stack/Loki/Alloy/Grafana —
 l'infrastructure du cluster elle-même, hors du périmètre applicatif Java. Le détail du RBAC dédié
 (`jenkins-infra-upgrader`), du choix « mise à jour en place » plutôt que reconstruction complète, et
 du job de déploiement réel post-merge sont documentés dans

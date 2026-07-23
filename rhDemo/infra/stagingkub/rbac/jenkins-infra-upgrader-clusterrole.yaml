@@ -1,7 +1,7 @@
 # ClusterRole pour jenkins-infra-upgrader - ressources cluster-scoped
 # strictement nécessaires à la mise à jour en place des composants
 # d'infrastructure (Cilium, NGINX Gateway Fabric, kube-prometheus-stack,
-# Loki, Promtail, Grafana). Voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md
+# Loki, Alloy, Grafana). Voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md
 # (étape 3) pour le détail du raisonnement.
 #
 # Principes appliqués partout dans ce fichier :
@@ -97,7 +97,7 @@ rules:
       - prometheus-kube-state-metrics
       - prometheus-kube-prometheus-operator
       - prometheus-kube-prometheus-prometheus
-      - promtail
+      - alloy
       - loki-clusterrole
       - grafana-clusterrole
     verbs: ["update", "patch"]
@@ -114,7 +114,7 @@ rules:
       - prometheus-kube-state-metrics
       - prometheus-kube-prometheus-operator
       - prometheus-kube-prometheus-prometheus
-      - promtail
+      - alloy
       - loki-clusterrolebinding
       - grafana-clusterrolebinding
     verbs: ["update", "patch"]

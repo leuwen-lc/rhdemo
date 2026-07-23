@@ -2,20 +2,23 @@
 set -e
 
 # ═══════════════════════════════════════════════════════════════
-# Installation ou mise à jour en place de Promtail
+# Installation ou mise à jour en place de Grafana Alloy
 # ═══════════════════════════════════════════════════════════════
+# Remplace Promtail (EOL depuis le 02/03/2026, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md).
 # Idempotent (helm upgrade --install). Composant le plus sûr du lot :
-# ClusterRole strictement en lecture (get/list/watch pods/nodes/
-# namespaces pour la découverte de service), aucune CRD, aucun
-# webhook d'admission. Simple `helm upgrade --atomic --wait` suffit,
-# sans préflight ni contrainte de saut de version.
+# ClusterRole strictement en lecture (get/list/watch pods/pods-log/
+# namespaces/endpoints/endpointslices/ingresses/services pour la découverte
+# de service), CRD podlogs.monitoring.grafana.com désactivée (crds.create:
+# false dans alloy-values.yaml, non utilisée par la config statique
+# ci-dessous), aucun webhook d'admission. Simple `helm upgrade --atomic
+# --wait` suffit, sans préflight ni contrainte de saut de version.
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 
-# renovate: datasource=helm depName=promtail registryUrl=https://grafana.github.io/helm-charts
-PROMTAIL_VERSION="6.17.1"  # App: Promtail 3.5.1
+# renovate: datasource=helm depName=alloy registryUrl=https://grafana.github.io/helm-charts
+ALLOY_VERSION="1.11.0"  # App: Alloy v1.18.0
 
 LOKI_NS="loki-stack"
 
@@ -28,9 +31,9 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${YELLOW}▶ Installation/mise à jour de Promtail ${PROMTAIL_VERSION}...${NC}"
+echo -e "${YELLOW}▶ Installation/mise à jour d'Alloy ${ALLOY_VERSION}...${NC}"
 
-[ -f "${VALUES_DIR}/promtail-values.yaml" ] || { echo -e "${RED}❌ Fichier promtail-values.yaml manquant${NC}"; exit 1; }
+[ -f "${VALUES_DIR}/alloy-values.yaml" ] || { echo -e "${RED}❌ Fichier alloy-values.yaml manquant${NC}"; exit 1; }
 
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
@@ -48,14 +51,14 @@ helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true
 
-helm upgrade --install promtail grafana/promtail \
-    --version "${PROMTAIL_VERSION}" \
+helm upgrade --install alloy grafana/alloy \
+    --version "${ALLOY_VERSION}" \
     --namespace "${LOKI_NS}" \
-    -f "${VALUES_DIR}/promtail-values.yaml" \
+    -f "${VALUES_DIR}/alloy-values.yaml" \
     ${HELM_MODE_ARGS}
 
 if [ "$HELM_DRY_RUN" = "true" ]; then
-    echo -e "${GREEN}✅ Validation dry-run Promtail ${PROMTAIL_VERSION} OK (aucune mutation du cluster)${NC}"
+    echo -e "${GREEN}✅ Validation dry-run Alloy ${ALLOY_VERSION} OK (aucune mutation du cluster)${NC}"
 else
-    echo -e "${GREEN}✅ Promtail ${PROMTAIL_VERSION} opérationnel${NC}"
+    echo -e "${GREEN}✅ Alloy ${ALLOY_VERSION} opérationnel${NC}"
 fi

@@ -5,7 +5,7 @@
  *
  * Application RÉELLE (post-merge) d'une mise à jour en place d'un composant
  * d'infrastructure stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-
- * stack, Loki, Promtail, Grafana) — Option 3 de
+ * stack, Loki, Alloy, Grafana) — Option 3 de
  * rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md.
  *
  * ARTICULATION AVEC Jenkinsfile-Renovate :
@@ -42,7 +42,7 @@ pipeline {
         string(
             name: 'COMPONENT',
             defaultValue: '',
-            description: "Composant à mettre à jour : cilium, ngf, kube-prometheus-stack, loki, promtail ou grafana. Si vide, déduit automatiquement des fichiers modifiés par le dernier commit (scripts/components/*.sh)."
+            description: "Composant à mettre à jour : cilium, ngf, kube-prometheus-stack, loki, alloy ou grafana. Si vide, déduit automatiquement des fichiers modifiés par le dernier commit (scripts/components/*.sh)."
         )
     }
 

@@ -309,10 +309,10 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `helm/rhdemo/Chart.yaml` | Métadonnées du chart Helm |
 | `helm/rhdemo/values.yaml` | Configuration par défaut |
 | `helm/rhdemo/templates/` | Templates Kubernetes |
-| `helm/observability/*-values.yaml` | Values Helm pour kube-prometheus-stack, Loki, Promtail, Grafana |
+| `helm/observability/*-values.yaml` | Values Helm pour kube-prometheus-stack, Loki, Alloy, Grafana |
 | `scripts/init-stagingkub.sh` | Script d'initialisation (reconstruction complète) |
 | `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
-| `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Promtail, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
+| `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
 | `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) |
 | `rbac/` | Configuration RBAC Jenkins — `jenkins-deployer` et `jenkins-infra-upgrader`, voir `rbac/README.md` |
 
@@ -378,7 +378,7 @@ kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
 
 ## 🔄 Mise à jour en place de l'infrastructure
 
-Absorber les mises à jour Renovate sur Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Promtail et Grafana **sans reconstruire le cluster** (pas de `kind delete`/`kind create`) : chaque composant est mis à jour en place via `helm upgrade`, exactement comme l'application elle-même (`Jenkinsfile-CD`).
+Absorber les mises à jour Renovate sur Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy et Grafana **sans reconstruire le cluster** (pas de `kind delete`/`kind create`) : chaque composant est mis à jour en place via `helm upgrade`, exactement comme l'application elle-même (`Jenkinsfile-CD`).
 
 ### Principe
 

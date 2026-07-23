@@ -51,7 +51,7 @@ Fichiers : `jenkins-infra-upgrader-serviceaccount.yaml`,
 
 Ce ServiceAccount existe pour une raison précise : absorber les mises à jour
 Renovate des composants d'infrastructure (Cilium, NGINX Gateway Fabric,
-kube-prometheus-stack, Loki, Promtail, Grafana) **sans jamais reconstruire le
+kube-prometheus-stack, Loki, Alloy, Grafana) **sans jamais reconstruire le
 cluster**, en respectant malgré tout le principe de moindre privilège. C'est
 une extension RBAC réelle et documentée, pas une exception silencieuse — voir
 l'étude complète dans

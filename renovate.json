@@ -48,13 +48,13 @@
     },
     {
       "customType": "regex",
-      "description": "Versions des composants d'infrastructure stagingkub (Option 3 — mise à jour en place, cf. rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md) : Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Promtail, Grafana. Format : commentaire '# renovate: datasource=... depName=... [registryUrl=...]' suivi d'une variable shell VERSION=\"x.y.z\"",
+      "description": "Versions des composants d'infrastructure stagingkub (Option 3 — mise à jour en place, cf. rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md) : Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana. Format : commentaire '# renovate: datasource=... depName=... [registryUrl=...]' suivi d'une variable shell VERSION=\"x.y.z\"",
       "managerFilePatterns": [
         "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-cilium.sh",
         "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-ngf.sh",
         "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-kube-prometheus-stack.sh",
         "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-loki.sh",
-        "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-promtail.sh",
+        "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-alloy.sh",
         "rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-grafana.sh"
       ],
       "matchStrings": [

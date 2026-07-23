@@ -1,6 +1,6 @@
 # Role pour jenkins-infra-upgrader dans le namespace loki-stack
-# (releases Helm "loki", "promtail", "grafana"). Ressources namespaced
-# classiques ; Promtail n'a par ailleurs qu'un ClusterRole en LECTURE
+# (releases Helm "loki", "alloy", "grafana"). Ressources namespaced
+# classiques ; Alloy n'a par ailleurs qu'un ClusterRole en LECTURE
 # SEULE (cf. jenkins-infra-upgrader-clusterrole.yaml).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

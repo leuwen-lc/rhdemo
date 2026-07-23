@@ -6,7 +6,7 @@
 #
 # Ce script installe:
 #   - Prometheus (métriques) + Prometheus Operator + AlertManager
-#   - Loki (logs) + Promtail + Grafana
+#   - Loki (logs) + Alloy + Grafana
 #   - Configuration Grafana avec les deux datasources
 #   - Dashboards: Logs, Métriques Pods, Spring Boot Actuator, PostgreSQL
 #
@@ -74,7 +74,7 @@ echo ""
 log "Vérification des fichiers de configuration..."
 [ -f "$VALUES_DIR/prometheus-values.yaml" ] || error "Fichier prometheus-values.yaml manquant"
 [ -f "$VALUES_DIR/loki-modern-values.yaml" ] || error "Fichier loki-modern-values.yaml manquant"
-[ -f "$VALUES_DIR/promtail-values.yaml" ] || error "Fichier promtail-values.yaml manquant"
+[ -f "$VALUES_DIR/alloy-values.yaml" ] || error "Fichier alloy-values.yaml manquant"
 [ -f "$VALUES_DIR/grafana-values.yaml" ] || error "Fichier grafana-values.yaml manquant"
 success "Fichiers de configuration OK"
 echo ""
@@ -98,10 +98,10 @@ echo ""
 echo ""
 
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Étape 3/4 : Promtail${NC}"
+echo -e "${BLUE}  Étape 3/4 : Alloy${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
 echo ""
-"${COMPONENTS_DIR}/install-or-upgrade-promtail.sh"
+"${COMPONENTS_DIR}/install-or-upgrade-alloy.sh"
 echo ""
 
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"

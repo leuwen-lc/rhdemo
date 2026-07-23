@@ -115,7 +115,7 @@ docker info
                                      └──────────────────────────────────────┘
 ```
 
-> Deux ServiceAccounts Kubernetes distincts pour `stagingkub`, générés par `init-stagingkub.sh` : `jenkins-deployer` (déploiement applicatif, `Jenkinsfile-CD`) et `jenkins-infra-upgrader` (mise à jour en place de l'infrastructure — Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Promtail, Grafana — `Jenkinsfile-Stagingkub-Upgrade-Deploy`). Voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
+> Deux ServiceAccounts Kubernetes distincts pour `stagingkub`, générés par `init-stagingkub.sh` : `jenkins-deployer` (déploiement applicatif, `Jenkinsfile-CD`) et `jenkins-infra-upgrader` (mise à jour en place de l'infrastructure — Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana — `Jenkinsfile-Stagingkub-Upgrade-Deploy`). Voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 
 ### Volumes persistants
 
@@ -411,7 +411,7 @@ Les pipelines sont créés automatiquement au démarrage dans la section `jobs:`
 | `RHDemo-CI` | `Jenkinsfile-CI` | Build, tests, scans sécurité, déploiement ephemere, publication image |
 | `RHDemo-CD` | `Jenkinsfile-CD` | Déploiement de l'application sur stagingkub |
 | `RHDemo-Renovate` | `Jenkinsfile-Renovate` | Scan Renovate + automerge des PRs de dépendances (patch/minor) |
-| `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Promtail, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) |
+| `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) |
 
 
 ## 🐳 Docker-in-Docker (DinD)

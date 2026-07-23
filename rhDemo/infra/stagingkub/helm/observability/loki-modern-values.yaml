@@ -82,14 +82,21 @@ resultsCache:
 ###########################################
 # Gateway (routage HTTP vers le SingleBinary)
 ###########################################
-# affinity: {} désactive le podAntiAffinity "requiredDuringScheduling" par
+# affinity: null désactive le podAntiAffinity "requiredDuringScheduling" par
 # défaut du chart (hard, par hostname) : sur ce cluster KinD à un seul nœud,
 # le pod surplus du rolling update (maxSurge) ne peut jamais être scheduled
 # à côté de l'ancien pod tant que cette contrainte est active — deadlock
 # vécu en conditions réelles (pod loki-gateway restant Pending indéfiniment,
 # provoquant le timeout puis le rollback --atomic en cascade).
+# IMPORTANT : `null` explicite, pas `{}` — une carte vide ne supprime pas un
+# champ par défaut du chart lors du merge des values Helm (deep-merge : {}
+# n'apporte aucune clé à substituer, donc le défaut du chart survit tel quel
+# derrière). Seul `null` indique explicitement à Helm de retirer la clé.
+# Vérifié par `helm template` : {} laissait l'anti-affinity intacte, null la
+# supprime bien du manifeste rendu — cause réelle des échecs répétés malgré
+# ce fix apparemment déjà en place.
 gateway:
-  affinity: {}
+  affinity: null
 
 ###########################################
 # Services désactivés (mode SingleBinary)

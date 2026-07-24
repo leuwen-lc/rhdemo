@@ -470,10 +470,45 @@ RENOVATE_SCAN_EOF
                                     returnStdout: true
                                 ).trim()
                                 def mergeStatus = (mergeHttpCode ==~ /2\d\d/) ? 0 : 1
+
+                                // Un code non-2xx (ex: HTTP 504) ne prouve pas que le merge a échoué
+                                // côté Forgejo : l'opération squash-merge peut très bien avoir abouti
+                                // après que la réponse ait expiré derrière le reverse proxy (faux négatif
+                                // observé en pratique sur le build #39 — PR #215 mergée avec succès,
+                                // "Do":"squash" appliqué, malgré un 504 reçu par Jenkins, ce qui avait
+                                // fait échouer le build ET empêché le déclenchement de
+                                // RHDemo-Stagingkub-Upgrade-Deploy alors que le code était déjà mergé).
+                                // On revérifie donc l'état réel de la PR via un GET avant de conclure.
                                 if (mergeStatus != 0) {
-                                    echo "WARN: merge API échoué pour PR #${prNumber} (HTTP ${mergeHttpCode})"
+                                    echo "WARN: merge API a répondu HTTP ${mergeHttpCode} pour PR #${prNumber} — vérification de l'état réel de la PR"
                                     sh "cat /tmp/forgejo-merge-response-${prNumber}.json 2>/dev/null || true"
                                     sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
+
+                                    // En try/catch : si ce GET échoue à son tour (nouveau problème
+                                    // gateway), on ne doit pas planter tout le stage — on retombe
+                                    // simplement sur le comportement d'origine (échec signalé).
+                                    def actuallyMerged = false
+                                    try {
+                                        actuallyMerged = sh(
+                                            script: """
+                                                set +x
+                                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                                  "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}" \
+                                                  | jq -r '.merged'
+                                            """,
+                                            returnStdout: true
+                                        ).trim() == 'true'
+                                    } catch (Exception e) {
+                                        echo "WARN: vérification de l'état de PR #${prNumber} impossible : ${e.message}"
+                                    }
+
+                                    if (actuallyMerged) {
+                                        echo "✅ PR #${prNumber} en fait bien mergée malgré la réponse HTTP ${mergeHttpCode} (timeout gateway probable) — poursuite comme un merge réussi"
+                                        mergeStatus = 0
+                                    }
+                                }
+
+                                if (mergeStatus != 0) {
                                     failures << prNumber
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                         "CI Jenkins OK mais merge échoué (HTTP ${mergeHttpCode} — conflit possible ou droits insuffisants). Intervention manuelle requise. Build : ${env.BUILD_URL}")

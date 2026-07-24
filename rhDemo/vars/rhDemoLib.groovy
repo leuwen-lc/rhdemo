@@ -405,16 +405,29 @@ def withSecretsLoaded(String secretsPath, String command) {
  */
 def postForgejoComment(String forgejoApi, String repo, String issueNumber, String message) {
     withEnv(["FORGEJO_COMMENT_BODY=${message}"]) {
-        sh """
-            set +x
-            PAYLOAD=\$(jq -n --arg body "\${FORGEJO_COMMENT_BODY}" '{body: \$body}')
-            curl -sf -X POST \\
-              -H "Authorization: token \${FORGEJO_TOKEN}" \\
-              -H "Content-Type: application/json" \\
-              -d "\${PAYLOAD}" \\
-              "${forgejoApi}/repos/${repo}/issues/${issueNumber}/comments" >/dev/null \\
-              || echo "⚠️  Commentaire Forgejo non posté sur #${issueNumber}"
-        """
+        // Capture code HTTP + corps de réponse (même principe que le merge dans
+        // Jenkinsfile-Renovate) : un "curl -sf ... || echo échec" ne dit jamais
+        // pourquoi, ce qui a déjà coûté un diagnostic à l'aveugle en pratique.
+        def httpCode = sh(
+            script: """
+                set +x
+                PAYLOAD=\$(jq -n --arg body "\${FORGEJO_COMMENT_BODY}" '{body: \$body}')
+                curl -s -o /tmp/forgejo-comment-response-${issueNumber}.json -w "%{http_code}" -X POST \\
+                  -H "Authorization: token \${FORGEJO_TOKEN}" \\
+                  -H "Content-Type: application/json" \\
+                  -d "\${PAYLOAD}" \\
+                  "${forgejoApi}/repos/${repo}/issues/${issueNumber}/comments"
+            """,
+            returnStdout: true
+        ).trim()
+
+        if (httpCode ==~ /2\d\d/) {
+            sh "rm -f /tmp/forgejo-comment-response-${issueNumber}.json"
+        } else {
+            echo "⚠️  Commentaire Forgejo non posté sur #${issueNumber} (HTTP ${httpCode})"
+            sh "cat /tmp/forgejo-comment-response-${issueNumber}.json 2>/dev/null || true"
+            sh "rm -f /tmp/forgejo-comment-response-${issueNumber}.json"
+        }
     }
 }
 

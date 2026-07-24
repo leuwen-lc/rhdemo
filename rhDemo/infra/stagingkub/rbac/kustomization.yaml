@@ -18,6 +18,8 @@ resources:
   - jenkins-infra-upgrader-loki-stack-role.yaml
   - jenkins-infra-upgrader-monitoring-role.yaml
   - jenkins-infra-upgrader-kube-system-role.yaml
+  - jenkins-infra-upgrader-cilium-system-role.yaml
+  - jenkins-infra-upgrader-cilium-secrets-role.yaml
   - jenkins-infra-upgrader-clusterrole.yaml
 
 commonLabels:

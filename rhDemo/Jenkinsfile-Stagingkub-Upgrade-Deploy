@@ -135,7 +135,7 @@ pipeline {
                         echo "▶ Vérification de l'accès au cluster (ServiceAccount jenkins-infra-upgrader)..."
                         kubectl config current-context
 
-                        if ! kubectl auth can-i update daemonsets/cilium -n kube-system > /dev/null 2>&1 \\
+                        if ! kubectl auth can-i update daemonsets/cilium -n cilium-system > /dev/null 2>&1 \\
                            && ! kubectl auth can-i create deployments -n nginx-gateway > /dev/null 2>&1 \\
                            && ! kubectl auth can-i create deployments -n monitoring > /dev/null 2>&1 \\
                            && ! kubectl auth can-i create deployments -n loki-stack > /dev/null 2>&1; then

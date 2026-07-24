@@ -1,0 +1,72 @@
+# Role pour jenkins-infra-upgrader dans le namespace cilium-system
+# (release Helm "cilium" + "cilium-preflight" — CNI). Namespace dédié et
+# mono-usage, contrairement à kube-system : aucun risque d'exposer un objet
+# système sans rapport (tokens bootstrap, certs kubeadm, autres composants
+# système), donc RBAC large sans `resourceNames`, même traitement que
+# nginx-gateway/loki-stack.
+#
+# Ce namespace dédié élimine la friction récurrente de l'ancien modèle
+# kube-system (resourceNames figés, échec à chaque nouvelle version de
+# Cilium introduisant un objet nommé inédit : cilium-envoy,
+# cilium-config-agent, cilium-operator-ztunnel, cilium-pre-flight...) :
+# create/update/patch/delete sont désormais couverts génériquement, plus
+# besoin de connaître à l'avance chaque nom d'objet.
+#
+# Seuls les ClusterRole/ClusterRoleBinding cluster-scoped (`cilium`,
+# `cilium-operator`, `cilium-pre-flight`) restent nommés et sans `create`
+# dans jenkins-infra-upgrader-clusterrole.yaml — la protection `escalate`
+# native de Kubernetes ne dépend pas du namespace des ressources namespacées,
+# et un namespace dédié ne change rien à leur niveau de risque.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-cilium-system-role
+  namespace: cilium-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "serviceaccounts", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Role/RoleBinding namespacés gérés par la release Helm (cilium-config-agent,
+  # cilium-operator-ztunnel...) : jamais de `create`/`delete` ici — RBAC
+  # Kubernetes ne permet pas de restreindre `create` par `resourceNames`, et la
+  # protection `escalate` native ne s'applique qu'à `update`/`patch`, pas à un
+  # `create` libre qui permettrait de définir un Role arbitraire dans ce
+  # namespace. Même limitation que grafana (jenkins-infra-upgrader-loki-stack-role.yaml) :
+  # création initiale = opération admin ponctuelle, jenkins-infra-upgrader ne
+  # fait que patcher l'existant lors des upgrades suivants.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames: ["cilium-config-agent", "cilium-operator-ztunnel"]
+    verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-cilium-system-rolebinding
+  namespace: cilium-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-cilium-system-role
+  apiGroup: rbac.authorization.k8s.io

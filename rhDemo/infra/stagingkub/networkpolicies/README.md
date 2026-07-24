@@ -149,8 +149,8 @@ Pour diagnostiquer les problèmes de Network Policy avec Cilium :
 
 ```bash
 # Voir les paquets bloqués par Cilium
-kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
-    xargs -I {} kubectl -n kube-system exec {} -- cilium monitor --type drop
+kubectl get pods -n cilium-system -l k8s-app=cilium -o name | head -1 | \
+    xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
 ```
 
 ## Dépannage
@@ -160,7 +160,7 @@ kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
 Vérifiez que le CNI (Cilium) supporte les Network Policies :
 
 ```bash
-kubectl get pods -n kube-system -l k8s-app=cilium
+kubectl get pods -n cilium-system -l k8s-app=cilium
 ```
 
 ### Pod en CrashLoopBackOff avec "context deadline exceeded"
@@ -176,8 +176,8 @@ C'est probablement un problème d'accès à l'API Server. Vérifiez :
 2. Les drops Cilium :
 
    ```bash
-   kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
-       xargs -I {} kubectl -n kube-system exec {} -- cilium monitor --type drop
+   kubectl get pods -n cilium-system -l k8s-app=cilium -o name | head -1 | \
+       xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
    ```
 
 ### Grafana ne peut pas accéder à Prometheus

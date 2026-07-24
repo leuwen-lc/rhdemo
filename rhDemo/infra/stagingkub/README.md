@@ -233,7 +233,7 @@ kubectl cluster-info --context kind-rhdemo
 kubectl get nodes
 
 # Vérifier Cilium
-kubectl get pods -n kube-system -l k8s-app=cilium
+kubectl get pods -n cilium-system -l k8s-app=cilium
 
 # Vérifier NGINX Gateway Fabric
 kubectl get pods -n nginx-gateway

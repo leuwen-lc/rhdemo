@@ -1,14 +1,14 @@
-# Role pour jenkins-infra-upgrader dans le namespace kube-system (Cilium).
+# Role pour jenkins-infra-upgrader dans le namespace kube-system.
 #
-# Cilium bootstrappe lui-même ses propres CRDs (cilium.io) au démarrage de
-# l'agent/operator, via SA propre — vérifié en inspectant le chart Cilium
-# 1.18.6 (aucun dossier crds/, aucune CRD dans `helm template --include-crds`).
-# jenkins-infra-upgrader n'a donc besoin QUE des objets que la release Helm
-# gère directement (DaemonSet, Deployment, ConfigMap, Service, ServiceAccounts,
-# Role/RoleBinding), et
-# UNIQUEMENT ceux nommément listés ci-dessous — jamais un accès générique à
-# kube-system (voir jenkins-infra-upgrader-clusterrole.yaml pour le
-# ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` eux-mêmes).
+# Depuis la bascule de Cilium vers son propre namespace dédié
+# (`cilium-system`, cf. jenkins-infra-upgrader-cilium-system-role.yaml et
+# install-or-upgrade-cilium.sh), le seul objet de kube-system encore géré par
+# une release Helm de jenkins-infra-upgrader est ce Service : la release
+# "prometheus" (kube-prometheus-stack, namespace `monitoring`) crée un
+# Service headless dans kube-system pour scraper les métriques CoreDNS.
+# `prometheus-kube-prometheus-kubelet` (autre Service de kube-system) n'est
+# PAS géré par Helm (annotation app.kubernetes.io/managed-by=prometheus-operator,
+# reconcilié par l'Operator lui-même) — aucun droit RBAC nécessaire dessus.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -18,95 +18,10 @@ metadata:
     app.kubernetes.io/name: jenkins-infra-upgrader
     app.kubernetes.io/component: ci-cd-infra-upgrade
 rules:
-  - apiGroups: ["apps"]
-    resources: ["daemonsets"]
-    resourceNames: ["cilium", "cilium-envoy"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "deployments/scale"]
-    resourceNames: ["cilium-operator"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["replicasets"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["configmaps"]
-    resourceNames: ["cilium-config", "cilium-envoy-config"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: ["cilium-ca", "hubble-server-certs", "hubble-relay-client-certs"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: [""]
-    resources: ["serviceaccounts"]
-    resourceNames: ["cilium", "cilium-operator", "cilium-envoy"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  # `cilium-envoy` (release Helm cilium) et `prometheus-kube-prometheus-coredns`
-  # (release Helm prometheus — kube-prometheus-stack, Service headless pour
-  # scraper les métriques CoreDNS). Vérifié exhaustivement sur le cluster réel :
-  # `prometheus-kube-prometheus-kubelet` (autre Service de kube-system) n'est
-  # PAS géré par Helm (annotation app.kubernetes.io/managed-by=prometheus-operator,
-  # reconcilié par l'Operator lui-même) — aucun droit RBAC nécessaire dessus ici.
   - apiGroups: [""]
     resources: ["services"]
-    resourceNames: ["cilium-envoy", "prometheus-kube-prometheus-coredns"]
+    resourceNames: ["prometheus-kube-prometheus-coredns"]
     verbs: ["get", "list", "watch", "update", "patch"]
-  # Compromis assumé : pas de `resourceNames` ici, contrairement à toutes les
-  # autres règles de ce fichier. Les pods du DaemonSet Cilium ont un nom
-  # généré (suffixe aléatoire) qui change à chaque rollout/redémarrage — un
-  # `resourceNames` figé casserait la lecture de logs dès le premier
-  # redéploiement. Conséquence acceptée : lecture (get/list/watch, jamais
-  # d'écriture) de TOUS les pods et logs de kube-system (kube-apiserver, etcd,
-  # coredns, kube-proxy, kindnet...), pas seulement ceux de Cilium — vérifié
-  # avec `kubectl auth can-i get pods -n kube-system --as=...` (retourne
-  # "yes"). Risque limité à une fuite de confidentialité en lecture seule
-  # (contenu de logs d'autres composants système), jamais à une élévation de
-  # privilège ou une action d'écriture.
-  - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
-  # Role/RoleBinding namespacés gérés par la release Helm : `cilium-config-agent`
-  # (lecture de cilium-config par l'agent, présent depuis l'install initiale)
-  # et `cilium-operator-ztunnel` (RBAC propre à l'operator pour gérer les
-  # DaemonSets ztunnel — cf. chart >=1.19, toujours rendu même si ztunnel/
-  # ambient mesh n'est pas activé). Jamais de `create` ici (RBAC Kubernetes ne
-  # permet pas de restreindre `create` par `resourceNames` : l'accorder
-  # ouvrirait la création d'un Role/RoleBinding arbitraire dans kube-system,
-  # pas seulement ceux-ci) — même principe que `create` interdit sur
-  # ClusterRole/ClusterRoleBinding ci-dessous. La création initiale de ces
-  # objets est donc une opération admin ponctuelle (comme pour la release
-  # Cilium elle-même).
-  #
-  # Liste vérifiée exhaustivement sur le cluster réel (kind-rhdemo) après
-  # l'upgrade 1.19.5, pas devinée depuis le chart seul :
-  # `kubectl get <kind> -n kube-system -o json | jq '.items[] | select(
-  # .metadata.annotations."meta.helm.sh/release-name"=="cilium") | .metadata.name'`
-  # pour daemonsets/deployments/configmaps/secrets/serviceaccounts/roles/
-  # rolebindings — seule source fiable, une v1.19 a déjà ajouté un objet non
-  # documenté dans le chart (cilium-operator-ztunnel) sans que `helm template`
-  # seul ne l'ait fait ressortir clairement au moment de l'audit initial.
-  - apiGroups: ["rbac.authorization.k8s.io"]
-    resources: ["roles", "rolebindings"]
-    resourceNames: ["cilium-config-agent", "cilium-operator-ztunnel"]
-    verbs: ["get", "list", "watch", "update", "patch"]
-  # Note volontaire : aucun droit sur customresourcedefinitions.cilium.io
-  # (Cilium les gère lui-même, cf. commentaire ci-dessus) ni sur les
-  # ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` (portés par
-  # jenkins-infra-upgrader-clusterrole.yaml, cluster-scoped par nature).
-  #
-  # Hormis la règle pods/pods-log ci-dessus (seule exception documentée),
-  # aucune règle générique (`resourceNames` absent) sur kube-system : toute
-  # nouvelle ressource nommée introduite par une future version de Cilium
-  # nécessite un ajout explicite et revu ici, jamais un accès par défaut.
-  #
-  # Volontairement absent : tout droit sur `secrets` sans `resourceNames`.
-  # Helm a besoin de lister ses propres secrets de suivi de release
-  # (`sh.helm.release.v1.cilium.v<N>`, nom non fixe) — impossible à restreindre
-  # par `resourceNames`. Plutôt que d'élargir cette règle à tout kube-system,
-  # la release Cilium utilise `--set namespaceOverride=kube-system` avec le
-  # stockage Helm dans un namespace dédié `cilium-release` (voir
-  # jenkins-infra-upgrader-cilium-release-role.yaml et
-  # install-or-upgrade-cilium.sh).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

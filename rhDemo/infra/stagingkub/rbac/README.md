@@ -8,7 +8,7 @@ distinctes :
 | ServiceAccount | Utilisé par | Portée |
 |---|---|---|
 | `jenkins-deployer` | `Jenkinsfile-CD` (déploiement applicatif) | Namespace `rhdemo-stagingkub` + lecture/écriture ServiceMonitors dans `monitoring` + PersistentVolumes (cluster-scoped) |
-| `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `kube-system` (restreint à Cilium), `cilium-release` (stockage Helm de la release Cilium), + CRDs/ClusterRoles cluster-scoped nommés |
+| `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `cilium-system` (namespace dédié Cilium, RBAC large), `kube-system` (un seul objet nommé, Prometheus/CoreDNS), + CRDs/ClusterRoles cluster-scoped nommés |
 
 Les deux credentials Jenkins correspondants (`kubeconfig-stagingkub` et
 `kubeconfig-stagingkub-infra-upgrader`) sont générés par
@@ -45,7 +45,7 @@ Fichiers : `jenkins-infra-upgrader-serviceaccount.yaml`,
 `jenkins-infra-upgrader-loki-stack-role.yaml`,
 `jenkins-infra-upgrader-monitoring-role.yaml`,
 `jenkins-infra-upgrader-kube-system-role.yaml`,
-`jenkins-infra-upgrader-cilium-release-role.yaml`,
+`jenkins-infra-upgrader-cilium-system-role.yaml`,
 `jenkins-infra-upgrader-cilium-secrets-role.yaml`,
 `jenkins-infra-upgrader-clusterrole.yaml`.
 
@@ -75,62 +75,82 @@ l'étude complète dans
   ajoutée ici explicitement et revue — jamais un accès élargi par défaut.
   L'échec est le comportement attendu tant que cet ajout n'a pas été fait.
 
-### Cas particulier Cilium (`kube-system`)
+### Cas particulier Cilium (`cilium-system`)
+
+**Historique** : Cilium vivait initialement dans `kube-system` (choix par
+défaut de la doc Cilium), avec un RBAC restreint par `resourceNames` comme
+NGF/kube-prometheus-stack. En pratique, chaque nouvelle version de Cilium
+introduisait régulièrement un objet nommé inédit (`cilium-envoy`,
+`cilium-config-agent`, `cilium-operator-ztunnel`, `cilium-pre-flight`...),
+provoquant un échec de pipeline à chaque fois tant que le nom n'avait pas été
+ajouté manuellement au RBAC — bien plus fréquent que pour les autres
+composants. Vérifié avant bascule (`helm template` sur le chart 1.19.6,
+comparaison namespace custom vs `kube-system`, inspection des variables
+d'environnement `CILIUM_K8S_NAMESPACE`) : le chart Cilium ne câble aucun
+namespace en dur, l'agent/operator lisent leur propre namespace via la
+downward API, et le chart supporte officiellement une installation hors
+`kube-system` (garde-fou GKE qui recommande explicitement cette option dans
+certains cas). Cilium a donc été basculé vers un namespace dédié et
+mono-usage, `cilium-system`, au même titre que `nginx-gateway`/`loki-stack` —
+voir `install-or-upgrade-cilium.sh` pour le détail de la bascule.
 
 Cilium bootstrappe lui-même ses CRDs (`cilium.io`) au démarrage de
 l'agent/operator, via son propre ServiceAccount — vérifié en inspectant le
 chart 1.18.6 (`helm template --include-crds` : aucune CRD rendue ; aucun
 dossier `crds/` dans le chart). `jenkins-infra-upgrader` n'a donc **aucun
-droit CRD** sur `cilium.io`, uniquement des droits nommés sur les objets que
-la release Helm gère directement : `daemonset/cilium`,
-`deployment/cilium-operator`, `configmap/cilium-config`, et les
-ClusterRole/ClusterRoleBinding `cilium`/`cilium-operator` (portés par
-`jenkins-infra-upgrader-clusterrole.yaml`).
+droit CRD** sur `cilium.io`.
 
-Le garde-fou réel sur ces deux derniers objets : Kubernetes empêche
-nativement l'auto-élévation de privilèges via RBAC (verbe spécial
+**`jenkins-infra-upgrader-cilium-system-role.yaml`** : RBAC large sans
+`resourceNames` sur `daemonsets`/`deployments`/`configmaps`/`secrets`/
+`serviceaccounts`/`services` (create/update/patch/delete), même logique que
+`nginx-gateway`/`loki-stack` — namespace mono-usage, aucun risque d'exposer
+un objet système sans rapport. Ceci couvre à la fois les ressources réelles
+de la release `cilium` et le stockage Helm de ses secrets de suivi
+(`sh.helm.release.v1.*`, nom non fixe), qui vivent désormais dans le même
+namespace : plus besoin du namespace séparé `cilium-release` de l'ancien
+modèle. Cela couvre aussi, sans ajout RBAC, la release `cilium-preflight`
+(job de compatibilité CRD exécuté à chaque montée de version mineure) —
+c'est elle qui avait déclenché l'échec initial motivant cette bascule.
+
+**Ce qui reste nommé et restreint malgré la bascule — ClusterRole/
+ClusterRoleBinding cluster-scoped (`cilium`, `cilium-operator`,
+`cilium-pre-flight`)** : portés par `jenkins-infra-upgrader-clusterrole.yaml`,
+`get`/`update`/`patch` uniquement, jamais `create`. Ces objets ne sont pas
+namespacés — le namespace dédié de Cilium ne change rien à leur niveau de
+risque, la restriction reste nécessaire. Le garde-fou réel : Kubernetes
+empêche nativement l'auto-élévation de privilèges via RBAC (verbe spécial
 `escalate`) — `jenkins-infra-upgrader` ne pourra jamais réécrire les règles
 du ClusterRole `cilium` pour lui accorder des droits qu'il ne détient pas
 déjà lui-même. Si une future version de Cilium a besoin d'étendre son propre
 ClusterRole, l'upgrade échoue proprement (rollback `--atomic`) plutôt que de
-réussir silencieusement avec des droits élargis.
+réussir silencieusement avec des droits élargis. Conséquence pour
+`cilium-pre-flight` : sa première création (par version majeure/mineure
+introduisant ce garde-fou) reste une opération admin ponctuelle, comme pour
+`cilium`/`cilium-operator` — voir `install-or-upgrade-cilium.sh` (la release
+`cilium-preflight` n'est volontairement jamais supprimée par
+`jenkins-infra-upgrader`, uniquement mise à jour en place, pour ne jamais
+avoir besoin de la recréer).
 
-**Compromis assumé et documenté — lecture des pods/logs `kube-system`** : la
-règle `pods`/`pods/log` de `jenkins-infra-upgrader-kube-system-role.yaml` est
-la seule de tout ce Role sans `resourceNames` (contrairement au principe
-énoncé plus haut). Les pods du DaemonSet Cilium portent un nom généré
-(suffixe aléatoire, change à chaque rollout) — un `resourceNames` figé
-casserait la lecture de logs dès le premier redémarrage. Conséquence acceptée
-et vérifiée (`kubectl auth can-i get pods -n kube-system --as=...` → `yes`) :
-`jenkins-infra-upgrader` peut lire (jamais écrire) les pods et logs de
-**tout** `kube-system` (kube-apiserver, etcd, coredns, kube-proxy...), pas
-seulement ceux de Cilium. Risque limité à une fuite de confidentialité en
-lecture seule, sans élévation de privilège ni action d'écriture possible.
+**`jenkins-infra-upgrader-kube-system-role.yaml` — désormais quasi vide.**
+Depuis la bascule, le seul objet encore géré par `jenkins-infra-upgrader`
+dans `kube-system` est sans rapport avec Cilium : le Service headless
+`prometheus-kube-prometheus-coredns`, créé par la release Helm
+`kube-prometheus-stack` (namespace `monitoring`) pour scraper les métriques
+CoreDNS. Plus aucun accès générique (`pods`/`pods/log`, `secrets`) n'y est
+nécessaire — l'ancien compromis (lecture de tous les pods/logs de
+`kube-system`, uniquement justifié par les noms de pods aléatoires du
+DaemonSet Cilium) a disparu avec la bascule.
 
-**Namespace dédié `cilium-release` — état Helm de la release Cilium.** Helm a
-besoin de lister ses propres secrets de suivi de release
-(`sh.helm.release.v1.cilium.v<N>`), dont le nom change à chaque révision —
-impossible à couvrir par `resourceNames`, contrairement à `cilium-ca`/
-`hubble-*-certs` (secrets nommés fixes gérés par le chart). Plutôt qu'élargir
-`jenkins-infra-upgrader-kube-system-role.yaml` à un accès secrets générique
-(exposerait tous les secrets de `kube-system`, y compris tokens bootstrap et
-certs kubeadm), la release Cilium est installée avec
-`--namespace cilium-release --set namespaceOverride=kube-system` : les
-ressources réelles (DaemonSet, ConfigMap, ServiceAccounts) continuent de
-vivre dans `kube-system` sous les droits nommés ci-dessus, seul le stockage
-Helm vit dans `cilium-release`. Ce namespace est mono-usage (aucune ressource
-Cilium n'y est créée) : un accès `secrets` sans `resourceNames`
-(`jenkins-infra-upgrader-cilium-release-role.yaml`) y est donc sans risque,
-même logique que `nginx-gateway`/`loki-stack` ci-dessous.
-
-**Namespace `cilium-secrets` — créé par le chart lui-même.** Le chart Cilium
-crée ce namespace pour la synchro de secrets TLS (Ingress/Gateway API/Envoy
-SDS), fonctionnalité présente dans le chart mais non utilisée ici. Il ne
-contient que deux `Role`/`RoleBinding` gérés par la release (`cilium-tlsinterception-secrets`,
+**Namespace `cilium-secrets` — créé par le chart lui-même, inchangé par la
+bascule.** Le chart Cilium crée ce namespace pour la synchro de secrets TLS
+(Ingress/Gateway API/Envoy SDS), fonctionnalité présente dans le chart mais
+non utilisée ici. Il ne contient que deux `Role`/`RoleBinding` gérés par la
+release (`cilium-tlsinterception-secrets`,
 `cilium-operator-tlsinterception-secrets`) — inventaire vérifié
-exhaustivement sur le cluster réel, pas deviné. Même traitement que les
-Role/RoleBinding de `kube-system` : accès nommé, jamais de `create`
-(`jenkins-infra-upgrader-cilium-secrets-role.yaml`).
+exhaustivement sur le cluster réel, pas deviné. Nom fixe indépendant du
+namespace d'installation de Cilium, donc non affecté par la bascule vers
+`cilium-system`. Même traitement qu'ailleurs : accès nommé, jamais de
+`create` (`jenkins-infra-upgrader-cilium-secrets-role.yaml`).
 
 **Méthode d'audit à privilégier pour Cilium** : ne pas se fier uniquement à
 `helm template`/aux commentaires du chart pour lister les objets à couvrir —

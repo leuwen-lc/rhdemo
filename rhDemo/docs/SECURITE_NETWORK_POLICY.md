@@ -375,7 +375,7 @@ Si vous ajoutez un nouveau service exposé via la Gateway, modifiez `nginx-gatew
 
 1. Vérifiez que Cilium est bien installé et fonctionnel :
    ```bash
-   kubectl get pods -n kube-system -l k8s-app=cilium
+   kubectl get pods -n cilium-system -l k8s-app=cilium
    ```
 
 2. Vérifiez les labels des pods :
@@ -436,8 +436,8 @@ kubectl logs -n nginx-gateway -l app.kubernetes.io/name=shared-gateway-nginx --t
 
 # Si vous voyez "dial tcp <IP>:443: i/o timeout", la communication gRPC est bloquée
 # Vérifier les drops Cilium
-kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
 ```
 
 **3. Vérifier que les HTTPRoutes sont acceptées**
@@ -519,10 +519,10 @@ Pour vérifier si un pod est bloqué par une NetworkPolicy vers l'API Server :
 
 ```bash
 # Identifier l'endpoint Cilium du pod
-kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep <pod-name>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg endpoint list | grep <pod-name>
 
 # Monitorer les drops en temps réel (remplacer <ID> par l'endpoint ID)
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ID>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg monitor --type drop --from <ID>
 
 # Lister les CiliumNetworkPolicies
 kubectl get ciliumnetworkpolicies -A

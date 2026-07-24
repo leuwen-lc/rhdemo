@@ -537,11 +537,11 @@ KUBECONFIG_EOF
     echo -e "${YELLOW}▶ Configuration RBAC pour jenkins-infra-upgrader...${NC}"
 
     # Namespaces nécessaires (monitoring déjà créé ci-dessus)
-    # cilium-release : stockage dédié de l'état Helm de la release Cilium
-    # (secrets sh.helm.release.v1.*), séparé de kube-system — voir
-    # jenkins-infra-upgrader-cilium-release-role.yaml et
+    # cilium-system : namespace dédié et mono-usage pour la release Helm
+    # Cilium (ressources réelles + stockage Helm), à la place de kube-system —
+    # voir jenkins-infra-upgrader-cilium-system-role.yaml et
     # install-or-upgrade-cilium.sh.
-    for ns in nginx-gateway loki-stack cilium-release; do
+    for ns in nginx-gateway loki-stack cilium-system; do
         if ! kubectl get namespace "$ns" > /dev/null 2>&1; then
             echo -e "${YELLOW}  - Création du namespace '$ns'...${NC}"
             kubectl create namespace "$ns"
@@ -553,7 +553,7 @@ KUBECONFIG_EOF
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-loki-stack-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-monitoring-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-kube-system-role.yaml"
-    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-release-role.yaml"
+    kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-system-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-cilium-secrets-role.yaml"
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-clusterrole.yaml"
     echo -e "${GREEN}✅ Ressources RBAC jenkins-infra-upgrader appliquées${NC}"
@@ -613,8 +613,8 @@ KUBECONFIG_EOF
 
     # Vérification des permissions clés (accordées)
     echo -e "${YELLOW}  - Vérification des permissions RBAC jenkins-infra-upgrader...${NC}"
-    if kubectl auth can-i update daemonsets/cilium -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
-        echo -e "${GREEN}    ✓ Mise à jour du DaemonSet cilium (kube-system, nommé)${NC}"
+    if kubectl auth can-i update daemonsets/cilium -n cilium-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Mise à jour du DaemonSet cilium (cilium-system)${NC}"
     else
         echo -e "${RED}    ✗ Mise à jour du DaemonSet cilium refusée${NC}"
     fi
@@ -631,10 +631,10 @@ KUBECONFIG_EOF
         echo -e "${RED}    ✗ Mise à jour de la CRD httproutes.gateway.networking.k8s.io refusée${NC}"
     fi
 
-    if kubectl auth can-i list secrets -n cilium-release --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
-        echo -e "${GREEN}    ✓ Gestion des secrets de release Helm Cilium (cilium-release)${NC}"
+    if kubectl auth can-i list secrets -n cilium-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Gestion des secrets (cilium-system, namespace dédié)${NC}"
     else
-        echo -e "${RED}    ✗ Gestion des secrets de release Helm Cilium (cilium-release) refusée${NC}"
+        echo -e "${RED}    ✗ Gestion des secrets (cilium-system) refusée${NC}"
     fi
 
     # Vérification des refus attendus (garde-fous)
@@ -644,12 +644,19 @@ KUBECONFIG_EOF
         echo -e "${YELLOW}    ⚠ Accès à rhdemo-stagingkub détecté (inattendu)${NC}"
     fi
 
-    # Note : get/list/watch sur pods et pods/log EST générique dans kube-system
-    # (compromis assumé, cf. jenkins-infra-upgrader-kube-system-role.yaml) —
-    # ce garde-fou porte donc sur les secrets, jamais accessibles sans
-    # resourceNames dans kube-system (cf. namespace cilium-release ci-dessus).
+    # Depuis la bascule de Cilium vers cilium-system, jenkins-infra-upgrader
+    # n'a plus qu'un unique objet nommé dans kube-system (Service
+    # prometheus-kube-prometheus-coredns, cf.
+    # jenkins-infra-upgrader-kube-system-role.yaml) — plus aucun accès
+    # générique (pods/pods-log, secrets) n'y est nécessaire.
+    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+        echo -e "${GREEN}    ✓ Pas d'accès générique aux pods de kube-system (sécurité OK)${NC}"
+    else
+        echo -e "${YELLOW}    ⚠ Accès générique aux pods de kube-system détecté (inattendu)${NC}"
+    fi
+
     if ! kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
-        echo -e "${GREEN}    ✓ Pas d'accès générique aux secrets de kube-system (nommés uniquement)${NC}"
+        echo -e "${GREEN}    ✓ Pas d'accès générique aux secrets de kube-system (sécurité OK)${NC}"
     else
         echo -e "${YELLOW}    ⚠ Accès générique aux secrets de kube-system détecté (inattendu)${NC}"
     fi

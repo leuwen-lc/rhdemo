@@ -41,7 +41,7 @@ rules:
   # l'état des CRDs), écriture strictement restreinte par resourceNames à
   # la liste exacte des CRDs Gateway API / NGF / kube-prometheus-stack.
   # Cilium est volontairement absent de cette liste (bootstrappe ses
-  # propres CRDs lui-même, cf. jenkins-infra-upgrader-kube-system-role.yaml).
+  # propres CRDs lui-même, cf. jenkins-infra-upgrader-cilium-system-role.yaml).
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
@@ -93,6 +93,7 @@ rules:
     resourceNames:
       - cilium
       - cilium-operator
+      - cilium-pre-flight
       - ngf-nginx-gateway-fabric
       - prometheus-kube-state-metrics
       - prometheus-kube-prometheus-operator
@@ -110,6 +111,7 @@ rules:
     resourceNames:
       - cilium
       - cilium-operator
+      - cilium-pre-flight
       - ngf-nginx-gateway-fabric
       - prometheus-kube-state-metrics
       - prometheus-kube-prometheus-operator

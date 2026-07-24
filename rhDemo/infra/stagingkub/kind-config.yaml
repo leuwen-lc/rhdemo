@@ -57,7 +57,7 @@ nodes:
 # Installation manuelle (si nécessaire) :
 #   helm repo add cilium https://helm.cilium.io/
 #   helm install cilium cilium/cilium --version 1.18.6 \
-#     --namespace kube-system \
+#     --namespace cilium-system --create-namespace \
 #     --set kubeProxyReplacement=true \
 #     --set k8sServiceHost=rhdemo-control-plane \
 #     --set k8sServicePort=6443 \
@@ -65,5 +65,5 @@ nodes:
 #     --set ipam.mode=kubernetes
 #
 # Vérification :
-#   kubectl get pods -n kube-system -l k8s-app=cilium
+#   kubectl get pods -n cilium-system -l k8s-app=cilium
 # ═══════════════════════════════════════════════════════════════

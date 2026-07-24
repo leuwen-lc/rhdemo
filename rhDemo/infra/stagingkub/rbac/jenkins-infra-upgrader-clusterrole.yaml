@@ -120,6 +120,90 @@ rules:
       - loki-clusterrolebinding
       - grafana-clusterrolebinding
     verbs: ["update", "patch"]
+
+  # Miroir des règles portées par les ClusterRoles
+  # prometheus-kube-prometheus-operator / prometheus-kube-prometheus-prometheus
+  # (kube-prometheus-stack). Le `get/update/patch` nommé ci-dessus sur ces
+  # deux objets ne suffit PAS : le garde-fou RBAC natif de Kubernetes contre
+  # l'auto-élévation de privilèges (admission "non-escalating rule",
+  # indépendant du verbe `escalate`) exige que le compte qui patche un
+  # ClusterRole détienne DÉJÀ lui-même toutes les règles qu'il y écrit —
+  # y compris celles déjà présentes et inchangées d'une version à l'autre.
+  # Contrairement à l'hypothèse initiale documentée dans
+  # STAGINGKUB_REBUILD_PIPELINE.md (le garde-fou `escalate` protégerait ce
+  # cas comme pour Cilium), ce chemin n'avait jamais été exercé en
+  # conditions réelles — l'installation initiale s'était faite depuis
+  # l'hôte avec un kubeconfig admin. Ces deux ClusterRoles n'acceptant pas
+  # de restriction par `resourceNames` (ils s'appliquent cluster-wide, sans
+  # nom d'objet cible), aucune réduction de portée n'est possible ici :
+  # liste vérifiée exhaustivement sur le message d'erreur RBAC réel de
+  # l'échec d'upgrade kube-prometheus-stack 87.17.0 (union des deux
+  # ClusterRoles). Conséquence acceptée : accès `secrets`/`configmaps`
+  # cluster-wide pour `jenkins-infra-upgrader`.
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["endpoints", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["patch", "create"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["watch"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["services/finalizers"]
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["*"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "create", "list", "watch", "update", "delete"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["patch", "create"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - alertmanagerconfigs
+      - alertmanagers
+      - alertmanagers/finalizers
+      - alertmanagers/status
+      - podmonitors
+      - podmonitors/status
+      - probes
+      - probes/status
+      - prometheusagents
+      - prometheusagents/finalizers
+      - prometheusagents/status
+      - prometheuses
+      - prometheuses/finalizers
+      - prometheuses/status
+      - prometheusrules
+      - prometheusrules/status
+      - scrapeconfigs
+      - scrapeconfigs/status
+      - servicemonitors
+      - servicemonitors/status
+      - thanosrulers
+      - thanosrulers/finalizers
+      - thanosrulers/status
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

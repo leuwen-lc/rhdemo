@@ -188,6 +188,18 @@ réels (voir `jenkins-infra-upgrader-clusterrole.yaml` pour le détail complet) 
   `prometheuses`, `prometheusrules`, `scrapeconfigs`, `servicemonitors`,
   `thanosrulers` (`.monitoring.coreos.com`).
 
+### Miroir des règles Operator/Prometheus (`jenkins-infra-upgrader-clusterrole.yaml`)
+
+En plus du `get`/`update`/`patch` nommé sur les `ClusterRole`
+`prometheus-kube-prometheus-operator`/`-prometheus`, `jenkins-infra-upgrader`
+détient un bloc de règles qui reprend exactement le contenu de ces deux
+`ClusterRole` (union des deux, vérifiée sur le message d'erreur RBAC réel de
+l'upgrade 87.17.0) : le garde-fou anti-élévation de Kubernetes exige de
+détenir déjà toute règle qu'on écrit dans un `ClusterRole`, même déjà
+présente et inchangée. Ni `resourceNames` ni réduction de portée possibles
+(ces `ClusterRole` s'appliquent cluster-wide) — conséquence assumée :
+`secrets`/`configmaps` cluster-wide pour `jenkins-infra-upgrader`.
+
 ### Admission webhooks Prometheus Operator : désactivés
 
 `prometheusOperator.admissionWebhooks.enabled: false` dans

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+    <!-- CspPolicyBuilderPropertyTest fuzze volontairement des milliers d'URI invalides,
+         chacune journalisée en WARN par CspPolicyBuilder en usage normal (utile en
+         production) — sans intérêt en test où c'est le comportement attendu, et ça
+         représente à lui seul la majorité du volume de logs d'un `mvnw verify`. Ce test
+         jqwik pur ne charge pas de contexte Spring : logback-test.xml (pris en compte
+         indépendamment de tout profil Spring) est le seul point où ce niveau peut être
+         réglé, contrairement à application-test.yml. -->
+    <logger name="fr.leuwen.rhdemoAPI.springconfig.CspPolicyBuilder" level="ERROR"/>
+</configuration>

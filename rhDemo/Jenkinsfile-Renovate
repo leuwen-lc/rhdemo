@@ -439,9 +439,12 @@ RENOVATE_SCAN_EOF
                                     script: '''
                                         cd rhDemo
                                         set -e
-                                        ./mvnw clean compile -DskipTests
-                                        ./mvnw verify
-                                        ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                        # -q : n'affiche que warnings/erreurs Maven (les résultats de tests
+                                        # restent exploitables via les rapports JUnit archivés par le step
+                                        # "junit" plus bas, indépendants de la verbosité console).
+                                        ./mvnw -q clean compile -DskipTests
+                                        ./mvnw -q verify
+                                        ./mvnw -q org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
                                     ''',
                                     returnStatus: true
                                 )

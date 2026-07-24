@@ -54,6 +54,10 @@ pipeline {
         // install-or-upgrade-ngf.sh — voir kind-config.yaml, hostPort 443 -> containerPort 32616)
         HTTPS_NODEPORT = '32616'
         KIND_NODE_CONTAINER = 'rhdemo-control-plane'
+
+        // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials)
+        NOTIFICATION_EMAIL = 'lcpro@etik.com'
     }
 
     stages {
@@ -200,9 +204,35 @@ pipeline {
                 echo "═══════════════════════════════════════════════════════"
             }
         }
+        success {
+            script {
+                echo "✅ Mise à jour en place réussie pour ${env.TARGET_COMPONENT ?: 'N/A'}"
+
+                // Best-effort : une panne SMTP ne doit pas faire échouer un build par ailleurs réussi.
+                // emailext (plugin email-ext) et non le step "mail" basique : credential SMTP
+                // géré côté serveur (Extended E-mail Notification), voir jenkins-casc.yaml.
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "✅ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : succès (${env.TARGET_COMPONENT ?: 'N/A'})",
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a réussi.\n\nComposant mis à jour : ${env.TARGET_COMPONENT ?: 'N/A'}\nApplication : ${env.APP_URL}\n\nDétails : ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
         failure {
-            echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --atomic dans le script composant."
-            echo "   Consultez les logs ci-dessus pour le détail de l'échec."
+            script {
+                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --atomic dans le script composant."
+                echo "   Consultez les logs ci-dessus pour le détail de l'échec."
+
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : échec (${env.TARGET_COMPONENT ?: 'N/A'})",
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback automatique déclenché par --atomic dans le script composant.\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
         }
     }
 }

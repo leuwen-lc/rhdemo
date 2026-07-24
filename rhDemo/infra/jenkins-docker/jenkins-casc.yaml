@@ -243,9 +243,16 @@ unclassified:
   # Pas de bloc JCasC ici : le configurateur ne gère pas le champ credentialsId de ce plugin.
 
   # Configuration Location
+  # adminAddress doit correspondre au compte SMTP authentifié (smtp-infomaniak-credentials,
+  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Stagingkub-Upgrade-Deploy) n'a pas de
+  # "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
+  # avec le compte authentifié fait rejeter l'envoi par Infomaniak (observé en pratique :
+  # un override manuel via l'UI avait corrigé cette valeur, mais un redémarrage Jenkins a
+  # réappliqué ce fichier JCasC et donc écrasé silencieusement l'override, cassant les
+  # notifications email de tous les pipelines pendant plusieurs jours sans erreur visible).
   location:
     url: "http://jenkins:8080/"
-    adminAddress: "jenkins@example.com"
+    adminAddress: "lcpro@etik.com"
 
 # ═══════════════════════════════════════════════════════════════════
 # JOBS - Pipelines RHDemo

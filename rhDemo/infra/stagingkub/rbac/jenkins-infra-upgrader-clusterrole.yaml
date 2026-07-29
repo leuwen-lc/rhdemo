@@ -82,6 +82,23 @@ rules:
       - thanosrulers.monitoring.coreos.com
     verbs: ["update", "patch"]
 
+  # ValidatingAdmissionPolicy/Binding "safe-upgrades.gateway.networking.k8s.io" :
+  # embarquée par le bundle CRDs Gateway API standard channel vendoré (à
+  # partir de v1.5.0, cf. gateway-api-crds/v2.6.0/crds.yaml) au même titre
+  # que les CRDs elles-mêmes — mêmes principes (lecture large, écriture
+  # restreinte par resourceNames à l'objet exact déjà connu, jamais de
+  # `create`). Ce ne sont pas des objets RBAC (Role/ClusterRole), donc pas
+  # soumis au garde-fou `escalate` : un simple oubli de règle, comme pour les
+  # CRDs ci-dessus.
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    resourceNames:
+      - safe-upgrades.gateway.networking.k8s.io
+    verbs: ["update", "patch"]
+
   # ClusterRoles : mêmes principes, restreint aux objets déjà créés par les
   # releases gérées ici (noms vérifiés par `helm template`/`helm show crds`
   # sur les charts réels du projet).

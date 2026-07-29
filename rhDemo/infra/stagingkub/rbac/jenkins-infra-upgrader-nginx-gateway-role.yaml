@@ -22,6 +22,20 @@ rules:
   - apiGroups: ["gateway.networking.k8s.io"]
     resources: ["gateways", "gateways/status"]
     verbs: ["get", "list", "watch"]
+  # Role/RoleBinding "ngf-nginx-gateway-fabric-cert-generator" (hook Helm
+  # pre-install, cf. templates/certs-job.yaml du chart) : mêmes principes
+  # que les ClusterRoles cluster-scoped (jenkins-infra-upgrader-clusterrole.
+  # yaml) — restreint par resourceNames à l'objet exact déjà connu, jamais
+  # de `create`, soumis au même garde-fou `escalate` (la règle secrets
+  # create/update/get qu'il porte est déjà couverte ci-dessus).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames:
+      - ngf-nginx-gateway-fabric-cert-generator
+    verbs: ["update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

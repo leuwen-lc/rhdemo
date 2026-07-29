@@ -91,6 +91,8 @@ que pour les autres automatisations du projet :
    Collaborators) — jamais Admin.
 3. Se connecter avec ce compte et générer un fine-grained access token sur
    `https://codeberg.org/user/settings/applications`, scope écriture restreint à `rhdemo`.
+4. Si la branche cible est protégée (Settings > Branches), ajouter `fixcvebot-leuwen-lc` à la
+   whitelist de push de la règle correspondante — sinon `git push` est rejeté.
 
 Création :
 

@@ -4,6 +4,26 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
+
+### Détection
+
+- **Date de détection** : 2026-07-29 (build Jenkins RHDemo-CI #721)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `brace-expansion:1.1.17` (`frontend/package-lock.json`, transitif via `minimatch:3.1.5`)
+
+### Description
+
+DoS par épuisement mémoire (uncatchable OOM) : `expand()` borne le nombre de résultats produits (`max`, 100 000 par défaut) mais pas leur longueur — un enchaînement de groupes d'accolades chaînés (`'{a,b}'.repeat(N)`) fait croître la taille totale sans limite et peut faire crasher le process Node avec une entrée d'environ 7,5 Ko. Versions affectées : `<=5.0.7` ; corrigé en `5.0.8`.
+
+### Remédiation automatique (2026-07-29, build #721)
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` (pas de montée de version).
+- **Justification** : `brace-expansion` est fixé à `1.1.17` par la contrainte `^1.1.7` de `minimatch:3.1.5`, lui-même dépendance transitive de la chaîne de build `@vue/cli-service` (`glob`/`rimraf`, devDependency uniquement — absent de `dependencies` dans `frontend/package.json`). `npm audit fix --package-lock-only` rapporte `fixAvailable: false` : la mise à jour vers `5.0.8` impliquerait un saut de version majeure (1.x → 5.x) au-delà de la contrainte semver déclarée par `minimatch`, ce qui nécessiterait `--force` — exclu par la politique du skill `fixcve-auto`. `brace-expansion` n'est utilisé que par ces outils de build (résolution de patterns de fichiers via `minimatch`/`glob`), jamais embarqué dans le bundle de production `vue-cli-service build`.
+- **À retirer** : dès que `@vue/cli-service` (ou sa chaîne de dépendances) embarque une version de `minimatch` compatible avec `brace-expansion >= 5.0.8`.
+
+---
+
 ## Lot npm frontend (build #717) — CVE/GHSA multiples CVSS ≥ 7
 
 ### Détection

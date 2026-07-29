@@ -128,4 +128,22 @@
         <cve>CVE-2026-42154</cve>
     </suppress>
 
+
+    <!--
+        GHSA-mh99-v99m-4gvg (CVE-2026-14257) — brace-expansion (DoS OOM, aucun correctif compatible)
+        brace-expansion <=5.0.7 permet un crash mémoire (uncatchable OOM) via expand() sur une entrée
+        contenant de nombreux groupes d'accolades chaînés. Corrigé en 5.0.8, mais atteint ici en 1.1.17
+        via minimatch:3.1.5 (frontend/package-lock.json?minimatch:3.1.5/brace-expansion:^1.1.7), lui-même
+        dépendance transitive de la chaîne de build @vue/cli-service (glob/rimraf). npm audit fix
+        (package-lock-only) ne peut pas mettre à jour brace-expansion sans saut majeur 1.x -> 5.x
+        (option force, exclue par la politique du skill) : fixAvailable=false.
+        brace-expansion n'est utilisé que par ces outils de build (résolution de patterns de fichiers),
+        jamais embarqué dans le bundle de production vue-cli-service build.
+    -->
+    <suppress>
+        <notes>GHSA-mh99-v99m-4gvg (CVE-2026-14257) : pas de correctif compatible sans passage en force (minimatch:3.1.5, dépendance de build @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/brace-expansion@.*$</packageUrl>
+        <vulnerabilityName>GHSA-mh99-v99m-4gvg</vulnerabilityName>
+    </suppress>
+
 </suppressions>

@@ -4,7 +4,9 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 
 ⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessous — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
 
-⚠️ **Limitation connue — `--dangerously-skip-permissions`** : la conception initiale prévoyait un scope d'outils restreint (`--permission-mode dontAsk` + règles `permissions.allow`), pour que Claude n'ait accès qu'à un périmètre précis (curl Jenkins, git commit/push, quelques commandes). En pratique, ce mode **refuse toute commande Bash réseau même avec des règles d'autorisation explicites** (testé et reproduit sur Claude Code `2.1.205`, en contradiction avec la documentation officielle). Seul `--dangerously-skip-permissions` fonctionne actuellement, ce qui retire tout scoping : pendant l'exécution de `/fixcve-auto`, Claude peut exécuter n'importe quelle commande, pas seulement celles prévues. Comme `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy), c'est une surface d'injection de prompt à garder à l'esprit — les garde-fous **git** ci-dessous (working tree propre, rollback automatique, halte après rollbacks) sont donc la seule protection réellement en place, pas le scoping des outils. À réévaluer si Anthropic corrige `dontAsk`, ou si Claude Code introduit un mode headless réellement scoped.
+⚠️ **Surface d'injection de prompt** : `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy). Le scope d'outils est restreint via `--permission-mode dontAsk` + règles `permissions.allow` (fichier versionné [`fixcve-auto-permissions.json`](../scripts/fixcve-auto-permissions.json)) : Claude n'a accès qu'aux commandes prévues (curl Jenkins/Maven Central, `docker manifest inspect`, `git add`/`commit`/`push`) et aux fichiers de remédiation attendus (`pom.xml`, `Jenkinsfile-CI`, `owasp-suppressions.xml`, `.trivyignore.yaml`, `docs/SECURITY_ADVISORIES.md`, `docs/fixcve-audit.jsonl`, les manifests de déploiement des images externes). Toute autre commande ou fichier est refusé sans prompt (mode non interactif). Ce scoping s'ajoute aux garde-fous **git** ci-dessous (working tree propre, rollback automatique, halte après rollbacks), qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
+
+Historique : la conception initiale utilisait déjà `dontAsk` + `permissions.allow`, mais ce mode refusait alors *toute* commande Bash réseau même avec une règle d'autorisation explicite (bug observé et documenté sur Claude Code `2.1.205`), forçant un contournement temporaire via `--dangerously-skip-permissions` (aucun scoping). Ce bug a été vérifié empiriquement comme résolu sur Claude Code `2.1.220` — le scoping normal a été rétabli.
 
 ---
 
@@ -66,14 +68,14 @@ Ce fichier vit **hors du dépôt git**, chiffré avec votre clé AGE personnelle
 d'un compte bot séparé, ajouté comme collaborateur **Write** (pas Admin) sur `leuwen-lc/rhdemo` —
 pas du compte personnel `leuwen-lc`, même avec un token scope-limité. Raisons, plus marquées ici
 que pour les autres automatisations du projet :
-- `fixcve-auto` tourne avec `--dangerously-skip-permissions` (voir « Limitation connue » en tête
-  de ce document) et parse du contenu externe non fiable (descriptions de CVE, rapports Trivy/
-  OWASP) — c'est la surface d'injection de prompt la plus exposée du projet. Le scope du token est
-  la seule vraie limite si une commande imprévue tentait un `git push` malveillant.
+- `fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapports Trivy/OWASP)
+  — voir « Surface d'injection de prompt » en tête de ce document. Le scope d'outils
+  (`permissions.allow`) limite déjà `git push` à ce dépôt, mais le scope du token reste une
+  deuxième limite indépendante si une commande `git push` malveillante était malgré tout exécutée.
 - **Distinct aussi de `rhdemo-ci-bot`** (compte bot dédié au merge des PRs Renovate — voir
   [`RENOVATE_AUTOMERGE_CI.md`](RENOVATE_AUTOMERGE_CI.md)). Les deux ont le même niveau d'accès
   (write sur `rhdemo`), mais un profil de risque très différent : appels curl/git déterministes
-  d'un côté, agent LLM à outils non scopés sur du contenu non fiable de l'autre. En cas de commit
+  d'un côté, agent LLM à outils scopés sur du contenu non fiable de l'autre. En cas de commit
   suspect, distinguer immédiatement "quelle automatisation" accélère le triage d'incident.
 - Email du compte bot : un alias Gmail `+` (ex. `leuwenlc+fixcvebot@gmail.com`) fonctionne pour
   l'inscription (Codeberg n'exige qu'une adresse unique par compte, pas un domaine distinct), au

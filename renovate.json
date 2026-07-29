@@ -10,6 +10,7 @@
   "prCreation": "immediate",
   "minimumReleaseAge": "7 days",
   "rebaseWhen": "behind-base-branch",
+  "osvVulnerabilityAlerts": true,
   "packageRules": [
     {
       "matchUpdateTypes": [

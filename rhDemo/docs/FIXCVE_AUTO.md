@@ -8,6 +8,8 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 
 Historique : la conception initiale utilisait déjà `dontAsk` + `permissions.allow`, mais ce mode refusait alors *toute* commande Bash réseau même avec une règle d'autorisation explicite (bug observé et documenté sur Claude Code `2.1.205`), forçant un contournement temporaire via `--dangerously-skip-permissions` (aucun scoping). Ce bug a été vérifié empiriquement comme résolu sur Claude Code `2.1.220` — le scoping normal a été rétabli.
 
+⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution de `/fixcve-auto`, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le skill utilise `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
+
 ---
 
 ## Architecture
@@ -63,6 +65,8 @@ Ce fichier vit **hors du dépôt git**, chiffré avec votre clé AGE personnelle
 
 - le compte Jenkins dédié à l'automatisation (`claude`, **pas** `admin` — voir `.claude/skills/fixcve/SKILL.md`),
 - un token Codeberg **dédié et restreint à ce seul dépôt** (fine-grained access token, scope écriture sur `rhdemo` uniquement — ne pas réutiliser un token à portée large).
+
+À chaque cycle, `fixcve-auto-poll.sh` régénère à partir de ce fichier `~/.config/rhdemo-fixcve/jenkins.netrc` (`chmod 600`, jamais versionné) — c'est ce fichier, pas les identifiants Jenkins directement, que `curl --netrc-file` utilise dans le skill (voir l'encadré sur `dontAsk` et les expansions de variable ci-dessus).
 
 **Compte Codeberg dédié (`fixcvebot-leuwen-lc`), pas le compte personnel.** Le token doit provenir
 d'un compte bot séparé, ajouté comme collaborateur **Write** (pas Admin) sur `leuwen-lc/rhdemo` —

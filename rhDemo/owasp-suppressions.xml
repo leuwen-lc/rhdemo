@@ -36,6 +36,12 @@
         <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — Stored XSS via setConfig()/uponSanitizeAttribute qui mute l'allowlist partagée (corrigé en 3.4.11). Non utilisé dans le code applicatif frontend/src (vérifié : aucune référence à DOMPurify). Swagger UI protégé par Spring Security (accès admin uniquement) et le spec OpenAPI est généré statiquement depuis les annotations du code, sans contenu utilisateur non fiable. Pas de springdoc fix disponible (3.0.3 = dernière version Maven Central). A retirer avec springdoc 3.0.4+ embarquant DOMPurify >= 3.4.11.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <cve>CVE-2026-65898</cve>
+    </suppress>
+
 
     <!--
         CVE-2026-42154 — micrometer-registry-prometheus et prometheus-metrics-core (faux positif)

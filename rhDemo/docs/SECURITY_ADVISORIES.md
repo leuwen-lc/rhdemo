@@ -4,6 +4,32 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## CVE-2026-65898 — DOMPurify dans swagger-ui (springdoc-openapi)
+
+### Détection
+
+- **Date de détection** : 2026-07-29 (build Jenkins RHDemo-CI #710)
+- **Outil** : OWASP Dependency-Check (RetireJS + NVD)
+- **Sévérité** : HIGH (CVSSv3.1: 7.2) / MEDIUM (CVSSv4: 5.1)
+- **Composants affectés** : `pkg:javascript/DOMPurify@3.3.2` embarqué dans `swagger-ui-5.32.2.jar` (via `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3`) — même composant que les suppressions DOMPurify déjà documentées plus bas.
+
+### Description
+
+DOMPurify avant 3.4.11 ne clone pas la liste `ALLOWED_ATTR` lorsque `setConfig()` est utilisé avec un hook `uponSanitizeAttribute`, permettant à ce hook de muter durablement la liste partagée. Un attaquant enregistrant un hook autorisant conditionnellement des attributs dangereux (ex: `onerror`) peut ensuite faire hériter ce contournement à du contenu non fiable soumis ultérieurement, exécutant du XSS stocké (CWE-79). Corrigé dans DOMPurify 3.4.11.
+
+### Remédiation automatique (2026-07-29, build #710)
+
+- **Action** : Suppression OWASP (springdoc-openapi 3.0.3 reste la dernière version disponible sur Maven Central, aucun fix amont)
+- **Fichier modifié** : `rhDemo/owasp-suppressions.xml`
+- **Détail** : Suppression par `packageUrl` regex `^pkg:javascript/DOMPurify@3\.3\.2$` — 1 suppression `<cve>` (CVE-2026-65898)
+- **Critère objectif vérifié** : finding RetireJS, DOMPurify non référencé dans `frontend/src` (recherche effectuée, aucune occurrence)
+- **Atténuations en place** :
+  - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security, cf. `SecurityConfig.java`)
+  - Spec OpenAPI générée statiquement depuis les annotations du code, pas de contenu utilisateur non fiable rendu par cette lib
+- **Action requise** : Retirer la suppression et vérifier l'upgrade DOMPurify dès que springdoc-openapi 3.0.4+ est disponible
+
+---
+
 ## Mémo — Texte d'injection de prompt ciblant les agents IA dans jqwik-engine 1.10.1
 
 ### Détection

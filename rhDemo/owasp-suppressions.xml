@@ -36,6 +36,74 @@
         <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible (3.0.3 = dernière version publiée sur Maven Central). Swagger UI protégé par Spring Security ; DOMPurify n'est jamais utilisé par le code applicatif frontend/src. A retirer avec springdoc 3.0.4+.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
+        <cve>CVE-2026-65898</cve>
+    </suppress>
+
+
+    <!--
+        CVE-2022-37620 — html-minifier-terser (faux positif de correspondance CPE)
+        OWASP Dependency-Check associe html-minifier-terser (fork maintenu, utilisé par html-webpack-plugin)
+        au CPE de kangax/html-minifier (projet original non maintenu, dont il dérive) faute de CPE dédié.
+        La CVE elle-même (ReDoS via reCustomIgnore) concerne le code de html-minifier 4.0.0, pas le fork.
+        Par ailleurs html-minifier-terser n'est atteint que via la chaîne de build
+        @vue/cli-service (devDependency) -> html-webpack-plugin -> html-minifier-terser :
+        jamais embarqué dans le bundle de production `vue-cli-service build`.
+    -->
+    <suppress>
+        <notes>CVE-2022-37620 : faux positif CPE (html-minifier-terser confondu avec html-minifier, non maintenu) — de plus package uniquement présent dans la chaîne de build (devDependency @vue/cli-service), jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/html-minifier-terser@.*$</packageUrl>
+        <cve>CVE-2022-37620</cve>
+    </suppress>
+
+
+    <!--
+        GHSA-5m6q-g25r-mvwx — node-forge (DoS bnModInverse, aucun correctif publié)
+        L'avis indique explicitement "Affected versions: All versions (including latest)" :
+        aucune version corrigée n'existe à ce jour sur npm (montée de version 1.3.3 -> 1.4.0
+        appliquée par npm audit fix pour les 3 autres avis node-forge, sans effet sur celui-ci).
+        node-forge n'est atteint que via la chaîne de build
+        @vue/cli-service (devDependency) -> @vue/cli-shared-utils -> @achrinza/node-ipc -> node-forge :
+        jamais embarqué dans le bundle de production `vue-cli-service build`.
+    -->
+    <suppress>
+        <notes>GHSA-5m6q-g25r-mvwx : aucun correctif node-forge disponible (avis officiel : toutes versions affectées) — package uniquement présent dans la chaîne de build (devDependency @vue/cli-service), jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/node-forge@.*$</packageUrl>
+        <vulnerabilityName>GHSA-5m6q-g25r-mvwx</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        GHSA-5c6j-r48x-rmvq — serialize-javascript (RCE, aucun correctif compatible)
+        npm audit fix (package-lock-only) ne peut pas mettre à jour serialize-javascript :
+        copy-webpack-plugin et css-minimizer-webpack-plugin (dépendances de @vue/cli-service)
+        n'acceptent pas de version corrigée sans saut majeur (option force, exclue par la politique du skill).
+        serialize-javascript n'est atteint que via ces plugins de build,
+        jamais embarqué dans le bundle de production vue-cli-service build.
+    -->
+    <suppress>
+        <notes>GHSA-5c6j-r48x-rmvq : pas de correctif compatible sans passage en force (copy-webpack-plugin/css-minimizer-webpack-plugin, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
+        <vulnerabilityName>GHSA-5c6j-r48x-rmvq</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        GHSA-w5hq-g745-h8pq — uuid (dépassement mémoire tampon, aucun correctif compatible)
+        npm audit fix (package-lock-only) ne peut pas mettre à jour uuid :
+        sockjs (dépendance de webpack-dev-server, lui-même dépendance de @vue/cli-service)
+        n'accepte pas de version corrigée sans saut majeur (option force, exclue par la politique du skill).
+        uuid n'est atteint que via cette chaîne de build (serveur de développement),
+        jamais embarqué dans le bundle de production vue-cli-service build.
+    -->
+    <suppress>
+        <notes>GHSA-w5hq-g745-h8pq : pas de correctif compatible sans passage en force (sockjs/webpack-dev-server, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/uuid@.*$</packageUrl>
+        <vulnerabilityName>GHSA-w5hq-g745-h8pq</vulnerabilityName>
+    </suppress>
+
 
     <!--
         CVE-2026-42154 — micrometer-registry-prometheus et prometheus-metrics-core (faux positif)

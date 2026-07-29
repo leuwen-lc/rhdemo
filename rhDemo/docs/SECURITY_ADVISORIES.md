@@ -4,6 +4,32 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Lot npm frontend (build #717) — CVE/GHSA multiples CVSS ≥ 7
+
+### Détection
+
+- **Date de détection** : 2026-07-29 (build Jenkins RHDemo-CI #717)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : dépendances npm transitives de `frontend/package-lock.json` (essentiellement via `@vue/cli-service`) et DOMPurify embarqué dans `swagger-ui-5.32.2.jar` (springdoc-openapi)
+
+### Description
+
+Un lot de CVE/GHSA CVSS ≥ 7 a été détecté sur des dépendances npm transitives : `brace-expansion` (CVE-2026-33750), `minimatch` (CVE-2026-26996, CVE-2026-27903, CVE-2026-27904), `picomatch` (CVE-2026-33671), `shell-quote` (CVE-2026-13311), `svgo` (CVE-2026-29074), `ws` (CVE-2026-48779, CVE-2026-45736), `fast-uri`, `form-data`, `http-proxy-middleware` (CVE-2026-55602), `path-to-regexp`, `qs` (CVE-2026-2391) et `node-forge` (3 avis GHSA sur 4). Plus une CVE sur DOMPurify 3.3.2 embarqué dans `swagger-ui-bundle.js`/`swagger-ui-es-bundle.js` (springdoc-openapi 3.0.3).
+
+### Remédiation automatique (2026-07-29, build #717)
+
+- **Action** : `frontend/node/npm --prefix frontend audit fix --package-lock-only` — montée de version groupée sans `--force` :
+  - `brace-expansion` 1.1.12 → 1.1.17, `minimatch` 3.1.2 → 3.1.5, `picomatch` 2.3.1 → 2.3.2, `shell-quote` 1.8.3 → 1.10.0, `svgo` 2.8.0 → 2.8.3, `ws` 7.5.10 → 7.5.13 / 8.19.0 → 8.21.1, `fast-uri` 3.1.0 → 3.1.4, `form-data` 4.0.5 → 4.0.6, `http-proxy-middleware` 2.0.9 → 2.0.10, `path-to-regexp` 0.1.12 → 0.1.13, `qs` 6.14.1 → 6.15.3, `node-forge` 1.3.3 → 1.4.0
+- **Fichier modifié** : `frontend/package-lock.json` uniquement (aucune contrainte de `frontend/package.json` à changer)
+- **CVE non corrigeables sans saut majeur** (`--force`, exclu par la politique du skill `fixcve-auto`), suppressions documentées dans `owasp-suppressions.xml` — packages atteints uniquement via la chaîne de build `@vue/cli-service` (devDependency), jamais embarqués dans le bundle de production `vue-cli-service build` :
+  - `node-forge` GHSA-5m6q-g25r-mvwx (aucun correctif publié, "all versions affected")
+  - `serialize-javascript` GHSA-5c6j-r48x-rmvq
+  - `uuid` GHSA-w5hq-g745-h8pq
+- **CVE-2022-37620 (`html-minifier-terser`)** : faux positif de correspondance CPE (confusion avec le projet non maintenu `html-minifier`) — suppression documentée, package également limité à la chaîne de build.
+- **CVE-2026-65898 (DOMPurify 3.3.2 dans swagger-ui)** : pas de version springdoc-openapi plus récente que 3.0.3 disponible sur Maven Central ; suppression ajoutée à la suite des suppressions DOMPurify déjà existantes (même rationale : Swagger UI protégé par Spring Security, DOMPurify jamais utilisé par `frontend/src`).
+
+---
+
 ## Mémo — Texte d'injection de prompt ciblant les agents IA dans jqwik-engine 1.10.1
 
 ### Détection

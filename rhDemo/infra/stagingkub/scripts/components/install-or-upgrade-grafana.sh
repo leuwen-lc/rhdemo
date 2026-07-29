@@ -10,6 +10,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=grafana registryUrl=https://grafana.github.io/helm-charts
 GRAFANA_VERSION="10.5.15"  # App: Grafana 12.3.1
@@ -50,6 +51,10 @@ helm repo add grafana https://grafana.github.io/helm-charts --force-update >/dev
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true
+
+rbac_preflight_check grafana "${LOKI_NS}" grafana/grafana \
+    --version "${GRAFANA_VERSION}" \
+    -f "${VALUES_DIR}/grafana-values.yaml" || exit 1
 
 helm upgrade --install grafana grafana/grafana \
     --version "${GRAFANA_VERSION}" \

@@ -22,6 +22,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
 KUBE_PROMETHEUS_STACK_VERSION="87.19.0"  # App: Prometheus Operator v0.88.1
@@ -58,6 +59,10 @@ echo -e "${YELLOW}  - Application des CRDs (server-side, obligatoire pour ce cha
 helm show crds prometheus-community/kube-prometheus-stack --version "${KUBE_PROMETHEUS_STACK_VERSION}" \
     | kubectl apply ${KUBECTL_APPLY_ARGS} -f -
 echo -e "${GREEN}  ✓ CRDs monitoring.coreos.com à jour${NC}"
+
+rbac_preflight_check prometheus "${MONITORING_NS}" prometheus-community/kube-prometheus-stack \
+    --version "${KUBE_PROMETHEUS_STACK_VERSION}" \
+    --values "${VALUES_DIR}/prometheus-values.yaml" || exit 1
 
 helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
     --version "${KUBE_PROMETHEUS_STACK_VERSION}" \

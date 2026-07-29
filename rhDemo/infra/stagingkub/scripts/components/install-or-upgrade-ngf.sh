@@ -16,6 +16,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STAGINGKUB_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # Le datasource "helm" de Renovate ne sait pas résoudre un registryUrl oci://
 # (il tente un index.yaml HTTP classique, inexistant sur un registre OCI —
@@ -68,6 +69,15 @@ fi
 rm -f "${NGF_CRDS_TMP}"
 
 # ─── 3. Release Helm NGF (ou validation dry-run=server) ───
+rbac_preflight_check ngf "${NGF_NAMESPACE}" oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+    --version "${NGF_VERSION}" \
+    --set nginx.service.type=NodePort \
+    --set nginx.service.externalTrafficPolicy=Local \
+    --set 'nginx.service.ports[0].port=80' \
+    --set 'nginx.service.ports[0].nodePort=31792' \
+    --set 'nginx.service.ports[1].port=443' \
+    --set 'nginx.service.ports[1].nodePort=32616' || exit 1
+
 helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --version "${NGF_VERSION}" \
     --create-namespace \

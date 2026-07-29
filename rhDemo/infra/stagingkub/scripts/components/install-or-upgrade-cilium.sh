@@ -33,6 +33,9 @@ set -e
 
 HELM_DRY_RUN="${HELM_DRY_RUN:-false}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
+
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
 CILIUM_VERSION="1.19.6"
 
@@ -133,6 +136,15 @@ if [ "$HELM_DRY_RUN" = "true" ]; then
 else
     HELM_MODE_ARGS="--atomic --wait --timeout 5m"
 fi
+
+rbac_preflight_check cilium "${CILIUM_NAMESPACE}" cilium/cilium --version "${CILIUM_VERSION}" \
+    --set kubeProxyReplacement=true \
+    --set k8sServiceHost="${CILIUM_K8S_API_SERVER}" \
+    --set k8sServicePort="${CILIUM_K8S_API_PORT}" \
+    --set hubble.enabled=false \
+    --set ipam.mode=kubernetes \
+    --set operator.replicas=1 \
+    --set operator.affinity=null || exit 1
 
 helm upgrade --install cilium cilium/cilium --version "${CILIUM_VERSION}" \
     --namespace "${CILIUM_NAMESPACE}" \

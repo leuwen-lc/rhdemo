@@ -16,6 +16,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=alloy registryUrl=https://grafana.github.io/helm-charts
 ALLOY_VERSION="1.11.0"  # App: Alloy v1.18.0
@@ -50,6 +51,10 @@ helm repo add grafana https://grafana.github.io/helm-charts --force-update >/dev
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true
+
+rbac_preflight_check alloy "${LOKI_NS}" grafana/alloy \
+    --version "${ALLOY_VERSION}" \
+    -f "${VALUES_DIR}/alloy-values.yaml" || exit 1
 
 helm upgrade --install alloy grafana/alloy \
     --version "${ALLOY_VERSION}" \

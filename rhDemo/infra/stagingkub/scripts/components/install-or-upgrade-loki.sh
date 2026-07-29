@@ -11,6 +11,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
+source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # Depuis la chart 7.0.0, le dépôt https://grafana.github.io/helm-charts ne
 # publie plus que la variante Grafana Enterprise Logs (GEL) — le chart OSS a
@@ -48,6 +49,10 @@ helm repo add grafana https://grafana-community.github.io/helm-charts --force-up
 helm repo update grafana >/dev/null
 
 kubectl create namespace "${LOKI_NS}" 2>/dev/null || true
+
+rbac_preflight_check loki "${LOKI_NS}" grafana/loki \
+    --version "${LOKI_VERSION}" \
+    -f "${VALUES_DIR}/loki-modern-values.yaml" || exit 1
 
 helm upgrade --install loki grafana/loki \
     --version "${LOKI_VERSION}" \

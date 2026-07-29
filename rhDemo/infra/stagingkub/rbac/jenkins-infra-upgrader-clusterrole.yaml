@@ -201,9 +201,58 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["storage.k8s.io"]
     resources: ["storageclasses"]
-    verbs: ["get"]
+    verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
     verbs: ["get"]
+
+  # Miroir des règles portées par le ClusterRole prometheus-kube-state-metrics
+  # (sous-chart kube-state-metrics de kube-prometheus-stack, kubeStateMetrics.
+  # enabled: true sans restriction de resources dans prometheus-values.yaml,
+  # donc jeu de règles complet upstream). Même raisonnement que le bloc
+  # ci-dessus pour operator/prometheus : le garde-fou RBAC non-escalation
+  # exige que jenkins-infra-upgrader détienne déjà TOUTES ces règles avant de
+  # patcher ce ClusterRole, y compris celles inchangées d'une version à
+  # l'autre. Liste vérifiée exhaustivement via
+  # `helm template ... kube-prometheus-stack --version 87.19.0` suite à
+  # l'échec d'upgrade 87.19.0 (kube-state-metrics avait ajouté de nouvelles
+  # ressources scrutées depuis la dernière vérification à 87.17.0).
+  - apiGroups: ["certificates.k8s.io"]
+    resources: ["certificatesigningrequests"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "replicasets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - limitranges
+      - persistentvolumeclaims
+      - persistentvolumes
+      - replicationcontrollers
+      - resourcequotas
+    verbs: ["list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs: ["list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

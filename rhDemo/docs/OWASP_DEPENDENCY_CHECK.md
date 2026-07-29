@@ -37,6 +37,10 @@ Le **CVSS** (Common Vulnerability Scoring System) évalue la gravité des vulné
 
 ## Configuration actuelle
 
+### Couverture npm (frontend Vue.js)
+
+Le plugin Maven n'analyse par défaut que les dépendances résolues par Maven (jars). Un `scanSet` a été ajouté ([pom.xml](../pom.xml)) pour inclure `frontend/package.json` et `frontend/package-lock.json` dans l'analyse (Node Package/Audit Analyzer + Retire.js, activés par défaut dans dependency-check), afin de couvrir aussi les CVE des dépendances npm (Vue, Element Plus, Axios...). `node_modules/` et `dist/` sont exclus du scan (déjà couverts via les fichiers de lock, inutile de les parcourir).
+
 ### [pom.xml:309-345](../pom.xml#L309-L345)
 
 ```xml

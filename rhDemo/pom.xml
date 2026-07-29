@@ -376,6 +376,22 @@
 
 					<!-- OSS Index : nouvelle URL depuis migration Sonatype (ancienne : ossindex.sonatype.org) -->
 					<ossindexAnalyzerUrl>https://api.guide.sonatype.com</ossindexAnalyzerUrl>
+
+					<!-- Inclure les dépendances npm du frontend (Vue.js) dans le scan CVE
+					     Sans ce scanSet, seules les dépendances Maven sont analysées -->
+					<scanSet>
+						<fileSet>
+							<directory>${project.basedir}/frontend</directory>
+							<includes>
+								<include>package.json</include>
+								<include>package-lock.json</include>
+							</includes>
+							<excludes>
+								<exclude>node_modules/**</exclude>
+								<exclude>dist/**</exclude>
+							</excludes>
+						</fileSet>
+					</scanSet>
 				</configuration>
 			</plugin>
 		</plugins>

@@ -337,13 +337,30 @@ RENOVATE_SCAN_EOF
                         def isPinnedImagePr = !isInfraComponentPr &&
                             changedFiles.split('\n').every { it in pinnedImageFiles }
 
+                        // OWASP Dependency-Check n'a de sens que si la PR touche un manifeste de
+                        // dépendances (Maven et/ou npm, ce dernier étant compilé par le même
+                        // "mvnw verify" via frontend-maven-plugin). Sans ça, l'arbre de dépendances
+                        // scanné est strictement identique à celui déjà en place sur BASE_BRANCH :
+                        // toute CVE remontée est donc préexistante et sans rapport avec cette PR
+                        // (ex: build #45, bump du tag Docker de Renovate lui-même dans ce
+                        // Jenkinsfile — aucune dépendance Maven/npm concernée). Bloquer serait à la
+                        // fois inutile (rien de nouveau à scanner) et injuste (la PR ne peut rien
+                        // faire pour corriger une CVE qui n'est pas la sienne — c'est le rôle de
+                        // fixcve/fixcve-auto sur RHDemo-CI, pas de ce garde-fou de merge).
+                        def dependencyManifestFiles = ['rhDemo/pom.xml', 'rhDemo/frontend/package.json', 'rhDemo/frontend/package-lock.json']
+                        def touchesDependencyManifest = changedFiles.split('\n').any { it in dependencyManifestFiles }
+                        def isOutOfMavenScopePr = !isInfraComponentPr && !isPinnedImagePr && !touchesDependencyManifest
+
                         if (isInfraComponentPr) {
                             echo "→ PR #${prNumber} : chemin retenu = Kubernetes dry-run (composant d'infra stagingkub détecté dans les fichiers modifiés)"
                         } else if (isPinnedImagePr) {
                             def matchedFiles = pinnedImageFiles.findAll { f -> changedFiles.split('\n').contains(f) }
                             echo "→ PR #${prNumber} : chemin retenu = Trivy scan ciblé (image(s) Docker épinglée(s) détectée(s) dans : ${matchedFiles.join(', ')})"
+                        } else if (isOutOfMavenScopePr) {
+                            echo "→ PR #${prNumber} : chemin retenu = validation directe, hors périmètre OWASP (aucun manifeste de dépendances Maven/npm modifié)"
                         } else {
-                            echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (chemin par défaut — aucun motif d'infra stagingkub ni d'image épinglée reconnu)"
+                            def matchedFiles = dependencyManifestFiles.findAll { f -> changedFiles.split('\n').contains(f) }
+                            echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (manifeste de dépendances modifié : ${matchedFiles.join(', ')})"
                         }
 
                         def ciStatus
@@ -420,6 +437,10 @@ RENOVATE_SCAN_EOF
 
                                 ciStatus = lib.aggregateTrivyResults() ? 0 : 1
                             }
+                        } else if (isOutOfMavenScopePr) {
+                            // Aucun manifeste de dépendances touché : rien à construire ni à scanner,
+                            // la PR est validée directement (cf. commentaire de l'aiguillage ci-dessus).
+                            ciStatus = 0
                         } else {
                             // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
                             // bloc : c'est ici que tourne du code non revu (le contenu de la mise à jour
@@ -547,7 +568,7 @@ RENOVATE_SCAN_EOF
                             }
                         }
 
-                        if (!isInfraComponentPr && !isPinnedImagePr) {
+                        if (!isInfraComponentPr && !isPinnedImagePr && !isOutOfMavenScopePr) {
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                         }

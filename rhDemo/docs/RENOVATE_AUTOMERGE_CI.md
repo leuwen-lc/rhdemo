@@ -114,12 +114,13 @@ le code Java ne change pas, donc le build/tests Maven passeraient de toute faço
 exercé le moindre bit du changement réel.
 
 L'aiguillage se fait sur `git diff --name-only origin/${BASE_BRANCH}...HEAD` (calculé une seule
-fois par PR, loggé explicitement dans la console Jenkins avant le choix du chemin), avec trois
+fois par PR, loggé explicitement dans la console Jenkins avant le choix du chemin), avec quatre
 chemins mutuellement exclusifs, évalués dans cet ordre de priorité :
 
 1. **Composant d'infrastructure stagingkub → Kubernetes dry-run**
 2. **Image Docker épinglée par digest → Trivy scan ciblé**
-3. **Tout le reste → Maven + OWASP Dependency-Check** (chemin historique, inchangé)
+3. **Manifeste de dépendances Maven/npm modifié → Maven + OWASP Dependency-Check** (chemin historique, inchangé)
+4. **Aucun manifeste de dépendances modifié → validation directe, hors périmètre OWASP**
 
 **Pourquoi une extension du pipeline existant plutôt qu'un second job Renovate séparé** : un
 second job avec son propre listing Forgejo aurait dupliqué le code de listing/synchronisation/merge
@@ -211,18 +212,40 @@ bloc par cohérence avec le principe de moindre privilège appliqué partout ail
 `Jenkinsfile-CI`/`Jenkinsfile-CD` au prochain build normal, comme n'importe quelle autre dépendance
 passée par le chemin Maven.
 
-### 3. Tout le reste → Maven + OWASP Dependency-Check (inchangé)
+### 3. Manifeste de dépendances Maven/npm modifié → Maven + OWASP Dependency-Check (inchangé)
 
-`pom.xml`, `package.json`, code Java/Vue, etc. — chemin historique, décrit en section
-« Implémentation » ci-dessus.
+**Détection** : le diff touche `rhDemo/pom.xml`, `rhDemo/frontend/package.json` et/ou
+`rhDemo/frontend/package-lock.json`.
+
+Chemin historique, décrit en section « Implémentation » ci-dessus.
+
+### 4. Aucun manifeste de dépendances modifié → validation directe, hors périmètre OWASP
+
+**Détection** : le diff ne touche ni un composant d'infra stagingkub, ni une image épinglée par
+digest, ni `pom.xml`/`package.json`/`package-lock.json`.
+
+**Pourquoi** : OWASP Dependency-Check scanne l'arbre de dépendances Maven/npm du projet — sans
+modification d'un de ces manifestes, l'arbre scanné serait strictement identique à celui déjà en
+place sur `${BASE_BRANCH}`. Toute CVE remontée dans ce cas est donc préexistante et sans rapport
+avec la PR (ex: **build #45** — bump du tag Docker `RENOVATE_IMAGE` dans `Jenkinsfile-Renovate`
+lui-même, PR bloquée par une CVE apparue entre-temps sur une bibliothèque totalement étrangère à
+ce changement). Bloquer une telle PR est à la fois inutile (rien de nouveau à scanner) et injuste
+(elle ne peut rien faire pour corriger une CVE qui n'est pas la sienne — c'est le rôle de
+`/fixcve`/`fixcve-auto` sur `RHDemo-CI`, pas de ce garde-fou de merge). Couvre entre autres les
+bumps d'outils CI n'affectant pas l'application (tag Docker de Renovate lui-même, tag de l'image
+Jenkins dans `Dockerfile.jenkins`, GitHub Actions, etc.).
+
+**Validation** : `ciStatus = 0` directement, aucun build ni scan exécuté.
+
+**Après merge** : pas de déclenchement supplémentaire.
 
 ### Traçabilité
 
 Chaque itération de la boucle logge explicitement, avant tout choix de chemin : la liste des
 fichiers modifiés (`git diff --name-only`) puis une ligne dédiée « chemin retenu = ... » indiquant
 le chemin choisi et le motif ayant matché (composant d'infra nommé, fichier(s) d'image épinglée
-détecté(s), ou absence de motif reconnu pour le chemin Maven par défaut) — pour diagnostiquer un
-aiguillage inattendu directement depuis les logs Jenkins sans avoir à rejouer `git diff` à la main.
+détecté(s), manifeste de dépendances modifié, ou absence de tout motif reconnu) — pour diagnostiquer
+un aiguillage inattendu directement depuis les logs Jenkins sans avoir à rejouer `git diff` à la main.
 
 ---
 

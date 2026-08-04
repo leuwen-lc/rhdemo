@@ -41,6 +41,24 @@ Le **CVSS** (Common Vulnerability Scoring System) évalue la gravité des vulné
 
 Le plugin Maven n'analyse par défaut que les dépendances résolues par Maven (jars). Un `scanSet` a été ajouté ([pom.xml](../pom.xml)) pour inclure `frontend/package.json` et `frontend/package-lock.json` dans l'analyse (Node Package/Audit Analyzer + Retire.js, activés par défaut dans dependency-check), afin de couvrir aussi les CVE des dépendances npm (Vue, Element Plus, Axios...). `node_modules/` et `dist/` sont exclus du scan (déjà couverts via les fichiers de lock, inutile de les parcourir).
 
+Le build frontend lui-même utilise `npm ci` (et non `npm install`) via `frontend-maven-plugin` ([pom.xml](../pom.xml)) : `npm ci` installe strictement les versions et hashes d'intégrité verrouillés dans `package-lock.json` et échoue si ce dernier n'est pas synchronisé avec `package.json`, contrairement à `npm install` qui peut re-résoudre silencieusement une dépendance vers une version plus récente non verrouillée.
+
+### Exécution dans les pipelines
+
+Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-Renovate` l'exécute aussi (`./mvnw org.owasp:dependency-check-maven:check`) pour toute PR Renovate qui touche un manifeste de dépendances (`pom.xml`, `frontend/package.json`, `frontend/package-lock.json`) — voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate). Les PR qui ne touchent aucun de ces fichiers (Jenkinsfile, Helm values, etc.) suivent un chemin de validation direct, hors périmètre OWASP.
+
+### Limites face aux attaques de type supply-chain (paquets malveillants)
+
+Dependency-Check est un scanner **CVE/NVD** (complété par OSS Index) : il compare vos dépendances à des vulnérabilités *connues et documentées*. Il ne couvre pas fiablement les attaques où une version légitime d'un paquet est republiée avec du code malveillant injecté (compte mainteneur compromis) — ce type d'incident n'a généralement pas de CVE NVD, il est signalé via une advisory GitHub de type *malware* (base OSV/GHSA), un registre différent de celui que Dependency-Check interroge en priorité. C'est le cas de l'attaque npm "keyv" (août 2026, cf. [thecybersecguru.com](https://thecybersecguru.com/news/keyv-npm-supply-chain-attack/)) : `keyv`, `flat-cache`, `cache-manager`, `@cacheable/utils`, `@qlik/embed-react`, entre autres.
+
+Ce que ce projet a en place contre ce type précis d'attaque :
+
+- **`minimumReleaseAge: 7 days`** ([renovate.json](../renovate.json)) : Renovate n'ouvre pas de PR sur une version publiée depuis moins de 7 jours — fenêtre pendant laquelle ce type d'attaque est généralement détecté et la version retirée de npm.
+- **`osvVulnerabilityAlerts: true`** ([renovate.json](../renovate.json)) : bypass du délai ci-dessus si une advisory de vulnérabilité (y compris malware, via la base OSV/GHSA) existe déjà sur une version que vous avez installée.
+- **`npm ci`** (voir ci-dessus) : empêche toute résolution silencieuse vers une version non verrouillée dans le lockfile.
+
+Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une protection réelle il faudrait qu'il soit bloquant, ce qui introduirait un 3ᵉ type d'échec de build non reconnu par l'automatisation de remédiation (`fixcve-auto` ne classe les échecs Jenkins qu'en `trivy` ou `owasp` — voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md)), sans bénéfice suffisant pour justifier cette extension aujourd'hui. `npm audit` reste disponible en local : lancer `cd rhDemo/frontend && npm audit` (ou `npm audit --omit=dev` pour se limiter à ce qui est réellement livré dans le bundle, en excluant les dépendances de build/test) de temps en temps — par exemple avant une release, ou en cas de doute suite à une actualité sécurité comme celle-ci.
+
 ### [pom.xml:309-345](../pom.xml#L309-L345)
 
 ```xml

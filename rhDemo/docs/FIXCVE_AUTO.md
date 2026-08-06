@@ -48,6 +48,7 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 | **Critères objectifs pour toute suppression/acceptation de risque** | Une CVE sans correctif disponible n'est supprimée que si : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local). Sinon : blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, application, validation, rollback, halte). |
 | **Verrou anti-chevauchement** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock` — un cycle CI (~2h max) ne peut pas se chevaucher avec le suivant. |
+| **Anti-boucle blocage confirmé** | Après un `blocked_needs_human` (CVE bloquante sans correctif dispo), le script mémorise `blocked_confirmed.{since,source_sha}` dans `state.json`. Tant que le code source n'a pas changé (SHA du dernier commit hors `fixcve-audit.jsonl` identique) et que `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) n'est pas écoulé, les cycles suivants n'appellent pas Claude et ne committent/poussent rien — évite la boucle auto-entretenue commit→build Jenkins→nouveau commit observée sur les builds #735-#744 (aucune information nouvelle à chaque cycle, seul le push relançait le build suivant). |
 
 ---
 
@@ -198,6 +199,21 @@ Après avoir traité manuellement la cause des rollbacks répétés (visible dan
 ```bash
 jq '.status="idle" | .consecutive_rollbacks=0' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
 ```
+
+## Forcer une revérification immédiate d'un blocage confirmé
+
+Un `blocked_needs_human` (CVE sans correctif dispo) n'est réévalué qu'après `BLOCKED_RECHECK_INTERVAL_SECONDS`
+(48h) tant que le code source n'a pas changé (voir garde-fou « Anti-boucle blocage confirmé »
+ci-dessus). Pour forcer une revérification dès le prochain cycle cron (ex : vous savez qu'un
+correctif upstream vient de sortir, sans avoir encore touché au code) :
+
+```bash
+jq '.blocked_confirmed=null' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
+```
+
+Inutile après un vrai changement de code (upgrade manuel, suppression ajoutée à
+`owasp-suppressions.xml`...) : le SHA source ne correspond alors plus à `blocked_confirmed.source_sha`,
+la revérification est automatique dès le cycle suivant.
 
 ## Lecture des logs
 

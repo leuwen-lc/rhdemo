@@ -4,38 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## Lot CVE build #749 — Maven + npm + risque accepté temporaire Tomcat
-
-**Remédiation automatique**
-
-### Détection
-
-- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #749)
-- **Outil** : OWASP Dependency-Check
-- **Composants affectés** : `jackson-databind`, `log4j-api`/`log4j-to-slf4j`, `brace-expansion`, `postcss` (deux instances), `serialize-javascript`, `webpack-dev-server`, DOMPurify (swagger-ui), `tomcat-embed-core`/`tomcat-embed-websocket`
-
-### Contexte — rollback du build #746
-
-Ce même lot de CVE avait déjà été traité une première fois (build #746, commit `3d600283a077eca58ad942048aff64be26e75466`), mais la validation du build suivant (#748) a échoué et déclenché un rollback automatique : la suppression `tomcat-embed-core` ne couvrait que ce seul artefact, alors que `tomcat-embed-websocket-11.0.24.jar` (même version Tomcat, même CVE-2026-66299) est resté non couvert et a fait échouer le scan OWASP. Le présent correctif reprend le même lot en corrigeant ce point précis (suppression élargie à tout le groupId `org.apache.tomcat.embed`).
-
-### Remédiation appliquée
-
-- **`brace-expansion`** 1.1.17 → 1.1.18 (CVE-2026-69152, HIGH 7.5, **bloquant**) : `npm audit fix --package-lock-only`.
-- **`postcss`** (premier niveau) 8.5.19 → 8.5.26 (CVE-2026-69153) : `npm audit fix --package-lock-only`.
-- **`fast-uri`** 3.1.4 → 3.1.5 (GHSA-7p8r-x3mc-p8w7, non bloquant, corrigé au passage par le même lot).
-- **`jackson-databind`** 2.21.4 → 2.21.5 (CVE-2026-54515, MEDIUM 5.3) : `dependencyManagement` ajouté dans `pom.xml` (tiré transitivement par `json-path`, hors du `jackson-bom` Jackson 3.x géré par Spring Boot 4).
-- **`log4j-api`/`log4j-to-slf4j`** 2.25.4 → 2.25.5 (CVE-2026-49844, MEDIUM) : propriété `log4j2.version` ajoutée dans `pom.xml`, qui pilote l'import du `log4j-bom` Spring Boot (couvre tous les artefacts log4j2 en une fois, évite l'incohérence de version constatée sur `log4j-to-slf4j` lors du build #748).
-- **DOMPurify (swagger-ui)** : `springdoc-openapi.version` 3.0.3 → 3.1.0, qui embarque `swagger-ui` 5.32.11 (au lieu de 5.32.2). Confirmé par le rapport OWASP du build #748 : plus aucune CVE DOMPurify/swagger-ui remontée après cette bascule — les suppressions DOMPurify existantes (CVE-2026-41240/41238/41239/65898, GHSA-39q2-94rc-95cp) deviennent obsolètes mais restent en place (ciblent `DOMPurify@3.3.2`, ne matchent plus rien avec la nouvelle version).
-- **`postcss`** imbriqué 7.0.39 (via `@vue/component-compiler-utils`, CVE-2026-69153, CVE-2023-44270) : suppression documentée — branche 7.x arrêtée, aucun correctif publié, dépendance de build uniquement (`devDependency`).
-- **`serialize-javascript`** (GHSA-qj8w-gfj5-8c6v) : suppression documentée, même contrainte que la suppression GHSA-5c6j-r48x-rmvq déjà en place (`copy-webpack-plugin`/`css-minimizer-webpack-plugin` exigent `^6.0.0`, saut majeur exclu).
-- **`webpack-dev-server`** (CVE-2025-30360, CVE-2026-6402, CVE-2025-30359, CVE-2026-14631, CVE-2026-14620, CVE-2026-9595) : suppression documentée — bloqué par `uuid<11.1.1` (via `sockjs`), serveur de développement uniquement, jamais dans le bundle de production.
-
-### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)
-
-- **`tomcat-embed-core`/`tomcat-embed-websocket` 11.0.24** — CVE-2026-66299 (HIGH 7.5, CWE-400, **bloquant**) : aucune version corrigée publiée sur Maven Central (11.0.25/10.1.58/9.0.121 indiqués « when released » par l'Apache Security Team, revérifié à chaque build depuis le #735). Composant de production (`scope rhdemo:compile` via `spring-boot-starter-web`), vecteur réseau (`AV:N`) : aucun critère de suppression permanente (Critère A) ne s'applique. CVSS 7.5 < 9.0 : acceptation de risque **temporaire** (Critère B), suppression documentée dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]`, scope élargi à tout le groupId `org.apache.tomcat.embed` (correction du périmètre trop étroit qui a causé le rollback du build #746→#748). Cette exclusion sera revérifiée à chaque activation du skill `fixcve-auto` et remplacée par le correctif réel dès sa publication.
-
----
-
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
 ### Détection

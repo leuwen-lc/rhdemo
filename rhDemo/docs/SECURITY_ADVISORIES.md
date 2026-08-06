@@ -4,6 +4,46 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## tomcat-embed-core (build #754) — CVE-2026-66299 (CVSS 7.5)
+
+### Détection
+
+- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #735, reconfirmé jusqu'au build #754)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `tomcat-embed-core-11.0.24.jar` (`org.apache.tomcat.embed:tomcat-embed-core`, scope compile, via `spring-boot-starter-web`)
+
+### Description
+
+DoS (épuisement de ressources), CWE-400. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`.
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-08-06, build #754)
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` (pas de montée de version disponible).
+- **Justification** : composant de production (scope `compile`), vecteur réseau `AV:N`, pas RetireJS, pas devDependency npm — aucun critère A ne s'applique. CVSS 7.5 < 9.0 → acceptation temporaire du risque (Critère B). Vérifié sur `maven-metadata.xml` (`org/apache/tomcat/embed/tomcat-embed-core`) le 2026-08-06 : `latest=release=11.0.24`, aucune version 11.0.25/10.1.58/9.0.121 publiée sur Maven Central (correctif indiqué « when released » par l'Apache Security Team).
+- **Note** : cette exclusion sera revérifiée à chaque activation du skill `fixcve-auto` (étape 0) et remplacée par le correctif réel dès sa publication. Une première tentative de cette même remédiation (commit `bb0539d`, build #752) avait été annulée par un rollback automatique au build #753 — analyse a posteriori : le rollback était dû à une détection transitoire et non reproductible de `fast-uri` par `npm audit` (GHSA-7p8r-x3mc-p8w7) entre les scans #752 et #753, sans rapport avec cette suppression Tomcat elle-même (déjà corrigée au passage par le lot npm ci-dessous).
+- **À retirer** : dès qu'une version corrigée de `tomcat-embed-core` est publiée sur Maven Central.
+
+---
+
+## Lot npm frontend (build #754) — CVE-2026-69152 (CVSS 7.5) et dépendances associées
+
+### Détection
+
+- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #735, reconfirmé jusqu'au build #754)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `brace-expansion:1.1.17` (`frontend/package-lock.json`, transitif via `minimatch:3.1.5`, dépendance de build `@vue/cli-service`)
+
+### Description
+
+CVE-2026-69152 : `expand()` n'applique pas `maxLength` lors de la construction des tableaux intermédiaires de combinaisons, permettant à une entrée contrôlée par l'attaquant d'épuiser la mémoire ou de bloquer la boucle d'événements — contourne le correctif de CVE-2026-14257. Versions affectées : `<1.1.18` (branche 1.x) ; corrigé en `1.1.18`, `2.1.4`, `3.0.6`, `5.0.9`.
+
+### Remédiation automatique (2026-08-06, build #754)
+
+- **Action** : `npm audit fix --package-lock-only` (frontend) : `brace-expansion` `1.1.17` → `1.1.18`, `fast-uri` `3.1.4` → `3.1.5`, `nanoid` `3.3.12` → `3.3.17`, `postcss` `8.5.19` → `8.5.26` (aucun saut de version majeure).
+- **Note** : un premier correctif identique (commit `bb0539d`, build #752) avait été annulé par un rollback automatique au build #753. Analyse a posteriori : le rollback n'était pas lié à ce correctif mais à une détection transitoire de `fast-uri` (GHSA-7p8r-x3mc-p8w7) par le scan `npm audit` du build #753, absente du rapport OWASP Dependency-Check des builds #752 et #754 — corrigée au passage par ce même lot (`fast-uri` → `3.1.5`).
+
+---
+
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
 ### Détection

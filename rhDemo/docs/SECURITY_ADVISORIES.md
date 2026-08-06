@@ -4,6 +4,31 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## brace-expansion (build #732) — GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (CVSS 7.5)
+
+### Détection
+
+- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #732)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `brace-expansion:1.1.17` (`frontend/package-lock.json`, transitif via `minimatch:3.1.5`)
+
+### Description
+
+DoS par épuisement mémoire/blocage de l'event loop : `expand()` n'applique pas `maxLength` lors de la construction des tableaux intermédiaires de combinaisons ou des séquences paddées, ce qui permet à une entrée contrôlée par l'attaquant d'épuiser la mémoire ou de bloquer l'event loop. Cette vulnérabilité contourne le correctif de CVE-2026-14257 (déjà suppressed dans ce projet). Versions affectées : `<1.1.18`, `<2.1.4`, `<3.0.6`, `<5.0.9` ; corrigé en `1.1.18`, `2.1.4`, `3.0.6`, `5.0.9`.
+
+### Remédiation automatique (2026-08-06, build #732)
+
+- **Action** : `frontend/node/npm --prefix frontend audit fix --package-lock-only` — montée de version `brace-expansion` 1.1.17 → 1.1.18.
+- **Fichier modifié** : `frontend/package-lock.json` uniquement (aucune contrainte de `frontend/package.json` à changer — `1.1.18` reste compatible avec la contrainte `^1.1.7` de `minimatch:3.1.5`, pas de saut majeur nécessaire cette fois).
+
+### CVE bloquante non corrigée (même build) — tomcat-embed-core CVE-2026-66299 (CVSS 7.5)
+
+- **Composant affecté** : `tomcat-embed-core:11.0.24` (scope `compile`, inclus via `spring-boot-starter-web@4.1.0`)
+- **Description** : Uncontrolled Resource Consumption dans l'exemple de chat WebSocket de Tomcat (CWE-400). Correctif prévu en `11.0.25` (Tomcat 11.x), `10.1.58` ou `9.0.121` — **non encore publié sur Maven Central** au moment de la détection (dernière version disponible : `11.0.24`, `maven-metadata.xml` mis à jour le 2026-07-08).
+- **Statut** : `NO_ACTION` — aucun des critères objectifs de suppression automatique du skill `fixcve-auto` n'est vérifié (composant en scope `compile`, vecteur CVSS `AV:N` donc pas `AV:L`/`AV:P`, pas RetireJS, pas un package npm devDependency). Bloqué en attente d'une version corrigée de `tomcat-embed-core` ou d'une revue humaine (`/fixcve`).
+
+---
+
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
 ### Détection

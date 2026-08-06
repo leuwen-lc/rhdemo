@@ -4,6 +4,35 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Lot OWASP build #746 — CVE multiples (débloque tomcat-embed-core, blocage depuis build #735)
+
+### Détection
+
+- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #746)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `brace-expansion`, `postcss` (npm, `frontend/package-lock.json`), `serialize-javascript`, `webpack-dev-server`, `jackson-databind`, `log4j-api`, `tomcat-embed-core` (Maven, `pom.xml`), DOMPurify embarqué dans `swagger-ui-5.32.2.jar` (springdoc-openapi)
+
+### Remédiation automatique — correctifs réels (2026-08-06, build #746)
+
+- **`brace-expansion` 1.1.17 → 1.1.18** (`CVE-2026-69152`, HIGH 7.5) : `frontend/node/npm --prefix frontend audit fix --package-lock-only`, sans saut majeur. A entraîné au passage la mise à jour collatérale de `postcss` 8.5.19 → 8.5.26 (instance de premier niveau) et `fast-uri` 3.1.4 → 3.1.5, `nanoid` 3.3.12 → 3.3.17.
+- **`jackson-databind` 2.21.4 → 2.21.5** (`CVE-2026-54515`, MEDIUM 5.3) : ajout d'un `<dependencyManagement>` dans `pom.xml` (aucune propriété BOM Spring Boot exposée pour ce module ; transitif via `springdoc-openapi-starter-webmvc-ui`).
+- **`log4j-api` 2.25.4 → 2.25.5** (`CVE-2026-49844`, MEDIUM 6.3) : même mécanisme `<dependencyManagement>`.
+- **`springdoc-openapi` 3.0.3 → 3.1.0** : résout d'un coup les **9 nouvelles CVE DOMPurify** détectées au build #746 (`CVE-2026-49978`, `CVE-2026-49458`, `CVE-2026-49459`, `CVE-2026-65899`, `CVE-2026-65900`, `CVE-2026-65901`, `CVE-2026-65902`, `CVE-2026-65903`, `CVE-2026-66010`, toutes MEDIUM 5.1-6.3) **et** les 5 CVE DOMPurify déjà suppressées précédemment (`CVE-2026-41240`, `CVE-2026-41238`, `CVE-2026-41239`, `GHSA-39q2-94rc-95cp`, `CVE-2026-65898`) : springdoc-openapi 3.1.0 est publié avec `spring-boot-starter-parent` 4.1.0 comme parent (compatibilité confirmée), et embarque `swagger-ui` 5.32.11 dont le bundle JS contient `DOMPurify.version="3.4.12"` (vérifié par inspection du webjar `org.webjars:swagger-ui:5.32.11`), au-dessus du seuil de correctif le plus élevé requis (3.4.7). Les 10 suppressions DOMPurify obsolètes ont été retirées de `owasp-suppressions.xml`.
+
+### Remédiation automatique — risque accepté (permanent, Critère A)
+
+Composants atteints uniquement via la chaîne de build `@vue/cli-service` (devDependency, absente de `dependencies` dans `frontend/package.json`), jamais embarqués dans le bundle de production `vue-cli-service build`. `npm audit fix --package-lock-only` confirme `fixAvailable=false` pour chacun (saut de version majeure nécessitant `--force`, exclu par la politique du skill) :
+
+- **`postcss:7.0.39`** (instance imbriquée `@vue/component-compiler-utils/node_modules/postcss`, distincte de l'instance de premier niveau corrigée) : `CVE-2026-69153` (MEDIUM 6.3), `CVE-2023-44270` (MEDIUM 5.3).
+- **`serialize-javascript:6.0.2`** : `GHSA-qj8w-gfj5-8c6v` (MEDIUM 5.9, DoS CPU via objet "array-like") — s'ajoute à `GHSA-5c6j-r48x-rmvq` déjà suppressée.
+- **`webpack-dev-server:4.15.2`** : `CVE-2025-30360`/`GHSA-9jgg-88mc-972h`, `CVE-2025-30359`/`GHSA-4v9v-hfq4-rm2v`, `CVE-2026-6402`/`GHSA-79cf-xcqc-c78w`, `GHSA-m28w-2pqf-7qgj` (toutes MEDIUM 5.3-6.5, vols de code source / exposition cross-origin via le serveur de développement webpack).
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream, Critère B)
+
+- **`tomcat-embed-core:11.0.24`** — `CVE-2026-66299` (HIGH 7.5, CWE-400, DoS dans l'exemple WebSocket chat de la distribution Tomcat standalone, non déployé par un `tomcat-embed-core` Spring Boot). Bloque les builds Jenkins RHDemo-CI depuis le build #735 (2026-08-06) : composant de production (scope `compile`, transitif via `spring-boot-starter-web`), vecteur réseau (`AV:N`), aucun critère de suppression permanente (Critère A) ne s'applique. Comme la CVSS (7.5) est strictement inférieure à 9.0, le risque est accepté **temporairement** (Critère B, politique introduite au build #746 pour débloquer ce cycle après 12 builds consécutifs bloqués — voir `fixcve-audit.md` builds #735-#745). Aucune version corrigée (`11.0.25`/`10.1.58`/`9.0.121`) n'est publiée sur Maven Central à ce jour. Cette exclusion sera revérifiée à chaque activation du skill `fixcve-auto` (étape 0) et remplacée par le correctif réel dès sa publication — ce n'est pas une clôture définitive.
+
+---
+
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
 ### Détection

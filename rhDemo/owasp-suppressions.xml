@@ -2,45 +2,13 @@
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
 
     <!--
-        CVE-2026-41240, CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp — DOMPurify 3.3.2 dans swagger-ui
-        DOMPurify < 3.4.0 embarqué dans swagger-ui-5.32.2.jar (springdoc-openapi 3.0.3, dernière version disponible).
-        CVE-2026-41240 (NVD, CVSS 6.1) : XSS bypass via FORBID_TAGS + ADD_TAGS function-based — corrigé dans DOMPurify 3.4.0.
-        CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp (RetireJS) : autres vecteurs XSS dans DOMPurify 3.3.2.
-        Risque atténué par les contrôles suivants :
-          - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security)
-          - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
-          - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
-        À retirer dès que springdoc-openapi 3.0.4+ embarque DOMPurify >= 3.4.0.
+        DOMPurify 3.3.2 dans swagger-ui — RÉSOLU (build #746)
+        Toutes les suppressions DOMPurify 3.3.2 (CVE-2026-41240, CVE-2026-41238, CVE-2026-41239,
+        GHSA-39q2-94rc-95cp, CVE-2026-65898, ainsi que le lot CVE-2026-49978, CVE-2026-49458,
+        CVE-2026-49459, CVE-2026-65899 à 65903, CVE-2026-66010 détecté au build #746) sont retirées :
+        springdoc-openapi 3.0.3 -> 3.1.0 embarque swagger-ui 5.32.11 (DOMPurify 3.3.2 -> 3.4.12),
+        qui corrige l'ensemble de ces CVE. Voir docs/SECURITY_ADVISORIES.md.
     -->
-    <suppress>
-        <notes>CVE-2026-41240 : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <cve>CVE-2026-41240</cve>
-    </suppress>
-
-    <suppress>
-        <notes>CVE-2026-41238 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>CVE-2026-41238</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>CVE-2026-41239 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>CVE-2026-41239</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>GHSA-39q2-94rc-95cp (RetireJS/GHSA) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible (3.0.3 = dernière version publiée sur Maven Central). Swagger UI protégé par Spring Security ; DOMPurify n'est jamais utilisé par le code applicatif frontend/src. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <cve>CVE-2026-65898</cve>
-    </suppress>
 
 
     <!--
@@ -89,6 +57,37 @@
         <vulnerabilityName>GHSA-5c6j-r48x-rmvq</vulnerabilityName>
     </suppress>
 
+    <suppress>
+        <notes>GHSA-qj8w-gfj5-8c6v (build #746) : DoS CPU par objet "array-like" — même contrainte que GHSA-5c6j-r48x-rmvq (copy-webpack-plugin/css-minimizer-webpack-plugin, dépendances de build @vue/cli-service), npm audit fix confirme fixAvailable=false — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
+        <vulnerabilityName>GHSA-qj8w-gfj5-8c6v</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        CVE-2026-69153, CVE-2023-44270 — postcss:7.0.39 (aucun correctif compatible, build #746)
+        Deux instances de postcss dans l'arbre npm : une de premier niveau (corrigée 8.5.19 -> 8.5.26
+        par npm audit fix package-lock-only) et une imbriquée sous
+        @vue/component-compiler-utils/node_modules/postcss, épinglée en 7.0.39 par la contrainte de
+        @vue/component-compiler-utils lui-même (dépendance de vue-loader -> @vue/cli-service).
+        npm audit fix confirme fixAvailable=false pour cette instance : la mise à jour impliquerait
+        un saut de version majeure (7.x -> 8.x) au-delà de la contrainte semver déclarée, nécessitant
+        l'option force (exclue par la politique du skill fixcve-auto).
+        postcss n'est utilisé qu'à la compilation (transformation CSS via la chaîne de build
+        @vue/cli-service), jamais embarqué dans le bundle de production vue-cli-service build.
+    -->
+    <suppress>
+        <notes>CVE-2026-69153 (build #746) : pas de correctif compatible sans passage en force pour l'instance imbriquée @vue/component-compiler-utils/node_modules/postcss@7.0.39 — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@.*$</packageUrl>
+        <cve>CVE-2026-69153</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2023-44270 (build #746) : pas de correctif compatible sans passage en force pour l'instance imbriquée @vue/component-compiler-utils/node_modules/postcss@7.0.39 — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@.*$</packageUrl>
+        <cve>CVE-2023-44270</cve>
+    </suppress>
+
 
     <!--
         GHSA-w5hq-g745-h8pq — uuid (dépassement mémoire tampon, aucun correctif compatible)
@@ -102,6 +101,61 @@
         <notes>GHSA-w5hq-g745-h8pq : pas de correctif compatible sans passage en force (sockjs/webpack-dev-server, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
         <packageUrl regex="true">^pkg:npm/uuid@.*$</packageUrl>
         <vulnerabilityName>GHSA-w5hq-g745-h8pq</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        CVE-2025-30360, CVE-2025-30359, CVE-2026-6402, GHSA-9jgg-88mc-972h, GHSA-4v9v-hfq4-rm2v,
+        GHSA-79cf-xcqc-c78w, GHSA-m28w-2pqf-7qgj — webpack-dev-server:4.15.2 (build #746)
+        Vols de code source / exposition cross-origin via le serveur de développement webpack.
+        Correctifs disponibles uniquement à partir de la branche majeure 5.x (5.2.1 à 5.2.5 selon la CVE) ;
+        webpack-dev-server est fixé en 4.15.2 par la contrainte de @vue/cli-service (devDependency,
+        absent de frontend/package.json "dependencies"). npm audit fix confirme fixAvailable=false :
+        la mise à jour impliquerait un saut de version majeure (4.x -> 5.x) nécessitant l'option force
+        (exclue par la politique du skill fixcve-auto). webpack-dev-server n'est utilisé que par le
+        serveur de développement (`vue-cli-service serve`), jamais embarqué dans le bundle de
+        production `vue-cli-service build`.
+    -->
+    <suppress>
+        <notes>CVE-2025-30360 (build #746) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <cve>CVE-2025-30360</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2025-30359 (build #746) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <cve>CVE-2025-30359</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-6402 (build #746) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <cve>CVE-2026-6402</cve>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-9jgg-88mc-972h (build #746, alias GHSA de CVE-2025-30360) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <vulnerabilityName>GHSA-9jgg-88mc-972h</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-4v9v-hfq4-rm2v (build #746, alias GHSA de CVE-2025-30359) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <vulnerabilityName>GHSA-4v9v-hfq4-rm2v</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-79cf-xcqc-c78w (build #746, alias GHSA de CVE-2026-6402) : pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <vulnerabilityName>GHSA-79cf-xcqc-c78w</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-m28w-2pqf-7qgj (build #746) : DoS via en-tête Host/Origin malformé — pas de correctif compatible sans passage en force (devDependency @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <vulnerabilityName>GHSA-m28w-2pqf-7qgj</vulnerabilityName>
     </suppress>
 
 
@@ -144,6 +198,30 @@
         <notes>GHSA-mh99-v99m-4gvg (CVE-2026-14257) : pas de correctif compatible sans passage en force (minimatch:3.1.5, dépendance de build @vue/cli-service) — jamais dans le bundle de production.</notes>
         <packageUrl regex="true">^pkg:npm/brace-expansion@.*$</packageUrl>
         <vulnerabilityName>GHSA-mh99-v99m-4gvg</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        CVE-2026-66299 — tomcat-embed-core:11.0.24 (build #746, risque accepté TEMPORAIRE)
+        DoS par épuisement de ressources dans l'exemple WebSocket chat de la distribution Tomcat
+        standalone (CWE-400). CVSS 7.5 HIGH — sous le seuil CVSS 9.0 autorisant l'acceptation de
+        risque temporaire (Critère B du skill fixcve-auto). Bloque les builds Jenkins RHDemo-CI
+        depuis le build #735 (2026-08-06) : aucune version corrigée (11.0.25 / 10.1.58 / 9.0.121)
+        n'est publiée sur Maven Central à ce jour (vérifié à chaque activation du skill, dernière
+        vérification build #746). tomcat-embed-core est un composant de production (scope compile,
+        transitif via spring-boot-starter-web), atteint en réseau (AV:N) : aucun critère de
+        suppression permanente (Critère A) ne s'applique. La description NVD précise que seul
+        l'exemple WebSocket chat de la distribution Tomcat standalone est concerné, non déployé par
+        un tomcat-embed-core Spring Boot (les exemples ne sont jamais embarqués) — élément
+        contextuel qui réduit le risque réel sans constituer un critère objectif de suppression
+        permanente au regard de la politique du skill.
+        À retirer dès qu'une version corrigée de tomcat-embed-core sera publiée (revérifié à chaque
+        activation du skill fixcve-auto, étape 0).
+    -->
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-66299 (CVSS 7.5 HIGH) : DoS (CWE-400) dans l'exemple WebSocket chat de Tomcat standalone, non déployé par tomcat-embed-core Spring Boot. Aucun correctif publié sur Maven Central (11.0.25/10.1.58/9.0.121 attendus). Composant de production, vecteur réseau — risque accepté temporairement (CVSS &lt; 9.0), revérifié à chaque activation du skill fixcve-auto.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/tomcat-embed-core@.*$</packageUrl>
+        <cve>CVE-2026-66299</cve>
     </suppress>
 
 </suppressions>

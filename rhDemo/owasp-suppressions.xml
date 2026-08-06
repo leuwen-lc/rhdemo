@@ -146,4 +146,80 @@
         <vulnerabilityName>GHSA-mh99-v99m-4gvg</vulnerabilityName>
     </suppress>
 
+
+    <!--
+        CVE-2026-69153, CVE-2023-44270 — postcss:7.0.39 imbriqué (@vue/component-compiler-utils, devDependency)
+        La branche postcss 7.x est arrêtée (dernière publication : 7.0.39, aucun correctif au-delà).
+        @vue/component-compiler-utils:3.3.0 (dépendance de vue-loader, chaîne @vue/cli-service) exige
+        postcss ^7.0.36 : npm audit fix (package-lock-only) ne peut pas basculer vers la branche 8.x
+        sans saut majeur (option force, exclue par la politique du skill). Le postcss de premier niveau
+        (8.5.19 -> 8.5.26) est corrigé séparément par npm audit fix. postcss:7.0.39 n'est ici qu'une
+        dépendance de la chaîne de build (compilation des composants .vue), jamais dans le bundle de
+        production `vue-cli-service build` (dev:true dans package-lock.json).
+    -->
+    <suppress>
+        <notes>CVE-2026-69153 : postcss 7.0.39 imbriqué (@vue/component-compiler-utils, branche 7.x arrêtée, aucun correctif publié) — dépendance de build uniquement (devDependency), jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@7\..*$</packageUrl>
+        <cve>CVE-2026-69153</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2023-44270 : postcss 7.0.39 imbriqué (@vue/component-compiler-utils, branche 7.x arrêtée, aucun correctif publié) — dépendance de build uniquement (devDependency), jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@7\..*$</packageUrl>
+        <cve>CVE-2023-44270</cve>
+    </suppress>
+
+
+    <!--
+        GHSA-qj8w-gfj5-8c6v — serialize-javascript (DoS CPU par objet array-like, aucun correctif compatible)
+        Même contrainte que GHSA-5c6j-r48x-rmvq déjà supprimée ci-dessus : correctif en 7.0.5, mais
+        copy-webpack-plugin et css-minimizer-webpack-plugin (dépendances de @vue/cli-service) exigent
+        serialize-javascript ^6.0.0, saut majeur exclu par la politique du skill (fixAvailable=false).
+        Dépendance de build uniquement (devDependency), jamais dans le bundle de production.
+    -->
+    <suppress>
+        <notes>GHSA-qj8w-gfj5-8c6v : pas de correctif compatible sans passage en force (copy-webpack-plugin/css-minimizer-webpack-plugin, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
+        <vulnerabilityName>GHSA-qj8w-gfj5-8c6v</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        CVE-2025-30360, CVE-2026-6402, CVE-2025-30359, CVE-2026-14631, CVE-2026-14620, CVE-2026-9595
+        — webpack-dev-server:4.15.2 (aucun correctif compatible sans passage en force)
+        npm audit fix (package-lock-only) ne peut pas mettre à jour webpack-dev-server : bloqué par
+        uuid<11.1.1 (via sockjs), qui exigerait lui-même un saut majeur exclu par la politique du skill
+        (fixAvailable=false). webpack-dev-server n'est utilisé que par le serveur de développement
+        (`vue-cli-service serve`), jamais embarqué ni exécuté dans le bundle de production
+        `vue-cli-service build` (dev:true dans package-lock.json).
+    -->
+    <suppress>
+        <notes>CVE-2025-30360/CVE-2026-6402/CVE-2025-30359/CVE-2026-14631/CVE-2026-14620/CVE-2026-9595 : pas de correctif compatible sans passage en force (uuid&lt;11.1.1 via sockjs, dépendances de build @vue/cli-service) — serveur de développement uniquement, jamais dans le bundle de production.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+    </suppress>
+
+
+    <!--
+        [PENDING_UPSTREAM_FIX] CVE-2026-66299 — tomcat-embed-core / tomcat-embed-websocket 11.0.24 (HIGH 7.5, CWE-400)
+        Uncontrolled Resource Consumption dans l'exemple WebSocket chat de la distribution Tomcat standalone
+        (non déployé par un tomcat-embed-core/tomcat-embed-websocket Spring Boot, mais ce jugement contextuel
+        sort du périmètre des critères objectifs de suppression automatique — traité en Critère B).
+        Vecteur CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H — composant de production (scope rhdemo:compile
+        via spring-boot-starter-web), vecteur réseau, CVSS 7.5 < 9.0 : acceptation de risque temporaire.
+        Vérifié sur maven-metadata.xml (org/apache/tomcat/embed/tomcat-embed-core) : aucune version
+        11.0.25/10.1.58/9.0.121 publiée sur Maven Central à ce jour (correctif indiqué "when released"
+        par l'Apache Security Team). tomcat-embed-websocket-11.0.24.jar est une dépendance liée
+        (même version Tomcat, même CPE apache:tomcat:11.0.24) : la suppression précédente (build #746,
+        commit 3d60028) ne couvrait que tomcat-embed-core par erreur, ce qui a fait échouer le build de
+        validation suivant (#748) sur tomcat-embed-websocket et provoqué un rollback automatique. Le
+        packageUrl regex ci-dessous couvre tout le groupId org.apache.tomcat.embed pour éviter de
+        reproduire cette erreur. À retirer dès qu'un correctif Tomcat 11.0.25+ est publié (revérifié à
+        chaque activation du skill fixcve-auto, cf. étape 0).
+    -->
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-66299 : tomcat-embed-* 11.0.24 (HIGH 7.5, CWE-400) — aucune version corrigée publiée sur Maven Central (11.0.25 indiqué "when released"). Composant de production, vecteur réseau, mais CVSS 7.5 &lt; 9.0 : acceptation de risque temporaire (Critère B), en attente du correctif upstream Apache Tomcat.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/.*$</packageUrl>
+        <cve>CVE-2026-66299</cve>
+    </suppress>
+
 </suppressions>

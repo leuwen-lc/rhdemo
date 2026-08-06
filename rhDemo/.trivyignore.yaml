@@ -7,9 +7,11 @@ vulnerabilities:
   # Affecte : libexpat 2.7.4-r0 dans nginx:1.29.6-alpine (Alpine 3.23.3) — pas de correctif disponible
   # Risque réel : À évaluer selon publication NVD
   # À retirer quand : Alpine publie libexpat avec le correctif intégré
+  # [PENDING_UPSTREAM_FIX] ajouté rétroactivement le 2026-08-06 pour que l'étape 0 de SKILL.md
+  # (revérification à chaque activation de fixcve-auto) la détecte désormais.
   - id: CVE-2026-32767
     pkg-name: libexpat
-    statement: "libexpat 2.7.4-r0 dans nginx:1.29.6-alpine - aucune version nginx:alpine ne corrige cette CVE (Alpine 3.23.3 non patché)"
+    statement: "[PENDING_UPSTREAM_FIX] libexpat 2.7.4-r0 dans nginx:1.29.6-alpine - aucune version nginx:alpine ne corrige cette CVE (Alpine 3.23.3 non patché)"
 
   # CVE-2026-22184 - zlib contrib/untgz buffer overflow (Out-of-bounds Write, CWE-787)
   # Affecte : zlib-1.3.1-r2 dans nginx:1.29.6-alpine (Alpine 3.23.3) — paquet non patché par Alpine
@@ -18,9 +20,10 @@ vulnerabilities:
   # Note : l'upgrade nginx:1.29.4→1.29.6 a corrigé CVE-2026-1642 mais pas CVE-2026-32767 ni
   #   CVE-2026-22184 car Alpine 3.23.3 ne publie pas encore de patch pour zlib-1.3.1-r2
   # À retirer quand : Alpine publie zlib-1.3.1-r3+ avec le correctif intégré
+  # [PENDING_UPSTREAM_FIX] ajouté rétroactivement le 2026-08-06 (idem ci-dessus).
   - id: CVE-2026-22184
     pkg-name: zlib
-    statement: "zlib-1.3.1-r2 dans nginx:1.29.6-alpine - contrib/untgz non utilisé par nginx web server ; vecteur local uniquement (CVSS v4 : 4.6 MEDIUM)"
+    statement: "[PENDING_UPSTREAM_FIX] zlib-1.3.1-r2 dans nginx:1.29.6-alpine - contrib/untgz non utilisé par nginx web server ; vecteur local uniquement (CVSS v4 : 4.6 MEDIUM)"
 
   # CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass
   # Affecte : gosu (compilé en Go 1.24.6) dans postgres:18-alpine

@@ -46,6 +46,8 @@ CVE-2026-69152 : `expand()` n'applique pas `maxLength` lors de la construction d
 
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
+**Statut : ✅ Risque accepté (permanent)** — devDependency, jamais dans le bundle de production ; pas de correctif de sécurité requis, indépendant de la disponibilité de `brace-expansion >= 5.0.8`.
+
 ### Détection
 
 - **Date de détection** : 2026-07-29 (build Jenkins RHDemo-CI #721)
@@ -65,6 +67,11 @@ DoS par épuisement mémoire (uncatchable OOM) : `expand()` borne le nombre de r
 ---
 
 ## Lot npm frontend (build #717) — CVE/GHSA multiples CVSS ≥ 7
+
+**Statut mixte** : la plupart des CVE de ce lot sont corrigées (montées de version ci-dessous). Parmi les suppressions restantes :
+
+- **✅ Permanentes** (devDependency, jamais en production) : `node-forge` GHSA-5m6q-g25r-mvwx, `serialize-javascript` GHSA-5c6j-r48x-rmvq, `uuid` GHSA-w5hq-g745-h8pq, `html-minifier-terser` CVE-2022-37620 (faux positif).
+- **⏳ En attente de correctif upstream (temporaire)** : `CVE-2026-65898` (DOMPurify dans swagger-ui) — même cas que l'entrée dédiée ci-dessous (2026-05-19), en attente de springdoc-openapi 3.0.4+.
 
 ### Détection
 
@@ -357,6 +364,8 @@ Toutes corrigées dans la version 11.0.22.
 
 ## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
 
+**Statut : ⏳ En attente de correctif upstream (temporaire)** — suppression toujours active à ce jour (`owasp-suppressions.xml`, jeton `[PENDING_UPSTREAM_FIX]` ajouté le 2026-08-06 pour que le skill `fixcve-auto` la revérifie automatiquement, voir étape 0 de `SKILL.md`). Même famille que `CVE-2026-65898` (build #717, ci-dessus) — les deux seront retirées ensemble dès que springdoc-openapi 3.0.4+ sera publié.
+
 ### Détection
 
 - **Date de détection** : 2026-05-19
@@ -511,259 +520,295 @@ De la version 42.2.0 à 42.7.10, pgjdbc est vulnérable à un déni de service c
 
 ---
 
-## CVE-2025-49794 & CVE-2025-49796 - Vulnérabilités libxml2
+## CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — Apache Tomcat Embed Core
 
 ### Détection
 
-- **Date de détection** : 2025-11-27
-- **Outil** : Trivy Security Scanner
-- **Sévérité** : CRITICAL (Score CVSS: 9.1)
+- **Date** : 2026-04-19
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : À préciser (voir NVD) — niveau suffisant pour bloquer le pipeline (CVSS ≥ 7)
+- **Composant affecté** : `org.apache.tomcat.embed:tomcat-embed-core:11.0.20`
 
 ### Description
 
-Deux vulnérabilités critiques découvertes dans la bibliothèque libxml2 par Nikita Sveshnikov (Positive Technologies) :
+Trois CVE affectant Tomcat Embed Core 11.0.20, composant embarqué par Spring Boot 4.0.5 pour le serveur HTTP.
 
-**CVE-2025-49794** - Use-After-Free et Type Confusion
+| CVE | Description |
+| --- | --- |
+| CVE-2026-34483 | À préciser (voir NVD) |
+| CVE-2026-34486 | À préciser (voir NVD) |
+| CVE-2026-34487 | À préciser (voir NVD) |
 
-- **Impact** : Corruption mémoire lors du parsing XPath avec XML schematron
-- **Vecteur d'attaque** : Fichier XML malveillant
-- **Conséquences** : Déni de service (crash), exécution de code potentielle
+### Composants affectés
 
-**CVE-2025-49796** - Type Confusion dans module Schematron
-
-- **Impact** : Corruption mémoire lors du traitement d'éléments sch:name
-- **Vecteur d'attaque** : Fichier XML malveillant
-- **Conséquences** : Déni de service, comportement indéfini
-
-### Images affectées
-
-| Image | Version vulnérable | Status |
+| Composant | Version vulnérable | Version corrective |
 | --- | --- | --- |
-| nginx | 1.27-alpine (Alpine 3.20) | ❌ VULNÉRABLE |
-| postgres | 16-alpine (Alpine 3.20) | ✅ Non affecté |
-| keycloak | 26.4.2 | ✅ Non affecté |
-| rhdemo-api | build-* (Paketo) | ✅ Non affecté |
-
-**Seule l'image Nginx** était affectée car elle utilise Alpine Linux 3.20 qui contient une version vulnérable de libxml2.
+| `org.apache.tomcat.embed:tomcat-embed-core` | 11.0.20 | 11.0.21 |
 
 ### Remédiation appliquée
 
-**Action** : Mise à jour de l'image Nginx vers une version avec Alpine 3.21
+**Action** : Forçage de la propriété `<tomcat.version>` dans `pom.xml` pour surcharger la version gérée par `spring-boot-starter-parent`.
 
-**Changements** :
-
-```yaml
-# Avant (vulnérable)
-nginx:
-  image: nginx:1.27-alpine
-
-# Après (corrigé)
-nginx:
-  image: nginx:1.27.3-alpine3.21
+```xml
+<properties>
+  <!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 -->
+  <tomcat.version>11.0.21</tomcat.version>
+</properties>
 ```
 
-**Fichiers modifiés** :
+**Fichier modifié** : `pom.xml` (section `<properties>`)
 
-- `infra/ephemere/docker-compose.yml` (ligne 148)
-- `Jenkinsfile` (lignes 1078, 1129) - Mise à jour du stage Trivy
-
-**Version du correctif** :
-
-- Alpine Linux 3.21 inclut libxml2 2.13.6 qui corrige CVE-2025-49794 et CVE-2025-49796
-- Nginx 1.27.3 (dernière version stable au 2025-11-27)
+Spring Boot expose la propriété `tomcat.version` pour permettre l'override de tous les artefacts `tomcat-embed-*` sans modifier les dépendances directes.
 
 ### Validation
 
-**Test de non-régression** :
-
 ```bash
-# Vérifier que la nouvelle image fonctionne
-docker pull nginx:1.27.3-alpine3.21
-docker run --rm nginx:1.27.3-alpine3.21 nginx -v
+# Vérifier que Maven résout bien Tomcat 11.0.21
+cd rhDemo && ./mvnw dependency:tree | grep tomcat-embed
 
-# Scanner avec Trivy
-trivy image --severity CRITICAL nginx:1.27.3-alpine3.21
+# Résultat attendu :
+# org.apache.tomcat.embed:tomcat-embed-core:jar:11.0.21
+# org.apache.tomcat.embed:tomcat-embed-websocket:jar:11.0.21
+
+# Relancer le scan OWASP pour confirmer la disparition des alertes
+./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
 ```
 
-**Résultat attendu** : 0 vulnérabilités CRITICAL
+### Clôture
+
+Résolu par la remédiation CVE-2026-41293/43512/43515/41284/43513/42498 ci-dessus (upgrade vers 11.0.22, puis suppression de l'override lors du passage à Spring Boot 4.1.0).
 
 ### Timeline
 
 | Date | Action |
 | --- | --- |
-| 2025-06-03 | Découverte des CVE par Positive Technologies |
-| 2025-06-11 | Attribution des numéros CVE officiels |
-| 2025-11-12 | Alpine 3.21.2 publiée avec correctif libxml2 |
-| 2025-11-27 | Détection par Trivy dans notre pipeline |
-| 2025-11-27 | Remédiation appliquée (nginx:1.27.3-alpine3.21) |
+| 2026-04-19 | Détection par OWASP Dependency-Check dans le pipeline CI (tomcat-embed-core:11.0.20) |
+| 2026-04-19 | Forçage `<tomcat.version>11.0.21</tomcat.version>` dans `pom.xml` |
 
 ### Références
 
-- [CVE-2025-49794 - NVD](https://nvd.nist.gov/vuln/detail/cve-2025-49794)
-- [CVE-2025-49796 - NVD](https://nvd.nist.gov/vuln/detail/cve-2025-49796)
-- [Seal Security Blog - Analyse détaillée](https://www.seal.security/blog/zero-day-vulnerabilities-in-libxml2-cve-2025-49794-cve-2025-49796-a-deep-dive-and-seal-securitys-proactive-solution)
-- [Ubuntu Security Advisory](https://ubuntu.com/security/CVE-2025-49796)
-- [RedHat CVE Database](https://access.redhat.com/security/cve/cve-2025-49796)
-
-### Leçons apprises
-
-1. **Scan automatique efficace** : Le stage Trivy a détecté les CVE dès leur intégration au pipeline
-2. **Réactivité** : Remédiation appliquée le jour même de la détection
-3. **Images Alpine** : Préférer les tags explicites (ex: `alpine3.21`) plutôt que génériques (`alpine`)
-4. **Versions fixes** : Utiliser des versions précises pour garantir la reproductibilité
-
-### Actions futures
-
-- [ ] Vérifier mensuellement les nouvelles versions de Nginx
-- [ ] Mettre en place des alertes automatiques pour les nouvelles CVE (GitHub Dependabot)
-- [ ] Considérer l'utilisation d'images distroless pour réduire la surface d'attaque
+- [NVD — CVE-2026-34483](https://nvd.nist.gov/vuln/detail/CVE-2026-34483)
+- [NVD — CVE-2026-34486](https://nvd.nist.gov/vuln/detail/CVE-2026-34486)
+- [NVD — CVE-2026-34487](https://nvd.nist.gov/vuln/detail/CVE-2026-34487)
+- [Apache Tomcat security advisories](https://tomcat.apache.org/security-11.html)
 
 ---
 
-## 2025-11-28 — Nouvelles CVE CRITICAL détectées dans nginx:1.27.3-alpine3.21
-
-### Détection supplémentaire
-
-- **Date** : 2025-11-28
-- **Contexte** : Après migration vers nginx:1.27.3-alpine3.21, Trivy détecte encore 2 CVE CRITICAL
-
-**Résultats du scan** :
-
-```text
-🔍 Scan: nginx:1.27.3-alpine3.21
-   ├─ CRITICAL:   2
-   ├─ HIGH:       4
-   └─ MEDIUM:    18
-```
-
-### Nouvelle remédiation
-
-**Action** : Mise à jour vers Nginx 1.29.3 (dernière version stable au 2025-11-28)
-
-**Changements** :
-
-```yaml
-# Version précédente (encore vulnérable)
-nginx:
-  image: nginx:1.27.3-alpine3.21
-
-# Nouvelle version (correctif appliqué)
-nginx:
-  image: nginx:1.29.3-alpine
-```
-
-**Fichiers modifiés** :
-
-- `infra/ephemere/docker-compose.yml` (ligne 148)
-- `Jenkinsfile` (lignes 1081, 1143)
-
-**Justification** :
-
-- Nginx 1.29.3 publié le 19 novembre 2025
-- Inclut Alpine Linux avec les derniers correctifs de sécurité
-- Contient libxml2 >= 2.13.6 et autres packages à jour
-
-**Référence** : [Nginx Docker Hub](https://hub.docker.com/_/nginx)
-
-### Timeline mise à jour
-
-| Date | Action |
-| --- | --- |
-| 2025-11-27 | Première migration : nginx:1.27-alpine → nginx:1.27.3-alpine3.21 |
-| 2025-11-28 | Détection de 2 CVE CRITICAL supplémentaires |
-| 2025-11-28 | Seconde migration : nginx:1.27.3-alpine3.21 → nginx:1.29.3-alpine |
-
-### Note importante
-
-Cette situation démontre l'importance du **scan continu** avec Trivy :
-
-- ✅ Les CVE libxml2 (CVE-2025-49794, CVE-2025-49796) ont été corrigées
-- ⚠️ De **nouvelles** vulnérabilités ont été détectées dans d'autres packages
-- 🔄 La mise à jour vers la dernière version stable (1.29.3) devrait résoudre ces nouvelles CVE
-
-**Action de suivi** : Vérifier le prochain scan Trivy après déploiement de nginx:1.29.3-alpine
-
----
-
-## CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass (gosu)
+## CVE-2026-32767 — nginx
 
 ### Détection
 
-- **Date de détection** : 2026-02-12
+- **Date** : 2026-03-19
 - **Outil** : Trivy Security Scanner
-- **Sévérité** : CRITICAL
-- **Composant affecté** : `usr/local/bin/gosu` dans `postgres:18-alpine`
+- **Sévérité** : À préciser (voir NVD)
+- **Composant affecté** : `nginx:1.29.5-alpine` puis `nginx:1.29.6-alpine`
+- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
 
 ### Description
 
-CVE-2025-68121 est une vulnérabilité dans le package `crypto/tls` de la bibliothèque standard Go. Lors d'une reprise de session TLS, si les champs `ClientCAs` ou `RootCAs` de la configuration sont modifiés entre le handshake initial et la reprise, la session peut être rétablie alors qu'elle aurait dû échouer. Cela permet un contournement potentiel des restrictions de certificats.
-
-**Versions Go affectées** : Go < 1.24.13 et Go 1.25.0 à 1.25.6
-
-L'outil `gosu` (v1.19), utilisé par l'image officielle PostgreSQL pour changer d'utilisateur au démarrage du conteneur, est compilé avec **Go 1.24.6** et embarque donc le code vulnérable de `crypto/tls`.
-
-### Analyse de risque
-
-#### Risque réel — NUL (faux positif fonctionnel)
-
-`gosu` est un utilitaire de type `setuid+setgid+exec` dont le rôle unique est de changer d'utilisateur Unix puis d'exécuter une commande. Il **n'effectue aucune connexion réseau** et **n'utilise jamais** le package `crypto/tls` à l'exécution. Le code vulnérable est inclus dans le binaire Go par le compilateur mais n'est jamais appelé.
-
-Cette position est confirmée par :
-
-- Le mainteneur de gosu via [`govulncheck`](https://github.com/tianon/gosu/issues/144) qui vérifie que les chemins de code vulnérables ne sont pas atteignables
-- La discussion upstream [docker-library/postgres#1324](https://github.com/docker-library/postgres/issues/1324)
+CVE-2026-32767 affecte nginx. La version 1.29.6 (dernière disponible) ne corrige pas cette CVE.
 
 ### Images affectées
 
-| Image | Composant | Status |
-| --- | --- | --- |
-| postgres:18-alpine | gosu 1.19 (Go 1.24.6) | ⚠️ CVE présente mais non exploitable |
-| rhdemo-api | N/A | ✅ Non affecté |
-| nginx | N/A | ✅ Non affecté |
-| keycloak | N/A | ✅ Non affecté |
+| Image | Version | Correctif disponible | Statut |
+| --- | --- | --- | --- |
+| `nginx` | 1.29.6-alpine (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
 
 ### Remédiation appliquée
 
-**Action** : Exclusion de la CVE dans Trivy via `.trivyignore.yaml` (risque accepté - faux positif fonctionnel)
+**Action** : Mise à jour nginx 1.29.5 → 1.29.6 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
 
-**Fichier créé** : `rhDemo/.trivyignore.yaml`
+**Fichiers modifiés** :
 
-```yaml
-vulnerabilities:
-  - id: CVE-2025-68121
-    pkg-name: gosu
-    statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution"
-```
+- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, upgrade vers 1.29.6)
+- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`)
+- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
+- `.trivyignore.yaml` (exclusion CVE-2026-32767 avec justification)
 
-**Fichier modifié** : `rhDemo/vars/rhDemoLib.groovy`
+**Digest 1.29.6-alpine** : `sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67`
 
-- Ajout de `--ignorefile rhDemo/.trivyignore.yaml` aux commandes `trivy image` (scans JSON et table)
+**Note** : CVE-2026-22184 (zlib) reste également présente dans 1.29.6. Les deux sont exclues via `.trivyignore.yaml`.
 
-### Condition de retrait de l'exclusion
+### Condition de clôture
 
-L'exclusion dans `.trivyignore.yaml` devra être **retirée** lorsque l'une de ces conditions sera remplie :
-
-- Nouvelle release de gosu compilée avec Go >= 1.24.13 ou >= 1.25.7
-- Mise à jour de l'image `postgres:18-alpine` intégrant un gosu corrigé
+Retirer `CVE-2026-32767` du `.trivyignore.yaml` quand une version nginx:alpine intégrant le correctif est publiée.
 
 ### Validation
 
 ```bash
-# Vérifier que Trivy ignore bien la CVE
-trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL postgres:18-alpine
-
-# Vérifier que gosu n'utilise pas crypto/tls (nécessite govulncheck)
-# govulncheck -mode binary /usr/local/bin/gosu
+# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
+trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL,HIGH nginx:1.29.6-alpine
 ```
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-19 | Détection par Trivy dans le pipeline CI (nginx:1.29.5-alpine) |
+| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (dernière disponible — ne corrige pas CVE-2026-32767) |
+| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
 
 ### Références
 
-- [NVD - CVE-2025-68121](https://nvd.nist.gov/vuln/detail/CVE-2025-68121)
-- [SentinelOne - CVE-2025-68121](https://www.sentinelone.com/vulnerability-database/cve-2025-68121/)
-- [docker-library/postgres#1324 - gosu CVE discussion](https://github.com/docker-library/postgres/issues/1324)
-- [gosu security policy](https://github.com/tianon/gosu/issues/144)
-- [gosu releases](https://github.com/tianon/gosu/releases) - v1.19 (Go 1.24.6)
-- [Go 1.24.13 release notes](https://go.dev/doc/devel/release) - inclut le fix crypto/tls
+- [NVD — CVE-2026-32767](https://nvd.nist.gov/vuln/detail/CVE-2026-32767)
+- [nginx security advisories](https://nginx.org/en/security_advisories.html)
+
+---
+
+## CVE-2026-33186 — NGINX Gateway Fabric
+
+### Détection
+
+- **Date** : 2026-03-19
+- **Outil** : Trivy Security Scanner
+- **Sévérité** : À préciser (voir NVD)
+- **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric`
+- **Statut** : ✅ Corrigé — NGF 2.6.0 intègre `google.golang.org/grpc v1.80.0` (fix en v1.79.3)
+
+### Description
+
+CVE-2026-33186 est un contournement d'autorisation dans gRPC (CVSS 9.1 Critical) : les en-têtes `:path` non canoniques (sans `/` initial) échappaient aux politiques d'autorisation basées sur le chemin. Affectait NGF 2.4.x (grpc v1.78.0). **Corrigé dans NGF 2.6.0** via la mise à jour grpc → v1.80.0.
+
+### Images affectées
+
+| Image | Version | Correctif disponible | Statut |
+| --- | --- | --- | --- |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 | Non | ~~⚠️ CVE présente~~ (obsolète) |
+| `ghcr.io/nginx/nginx-gateway-fabric` | 2.6.0 | Oui (grpc v1.80.0) | ✅ Corrigé |
+
+### Remédiation appliquée
+
+**Action** : Mise à jour NGF 2.4.2 → 2.6.0 (correctif CVE-2026-31789 + CVE-2026-33186). Exclusion `.trivyignore.yaml` supprimée.
+
+**Fichiers modifiés** :
+
+- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.6.0)
+- `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
+- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
+- `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
+- `.trivyignore.yaml` (exclusion CVE-2026-33186 **supprimée** — CVE corrigée dans NGF 2.6.0)
+
+### Validation
+
+```bash
+# Vérifier que le scan CI passe sans exclusion
+trivy image ghcr.io/nginx/nginx-gateway-fabric:2.6.0 --severity CRITICAL,HIGH
+# CVE-2026-33186 ne doit plus apparaître
+```
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
+| 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 (dernière disponible — ne corrige pas CVE-2026-33186) |
+| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
+| 2026-05-20 | Mise à jour NGF 2.4.2 → 2.6.0 (grpc v1.78.0 → v1.80.0, CVE-2026-33186 corrigée) |
+| 2026-05-20 | Exclusion `.trivyignore.yaml` supprimée — CVE résolue upstream |
+
+### Références
+
+- [NVD — CVE-2026-33186](https://nvd.nist.gov/vuln/detail/CVE-2026-33186)
+- [NGINX Gateway Fabric releases](https://github.com/nginx/nginx-gateway-fabric/releases)
+
+---
+
+## Alerte sécurité Jackson — tools.jackson.core 3.0.4 → 3.1.0
+
+### Détection
+
+- **Date** : 2026-03-14
+- **Outil** : OWASP Dependency-Check
+- **Sévérité** : HIGH
+- **Composants affectés** :
+  - `tools.jackson.core:jackson-core:3.0.4`
+  - `tools.jackson.core:jackson-databind:3.0.4`
+
+### Description
+
+Alerte de sécurité détectée sur les artefacts Jackson 3.0.4, dépendances transitives de Spring Boot 4.0.3. La version 3.1.0 corrige les vulnérabilités signalées.
+
+**Note sur le groupId** : Jackson 3.x a migré le groupId de `com.fasterxml.jackson.core` vers `tools.jackson.core`.
+
+### Composants affectés
+
+| Composant | Version vulnérable | Version corrective |
+| --- | --- | --- |
+| `tools.jackson.core:jackson-core` | 3.0.4 | 3.1.0 |
+| `tools.jackson.core:jackson-databind` | 3.0.4 | 3.1.0 |
+| `tools.jackson.core:jackson-annotations` | 3.0.4 | 3.1.0 |
+
+### Remédiation appliquée
+
+**Action** : Import du Jackson BOM 3.1.0 dans `<dependencyManagement>` du `pom.xml`
+
+Spring Boot 4.0.3 importe `tools.jackson:jackson-bom:3.0.4` via son parent POM. L'entrée
+`dependencyManagement` du projet enfant prend priorité sur celle du parent, ce qui permet
+d'imposer une version différente du BOM Jackson.
+
+**Approche initiale (abandonnée)** : forcer les 3 artefacts core individuellement
+(`jackson-core`, `jackson-databind`, `jackson-annotations`). Cette approche a provoqué un
+crash au démarrage :
+```
+NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs
+```
+`jackson-databind:3.1.0` requiert `@JsonSerializeAs` (nouvelle dans `jackson-annotations:3.1.0`),
+mais aussi une version cohérente de `jackson-dataformat-yaml` (utilisé par Spring Boot pour
+parser `application.yml`), `jackson-datatype-jsr310`, `jackson-module-parameter-names`, etc.
+Un mélange de versions entre modules Jackson est fatal au démarrage.
+
+**Approche correcte** : importer le Jackson BOM complet qui aligne TOUS les modules à 3.1.0 :
+
+```xml
+<dependencyManagement>
+  <dependencies>
+    <!--
+      Upgrade Jackson BOM 3.0.4 → 3.1.0.
+      Le child POM prend priorité sur le BOM de spring-boot-starter-parent.
+      Aligne tous les modules Jackson simultanément.
+    -->
+    <dependency>
+      <groupId>tools.jackson</groupId>
+      <artifactId>jackson-bom</artifactId>
+      <version>3.1.0</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+```
+
+**Fichier modifié** : `pom.xml` (section `<dependencyManagement>`)
+
+### Validation
+
+```bash
+# Vérifier les versions résolues par Maven (tous les modules Jackson doivent être 3.1.0)
+cd rhDemo && ./mvnw dependency:tree | grep tools.jackson
+
+# Résultat attendu : TOUS les modules Jackson en 3.1.0
+# tools.jackson.core:jackson-core:jar:3.1.0
+# tools.jackson.core:jackson-databind:jar:3.1.0
+# tools.jackson.core:jackson-annotations:jar:3.1.0
+# tools.jackson.dataformat:jackson-dataformat-yaml:jar:3.1.0
+# tools.jackson.datatype:jackson-datatype-jsr310:jar:3.1.0
+# tools.jackson.module:jackson-module-parameter-names:jar:3.1.0
+
+# Relancer le scan OWASP pour confirmer la disparition de l'alerte
+./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+```
+
+### Clôture (2026-06-16)
+
+- **Action** : Bloc `<dependencyManagement>` Jackson supprimé — Spring Boot 4.1.0 bundle nativement le Jackson BOM 3.1.4 (`tools.jackson:jackson-bom:3.1.4`).
+- **Fichier modifié** : `pom.xml`
+
+### Timeline
+
+| Date | Action |
+| --- | --- |
+| 2026-03-14 | Détection par OWASP Dependency-Check dans le pipeline CI |
+| 2026-03-14 | Forçage de jackson-core, jackson-databind, jackson-annotations à 3.1.0 via `dependencyManagement` |
 
 ---
 
@@ -909,295 +954,85 @@ est disponible.
 
 ---
 
-## Alerte sécurité Jackson — tools.jackson.core 3.0.4 → 3.1.0
+## CVE-2025-68121 - Go crypto/tls TLS Session Resumption Auth Bypass (gosu)
 
 ### Détection
 
-- **Date** : 2026-03-14
-- **Outil** : OWASP Dependency-Check
-- **Sévérité** : HIGH
-- **Composants affectés** :
-  - `tools.jackson.core:jackson-core:3.0.4`
-  - `tools.jackson.core:jackson-databind:3.0.4`
-
-### Description
-
-Alerte de sécurité détectée sur les artefacts Jackson 3.0.4, dépendances transitives de Spring Boot 4.0.3. La version 3.1.0 corrige les vulnérabilités signalées.
-
-**Note sur le groupId** : Jackson 3.x a migré le groupId de `com.fasterxml.jackson.core` vers `tools.jackson.core`.
-
-### Composants affectés
-
-| Composant | Version vulnérable | Version corrective |
-| --- | --- | --- |
-| `tools.jackson.core:jackson-core` | 3.0.4 | 3.1.0 |
-| `tools.jackson.core:jackson-databind` | 3.0.4 | 3.1.0 |
-| `tools.jackson.core:jackson-annotations` | 3.0.4 | 3.1.0 |
-
-### Remédiation appliquée
-
-**Action** : Import du Jackson BOM 3.1.0 dans `<dependencyManagement>` du `pom.xml`
-
-Spring Boot 4.0.3 importe `tools.jackson:jackson-bom:3.0.4` via son parent POM. L'entrée
-`dependencyManagement` du projet enfant prend priorité sur celle du parent, ce qui permet
-d'imposer une version différente du BOM Jackson.
-
-**Approche initiale (abandonnée)** : forcer les 3 artefacts core individuellement
-(`jackson-core`, `jackson-databind`, `jackson-annotations`). Cette approche a provoqué un
-crash au démarrage :
-```
-NoClassDefFoundError: com/fasterxml/jackson/annotation/JsonSerializeAs
-```
-`jackson-databind:3.1.0` requiert `@JsonSerializeAs` (nouvelle dans `jackson-annotations:3.1.0`),
-mais aussi une version cohérente de `jackson-dataformat-yaml` (utilisé par Spring Boot pour
-parser `application.yml`), `jackson-datatype-jsr310`, `jackson-module-parameter-names`, etc.
-Un mélange de versions entre modules Jackson est fatal au démarrage.
-
-**Approche correcte** : importer le Jackson BOM complet qui aligne TOUS les modules à 3.1.0 :
-
-```xml
-<dependencyManagement>
-  <dependencies>
-    <!--
-      Upgrade Jackson BOM 3.0.4 → 3.1.0.
-      Le child POM prend priorité sur le BOM de spring-boot-starter-parent.
-      Aligne tous les modules Jackson simultanément.
-    -->
-    <dependency>
-      <groupId>tools.jackson</groupId>
-      <artifactId>jackson-bom</artifactId>
-      <version>3.1.0</version>
-      <type>pom</type>
-      <scope>import</scope>
-    </dependency>
-  </dependencies>
-</dependencyManagement>
-```
-
-**Fichier modifié** : `pom.xml` (section `<dependencyManagement>`)
-
-### Validation
-
-```bash
-# Vérifier les versions résolues par Maven (tous les modules Jackson doivent être 3.1.0)
-cd rhDemo && ./mvnw dependency:tree | grep tools.jackson
-
-# Résultat attendu : TOUS les modules Jackson en 3.1.0
-# tools.jackson.core:jackson-core:jar:3.1.0
-# tools.jackson.core:jackson-databind:jar:3.1.0
-# tools.jackson.core:jackson-annotations:jar:3.1.0
-# tools.jackson.dataformat:jackson-dataformat-yaml:jar:3.1.0
-# tools.jackson.datatype:jackson-datatype-jsr310:jar:3.1.0
-# tools.jackson.module:jackson-module-parameter-names:jar:3.1.0
-
-# Relancer le scan OWASP pour confirmer la disparition de l'alerte
-./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
-```
-
-### Clôture (2026-06-16)
-
-- **Action** : Bloc `<dependencyManagement>` Jackson supprimé — Spring Boot 4.1.0 bundle nativement le Jackson BOM 3.1.4 (`tools.jackson:jackson-bom:3.1.4`).
-- **Fichier modifié** : `pom.xml`
-
-### Timeline
-
-| Date | Action |
-| --- | --- |
-| 2026-03-14 | Détection par OWASP Dependency-Check dans le pipeline CI |
-| 2026-03-14 | Forçage de jackson-core, jackson-databind, jackson-annotations à 3.1.0 via `dependencyManagement` |
-
----
-
-## CVE-2026-32767 — nginx
-
-### Détection
-
-- **Date** : 2026-03-19
+- **Date de détection** : 2026-02-12
 - **Outil** : Trivy Security Scanner
-- **Sévérité** : À préciser (voir NVD)
-- **Composant affecté** : `nginx:1.29.5-alpine` puis `nginx:1.29.6-alpine`
-- **Statut** : ⚠️ Risque accepté — exclusion `.trivyignore.yaml` (aucune version corrective disponible)
+- **Sévérité** : CRITICAL
+- **Composant affecté** : `usr/local/bin/gosu` dans `postgres:18-alpine`
 
 ### Description
 
-CVE-2026-32767 affecte nginx. La version 1.29.6 (dernière disponible) ne corrige pas cette CVE.
+CVE-2025-68121 est une vulnérabilité dans le package `crypto/tls` de la bibliothèque standard Go. Lors d'une reprise de session TLS, si les champs `ClientCAs` ou `RootCAs` de la configuration sont modifiés entre le handshake initial et la reprise, la session peut être rétablie alors qu'elle aurait dû échouer. Cela permet un contournement potentiel des restrictions de certificats.
+
+**Versions Go affectées** : Go < 1.24.13 et Go 1.25.0 à 1.25.6
+
+L'outil `gosu` (v1.19), utilisé par l'image officielle PostgreSQL pour changer d'utilisateur au démarrage du conteneur, est compilé avec **Go 1.24.6** et embarque donc le code vulnérable de `crypto/tls`.
+
+### Analyse de risque
+
+#### Risque réel — NUL (faux positif fonctionnel)
+
+`gosu` est un utilitaire de type `setuid+setgid+exec` dont le rôle unique est de changer d'utilisateur Unix puis d'exécuter une commande. Il **n'effectue aucune connexion réseau** et **n'utilise jamais** le package `crypto/tls` à l'exécution. Le code vulnérable est inclus dans le binaire Go par le compilateur mais n'est jamais appelé.
+
+Cette position est confirmée par :
+
+- Le mainteneur de gosu via [`govulncheck`](https://github.com/tianon/gosu/issues/144) qui vérifie que les chemins de code vulnérables ne sont pas atteignables
+- La discussion upstream [docker-library/postgres#1324](https://github.com/docker-library/postgres/issues/1324)
 
 ### Images affectées
 
-| Image | Version | Correctif disponible | Statut |
-| --- | --- | --- | --- |
-| `nginx` | 1.29.6-alpine (dernière) | Non | ⚠️ CVE présente, exclusion `.trivyignore.yaml` |
-
-### Remédiation appliquée
-
-**Action** : Mise à jour nginx 1.29.5 → 1.29.6 (dernière version disponible) + exclusion Trivy en attente de correctif upstream.
-
-**Fichiers modifiés** :
-
-- `Jenkinsfile-CI` (variable `NGINX_IMAGE`, upgrade vers 1.29.6)
-- `infra/ephemere/docker-compose.yml` (valeur de repli `NGINX_IMAGE`)
-- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
-- `.trivyignore.yaml` (exclusion CVE-2026-32767 avec justification)
-
-**Digest 1.29.6-alpine** : `sha256:08fe94b0d1e72fc687840f5696f6e107a85c327b1bcb8a7acc22f8c100227c67`
-
-**Note** : CVE-2026-22184 (zlib) reste également présente dans 1.29.6. Les deux sont exclues via `.trivyignore.yaml`.
-
-### Condition de clôture
-
-Retirer `CVE-2026-32767` du `.trivyignore.yaml` quand une version nginx:alpine intégrant le correctif est publiée.
-
-### Validation
-
-```bash
-# Vérifier que le scan CI passe (CVE exclue via .trivyignore)
-trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL,HIGH nginx:1.29.6-alpine
-```
-
-### Timeline
-
-| Date | Action |
-| --- | --- |
-| 2026-03-19 | Détection par Trivy dans le pipeline CI (nginx:1.29.5-alpine) |
-| 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (dernière disponible — ne corrige pas CVE-2026-32767) |
-| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
-
-### Références
-
-- [NVD — CVE-2026-32767](https://nvd.nist.gov/vuln/detail/CVE-2026-32767)
-- [nginx security advisories](https://nginx.org/en/security_advisories.html)
-
----
-
-## CVE-2026-33186 — NGINX Gateway Fabric
-
-### Détection
-
-- **Date** : 2026-03-19
-- **Outil** : Trivy Security Scanner
-- **Sévérité** : À préciser (voir NVD)
-- **Composant affecté** : `ghcr.io/nginx/nginx-gateway-fabric`
-- **Statut** : ✅ Corrigé — NGF 2.6.0 intègre `google.golang.org/grpc v1.80.0` (fix en v1.79.3)
-
-### Description
-
-CVE-2026-33186 est un contournement d'autorisation dans gRPC (CVSS 9.1 Critical) : les en-têtes `:path` non canoniques (sans `/` initial) échappaient aux politiques d'autorisation basées sur le chemin. Affectait NGF 2.4.x (grpc v1.78.0). **Corrigé dans NGF 2.6.0** via la mise à jour grpc → v1.80.0.
-
-### Images affectées
-
-| Image | Version | Correctif disponible | Statut |
-| --- | --- | --- | --- |
-| `ghcr.io/nginx/nginx-gateway-fabric` | 2.4.2 | Non | ~~⚠️ CVE présente~~ (obsolète) |
-| `ghcr.io/nginx/nginx-gateway-fabric` | 2.6.0 | Oui (grpc v1.80.0) | ✅ Corrigé |
-
-### Remédiation appliquée
-
-**Action** : Mise à jour NGF 2.4.2 → 2.6.0 (correctif CVE-2026-31789 + CVE-2026-33186). Exclusion `.trivyignore.yaml` supprimée.
-
-**Fichiers modifiés** :
-
-- `Jenkinsfile-CI` (variable `NGF_IMAGE`, upgrade vers 2.6.0)
-- `infra/stagingkub/scripts/init-stagingkub.sh` (variables `NGF_VERSION` et `NGF_IMAGE_DIGEST`)
-- `docs/IMAGE_VERSIONS_MANAGEMENT.md`
-- `docs/NGINX_GATEWAY_FABRIC_MIGRATION.md`
-- `.trivyignore.yaml` (exclusion CVE-2026-33186 **supprimée** — CVE corrigée dans NGF 2.6.0)
-
-### Validation
-
-```bash
-# Vérifier que le scan CI passe sans exclusion
-trivy image ghcr.io/nginx/nginx-gateway-fabric:2.6.0 --severity CRITICAL,HIGH
-# CVE-2026-33186 ne doit plus apparaître
-```
-
-### Timeline
-
-| Date | Action |
-| --- | --- |
-| 2026-03-19 | Détection par Trivy dans le pipeline CI (NGF 2.4.0) |
-| 2026-03-19 | Mise à jour NGF 2.4.0 → 2.4.2 (dernière disponible — ne corrige pas CVE-2026-33186) |
-| 2026-03-19 | Exclusion `.trivyignore.yaml` avec justification documentée |
-| 2026-05-20 | Mise à jour NGF 2.4.2 → 2.6.0 (grpc v1.78.0 → v1.80.0, CVE-2026-33186 corrigée) |
-| 2026-05-20 | Exclusion `.trivyignore.yaml` supprimée — CVE résolue upstream |
-
-### Références
-
-- [NVD — CVE-2026-33186](https://nvd.nist.gov/vuln/detail/CVE-2026-33186)
-- [NGINX Gateway Fabric releases](https://github.com/nginx/nginx-gateway-fabric/releases)
-
----
-
-## CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 — Apache Tomcat Embed Core
-
-### Détection
-
-- **Date** : 2026-04-19
-- **Outil** : OWASP Dependency-Check
-- **Sévérité** : À préciser (voir NVD) — niveau suffisant pour bloquer le pipeline (CVSS ≥ 7)
-- **Composant affecté** : `org.apache.tomcat.embed:tomcat-embed-core:11.0.20`
-
-### Description
-
-Trois CVE affectant Tomcat Embed Core 11.0.20, composant embarqué par Spring Boot 4.0.5 pour le serveur HTTP.
-
-| CVE | Description |
-| --- | --- |
-| CVE-2026-34483 | À préciser (voir NVD) |
-| CVE-2026-34486 | À préciser (voir NVD) |
-| CVE-2026-34487 | À préciser (voir NVD) |
-
-### Composants affectés
-
-| Composant | Version vulnérable | Version corrective |
+| Image | Composant | Status |
 | --- | --- | --- |
-| `org.apache.tomcat.embed:tomcat-embed-core` | 11.0.20 | 11.0.21 |
+| postgres:18-alpine | gosu 1.19 (Go 1.24.6) | ⚠️ CVE présente mais non exploitable |
+| rhdemo-api | N/A | ✅ Non affecté |
+| nginx | N/A | ✅ Non affecté |
+| keycloak | N/A | ✅ Non affecté |
 
 ### Remédiation appliquée
 
-**Action** : Forçage de la propriété `<tomcat.version>` dans `pom.xml` pour surcharger la version gérée par `spring-boot-starter-parent`.
+**Action** : Exclusion de la CVE dans Trivy via `.trivyignore.yaml` (risque accepté - faux positif fonctionnel)
 
-```xml
-<properties>
-  <!-- Fix CVE-2026-34483, CVE-2026-34486, CVE-2026-34487 -->
-  <tomcat.version>11.0.21</tomcat.version>
-</properties>
+**Fichier créé** : `rhDemo/.trivyignore.yaml`
+
+```yaml
+vulnerabilities:
+  - id: CVE-2025-68121
+    pkg-name: gosu
+    statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution"
 ```
 
-**Fichier modifié** : `pom.xml` (section `<properties>`)
+**Fichier modifié** : `rhDemo/vars/rhDemoLib.groovy`
 
-Spring Boot expose la propriété `tomcat.version` pour permettre l'override de tous les artefacts `tomcat-embed-*` sans modifier les dépendances directes.
+- Ajout de `--ignorefile rhDemo/.trivyignore.yaml` aux commandes `trivy image` (scans JSON et table)
+
+### Condition de retrait de l'exclusion
+
+L'exclusion dans `.trivyignore.yaml` devra être **retirée** lorsque l'une de ces conditions sera remplie :
+
+- Nouvelle release de gosu compilée avec Go >= 1.24.13 ou >= 1.25.7
+- Mise à jour de l'image `postgres:18-alpine` intégrant un gosu corrigé
 
 ### Validation
 
 ```bash
-# Vérifier que Maven résout bien Tomcat 11.0.21
-cd rhDemo && ./mvnw dependency:tree | grep tomcat-embed
+# Vérifier que Trivy ignore bien la CVE
+trivy image --ignorefile rhDemo/.trivyignore.yaml --severity CRITICAL postgres:18-alpine
 
-# Résultat attendu :
-# org.apache.tomcat.embed:tomcat-embed-core:jar:11.0.21
-# org.apache.tomcat.embed:tomcat-embed-websocket:jar:11.0.21
-
-# Relancer le scan OWASP pour confirmer la disparition des alertes
-./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
+# Vérifier que gosu n'utilise pas crypto/tls (nécessite govulncheck)
+# govulncheck -mode binary /usr/local/bin/gosu
 ```
-
-### Clôture
-
-Résolu par la remédiation CVE-2026-41293/43512/43515/41284/43513/42498 ci-dessus (upgrade vers 11.0.22, puis suppression de l'override lors du passage à Spring Boot 4.1.0).
-
-### Timeline
-
-| Date | Action |
-| --- | --- |
-| 2026-04-19 | Détection par OWASP Dependency-Check dans le pipeline CI (tomcat-embed-core:11.0.20) |
-| 2026-04-19 | Forçage `<tomcat.version>11.0.21</tomcat.version>` dans `pom.xml` |
 
 ### Références
 
-- [NVD — CVE-2026-34483](https://nvd.nist.gov/vuln/detail/CVE-2026-34483)
-- [NVD — CVE-2026-34486](https://nvd.nist.gov/vuln/detail/CVE-2026-34486)
-- [NVD — CVE-2026-34487](https://nvd.nist.gov/vuln/detail/CVE-2026-34487)
-- [Apache Tomcat security advisories](https://tomcat.apache.org/security-11.html)
+- [NVD - CVE-2025-68121](https://nvd.nist.gov/vuln/detail/CVE-2025-68121)
+- [SentinelOne - CVE-2025-68121](https://www.sentinelone.com/vulnerability-database/cve-2025-68121/)
+- [docker-library/postgres#1324 - gosu CVE discussion](https://github.com/docker-library/postgres/issues/1324)
+- [gosu security policy](https://github.com/tianon/gosu/issues/144)
+- [gosu releases](https://github.com/tianon/gosu/releases) - v1.19 (Go 1.24.6)
+- [Go 1.24.13 release notes](https://go.dev/doc/devel/release) - inclut le fix crypto/tls
 
 ---
 
@@ -1235,4 +1070,4 @@ Résolu par la remédiation CVE-2026-41293/43512/43515/41284/43513/42498 ci-dess
 
 ---
 
-**Dernière mise à jour** : 2026-06-16 (migration Spring Boot 4.1.0 — suppression de 8 overrides absorbés nativement par le BOM)
+**Dernière mise à jour** : 2026-08-06 (réorganisation antichronologique, suppression des incidents résolus de plus de 6 mois, ajout du jeton `[PENDING_UPSTREAM_FIX]` rétroactif aux suppressions temporaires antérieures à cette convention)

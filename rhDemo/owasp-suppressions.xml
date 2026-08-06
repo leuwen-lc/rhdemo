@@ -11,33 +11,39 @@
           - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
           - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
         À retirer dès que springdoc-openapi 3.0.4+ embarque DOMPurify >= 3.4.0.
+        [PENDING_UPSTREAM_FIX] ajouté rétroactivement le 2026-08-06 : ces 5 suppressions sont
+        antérieures à la convention Critère B de fixcve-auto (elles datent du 2026-05-19,
+        avant l'introduction du jeton) mais correspondent exactement au même cas — composant
+        de production (swagger-ui, servi aux utilisateurs authentifiés), pas de critère A
+        applicable, en attente d'un correctif springdoc réel. Sans ce jeton, l'étape 0 de
+        SKILL.md (revérification à chaque activation) ne les aurait jamais détectées.
     -->
     <suppress>
-        <notes>CVE-2026-41240 : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41240 : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
         <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
         <cve>CVE-2026-41240</cve>
     </suppress>
 
     <suppress>
-        <notes>CVE-2026-41238 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41238 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
         <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
         <vulnerabilityName>CVE-2026-41238</vulnerabilityName>
     </suppress>
 
     <suppress>
-        <notes>CVE-2026-41239 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41239 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
         <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
         <vulnerabilityName>CVE-2026-41239</vulnerabilityName>
     </suppress>
 
     <suppress>
-        <notes>GHSA-39q2-94rc-95cp (RetireJS/GHSA) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
+        <notes>[PENDING_UPSTREAM_FIX] GHSA-39q2-94rc-95cp (RetireJS/GHSA) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
         <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
         <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
     </suppress>
 
     <suppress>
-        <notes>CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible (3.0.3 = dernière version publiée sur Maven Central). Swagger UI protégé par Spring Security ; DOMPurify n'est jamais utilisé par le code applicatif frontend/src. A retirer avec springdoc 3.0.4+.</notes>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible (3.0.3 = dernière version publiée sur Maven Central). Swagger UI protégé par Spring Security ; DOMPurify n'est jamais utilisé par le code applicatif frontend/src. A retirer avec springdoc 3.0.4+.</notes>
         <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
         <cve>CVE-2026-65898</cve>
     </suppress>

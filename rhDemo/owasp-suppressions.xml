@@ -146,24 +146,4 @@
         <vulnerabilityName>GHSA-mh99-v99m-4gvg</vulnerabilityName>
     </suppress>
 
-
-    <!--
-        CVE-2026-66299 — tomcat-embed-core 11.0.24 (DoS, aucun correctif publié à ce jour)
-        HIGH 7.5, CWE-400, vecteur CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H.
-        Composant de production (scope compile, via spring-boot-starter-web) : aucun critère A
-        (test/provided, RetireJS, AV:L/AV:P, devDependency npm) ne s'applique. Acceptation
-        temporaire du risque car CVSS < 9.0 (Critère B). Vérifié sur maven-metadata.xml
-        (org/apache/tomcat/embed) : latest=release=11.0.24, aucune version 11.0.25/10.1.58/9.0.121
-        publiée sur Maven Central (correctif indiqué "when released" par l'Apache Security Team).
-        Correspondance CPE générique (cpe:2.3:a:apache:tomcat:11.0.24) plutôt que packageUrl exact :
-        regex scopée à tout le groupId org.apache.tomcat.embed pour éviter un ré-attachement sur
-        un jar frère (tomcat-embed-websocket, tomcat-embed-el) lors d'un scan ultérieur.
-        À retirer dès qu'un correctif Tomcat est publié (revérifié à chaque cycle fixcve-auto).
-    -->
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-66299 : tomcat-embed-core 11.0.24, HIGH 7.5 — aucun correctif publié sur Maven Central (11.0.25 "when released"). Composant de production (compile via spring-boot-starter-web), vecteur réseau AV:N, pas de critère A applicable. Acceptation temporaire car CVSS &lt; 9.0 (Critère B) — à revérifier à chaque cycle fixcve-auto.</notes>
-        <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/.*@.*$</packageUrl>
-        <cve>CVE-2026-66299</cve>
-    </suppress>
-
 </suppressions>

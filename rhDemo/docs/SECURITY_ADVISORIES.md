@@ -4,46 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## brace-expansion (build #752) — CVE-2026-69152 (CVSS 7.5)
-
-**Remédiation automatique**
-
-### Détection
-
-- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #752)
-- **Outil** : OWASP Dependency-Check
-- **Composant affecté** : `brace-expansion:1.1.17` (`frontend/package-lock.json`, transitif via `minimatch:3.1.5`)
-
-### Description
-
-DoS par épuisement mémoire : `expand()` n'applique pas `maxLength` lors de la construction des tableaux intermédiaires, permettant à une entrée contrôlée par l'attaquant d'épuiser la mémoire ou de bloquer la boucle d'événements. Contourne le correctif de CVE-2026-14257. Versions affectées : `<1.1.18`, `<2.1.4`, `<3.0.6`, `<5.0.9` ; corrigé en `1.1.18` (pas de saut majeur nécessaire).
-
-### Remédiation
-
-Montée de version `brace-expansion` `1.1.17` → `1.1.18` via `npm install --package-lock-only --save-exact --save-dev` (`frontend/package.json`, `frontend/package-lock.json`).
-
----
-
-## tomcat-embed-core 11.0.24 (build #752) — CVE-2026-66299 (CVSS 7.5)
-
-**Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)**
-
-### Détection
-
-- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #752, déjà observé sans action depuis le build #735)
-- **Outil** : OWASP Dependency-Check
-- **Composant affecté** : `tomcat-embed-core:11.0.24` (`org.apache.tomcat.embed`, via `spring-boot-starter-web`, scope `compile`)
-
-### Description
-
-DoS (CWE-400), HIGH 7.5, vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`. Aucune version corrigée publiée sur Maven Central à la date de détection (`maven-metadata.xml` : `latest=release=11.0.24`, correctif indiqué "when released" par l'Apache Security Team). Composant de production (scope `compile`), vecteur réseau : aucun critère d'acceptation permanente (Critère A) ne s'applique.
-
-### Remédiation
-
-Acceptation temporaire du risque (Critère B : CVSS < 9.0) via `owasp-suppressions.xml`, jeton `[PENDING_UPSTREAM_FIX]`, regex scopée à tout le groupId `org.apache.tomcat.embed` (correspondance CPE générique, risque de ré-attachement sur un jar frère). Cette exclusion sera revérifiée à chaque activation du skill `fixcve-auto` et remplacée par le correctif réel dès qu'une version Tomcat corrigée sera publiée.
-
----
-
 ## brace-expansion (build #721) — GHSA-mh99-v99m-4gvg / CVE-2026-14257 (CVSS 7.5)
 
 ### Détection

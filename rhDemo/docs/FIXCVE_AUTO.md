@@ -45,7 +45,8 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 | **Branche à jour requise** | Si la branche locale est en retard/divergente par rapport à `origin`, le script s'arrête (pas de merge/rebase automatique). |
 | **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau, `git revert` immédiat + push. |
 | **Halte après rollbacks répétés** | Après `MAX_CONSECUTIVE_ROLLBACKS` (2) rollbacks consécutifs, le statut passe à `halted` : plus aucune action tant qu'un humain ne réinitialise pas `~/.config/rhdemo-fixcve/state.json`. |
-| **Critères objectifs pour toute suppression/acceptation de risque** | Une CVE sans correctif disponible n'est supprimée que si : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local). Sinon : blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
+| **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque activation du skill (étape 0 de `SKILL.md`), remplacée par le vrai correctif dès qu'il sort. **CVSS ≥ 9.0 sans correctif** : seule exception restant hors périmètre — blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
+| **Revérification des exclusions temporaires (Critère B)** | À chaque activation du skill (quel que soit le build/stage déclencheur), `SKILL.md` étape 0 scanne `owasp-suppressions.xml`/`.trivyignore.yaml` pour le jeton `[PENDING_UPSTREAM_FIX]` et revérifie Maven Central/npm pour chacune ; si un correctif est sorti, applique le vrai correctif et retire l'exclusion. Ce mécanisme ne se déclenche que si le skill est réinvoqué (un build vert sur une CVE désormais supprimée n'invoque plus le skill tant qu'aucune autre CVE ne fait échouer le build) — jugé suffisant vu la fréquence d'activation réelle du skill sur ce projet (surface OWASP Dependency-Check large). |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, application, validation, rollback, halte). |
 | **Verrou anti-chevauchement** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock` — un cycle CI (~2h max) ne peut pas se chevaucher avec le suivant. |
 | **Anti-boucle blocage confirmé** | Après un `blocked_needs_human` (CVE bloquante sans correctif dispo), le script mémorise `blocked_confirmed.{since,source_sha}` dans `state.json`. Tant que le code source n'a pas changé (SHA du dernier commit hors `fixcve-audit.jsonl` identique) et que `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) n'est pas écoulé, les cycles suivants n'appellent pas Claude et ne committent/poussent rien — évite la boucle auto-entretenue commit→build Jenkins→nouveau commit observée sur les builds #735-#744 (aucune information nouvelle à chaque cycle, seul le push relançait le build suivant). |
@@ -225,14 +226,25 @@ Deux fichiers distincts, deux usages différents :
   tail -f ~/.config/rhdemo-fixcve/poll.log
   ```
 
-- **`rhDemo/docs/fixcve-audit.jsonl`** — uniquement les événements notables (remédiation appliquée, build hors périmètre, validation, rollback, halte). Versionné dans git, à consulter avec la commande ci-dessous.
+- **`rhDemo/docs/fixcve-audit.jsonl`** — uniquement les événements notables (remédiation appliquée, build hors périmètre, validation, rollback, halte). Versionné dans git, source de vérité append-only.
+- **`rhDemo/docs/fixcve-audit.md`** — vue lisible pour un humain, régénérée automatiquement à partir du `.jsonl` par `rhDemo/scripts/fixcve-audit-render.sh` (déterministe, pas de LLM) à chaque nouvel événement, entrée la plus récente en tête. Ne pas éditer à la main — toute modification est écrasée au prochain cycle.
 
 ## Lecture du journal d'audit
+
+Pour un humain, ouvrir directement `rhDemo/docs/fixcve-audit.md`. Pour un traitement programmatique, la source de vérité reste le `.jsonl` :
 
 ```bash
 cat rhDemo/docs/fixcve-audit.jsonl | jq .
 # Uniquement les rollbacks :
 jq 'select(.event == "validation_failed_rollback")' rhDemo/docs/fixcve-audit.jsonl
+# Uniquement les acceptations de risque temporaires (Critère B, en attente de correctif) :
+jq 'select(.event == "risk_accepted_pending_upstream_fix")' rhDemo/docs/fixcve-audit.jsonl
+```
+
+Régénérer manuellement la vue lisible si besoin (ex: après une modification directe du `.jsonl`) :
+
+```bash
+rhDemo/scripts/fixcve-audit-render.sh
 ```
 
 ## Évolution future : exécution via Jenkins plutôt que cron local

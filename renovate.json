@@ -61,6 +61,59 @@
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s*\\n[A-Za-z_][\\w-]*=\"(?<currentValue>[^\"]+)\""
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Node/npm pinnés pour frontend-maven-plugin (rhDemo/pom.xml) — le manager natif node-version ne couvre que .nvmrc/package.json engines.node, pas la config d'un plugin Maven. Cause de l'incident EBADENGINE post-bump majeur de vue-router (cf. RENOVATE_AUTOMERGE_CI.md)",
+      "managerFilePatterns": [
+        "rhDemo/pom.xml"
+      ],
+      "matchStrings": [
+        "<!--\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s*-->\\s*\\n\\s*<[A-Za-z]+>v?(?<currentValue>[^<]+)</[A-Za-z]+>"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Maven téléchargé directement depuis les archives Apache (rhDemo/infra/jenkins-docker/Dockerfile.agent) — binaire brut, pas une image Docker, non couvert par le manager dockerfile natif. Tags GitHub apache/maven au format 'maven-X.Y.Z'",
+      "managerFilePatterns": [
+        "rhDemo/infra/jenkins-docker/Dockerfile.agent"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ENV\\s+MAVEN_VERSION=(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^maven-(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "SOPS, Helm et Cosign téléchargés depuis leurs releases GitHub (rhDemo/infra/jenkins-docker/Dockerfile.agent) — binaires bruts, non couverts par le manager dockerfile natif",
+      "managerFilePatterns": [
+        "rhDemo/infra/jenkins-docker/Dockerfile.agent"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ENV\\s+(?:SOPS|HELM|COSIGN)_VERSION=(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "JDK Temurin 25 téléchargé depuis l'API Adoptium (rhDemo/infra/jenkins-docker/Dockerfile.agent) pour compiler le projet — distinct de l'image de base jdk21 du conteneur agent, qui elle est déjà couverte par le manager dockerfile natif. Tags GitHub adoptium/temurin25-binaries au format 'jdk-X.Y.Z+B'",
+      "managerFilePatterns": [
+        "rhDemo/infra/jenkins-docker/Dockerfile.agent"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ENV\\s+TEMURIN_25_VERSION=(?<currentValue>\\S+)"
+      ],
+      "extractVersionTemplate": "^jdk-(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Image renovate/renovate (rhDemo/Jenkinsfile-Renovate) — le manager natif jenkins est désactivé globalement (packageRules ci-dessus) pour éviter les conflits avec les images épinglées par digest ; cette image en tag simple passait donc entre les mailles",
+      "managerFilePatterns": [
+        "rhDemo/Jenkinsfile-Renovate"
+      ],
+      "matchStrings": [
+        "RENOVATE_IMAGE\\s*=\\s*['\"](?<depName>[^:'\"]+):(?<currentValue>[^'\"]+)['\"]"
+      ],
+      "datasourceTemplate": "docker"
     }
   ]
 }

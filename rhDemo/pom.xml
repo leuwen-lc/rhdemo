@@ -271,7 +271,9 @@
                         <goal>install-node-and-npm</goal>
                     </goals>
                     <configuration>
-                        <nodeVersion>v20.10.0</nodeVersion>
+                        <!-- renovate: datasource=node-version depName=node -->
+                        <nodeVersion>v24.19.0</nodeVersion>
+                        <!-- renovate: datasource=npm depName=npm -->
                         <npmVersion>10.7.0</npmVersion>
                     </configuration>
                 </execution>

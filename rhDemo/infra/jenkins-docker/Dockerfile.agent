@@ -47,7 +47,7 @@ RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-c
 # ═══════════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=apache/maven
-ENV MAVEN_VERSION=3.9.12
+ENV MAVEN_VERSION=3.9.16
 ENV MAVEN_HOME=/opt/maven
 
 RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \

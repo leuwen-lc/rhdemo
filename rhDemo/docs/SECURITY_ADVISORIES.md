@@ -392,6 +392,31 @@ Toutes ces vulnérabilités sont présentes dans le JavaScript embarqué dans le
   - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
 - **Action requise** : Retirer les suppressions et vérifier l'upgrade DOMPurify dès que springdoc-openapi 3.0.4+ est disponible
 
+**Résolu le 2026-08-07** : `springdoc-openapi` `3.0.3` → `3.1.0` (`swagger-ui` `5.32.11`, `DOMPurify` `3.4.12`) — correctif réel, les 4 suppressions et la suppression jumelle `CVE-2026-65898` (build #717 ci-dessus) sont retirées de `owasp-suppressions.xml`. Confirmé par `dependency-check-maven:check` local : `DOMPurify` n'apparaît plus dans le rapport. Détecté et corrigé initialement par le cycle `fixcve-auto` build #761 (commit `8f32e47`), mais annulé par le rollback automatique du build #762 — cause sans rapport avec ce correctif (voir incident `postcss` ci-dessous) — puis recommité manuellement après correction de la cause du rollback.
+
+---
+
+## CVE-2026-45623, CVE-2026-69153, CVE-2023-44270 — postcss 7.0.39 (build #759, corrigé le 2026-08-07)
+
+**Statut : ✅ Risque accepté (permanent)** — devDependency, jamais dans le bundle de production ; pas de correctif de sécurité requis, indépendant de la disponibilité de `postcss >= 8.5.12`.
+
+### Détection
+
+- **Date de détection** : 2026-08-07 (build Jenkins RHDemo-CI #759)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `postcss:7.0.39` (`frontend/package-lock.json`, transitif via `@vue/component-compiler-utils:3.3.0`)
+
+### Description
+
+Lecture de fichier arbitraire via `sourceMappingURL` lors du traitement d'un fichier CSS malveillant (CVE-2026-45623, CVSS 9.1 ; CVE-2026-69153, CVE-2023-44270 apparentées). Versions affectées : `<8.5.12` ; corrigé en `8.5.12`.
+
+### Remédiation (2026-08-07)
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` (pas de montée de version compatible).
+- **Justification** : `postcss:7.0.39` est fixé par la contrainte `^7.0.36` de `@vue/component-compiler-utils:3.3.0`, lui-même dépendance de build de `@vue/cli-service` (`dev=true` dans `package-lock.json` — absent de `dependencies`/`devDependencies` directes de `frontend/package.json`). `npm audit fix --package-lock-only` rapporte `fixAvailable: false` : la mise à jour vers `8.5.12` impliquerait un saut de version majeure (7.x → 8.x) au-delà de la contrainte semver déclarée, nécessitant `--force` — exclu par la politique du skill `fixcve-auto`. Cette instance de `postcss` ne traite que le CSS des composants `.vue` écrits par l'équipe (pipeline `vue-cli-service build`), jamais de CSS externe/non fiable comme le décrit le vecteur d'attaque de la CVE, et n'est jamais embarquée dans le bundle de production (un second `postcss` 8.5.26, non affecté, coexiste au niveau supérieur du graphe pour l'usage de production).
+- **Incident associé** : ce CVE est la cause racine des rollbacks automatiques des builds #760 et #762 (le correctif poussé au build #759 avait traité DOMPurify sans traiter celui-ci — voir `rhDemo/docs/FIXCVE_AUTO.md`) — corrigé manuellement après durcissement du skill `fixcve-auto` (validation locale obligatoire avant push, cf. `.claude/skills/fixcve-auto/SKILL.md`).
+- **À retirer** : dès que `@vue/component-compiler-utils` (ou sa chaîne de dépendances) embarque une version de `postcss >= 8.5.12`.
+
 ---
 
 ## CVE-2026-42198 — PostgreSQL JDBC Driver (pgjdbc)

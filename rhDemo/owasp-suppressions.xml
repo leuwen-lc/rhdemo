@@ -2,54 +2,6 @@
 <suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
 
     <!--
-        CVE-2026-41240, CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp — DOMPurify 3.3.2 dans swagger-ui
-        DOMPurify < 3.4.0 embarqué dans swagger-ui-5.32.2.jar (springdoc-openapi 3.0.3, dernière version disponible).
-        CVE-2026-41240 (NVD, CVSS 6.1) : XSS bypass via FORBID_TAGS + ADD_TAGS function-based — corrigé dans DOMPurify 3.4.0.
-        CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp (RetireJS) : autres vecteurs XSS dans DOMPurify 3.3.2.
-        Risque atténué par les contrôles suivants :
-          - Swagger UI accessible uniquement aux utilisateurs authentifiés (Spring Security)
-          - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
-          - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
-        À retirer dès que springdoc-openapi 3.0.4+ embarque DOMPurify >= 3.4.0.
-        [PENDING_UPSTREAM_FIX] ajouté rétroactivement le 2026-08-06 : ces 5 suppressions sont
-        antérieures à la convention Critère B de fixcve-auto (elles datent du 2026-05-19,
-        avant l'introduction du jeton) mais correspondent exactement au même cas — composant
-        de production (swagger-ui, servi aux utilisateurs authentifiés), pas de critère A
-        applicable, en attente d'un correctif springdoc réel. Sans ce jeton, l'étape 0 de
-        SKILL.md (revérification à chaque activation) ne les aurait jamais détectées.
-    -->
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41240 : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <cve>CVE-2026-41240</cve>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41238 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>CVE-2026-41238</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-41239 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>CVE-2026-41239</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] GHSA-39q2-94rc-95cp (RetireJS/GHSA) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible. Swagger UI protégé par Spring Security. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <vulnerabilityName>GHSA-39q2-94rc-95cp</vulnerabilityName>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-65898 (RetireJS) : DOMPurify 3.3.2 dans swagger-ui — pas de springdoc fix disponible (3.0.3 = dernière version publiée sur Maven Central). Swagger UI protégé par Spring Security ; DOMPurify n'est jamais utilisé par le code applicatif frontend/src. A retirer avec springdoc 3.0.4+.</notes>
-        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.3\.2$</packageUrl>
-        <cve>CVE-2026-65898</cve>
-    </suppress>
-
-
-    <!--
         CVE-2022-37620 — html-minifier-terser (faux positif de correspondance CPE)
         OWASP Dependency-Check associe html-minifier-terser (fork maintenu, utilisé par html-webpack-plugin)
         au CPE de kangax/html-minifier (projet original non maintenu, dont il dérive) faute de CPE dédié.
@@ -170,6 +122,24 @@
         <notes>[PENDING_UPSTREAM_FIX] CVE-2026-66299 : tomcat-embed-core 11.0.24, HIGH 7.5 — aucun correctif publié sur Maven Central (11.0.25 "when released"). Composant de production (compile via spring-boot-starter-web), vecteur réseau AV:N, pas de critère A applicable. Acceptation temporaire car CVSS &lt; 9.0 (Critère B) — à revérifier à chaque cycle fixcve-auto.</notes>
         <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/.*@.*$</packageUrl>
         <cve>CVE-2026-66299</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-45623 : postcss 7.0.39 (lecture de fichier arbitraire via sourceMappingURL, CVSS 9.1). Corrigé en 8.5.12, mais atteint ici en 7.0.39 exclusivement via node_modules/@vue/component-compiler-utils/node_modules/postcss (frontend/package-lock.json, contrainte semver postcss ^7.0.36 déclarée par @vue/component-compiler-utils:3.3.0, lui-même dépendance de build de @vue/cli-service, marqué dev=true dans package-lock.json — absent de dependencies/devDependencies directes de frontend/package.json). npm audit fix --package-lock-only rapporte fixAvailable=false : la mise à jour vers la branche 8.x impliquerait un saut de version majeure au-delà de la contrainte semver déclarée, ce qui nécessiterait l'option force, exclue par la politique du skill fixcve-auto. Cette instance de postcss ne traite que le CSS des composants .vue écrits par l'équipe (pipeline vue-cli-service build), jamais de CSS externe/non fiable comme le décrit le vecteur d'attaque de la CVE (CMS, upload utilisateur), et n'est jamais embarquée dans le bundle de production. Un second postcss (8.5.26, non affecté) coexiste au niveau supérieur du graphe de dépendances pour l'usage de production.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
+        <cve>CVE-2026-45623</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-69153 : postcss 7.0.39, même dépendance transitive que CVE-2026-45623 ci-dessus (via @vue/component-compiler-utils:3.3.0, devDependency de @vue/cli-service, jamais dans le bundle de production) — même justification, pas de correctif compatible sans passage en force.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
+        <cve>CVE-2026-69153</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2023-44270 : postcss 7.0.39, même dépendance transitive que CVE-2026-45623 ci-dessus (via @vue/component-compiler-utils:3.3.0, devDependency de @vue/cli-service, jamais dans le bundle de production) — même justification, pas de correctif compatible sans passage en force.</notes>
+        <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
+        <cve>CVE-2023-44270</cve>
     </suppress>
 
 </suppressions>

@@ -61,7 +61,7 @@ RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries
 # ═══════════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=getsops/sops
-ENV SOPS_VERSION=3.11.0
+ENV SOPS_VERSION=3.13.3
 
 RUN wget -q https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /usr/local/bin/sops && \
     chmod +x /usr/local/bin/sops && \

@@ -270,6 +270,121 @@ rules:
   - apiGroups: ["storage.k8s.io"]
     resources: ["volumeattachments"]
     verbs: ["list", "watch"]
+
+  # Miroir des règles portées par les ClusterRoles cilium / cilium-operator
+  # (chart Cilium 1.20.0). Même raisonnement que les blocs miroir
+  # kube-prometheus-stack ci-dessus : le garde-fou RBAC non-escalation exige
+  # que jenkins-infra-upgrader détienne déjà toutes ces règles avant de
+  # patcher ces deux ClusterRoles. Liste vérifiée exhaustivement sur le
+  # message d'erreur RBAC réel de l'échec RHDemo-Renovate #56 (2026-08-07,
+  # bump 1.19.6 → 1.20.0), croisée avec
+  # templates/cilium-operator/clusterrole.yaml du chart 1.20.0.
+  #
+  # Exception documentée au principe "jamais de `create` sur
+  # CustomResourceDefinition" énoncé en tête de ce fichier : le
+  # ClusterRole cilium-operator embarque, sans condition de valeur Helm,
+  # un `create` non restreint sur customresourcedefinitions (l'opérateur
+  # crée lui-même ses CRD manquantes au démarrage — vérifié dans le chart,
+  # aucune option ne désactive ce comportement). C'est le seul verbe non
+  # restreignable par `resourceNames` ajouté ici (par nature : le nom d'un
+  # objet n'existe pas encore à sa création) ; tout le reste ci-dessous
+  # reste nommé. Accepté au même titre que le bloc configmaps/secrets
+  # `verbs: ["*"]` cluster-wide plus haut : assouplissement ponctuel et
+  # justifié, jamais un raccourci de confort. Corrige au passage
+  # l'hypothèse antérieure de rbac/README.md ("jenkins-infra-upgrader n'a
+  # aucun droit CRD sur cilium.io") — à mettre à jour en conséquence.
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services/status"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    resourceNames:
+      - ciliumbgpadvertisements.cilium.io
+      - ciliumbgpclusterconfigs.cilium.io
+      - ciliumbgpnodeconfigoverrides.cilium.io
+      - ciliumbgpnodeconfigs.cilium.io
+      - ciliumbgppeerconfigs.cilium.io
+      - ciliumcidrgroups.cilium.io
+      - ciliumclusterwideenvoyconfigs.cilium.io
+      - ciliumclusterwidenetworkpolicies.cilium.io
+      - ciliumdatapathplugins.cilium.io
+      - ciliumegressgatewaypolicies.cilium.io
+      - ciliumendpoints.cilium.io
+      - ciliumendpointslices.cilium.io
+      - ciliumenvoyconfigs.cilium.io
+      - ciliumgatewayclassconfigs.cilium.io
+      - ciliumidentities.cilium.io
+      - ciliuml2announcementpolicies.cilium.io
+      - ciliumloadbalancerippools.cilium.io
+      - ciliumlocalredirectpolicies.cilium.io
+      - ciliumnetworkpolicies.cilium.io
+      - ciliumnodeconfigs.cilium.io
+      - ciliumnodes.cilium.io
+      - ciliumpodippools.cilium.io
+    verbs: ["update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions/status"]
+    resourceNames:
+      - ciliumbgpadvertisements.cilium.io
+      - ciliumbgpclusterconfigs.cilium.io
+      - ciliumbgpnodeconfigoverrides.cilium.io
+      - ciliumbgpnodeconfigs.cilium.io
+      - ciliumbgppeerconfigs.cilium.io
+    verbs: ["update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpadvertisements", "ciliumbgpclusterconfigs", "ciliumbgpnodeconfigoverrides", "ciliumbgpnodeconfigs", "ciliumbgppeerconfigs", "ciliumcidrgroups", "ciliumenvoyconfigs"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpclusterconfigs/status", "ciliumbgppeerconfigs/status"]
+    verbs: ["update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpnodeconfigs/status", "ciliumendpoints/status", "ciliuml2announcementpolicies/status", "ciliumloadbalancerippools/status"]
+    verbs: ["patch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgppeeringpolicies", "ciliumdatapathplugins", "ciliumloadbalancerippools"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwideenvoyconfigs", "ciliumegressgatewaypolicies", "ciliuml2announcementpolicies", "ciliumlocalredirectpolicies", "ciliumnodeconfigs"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwidenetworkpolicies", "ciliumnetworkpolicies"]
+    verbs: ["create", "deletecollection", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwidenetworkpolicies/status", "ciliumnetworkpolicies/status"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpoints"]
+    verbs: ["create", "delete", "get", "list", "patch", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpointslices"]
+    verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumidentities"]
+    verbs: ["create", "delete", "list", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnodes"]
+    verbs: ["create", "delete", "get", "list", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnodes/status"]
+    verbs: ["get", "update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumpodippools"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "get", "update"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

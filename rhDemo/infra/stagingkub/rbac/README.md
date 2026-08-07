@@ -97,8 +97,21 @@ voir `install-or-upgrade-cilium.sh` pour le détail de la bascule.
 Cilium bootstrappe lui-même ses CRDs (`cilium.io`) au démarrage de
 l'agent/operator, via son propre ServiceAccount — vérifié en inspectant le
 chart 1.18.6 (`helm template --include-crds` : aucune CRD rendue ; aucun
-dossier `crds/` dans le chart). `jenkins-infra-upgrader` n'a donc **aucun
-droit CRD** sur `cilium.io`.
+dossier `crds/` dans le chart).
+
+**Correction (chart 1.20.0, échec RHDemo-Renovate #56)** : l'affirmation
+ci-dessus reste vraie pour le bootstrap initial des CRDs, mais le
+ClusterRole `cilium-operator` embarque, à partir du chart 1.20.0, des
+droits CRD que `jenkins-infra-upgrader` doit lui-même détenir pour pouvoir
+patcher ce ClusterRole (garde-fou RBAC non-escalation) : `update` nommé sur
+chaque CRD `*.cilium.io` (l'opérateur synchronise leur schéma), et surtout
+un `create` **non restreint** sur `customresourcedefinitions` — sans
+condition de valeur Helm, l'opérateur crée lui-même ses CRD manquantes au
+démarrage. C'est la seule dérogation de ce fichier au principe "jamais de
+`create` sur CustomResourceDefinition" (voir le commentaire dédié dans
+`jenkins-infra-upgrader-clusterrole.yaml`), acceptée au même titre que le
+bloc `configmaps`/`secrets` `verbs: ["*"]` cluster-wide déjà documenté plus
+bas — un assouplissement ponctuel et justifié, jamais un raccourci.
 
 **`jenkins-infra-upgrader-cilium-system-role.yaml`** : RBAC large sans
 `resourceNames` sur `daemonsets`/`deployments`/`configmaps`/`secrets`/

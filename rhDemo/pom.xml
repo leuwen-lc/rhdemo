@@ -275,7 +275,7 @@
                         <!-- renovate: datasource=node-version depName=node -->
                         <nodeVersion>v24.19.0</nodeVersion>
                         <!-- renovate: datasource=npm depName=npm -->
-                        <npmVersion>10.7.0</npmVersion>
+                        <npmVersion>10.9.9</npmVersion>
                     </configuration>
                 </execution>
                 <!-- Install dependencies -->

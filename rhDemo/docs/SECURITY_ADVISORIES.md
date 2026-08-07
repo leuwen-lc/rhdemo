@@ -4,29 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## postcss (build #761) — CVE-2026-45623 (CVSS 9.1)
-
-**Statut : ✅ Risque accepté (permanent)** — devDependency, jamais dans le bundle de production ; pas de correctif de sécurité requis, indépendant de la disponibilité de `postcss >= 8.5.12`.
-
-### Détection
-
-- **Date de détection** : 2026-08-06 (build Jenkins RHDemo-CI #735, reconfirmé jusqu'au build #761)
-- **Outil** : OWASP Dependency-Check
-- **Composant affecté** : `postcss:7.0.39` (`frontend/package-lock.json`, transitif via `@vue/component-compiler-utils:3.3.0` → `@vue/cli-service`)
-
-### Description
-
-`PreviousMap` analyse le commentaire `/*# sourceMappingURL=PATH */` de tout CSS passé à `process()` et déréférence `PATH` sur le système de fichiers local sans schéma, liste blanche ni contrôle de traversée — un attaquant contrôlant l'entrée CSS peut faire lire au process Node n'importe quel fichier accessible et en exfiltrer les ~10 premiers octets via le message d'erreur `JSON.parse`. CWE-22, CWE-200. Corrigé en version `8.5.12`.
-
-### Remédiation automatique (2026-08-07, build #761)
-
-- **Action** : suppression documentée dans `owasp-suppressions.xml` (Critère A — pas de montée de version).
-- **Justification** : `postcss` est fixé à `7.0.39` par la contrainte `^7.0.36` de `@vue/component-compiler-utils:3.3.0`, lui-même dépendance transitive de la chaîne de build `@vue/cli-service` (devDependency uniquement — absent de `dependencies` dans `frontend/package.json`). `npm audit fix --package-lock-only` rapporte `fixAvailable: false` : la mise à jour vers `8.5.12+` impliquerait un saut de version majeure (7.x → 8.x), exclu par la politique du skill `fixcve-auto` sans `--force`. Le vecteur d'attaque décrit par la CVE nécessite de faire transiter du CSS non fiable (thèmes CMS, upload utilisateur) par PostCSS : cette instance ne traite que le CSS des composants `.vue` écrits par l'équipe, au moment du build (`vue-cli-service build`) — ni le code de `postcss`, ni son exécution, ne sont jamais présents dans le bundle de production ou au runtime de l'application déployée.
-- **Note** : bien que la CVSS (9.1) dépasse le seuil de 9.0 qui déclencherait normalement l'exception « intervention humaine requise » du skill, le Critère A (devDependency exclusive, jamais dans le bundle de production) s'applique en premier et prime sur ce seuil — la suppression est donc permanente, pas soumise à revérification périodique.
-- **Historique** : un précédent build (#759) avait tenté de résoudre uniquement les CVE DOMPurify (ci-dessous) sans traiter cette CVE `postcss`, alors bloquante — le build #760 a échoué et le correctif a été annulé par rollback automatique.
-
----
-
 ## tomcat-embed-core (build #754) — CVE-2026-66299 (CVSS 7.5)
 
 ### Détection
@@ -94,7 +71,7 @@ DoS par épuisement mémoire (uncatchable OOM) : `expand()` borne le nombre de r
 **Statut mixte** : la plupart des CVE de ce lot sont corrigées (montées de version ci-dessous). Parmi les suppressions restantes :
 
 - **✅ Permanentes** (devDependency, jamais en production) : `node-forge` GHSA-5m6q-g25r-mvwx, `serialize-javascript` GHSA-5c6j-r48x-rmvq, `uuid` GHSA-w5hq-g745-h8pq, `html-minifier-terser` CVE-2022-37620 (faux positif).
-- **✅ Résolu le 2026-08-07 (build #761)** : `CVE-2026-65898` (DOMPurify dans swagger-ui) — même cas que l'entrée dédiée ci-dessous (2026-05-19), résolue avec springdoc-openapi 3.1.0.
+- **⏳ En attente de correctif upstream (temporaire)** : `CVE-2026-65898` (DOMPurify dans swagger-ui) — même cas que l'entrée dédiée ci-dessous (2026-05-19), en attente de springdoc-openapi 3.0.4+.
 
 ### Détection
 
@@ -387,7 +364,7 @@ Toutes corrigées dans la version 11.0.22.
 
 ## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
 
-**Statut : ✅ Résolu le 2026-08-07 (build #761)** — montée de version `springdoc-openapi` `3.0.3` → `3.1.0` (`swagger-ui` `5.32.2` → `5.32.11`, DOMPurify embarqué `3.3.2` → `3.4.12`), suppressions retirées de `owasp-suppressions.xml`. Même famille que `CVE-2026-65898` (build #717, ci-dessous), résolue avec le même correctif. Vérification de compatibilité : `springdoc-openapi:3.1.0` déclare le même parent `spring-boot-starter-parent:4.1.0` que la version actuelle du projet (pas de saut de compatibilité Spring Boot). Une première tentative (commit `4b45e99`, build #759) avait appliqué ce même correctif mais avait été annulée par un rollback automatique au build #760 : le build restait en échec à cause d'une CVE `postcss` distincte et non traitée à l'époque (CVE-2026-45623, CRITICAL 9.1, voir entrée dédiée en tête de document), pas d'un défaut de ce correctif springdoc lui-même.
+**Statut : ⏳ En attente de correctif upstream (temporaire)** — suppression toujours active à ce jour (`owasp-suppressions.xml`, jeton `[PENDING_UPSTREAM_FIX]` ajouté le 2026-08-06 pour que le skill `fixcve-auto` la revérifie automatiquement, voir étape 0 de `SKILL.md`). Même famille que `CVE-2026-65898` (build #717, ci-dessus) — les deux seront retirées ensemble dès que springdoc-openapi 3.0.4+ sera publié.
 
 ### Détection
 
@@ -414,8 +391,6 @@ Toutes ces vulnérabilités sont présentes dans le JavaScript embarqué dans le
   - XSS requiert interaction utilisateur ET contrôle du contenu affiché dans Swagger UI
   - CVSS modifié MAV:A (vecteur adjacent) dans le contexte projet
 - **Action requise** : Retirer les suppressions et vérifier l'upgrade DOMPurify dès que springdoc-openapi 3.0.4+ est disponible
-
-**Résolu le 2026-08-07 (build #761)** : `springdoc-openapi` `3.0.3` → `3.1.0` (DOMPurify `3.3.2` → `3.4.12`) — voir entrée dédiée en tête de document.
 
 ---
 

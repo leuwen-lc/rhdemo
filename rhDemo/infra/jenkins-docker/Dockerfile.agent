@@ -99,7 +99,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 # ═══════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=helm/helm
-ENV HELM_VERSION=3.20.0
+ENV HELM_VERSION=3.21.3
 
 RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
     tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz && \

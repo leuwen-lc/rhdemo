@@ -4,23 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## DOMPurify dans swagger-ui (build #759) — CVE-2026-41240, CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp, CVE-2026-65898
-
-### Détection
-
-- **Date de détection initiale** : 2026-05-19 (voir entrée dédiée plus bas) et build #717 (`CVE-2026-65898`)
-- **Outil** : OWASP Dependency-Check (RetireJS + NVD)
-- **Composant affecté** : `pkg:javascript/DOMPurify@3.3.2` embarqué dans `swagger-ui-5.32.2.jar` (via `org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3`)
-
-### Résolu le 2026-08-07 (build #759)
-
-- **Action** : montée de version `springdoc-openapi.version` `3.0.3` → `3.1.0` (`pom.xml`) — embarque `swagger-ui` `5.32.11` au lieu de `5.32.2`, dont le bundle JS contient `DOMPurify.version="3.4.12"` (vérifié par extraction directe de `swagger-ui-bundle.js` du webjar Maven Central). Toutes les CVE DOMPurify de ce lot (fixées entre les versions 3.4.0 et 3.4.7 selon l'avis) sont corrigées par ce saut à 3.4.12.
-- **Suppressions retirées** : les 5 entrées `<suppress>` `[PENDING_UPSTREAM_FIX]` ciblant `pkg:javascript/DOMPurify@3.3.2` dans `owasp-suppressions.xml` (elles ne matchaient de toute façon plus la nouvelle version bundlée).
-- **Compatibilité vérifiée** : `springdoc-openapi:3.1.0` déclare le même parent `spring-boot-starter-parent:4.1.0` que la version actuelle du projet (pas de saut de compatibilité Spring Boot).
-- **Note** : le scan OWASP du build #759 a également révélé 9 nouvelles CVE DOMPurify (CVE-2026-49978, CVE-2026-49458, CVE-2026-49459, CVE-2026-65902, CVE-2026-65899, CVE-2026-65900, CVE-2026-65901, CVE-2026-65903, CVE-2026-66010 — toutes MEDIUM, publiées après la version 3.3.2), également couvertes par ce même upgrade vers DOMPurify 3.4.12 (aucune suppression nécessaire).
-
----
-
 ## tomcat-embed-core (build #754) — CVE-2026-66299 (CVSS 7.5)
 
 ### Détection
@@ -88,7 +71,7 @@ DoS par épuisement mémoire (uncatchable OOM) : `expand()` borne le nombre de r
 **Statut mixte** : la plupart des CVE de ce lot sont corrigées (montées de version ci-dessous). Parmi les suppressions restantes :
 
 - **✅ Permanentes** (devDependency, jamais en production) : `node-forge` GHSA-5m6q-g25r-mvwx, `serialize-javascript` GHSA-5c6j-r48x-rmvq, `uuid` GHSA-w5hq-g745-h8pq, `html-minifier-terser` CVE-2022-37620 (faux positif).
-- **✅ Résolu le 2026-08-07 (build #759)** : `CVE-2026-65898` (DOMPurify dans swagger-ui) — voir entrée dédiée en tête de document (springdoc-openapi 3.0.3 → 3.1.0).
+- **⏳ En attente de correctif upstream (temporaire)** : `CVE-2026-65898` (DOMPurify dans swagger-ui) — même cas que l'entrée dédiée ci-dessous (2026-05-19), en attente de springdoc-openapi 3.0.4+.
 
 ### Détection
 
@@ -381,7 +364,7 @@ Toutes corrigées dans la version 11.0.22.
 
 ## CVE-2026-41240, CVE-2026-41238, CVE-2026-41239 & GHSA-39q2-94rc-95cp — DOMPurify dans swagger-ui (springdoc-openapi)
 
-**Statut : ✅ Résolu le 2026-08-07 (build #759)** — voir entrée dédiée en tête de document. `springdoc-openapi` `3.0.3` → `3.1.0`, DOMPurify embarqué `3.3.2` → `3.4.12`, suppressions retirées de `owasp-suppressions.xml`.
+**Statut : ⏳ En attente de correctif upstream (temporaire)** — suppression toujours active à ce jour (`owasp-suppressions.xml`, jeton `[PENDING_UPSTREAM_FIX]` ajouté le 2026-08-06 pour que le skill `fixcve-auto` la revérifie automatiquement, voir étape 0 de `SKILL.md`). Même famille que `CVE-2026-65898` (build #717, ci-dessus) — les deux seront retirées ensemble dès que springdoc-openapi 3.0.4+ sera publié.
 
 ### Détection
 

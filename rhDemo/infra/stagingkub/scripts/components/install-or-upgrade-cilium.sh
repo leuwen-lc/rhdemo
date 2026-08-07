@@ -37,7 +37,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=cilium registryUrl=https://helm.cilium.io/
-CILIUM_VERSION="1.19.6"
+CILIUM_VERSION="1.20.0"
 
 # Namespace dédié à Cilium (release Helm + ressources réelles : DaemonSet,
 # Deployment, ConfigMap, ServiceAccounts...), distinct de kube-system.

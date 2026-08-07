@@ -482,17 +482,44 @@ RENOVATE_SCAN_EOF
                                 // branche Renovate est supprimée après ce merge, donc pas de synchro
                                 // future à préserver sur cette branche. Nécessite "Allow squash merging"
                                 // activé côté réglages du dépôt Codeberg (Settings > Repository).
-                                def mergeHttpCode = sh(
-                                    script: """
-                                        set +x
-                                        curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
-                                          -H "Authorization: token \${FORGEJO_TOKEN}" \
-                                          -H "Content-Type: application/json" \
-                                          -d '{"Do":"squash","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
-                                          "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
-                                    """,
-                                    returnStdout: true
-                                ).trim()
+                                //
+                                // Retry avec attente fixe avant le premier appel : après le git push de
+                                // synchronisation juste au-dessus, Forgejo recalcule de façon asynchrone
+                                // le statut "mergeable" de la PR et refuse un appel /merge tant que ce
+                                // recalcul n'est pas terminé (HTTP 405 "Please try again later"). Sur le
+                                // chemin de validation directe (isOutOfMavenScopePr, ciStatus fixé sans
+                                // aucune étape intermédiaire), l'appel arrive en quelques centaines de ms
+                                // après le push, bien avant que Forgejo ait fini — échec systématique et
+                                // reproductible (build #56 et #57, PR #241 getsops-sops-3.x), à ne pas
+                                // confondre avec le faux négatif HTTP 504 déjà géré plus bas (build #39).
+                                // Les chemins avec une étape intermédiaire réelle (dry-run Kubernetes,
+                                // Maven+OWASP) laissent involontairement ce délai s'écouler, d'où
+                                // l'absence historique du problème sur ces PR-là. Sans risque de double
+                                // merge : un appel sur une PR déjà mergée échoue simplement à son tour, et
+                                // la vérification GET post-boucle (déjà en place) rattrape ce cas.
+                                def mergeHttpCode = '000'
+                                def maxMergeAttempts = 4
+                                def mergeRetryDelaySeconds = 10
+                                for (int attempt = 1; attempt <= maxMergeAttempts; attempt++) {
+                                    mergeHttpCode = sh(
+                                        script: """
+                                            set +x
+                                            curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
+                                              -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                              -H "Content-Type: application/json" \
+                                              -d '{"Do":"squash","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
+                                              "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
+                                        """,
+                                        returnStdout: true
+                                    ).trim()
+                                    if (mergeHttpCode ==~ /2\d\d/) {
+                                        break
+                                    }
+                                    if (attempt < maxMergeAttempts) {
+                                        echo "WARN: merge API a répondu HTTP ${mergeHttpCode} pour PR #${prNumber} (tentative ${attempt}/${maxMergeAttempts}) — nouvel essai dans ${mergeRetryDelaySeconds}s"
+                                        sleep(time: mergeRetryDelaySeconds, unit: 'SECONDS')
+                                    }
+                                }
                                 def mergeStatus = (mergeHttpCode ==~ /2\d\d/) ? 0 : 1
 
                                 // Un code non-2xx (ex: HTTP 504) ne prouve pas que le merge a échoué

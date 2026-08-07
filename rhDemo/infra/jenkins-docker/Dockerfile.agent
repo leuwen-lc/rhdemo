@@ -136,7 +136,7 @@ RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSI
 # JDK 25 est nécessaire pour compiler le projet (migration Java 25).
 
 # renovate: datasource=github-releases depName=adoptium/temurin25-binaries
-ENV TEMURIN_25_VERSION=25.0.2+10
+ENV TEMURIN_25_VERSION=25.0.4+7
 
 RUN wget -q "https://api.adoptium.net/v3/binary/version/jdk-${TEMURIN_25_VERSION}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -O /tmp/temurin-25.tar.gz && \
     mkdir -p /opt/java/temurin-25 && \

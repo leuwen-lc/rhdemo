@@ -48,7 +48,7 @@ pipeline {
         FORGEJO_API     = 'https://codeberg.org/api/v1'
         REPO            = 'leuwen-lc/rhdemo'
         BASE_BRANCH     = 'evolutions-post-1.1.9'
-        RENOVATE_IMAGE  = 'renovate/renovate:43.249.5'
+        RENOVATE_IMAGE  = 'renovate/renovate:43.288.0'
     }
 
     stages {

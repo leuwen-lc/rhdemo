@@ -19,7 +19,7 @@ VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=alloy registryUrl=https://grafana.github.io/helm-charts
-ALLOY_VERSION="1.11.0"  # App: Alloy v1.18.0
+ALLOY_VERSION="1.11.1"  # App: Alloy v1.18.0
 
 LOKI_NS="loki-stack"
 

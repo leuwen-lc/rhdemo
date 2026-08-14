@@ -385,6 +385,39 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get"]
+
+  # Miroir des règles portées par le ClusterRole "alloy" (chart grafana/alloy,
+  # RBAC de découverte de service pour le scraping — voir install-or-upgrade-alloy.sh).
+  # Même raisonnement que les blocs miroir ci-dessus : le garde-fou RBAC
+  # non-escalation exige que jenkins-infra-upgrader détienne déjà toutes ces
+  # règles avant de patcher ce ClusterRole. Contrairement aux mirrors
+  # précédents, la couverture Kubernetes est sémantique (pas de comparaison
+  # littérale de PolicyRule) : seules les combinaisons apiGroup/resource/verbe
+  # réellement absentes de ce fichier sont ajoutées ci-dessous, le reste
+  # (configmaps/secrets, nodes, nodes/metrics, apps replicasets list/watch,
+  # monitoring.coreos.com/*, nonResourceURLs /metrics, networking.k8s.io
+  # ingresses, "" endpoints/services/pods/namespaces) est déjà couvert par des
+  # blocs existants. Liste vérifiée exhaustivement via `helm template
+  # grafana/alloy --version 1.11.1` suite à l'échec d'upgrade 1.11.0 → 1.11.1
+  # (RHDemo-Renovate, 2026-08-14).
+  - apiGroups: [""]
+    resources: ["endpointslices", "ingresses", "nodes/pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps", "extensions"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpoints", "ingresses", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["monitoring.grafana.com"]
+    resources: ["podlogs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["endpoints", "endpointslices", "pods", "services"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

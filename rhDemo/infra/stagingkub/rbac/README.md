@@ -213,6 +213,22 @@ présente et inchangée. Ni `resourceNames` ni réduction de portée possibles
 (ces `ClusterRole` s'appliquent cluster-wide) — conséquence assumée :
 `secrets`/`configmaps` cluster-wide pour `jenkins-infra-upgrader`.
 
+### Miroir des règles Alloy (`jenkins-infra-upgrader-clusterrole.yaml`)
+
+Même garde-fou anti-élévation que pour le miroir Operator/Prometheus
+ci-dessus, déclenché par l'échec d'upgrade Alloy 1.11.0 → 1.11.1
+(RHDemo-Renovate, 2026-08-14) : `jenkins-infra-upgrader` détient un `get`/
+`update`/`patch` nommé sur le `ClusterRole` `alloy`, mais doit aussi détenir
+déjà toutes les règles que ce `ClusterRole` embarque avant de le patcher.
+Contrairement au miroir Operator/Prometheus, la couverture RBAC de
+Kubernetes est sémantique (par combinaison apiGroup/resource/verbe, pas par
+comparaison littérale de `PolicyRule`) : seules les combinaisons réellement
+absentes de ce fichier ont été ajoutées (bloc dédié en fin de
+`jenkins-infra-upgrader-clusterrole.yaml`), le reste du `ClusterRole` `alloy`
+étant déjà couvert par des règles existantes (mirrors kube-state-metrics/
+Operator-Prometheus, bloc `configmaps`/`secrets` `verbs: ["*"]`, etc.). Liste
+vérifiée exhaustivement via `helm template grafana/alloy --version 1.11.1`.
+
 ### Admission webhooks Prometheus Operator : désactivés
 
 `prometheusOperator.admissionWebhooks.enabled: false` dans

@@ -4,6 +4,28 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## nanoid (build #783) — CVE-2026-67214 (CVSS 7.5)
+
+### Détection
+
+- **Date de détection** : 2026-08-19 (build Jenkins RHDemo-CI #783)
+- **Outil** : OWASP Dependency-Check
+- **Composant affecté** : `nanoid@3.3.17` (npm, `frontend/package-lock.json`)
+
+### Description
+
+Boucle infinie (DoS) dans `customAlphabet`/`nanoid` du module `nanoid/non-secure` lorsqu'une taille négative est fournie. CWE-835. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`. Corrigé en `nanoid` 5.1.16.
+
+### Remédiation automatique — risque accepté (permanent) (2026-08-19, build #783)
+
+- **Action** :
+  1. `npm audit fix --package-lock-only` : `nanoid` 3.3.17 → 3.3.18 (corrige collatéralement `GHSA-2v37-7h3g-55p8`, CVSS 5.9, connue de npm).
+  2. Suppression documentée dans `owasp-suppressions.xml` pour `CVE-2026-67214` (aucune version ≥5.1.16 compatible).
+- **Justification** : `nanoid` n'apparaît que comme dépendance transitive de `postcss@8.5.26` (contrainte semver `^3.3.17`), lui-même dépendance de build de `@vue/cli-service` — absent de `dependencies` de `frontend/package.json`, présent uniquement en `devDependencies`, jamais embarqué dans le bundle de production `vue-cli-service build`. Aucune version corrigée n'est compatible : `nanoid` a abandonné le support CommonJS à partir de la 4.0.0 (package pur ESM), alors que `postcss@8.5.26` charge `nanoid` via `require('nanoid/non-secure')` (`node_modules/postcss/lib/input.js`) — un pin vers 5.1.16+ casse ce `require` et fait planter le build webpack. Package npm listé exclusivement en `devDependencies` (Critère A) → acceptation permanente du risque, pas de passage en force.
+- **À retirer** : si `postcss` migre un jour vers une version supportant `nanoid` ≥5.1.16 (ou une alternative ESM-compatible), revoir cette suppression manuellement — non concerné par la revérification automatique de l'étape 0 (Critère A, pas de jeton `PENDING_UPSTREAM_FIX`).
+
+---
+
 ## tomcat-embed-core (build #754) — CVE-2026-66299 (CVSS 7.5)
 
 ### Détection
@@ -22,6 +44,7 @@ DoS (épuisement de ressources), CWE-400. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/
 - **Justification** : composant de production (scope `compile`), vecteur réseau `AV:N`, pas RetireJS, pas devDependency npm — aucun critère A ne s'applique. CVSS 7.5 < 9.0 → acceptation temporaire du risque (Critère B). Vérifié sur `maven-metadata.xml` (`org/apache/tomcat/embed/tomcat-embed-core`) le 2026-08-06 : `latest=release=11.0.24`, aucune version 11.0.25/10.1.58/9.0.121 publiée sur Maven Central (correctif indiqué « when released » par l'Apache Security Team).
 - **Note** : cette exclusion sera revérifiée à chaque activation du skill `fixcve-auto` (étape 0) et remplacée par le correctif réel dès sa publication. Une première tentative de cette même remédiation (commit `bb0539d`, build #752) avait été annulée par un rollback automatique au build #753 — analyse a posteriori : le rollback était dû à une détection transitoire et non reproductible de `fast-uri` par `npm audit` (GHSA-7p8r-x3mc-p8w7) entre les scans #752 et #753, sans rapport avec cette suppression Tomcat elle-même (déjà corrigée au passage par le lot npm ci-dessous).
 - **À retirer** : dès qu'une version corrigée de `tomcat-embed-core` est publiée sur Maven Central.
+- **Résolu le 2026-08-19** (build #783) : `tomcat-embed-core` 11.0.25 publié sur Maven Central (`maven-metadata.xml` : `latest=release=11.0.25`, `lastUpdated=20260818081501`). Suppression retirée de `owasp-suppressions.xml`, propriété `<tomcat.version>` mise à jour vers `11.0.25` dans `pom.xml`.
 
 ---
 

@@ -105,25 +105,6 @@
     </suppress>
 
 
-    <!--
-        CVE-2026-66299 — tomcat-embed-core 11.0.24 (DoS, aucun correctif publié à ce jour)
-        HIGH 7.5, CWE-400, vecteur CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H.
-        Composant de production (scope compile, via spring-boot-starter-web) : aucun critère A
-        (test/provided, RetireJS, AV:L/AV:P, devDependency npm) ne s'applique. Acceptation
-        temporaire du risque car CVSS < 9.0 (Critère B). Vérifié sur maven-metadata.xml
-        (org/apache/tomcat/embed) : latest=release=11.0.24, aucune version 11.0.25/10.1.58/9.0.121
-        publiée sur Maven Central (correctif indiqué "when released" par l'Apache Security Team).
-        Correspondance CPE générique (cpe:2.3:a:apache:tomcat:11.0.24) plutôt que packageUrl exact :
-        regex scopée à tout le groupId org.apache.tomcat.embed pour éviter un ré-attachement sur
-        un jar frère (tomcat-embed-websocket, tomcat-embed-el) lors d'un scan ultérieur.
-        À retirer dès qu'un correctif Tomcat est publié (revérifié à chaque cycle fixcve-auto).
-    -->
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-66299 : tomcat-embed-core 11.0.24, HIGH 7.5 — aucun correctif publié sur Maven Central (11.0.25 "when released"). Composant de production (compile via spring-boot-starter-web), vecteur réseau AV:N, pas de critère A applicable. Acceptation temporaire car CVSS &lt; 9.0 (Critère B) — à revérifier à chaque cycle fixcve-auto.</notes>
-        <packageUrl regex="true">^pkg:maven/org\.apache\.tomcat\.embed/.*@.*$</packageUrl>
-        <cve>CVE-2026-66299</cve>
-    </suppress>
-
     <suppress>
         <notes>CVE-2026-45623 : postcss 7.0.39 (lecture de fichier arbitraire via sourceMappingURL, CVSS 9.1). Corrigé en 8.5.12, mais atteint ici en 7.0.39 exclusivement via node_modules/@vue/component-compiler-utils/node_modules/postcss (frontend/package-lock.json, contrainte semver postcss ^7.0.36 déclarée par @vue/component-compiler-utils:3.3.0, lui-même dépendance de build de @vue/cli-service, marqué dev=true dans package-lock.json — absent de dependencies/devDependencies directes de frontend/package.json). npm audit fix --package-lock-only rapporte fixAvailable=false : la mise à jour vers la branche 8.x impliquerait un saut de version majeure au-delà de la contrainte semver déclarée, ce qui nécessiterait l'option force, exclue par la politique du skill fixcve-auto. Cette instance de postcss ne traite que le CSS des composants .vue écrits par l'équipe (pipeline vue-cli-service build), jamais de CSS externe/non fiable comme le décrit le vecteur d'attaque de la CVE (CMS, upload utilisateur), et n'est jamais embarquée dans le bundle de production. Un second postcss (8.5.26, non affecté) coexiste au niveau supérieur du graphe de dépendances pour l'usage de production.</notes>
         <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
@@ -140,6 +121,12 @@
         <notes>CVE-2023-44270 : postcss 7.0.39, même dépendance transitive que CVE-2026-45623 ci-dessus (via @vue/component-compiler-utils:3.3.0, devDependency de @vue/cli-service, jamais dans le bundle de production) — même justification, pas de correctif compatible sans passage en force.</notes>
         <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
         <cve>CVE-2023-44270</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-67214 : nanoid 3.3.18 (HIGH 7.5, CWE-835, CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H — boucle infinie via customAlphabet/nanoid avec une taille négative dans nanoid/non-secure, corrigé en 5.1.16). nanoid n'apparaît que comme dépendance transitive de postcss@8.5.26 (frontend/package-lock.json, contrainte semver postcss ^3.3.17), lui-même dépendance de build @vue/cli-service — absent de dependencies de frontend/package.json, présent uniquement en devDependencies (build tooling), jamais embarqué dans le bundle de production vue-cli-service build : l'id généré par nanoid(6) dans postcss/lib/input.js ne sert qu'au bookkeeping interne de postcss pendant le build et est jeté ensuite. npm audit fix --package-lock-only a déjà remonté nanoid 3.3.17 -> 3.3.18 (corrige collatéralement GHSA-2v37-7h3g-55p8, CVSS 5.9). Aucune version >=5.1.16 n'est compatible : nanoid a abandonné le support CommonJS à partir de la 4.0.0 (package.json "type":"module", pas d'export require), alors que postcss@8.5.26 charge nanoid via require('nanoid/non-secure') (node_modules/postcss/lib/input.js) — un pin vers 5.1.16+ casse ce require et fait planter le build webpack. DevDependency npm exclusive (critère A) : acceptation permanente du risque, pas de passage en force.</notes>
+        <packageUrl regex="true">^pkg:npm/nanoid@.*$</packageUrl>
+        <cve>CVE-2026-67214</cve>
     </suppress>
 
 </suppressions>

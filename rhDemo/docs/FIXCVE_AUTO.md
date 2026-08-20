@@ -2,24 +2,6 @@
 
 Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. Complète le skill interactif `/fixcve` (`.claude/skills/fixcve/SKILL.md`) qui reste disponible pour un usage manuel.
 
-⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessous — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
-
-⚠️ **Surface d'injection de prompt** : `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy). Le scope d'outils est restreint via `--permission-mode dontAsk` + règles `permissions.allow` (fichier versionné [`fixcve-auto-permissions.json`](../scripts/fixcve-auto-permissions.json)) : Claude n'a accès qu'aux commandes prévues (curl Jenkins/Maven Central, `npm audit`/`view`/`install` scopés à `frontend/`, `docker manifest inspect`, `git add`/`commit`/`push`) et aux fichiers de remédiation attendus (`pom.xml`, `Jenkinsfile-CI`, `frontend/package.json`, `frontend/package-lock.json`, `owasp-suppressions.xml`, `.trivyignore.yaml`, `docs/SECURITY_ADVISORIES.md`, `docs/fixcve-audit.jsonl`, les manifests de déploiement des images externes). Toute autre commande ou fichier est refusé sans prompt (mode non interactif). Ce scoping s'ajoute aux garde-fous **git** ci-dessous (working tree propre, rollback automatique, halte après rollbacks), qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
-
-⚠️ **Limite du scoping par préfixe** : la règle `Bash(frontend/node/npm --prefix frontend audit:*)` autorise aussi bien `npm audit fix --package-lock-only` (voulu) que `npm audit fix --force` (interdit par consigne dans `SKILL.md`, jamais par le moteur de permissions lui-même — un préfixe `allow` ne peut pas exclure un flag précis). Le blocage de `--force` repose donc uniquement sur le respect de la consigne par le modèle, pas sur une barrière technique — à garder en tête vu la surface d'injection de prompt ci-dessus (une description de CVE malveillante pourrait tenter d'inciter à l'usage de `--force`). Les garde-fous git (rollback automatique après échec du build suivant) restent la protection de dernier recours si ça arrivait malgré tout.
-
-⚠️ **`npm` absent du `PATH` sous cron** : constaté sur le build #715 (`npm : commande introuvable`, `blocked_needs_human` sur 39 CVE). Le `PATH` minimal de cron ne source aucun profil shell, donc un `npm` installé via nvm (disponible en session interactive) n'est pas résolu par le skill. `SKILL.md` et `fixcve-auto-permissions.json` utilisent donc le binaire `frontend/node/npm` (téléchargé par `frontend-maven-plugin`, chemin littéral dans le dépôt, indépendant du `PATH`) plutôt qu'un `npm` nu.
-
-⚠️ **`Bash(git restore:*)`** : ajouté après le build #718, où un `npm install <package>@<version>` sans `--save-dev` a ajouté à tort une dépendance transitive (`brace-expansion`, saut de version majeure 1.x→5.x) dans `dependencies` de production. Le skill a correctement voulu annuler sa propre erreur (`git restore`) mais n'en avait pas le droit, laissant l'arbre de travail sale — ce qui aurait bloqué tous les cycles cron suivants (garde-fou « arbre non propre ») jusqu'à intervention manuelle. `git restore` ne peut annuler que des modifications non committées (jamais l'historique), scope volontairement plus étroit que `git checkout`.
-
-⚠️ **`packageUrl` trop étroit sur une CVE à CPE générique** : constaté build #746 → #748. `CVE-2026-66299` (Tomcat) était identifiée par OWASP DC via une CPE générique vendor/produit (`cpe:2.3:a:apache:tomcat:...`), pas un Package URL exact. La suppression du build #746 l'a scopée à `tomcat-embed-core` (seul jar visible dans le rapport à ce moment) ; au scan suivant, la même CVE s'est réattachée à un jar frère, `tomcat-embed-websocket` (même `groupId` `org.apache.tomcat.embed`), faisant échouer le build #748 et déclenchant un rollback qui a annulé l'intégralité du commit #746 — y compris les correctifs sans rapport (springdoc, jackson-databind, log4j-api, autres suppressions Critère A), tous corrects. `SKILL.md` (Priorité 2, format de suppression) demande désormais de scoper `<packageUrl regex="true">` au `groupId` Maven entier plutôt qu'à l'`artifactId` observé, quand la CVE provient d'une correspondance CPE générique.
-
-⚠️ **Pin npm manuel sans être passé par le lot d'abord** : constaté build #752 → #753. Correctif de `CVE-2026-69152` (`brace-expansion`) via un pin manuel isolé (`frontend/package.json`) plutôt que `npm audit fix --package-lock-only` en lot. Une CVE `fast-uri` (HIGH), publiée entre le scan du build #752 et celui du #753, n'a donc pas été couverte — alors que le lot `audit fix` la corrige collatéralement (constaté aussi bien au build #744 qu'au #754). Rollback du build #753 (correctif jamais fautif en lui-même, juste incomplet). `SKILL.md` (Priorité 1, remédiation npm) rend désormais l'exécution du lot `audit fix` **obligatoire** avant tout pin manuel, même quand une seule CVE npm semble concernée sur le rapport analysé.
-
-Historique : la conception initiale utilisait déjà `dontAsk` + `permissions.allow`, mais ce mode refusait alors *toute* commande Bash réseau même avec une règle d'autorisation explicite (bug observé et documenté sur Claude Code `2.1.205`), forçant un contournement temporaire via `--dangerously-skip-permissions` (aucun scoping). Ce bug a été vérifié empiriquement comme résolu sur Claude Code `2.1.220` — le scoping normal a été rétabli.
-
-⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution de `/fixcve-auto`, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le skill utilise `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
-
 ---
 
 ## Architecture
@@ -61,6 +43,46 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 
 ---
 
+## Points d'attention
+
+⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessus — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
+
+⚠️ **Surface d'injection de prompt** : `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy). Le scope d'outils est restreint via `--permission-mode dontAsk` + règles `permissions.allow` (fichier versionné [`fixcve-auto-permissions.json`](../scripts/fixcve-auto-permissions.json)) : Claude n'a accès qu'aux commandes prévues (curl Jenkins/Maven Central, `npm audit`/`view`/`install` scopés à `frontend/`, `docker manifest inspect`, `git add`/`commit`/`push`) et aux fichiers de remédiation attendus (`pom.xml`, `Jenkinsfile-CI`, `frontend/package.json`, `frontend/package-lock.json`, `owasp-suppressions.xml`, `.trivyignore.yaml`, `docs/SECURITY_ADVISORIES.md`, `docs/fixcve-audit.jsonl`, les manifests de déploiement des images externes). Toute autre commande ou fichier est refusé sans prompt (mode non interactif). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks), qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
+
+⚠️ **Limite du scoping par préfixe** : la règle `Bash(frontend/node/npm --prefix frontend audit:*)` autorise aussi bien `npm audit fix --package-lock-only` (voulu) que `npm audit fix --force` (interdit par consigne dans `SKILL.md`, jamais par le moteur de permissions lui-même — un préfixe `allow` ne peut pas exclure un flag précis). Le blocage de `--force` repose donc uniquement sur le respect de la consigne par le modèle, pas sur une barrière technique — à garder en tête vu la surface d'injection de prompt ci-dessus (une description de CVE malveillante pourrait tenter d'inciter à l'usage de `--force`). Les garde-fous git (rollback automatique après échec du build suivant) restent la protection de dernier recours si ça arrivait malgré tout.
+
+⚠️ **`npm` absent du `PATH` sous cron** : constaté sur le build #715 (`npm : commande introuvable`, `blocked_needs_human` sur 39 CVE). Le `PATH` minimal de cron ne source aucun profil shell, donc un `npm` installé via nvm (disponible en session interactive) n'est pas résolu par le skill. `SKILL.md` et `fixcve-auto-permissions.json` utilisent donc le binaire `frontend/node/npm` (téléchargé par `frontend-maven-plugin`, chemin littéral dans le dépôt, indépendant du `PATH`) plutôt qu'un `npm` nu.
+
+⚠️ **`Bash(git restore:*)`** : ajouté après le build #718, où un `npm install <package>@<version>` sans `--save-dev` a ajouté à tort une dépendance transitive (`brace-expansion`, saut de version majeure 1.x→5.x) dans `dependencies` de production. Le skill a correctement voulu annuler sa propre erreur (`git restore`) mais n'en avait pas le droit, laissant l'arbre de travail sale — ce qui aurait bloqué tous les cycles cron suivants (garde-fou « arbre non propre ») jusqu'à intervention manuelle. `git restore` ne peut annuler que des modifications non committées (jamais l'historique), scope volontairement plus étroit que `git checkout`.
+
+⚠️ **`packageUrl` trop étroit sur une CVE à CPE générique** : constaté build #746 → #748. `CVE-2026-66299` (Tomcat) était identifiée par OWASP DC via une CPE générique vendor/produit (`cpe:2.3:a:apache:tomcat:...`), pas un Package URL exact. La suppression du build #746 l'a scopée à `tomcat-embed-core` (seul jar visible dans le rapport à ce moment) ; au scan suivant, la même CVE s'est réattachée à un jar frère, `tomcat-embed-websocket` (même `groupId` `org.apache.tomcat.embed`), faisant échouer le build #748 et déclenchant un rollback qui a annulé l'intégralité du commit #746 — y compris les correctifs sans rapport (springdoc, jackson-databind, log4j-api, autres suppressions Critère A), tous corrects. `SKILL.md` (Priorité 2, format de suppression) demande désormais de scoper `<packageUrl regex="true">` au `groupId` Maven entier plutôt qu'à l'`artifactId` observé, quand la CVE provient d'une correspondance CPE générique.
+
+⚠️ **Pin npm manuel sans être passé par le lot d'abord** : constaté build #752 → #753. Correctif de `CVE-2026-69152` (`brace-expansion`) via un pin manuel isolé (`frontend/package.json`) plutôt que `npm audit fix --package-lock-only` en lot. Une CVE `fast-uri` (HIGH), publiée entre le scan du build #752 et celui du #753, n'a donc pas été couverte — alors que le lot `audit fix` la corrige collatéralement (constaté aussi bien au build #744 qu'au #754). Rollback du build #753 (correctif jamais fautif en lui-même, juste incomplet). `SKILL.md` (Priorité 1, remédiation npm) rend désormais l'exécution du lot `audit fix` **obligatoire** avant tout pin manuel, même quand une seule CVE npm semble concernée sur le rapport analysé.
+
+Historique : la conception initiale utilisait déjà `dontAsk` + `permissions.allow`, mais ce mode refusait alors *toute* commande Bash réseau même avec une règle d'autorisation explicite (bug observé et documenté sur Claude Code `2.1.205`), forçant un contournement temporaire via `--dangerously-skip-permissions` (aucun scoping). Ce bug a été vérifié empiriquement comme résolu sur Claude Code `2.1.220` — le scoping normal a été rétabli.
+
+⚠️ **Clone git isolé (depuis le 2026-08-20)** : `fixcve-auto` opère sur un clone git séparé
+(`~/fixcve-worktrees/rhdemo`, `chmod 700`), **jamais** sur la copie de travail principale — voir
+section « Clone isolé » ci-dessous (prérequis d'installation). Objectif : si une commande
+échappait malgré tout au scope `permissions.allow` (bug du moteur `dontAsk` comme ci-dessus, ou
+injection de prompt via un rapport CVE/Trivy malveillant — voir « Surface d'injection de prompt »
+plus haut dans ce chapitre), le rayon d'action reste confiné au code RHDemo plutôt que d'atteindre
+tout `$HOME` (clés SSH, autres dépôts, historique shell...). Le clone suit dynamiquement la
+branche active de la copie de travail principale à chaque cycle (jamais une branche figée), donc
+aucune resynchronisation manuelle n'est nécessaire à une coupure de release.
+
+Deux limites à connaître : (1) les commits automatiques (remédiation, rollback, halte)
+n'apparaissent plus instantanément dans `git log`/`git status` de votre session interactive —
+faire `git fetch`/`git pull` dans la copie principale pour les voir ; (2) ce clone ne protège
+**pas** les credentials du mécanisme (`~/.config/rhdemo-fixcve/`), volontairement partagés avec
+le clone car nécessaires à son fonctionnement — ils restent atteignables de la même façon
+qu'avant en cas d'évasion. Aucun confinement réseau ni noyau non plus (contrairement à une
+microVM, option plus lourde restée hors scope pour l'instant).
+
+⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution de `/fixcve-auto`, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le skill utilise `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
+
+---
+
 ## Prérequis d'installation
 
 ### 1. Outils
@@ -89,7 +111,7 @@ d'un compte bot séparé, ajouté comme collaborateur **Write** (pas Admin) sur 
 pas du compte personnel `leuwen-lc`, même avec un token scope-limité. Raisons, plus marquées ici
 que pour les autres automatisations du projet :
 - `fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapports Trivy/OWASP)
-  — voir « Surface d'injection de prompt » en tête de ce document. Le scope d'outils
+  — voir « Surface d'injection de prompt » dans « Points d'attention » ci-dessus. Le scope d'outils
   (`permissions.allow`) limite déjà `git push` à ce dépôt, mais le scope du token reste une
   deuxième limite indépendante si une commande `git push` malveillante était malgré tout exécutée.
 - **Distinct aussi de `rhdemo-ci-bot`** (compte bot dédié au merge des PRs Renovate — voir
@@ -150,20 +172,80 @@ Le token Jenkins doit être un token **régénéré** si une ancienne valeur a p
 
 Déjà en place : `~/.config/rhdemo-fixcve/git-askpass.sh` (aucun secret dedans, lit `CODEBERG_USER`/`CODEBERG_TOKEN` depuis l'environnement au moment du push).
 
-### 5. Identité des commits automatiques (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`)
+### 5. Clone git isolé
 
-`REPO_DIR` (`fixcve-auto-poll.sh`) pointe directement sur la copie de travail principale — pas un
-clone isolé. Un `git config user.name/email` (même en local, sans `--global`) écrirait donc dans
-`.git/config` de ce dépôt et changerait l'identité de **vos propres commits manuels** aussi, pas
-seulement ceux de l'automatisation. `fixcve-auto-poll.sh` exporte à la place `GIT_AUTHOR_NAME`,
-`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` — ces variables d'environnement ne
-s'appliquent qu'aux commits faits par ce process (et par le sous-processus `claude -p` qu'il
-invoke, qui les hérite), sans toucher au fichier de config. Résultat : les commits de
+`fixcve-auto` opère sur un clone séparé de la copie de travail principale (`REPO_DIR` dans
+`fixcve-auto-poll.sh`), jamais celle-ci directement — voir l'encadré dans « Points d'attention » ci-dessus.
+Création, une seule fois :
+
+```bash
+mkdir -p ~/fixcve-worktrees
+git clone "$(git -C /home/leno-vo/git/repository remote get-url origin)" ~/fixcve-worktrees/rhdemo
+chmod 700 ~/fixcve-worktrees/rhdemo
+
+cd ~/fixcve-worktrees/rhdemo
+git checkout "$(git -C /home/leno-vo/git/repository rev-parse --abbrev-ref HEAD)"
+```
+
+`.claude/` (skills, dont `fixcve-auto`) est **volontairement gitignored** dans ce dépôt
+(`.gitignore` : « peut être vecteur d'injections », resté local plutôt que versionné) — un
+`git clone` classique ne le copie donc pas. Sans lui, `claude -p "/fixcve-auto ..."` échouerait
+dès le premier cycle (skill introuvable). Un symlink vers la copie principale garde le clone
+isolé automatiquement à jour de toute évolution du skill, sans étape de resynchronisation
+manuelle :
+
+```bash
+ln -s /home/leno-vo/git/repository/.claude ~/fixcve-worktrees/rhdemo/.claude
+```
+
+⚠️ Le pattern `.claude/` du `.gitignore` (avec `/` final) ne matche que les **répertoires réels**,
+pas un symlink pointant vers un répertoire — sans correction, ce symlink apparaîtrait comme
+fichier non suivi (`?? .claude` dans `git status --porcelain`) et déclencherait à tort le
+garde-fou « arbre de travail non propre » à chaque cycle, bloquant l'automatisation en
+permanence. Correction locale au clone (`.git/info/exclude`, jamais versionné, sans impact sur
+la copie principale ni sur le dépôt distant) :
+
+```bash
+echo ".claude" >> ~/fixcve-worktrees/rhdemo/.git/info/exclude
+```
+
+Vérification : `git -C ~/fixcve-worktrees/rhdemo status --porcelain` ne doit rien afficher.
+
+Provisionnement de `frontend/node`/`node_modules` (téléchargé par `frontend-maven-plugin`, requis
+par `SKILL.md` Priorité 1 — un clone git frais ne les contient pas, contrairement à un cache
+global) :
+
+```bash
+cd ~/fixcve-worktrees/rhdemo/rhDemo
+./mvnw -q generate-resources
+```
+
+Vérification :
+
+```bash
+~/fixcve-worktrees/rhdemo/rhDemo/frontend/node/npm --version
+```
+
+Le clone suit ensuite automatiquement la branche active de la copie de travail principale à
+chaque cycle (`fixcve-auto-poll.sh` lit `git -C REPO_DIR_MAIN rev-parse --abbrev-ref HEAD` et
+bascule le clone dessus si besoin, y compris à une coupure de release) — pas de resynchronisation
+manuelle nécessaire, sauf reprovisionnement npm/node si un futur `package.json` introduit des
+dépendances significativement différentes (rare).
+
+### 6. Identité des commits automatiques (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`)
+
+`REPO_DIR` (`fixcve-auto-poll.sh`) pointe sur le clone isolé ci-dessus, pas sur la copie de
+travail principale — un `git config user.name/email` local à ce clone n'affecterait donc plus vos
+commits manuels de toute façon. `fixcve-auto-poll.sh` exporte quand même `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL` plutôt que `git config` — aucun
+inconvénient, et ça reste sûr par construction si `REPO_DIR` redevenait un jour la copie
+principale. Ces variables d'environnement ne s'appliquent qu'aux commits faits par ce process (et
+par le sous-processus `claude -p` qu'il invoke, qui les hérite). Résultat : les commits de
 `fixcve-auto-poll.sh` et ceux appliqués par `/fixcve-auto` (upgrade de version, suppression de
 CVE) apparaissent sous l'identité `RHDemo FixCVE Bot`, distincte de vos commits manuels et de
 `RHDemo CI Bot` (Renovate).
 
-### 6. Installation du cron
+### 7. Installation du cron
 
 **Ne pas installer sans avoir relu `rhDemo/scripts/fixcve-auto-poll.sh` et compris les garde-fous ci-dessus.**
 
@@ -177,7 +259,7 @@ Ajouter :
 */15 * * * * /home/leno-vo/git/repository/rhDemo/scripts/fixcve-auto-poll.sh >> /home/leno-vo/.config/rhdemo-fixcve/poll.log 2>&1
 ```
 
-### 7. Rotation de `poll.log`
+### 8. Rotation de `poll.log`
 
 `poll.log` est alimenté à chaque cycle (toutes les 15 min) et grossirait indéfiniment sans rotation. Config `logrotate` en espace utilisateur (pas de `sudo` requis), déjà en place : `~/.config/rhdemo-fixcve/logrotate.conf` (hebdomadaire, 4 générations conservées compressées, taille max 10 Mo).
 

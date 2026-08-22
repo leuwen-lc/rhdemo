@@ -70,14 +70,27 @@ jamais une URL ou des flags curl :
 
 ### Fichiers intermédiaires et validateur de schéma
 
-Les deux fichiers échangés entre phases vivent hors de l'arbre git (pour ne
-jamais déclencher le garde-fou « arbre de travail non propre » ni être
-committés par erreur) :
+⚠️ **Contrainte du moteur de permissions découverte à l'usage** : sous
+`--permission-mode dontAsk`, l'outil `Write` est **toujours refusé**, quel que
+soit le chemin ou les règles `permissions.allow` (vérifié empiriquement — un
+chemin absolu qui matche pourtant exactement la règle, `--add-dir` inclus, ne
+change rien). Seul `Edit` fonctionne, et uniquement sur un fichier **déjà
+existant**, à l'intérieur de l'arborescence du `cwd` de lancement (`--add-dir`
+n'étend que la lecture, jamais l'écriture/édition). Conséquence directe : les
+fichiers intermédiaires ne peuvent **pas** vivre hors de l'arbre du clone
+isolé comme prévu initialement — ils doivent être pré-créés par
+`fixcve-auto-poll.sh` (avec le contenu placeholder `{}`) avant chaque
+invocation, puis remplis par les skills via `Edit`, jamais `Write`.
 
-- `~/.config/rhdemo-fixcve/cycle/detected.json` (phase 1 → 2 → 3)
-- `~/.config/rhdemo-fixcve/cycle/lookup.json` (phase 2 → 3)
+Les deux fichiers échangés entre phases vivent donc **dans** l'arborescence du
+clone isolé, mais gitignorés (`rhDemo/.fixcve-cycle/`, voir `rhDemo/.gitignore`)
+pour ne jamais déclencher le garde-fou « arbre de travail non propre » ni être
+committés par erreur :
 
-Entre chaque phase, [`rhDemo/scripts/fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — **déterministe, jamais un LLM** — valide strictement le schéma (clés exactes, aucun champ inconnu toléré, valeurs contraintes par regex/enum, champs texte libre bornés à 200 caractères ASCII imprimable sans retour à la ligne, référence croisée des `finding_id` entre les deux fichiers). La garantie de sécurité ne doit jamais reposer sur le bon vouloir du skill qui a produit le fichier — c'est le même principe déjà appliqué à l'étape de validation locale avant push (voir plus bas, garde-fou « Validation locale obligatoire avant push »).
+- `.fixcve-cycle/detected.json` (phase 1 → 2 → 3)
+- `.fixcve-cycle/lookup.json` (phase 2 → 3)
+
+Entre chaque phase, [`rhDemo/scripts/fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — **déterministe, jamais un LLM** — valide strictement le schéma (clés exactes, aucun champ inconnu toléré, valeurs contraintes par regex/enum, champs texte libre bornés à 200 caractères ASCII imprimable sans retour à la ligne, référence croisée des `finding_id` entre les deux fichiers). Un placeholder `{}` jamais édité par une phase en échec échoue de toute façon cette validation (clés requises absentes) — pas besoin d'un contrôle de présence de fichier séparé. La garantie de sécurité ne doit jamais reposer sur le bon vouloir du skill qui a produit le fichier — c'est le même principe déjà appliqué à l'étape de validation locale avant push (voir plus bas, garde-fou « Validation locale obligatoire avant push »).
 
 Un échec de validation arrête le cycle **avant tout push** : aucune remédiation n'est appliquée, aucune phase suivante n'est invoquée. Voir « Traçabilité et échecs » ci-dessous.
 
@@ -417,7 +430,7 @@ skill monolithique.
 
 | Événement | Écrit par | Quand |
 | --- | --- | --- |
-| `detect_phase_failed` | `fixcve-auto-poll.sh` | Phase 1 : crash sans résultat exploitable, `detected.json` absent, ou rejeté par le validateur de schéma (`reason` : `no_result_line`, `missing_output_file`, `schema_invalid` avec `detail` tronqué à ~1200 caractères) |
+| `detect_phase_failed` | `fixcve-auto-poll.sh` | Phase 1 : pas de ligne `FIXCVE_DETECT_RESULT` exploitable, ou `detected.json` rejeté par le validateur de schéma — placeholder `{}` jamais édité y compris (`reason` : `no_result_line`, `schema_invalid` avec `detail` tronqué à ~1200 caractères) |
 | `lookup_phase_failed` | `fixcve-auto-poll.sh` | Phase 2 : même logique, sur `lookup.json` (`reason` inclut aussi une référence croisée invalide vers `detected.json`) |
 | `automation_halted` (`reason:"max_consecutive_prepush_failures"`) | `fixcve-auto-poll.sh` | `MAX_CONSECUTIVE_PREPUSH_FAILURES` échecs pré-push consécutifs (sur des builds distincts) — voir « Halte après échecs pré-push répétés » dans les garde-fous |
 

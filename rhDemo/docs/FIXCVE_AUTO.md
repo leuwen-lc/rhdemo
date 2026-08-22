@@ -207,6 +207,21 @@ microVM, option plus lourde restée hors scope pour l'instant).
 
 ⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution du pipeline, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le wrapper [`fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) utilise en interne `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande vue par le modèle — celui-ci ne fournit qu'un chemin Jenkins, jamais le netrc lui-même) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
 
+⚠️ **Comportement à connaître — ligne composée refusée en bloc** : sous
+`dontAsk`, une commande Bash enchaînant plusieurs sous-commandes (`;`, `&&`,
+pipe vers une commande non autorisée) est refusée **dans son intégralité** si
+une seule de ses sous-commandes ne matche aucune règle `allow`, même quand la
+première sous-commande est explicitement autorisée. Constaté au test manuel
+de la phase 2 sur le build #783 (2026-08-22, `permission_denials` dans la
+sortie `--output-format json`) : `fixcve-osv-lookup.sh ALPINE CVE-2026-32767;
+echo "EXIT:$?"` a été refusé en bloc bien que le wrapper seul soit sur la
+liste `allow` — seul l'`echo` final n'y figurait pas. Le modèle a correctement
+rebasculé sur un appel sans `echo` et obtenu le bon résultat, mais ce
+tâtonnement est désormais explicitement déconseillé dans `SKILL.md` (phases 2
+et 3) : toujours invoquer une commande autorisée seule sur son propre appel
+Bash, jamais suivie d'un diagnostic (`echo $?`, redirection, pipe) qui
+n'est pas lui-même sur la liste `allow`.
+
 ---
 
 ## Prérequis d'installation

@@ -11,13 +11,13 @@ crontab (toutes les 15 min)
    └─> rhDemo/scripts/fixcve-auto-poll.sh   (bash + jq + curl + python3, PAS de LLM)
          │
          ├─ Phase A (idle) : détecte un nouveau build Jenkins en échec Trivy/OWASP,
-         │     puis exécute 3 invocations Claude séquentielles à privilèges
-         │     disjoints (voir "Séparation en 3 phases" ci-dessous) :
-         │       1. /fixcve-auto-detect  -> detected.json
-         │       2. /fixcve-auto-lookup  -> lookup.json
-         │       3. /fixcve-auto-apply   -> commit + push
+         │     puis enchaîne 3 étapes à privilèges disjoints (voir "Séparation
+         │     en 3 phases" ci-dessous) :
+         │       1. fixcve-detect.py      -> detected.json   (script déterministe, PAS de LLM)
+         │       2. /fixcve-auto-lookup   -> lookup.json     (Claude)
+         │       3. /fixcve-auto-apply    -> commit + push   (Claude)
          │     un validateur de schéma déterministe (fixcve-validate-json.py)
-         │     s'exécute entre chaque phase ; tout échec (schéma invalide,
+         │     s'exécute entre chaque étape ; tout échec (schéma invalide,
          │     pas de résultat exploitable) arrête le cycle sans invoquer la
          │     phase suivante ni toucher git — voir "Traçabilité et échecs".
          │
@@ -26,7 +26,10 @@ crontab (toutes les 15 min)
                └─ FAILURE  → git revert automatique + halte après 2 rollbacks consécutifs
 ```
 
-Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué que pour la remédiation proprement dite (parsing des rapports, recherche de correctif, rédaction de suppression, édition de fichiers), répartie sur 3 invocations distinctes plutôt qu'une seule.
+Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué que
+pour les étapes qui demandent une vraie recherche/décision (recherche de
+correctif, rédaction de suppression, édition de fichiers), pas pour
+l'extraction mécanique des CVE bloquantes (phase 1), qui est un script pur.
 
 ---
 
@@ -41,15 +44,32 @@ les droits git push. C'est la combinaison classique dite du « lethal trifecta �
 de prompt réussie via une description de CVE forgée aurait pu, en un seul
 contexte, exfiltrer un credential ou pousser du code malveillant.
 
-Le pipeline est donc scindé en 3 skills à permissions disjointes (fichiers
-`rhDemo/scripts/fixcve-auto-{detect,lookup,apply}-permissions.json`), chacun
+Le pipeline est donc scindé en 3 étapes à permissions disjointes, chacune
 n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 
-| Phase | Skill | Détient | Ne détient pas | Touche du contenu externe non fiable |
+| Phase | Implémentation | Détient | Ne détient pas | Touche du contenu externe non fiable |
 | --- | --- | --- | --- | --- |
-| 1. Détection | `.claude/skills/fixcve-auto-detect/SKILL.md` | Accès Jenkins (lecture, via `fixcve-jenkins-fetch.sh`) | git, npm/Maven/Docker, Edit | Oui (rapports Trivy/OWASP) |
-| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` | Accès Maven Central (`fixcve-maven-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée et sans aucun secret** |
-| 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
+| 1. Détection | [`rhDemo/scripts/fixcve-detect.py`](../scripts/fixcve-detect.py) — **script déterministe, aucun LLM** | Accès Jenkins (lecture, via `fixcve-jenkins-fetch.sh`) | git, npm/Maven/Docker, aucun credential | Oui (rapports Trivy/OWASP) — **sans conséquence : pas de LLM, donc aucune cible pour une injection de prompt** |
+| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
+| 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` (Claude) | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
+
+### Pourquoi la phase 1 est un script plutôt qu'un skill Claude
+
+Contrairement aux phases 2 et 3, la détection ne demande aucun jugement : un
+seuil CVSS fixe (≥ 7 pour OWASP DC, sévérité `CRITICAL` pour Trivy), une
+extraction de champs mécanique, aucune décision de remédiation. C'est
+exactement le type de tâche que ce projet confie déjà à du code déterministe
+ailleurs (`fixcve-auto-poll.sh` lui-même, `fixcve-audit-render.sh`) plutôt qu'à
+un LLM. Bénéfice direct : **sans LLM, il n'y a plus de cible pour une
+injection de prompt** — toute la question de savoir si le contenu Jenkins
+(lui-même bâti à partir de bases de vulnérabilités publiques via Trivy/OWASP
+DC) est sûr à lire devient sans objet, puisque personne ne le "lit" au sens
+où un LLM pourrait être influencé par son contenu. Les schémas d'extraction
+(Trivy JSON, HTML OWASP DC) ont été construits et vérifiés contre des
+rapports réels de ce projet (builds Jenkins #783 et #789), pas devinés —
+voir les commentaires du script pour le détail des cas réels rencontrés
+(identifiants GHSA en plus des CVE, `CVSS` multi-sources, `FixedVersion`
+multi-valeurs, avisories ne portant qu'un score CVSS v4...).
 
 Propriété clé : même si la phase 2 (la seule exposée à de l'injection) était
 compromise, elle ne peut produire qu'un fichier de sortie erroné — ni
@@ -122,9 +142,9 @@ Un échec de validation arrête le cycle **avant tout push** : aucune remédiati
 
 ⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessus — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
 
-⚠️ **Surface d'injection de prompt** : le pipeline parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy, réponses Maven Central/npm). Depuis la séparation en 3 phases (voir plus haut), ce contenu n'est plus jamais lu par la même invocation Claude que celle qui détient les credentials Jenkins/git — chaque phase a son propre fichier `permissions.allow` versionné ([`fixcve-auto-detect-permissions.json`](../scripts/fixcve-auto-detect-permissions.json), [`fixcve-auto-lookup-permissions.json`](../scripts/fixcve-auto-lookup-permissions.json), [`fixcve-auto-apply-permissions.json`](../scripts/fixcve-auto-apply-permissions.json)), strictement plus étroit que l'ancien fichier unique. Toute commande ou fichier hors de la liste de la phase courante est refusé sans prompt (`--permission-mode dontAsk`). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks) et à la validation de schéma inter-phases, qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
+⚠️ **Surface d'injection de prompt** : les phases 2 et 3 parsent du contenu externe non fiable (réponses Maven Central/npm pour la phase 2 ; fichiers déjà structurés et validés pour la phase 3). La phase 1 (détection) est un script déterministe sans LLM (voir « Séparation en 3 phases » ci-dessus) : elle parse aussi du contenu externe (rapports Trivy/OWASP), mais aucune injection de prompt n'y a de prise puisqu'aucun modèle n'y "lit" quoi que ce soit. Pour les phases 2/3, ce contenu n'est jamais lu par la même invocation Claude que celle qui détient les credentials git — chaque phase a son propre fichier `permissions.allow` versionné ([`fixcve-auto-lookup-permissions.json`](../scripts/fixcve-auto-lookup-permissions.json), [`fixcve-auto-apply-permissions.json`](../scripts/fixcve-auto-apply-permissions.json)), strictement plus étroit que l'ancien fichier unique. Toute commande ou fichier hors de la liste de la phase courante est refusé sans prompt (`--permission-mode dontAsk`). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks) et à la validation de schéma inter-phases, qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
 
-⚠️ **`Bash(python3:*)` reste un joker complet, dans les 3 phases** : c'est la limite la plus sérieuse du modèle de permissions actuel. Le moteur de permissions de Claude Code ne matche que le *texte* de la commande Bash (`python3 ...`) — il ne regarde jamais ce que le script fait une fois lancé. Un script Python peut donc faire des appels réseau vers n'importe quel hôte (contournant entièrement les wrappers dédiés à `curl`), ou lire n'importe quel fichier accessible à l'utilisateur Unix qui exécute le cron — y compris `~/.config/rhdemo-fixcve/jenkins.netrc` — sans passer par l'outil `Read` de Claude Code ni par aucune règle `permissions.allow`.
+⚠️ **`Bash(python3:*)` reste un joker complet dans les phases 2 et 3** (celles qui invoquent Claude) : c'est la limite la plus sérieuse du modèle de permissions actuel. Le moteur de permissions de Claude Code ne matche que le *texte* de la commande Bash (`python3 ...`) — il ne regarde jamais ce que le script fait une fois lancé. Un script Python peut donc faire des appels réseau vers n'importe quel hôte (contournant entièrement les wrappers dédiés à `curl`), ou lire n'importe quel fichier accessible à l'utilisateur Unix qui exécute le cron — y compris `~/.config/rhdemo-fixcve/jenkins.netrc` — sans passer par l'outil `Read` de Claude Code ni par aucune règle `permissions.allow`. Sans objet pour la phase 1 : `python3` y est bien utilisé, mais dans un script versionné qu'on a écrit et relu nous-mêmes, jamais composé à la volée par un LLM potentiellement influencé par du contenu externe.
 
 Ce point a été comparé à dessein à l'option inverse (autoriser `Read` sur le rapport brut plutôt que de forcer un parsing Python complet) : **`python3` sans restriction est le facteur dominant, pas `Read`**. Le champ le plus sensible à l'injection (titre/description de CVE) atteint de toute façon le contexte du modèle via la sortie du script Python qu'il écrit lui-même pour l'extraire — bloquer `Read` réduit l'exposition au reste du document (les dizaines de milliers de lignes non pertinentes) et améliore la fiabilité du parsing (évite l'exploration ad hoc par lignes ciblées, source d'oublis), mais ne change pas le plafond de dégâts en cas d'injection réussie. Ce plafond est fixé par ce que peut faire l'utilisateur Unix du cron, pas par les outils Claude Code explicitement autorisés — un script Python malveillant a le même pouvoir que `Bash(curl:*)` aurait eu avant l'introduction des wrappers dédiés, voire plus (accès fichier en plus du réseau).
 
@@ -270,13 +290,14 @@ cd ~/fixcve-worktrees/rhdemo
 git checkout "$(git -C /home/leno-vo/git/repository rev-parse --abbrev-ref HEAD)"
 ```
 
-`.claude/` (skills, dont `fixcve-auto-detect`/`fixcve-auto-lookup`/`fixcve-auto-apply`) est
-**volontairement gitignored** dans ce dépôt (`.gitignore` : « peut être vecteur
-d'injections », resté local plutôt que versionné) — un `git clone` classique ne le copie
-donc pas. Sans lui, la première des 3 invocations `claude -p` échouerait dès le premier
-cycle (skill introuvable). Un symlink vers la copie principale garde le clone isolé
-automatiquement à jour de toute évolution des skills, sans étape de resynchronisation
-manuelle :
+`.claude/` (skills, dont `fixcve-auto-lookup`/`fixcve-auto-apply` — la phase 1
+n'en a plus besoin, c'est un script déterministe) est **volontairement
+gitignored** dans ce dépôt (`.gitignore` : « peut être vecteur d'injections »,
+resté local plutôt que versionné) — un `git clone` classique ne le copie donc
+pas. Sans lui, l'invocation `claude -p` de la phase 2 échouerait dès le
+premier cycle (skill introuvable). Un symlink vers la copie principale garde
+le clone isolé automatiquement à jour de toute évolution des skills, sans
+étape de resynchronisation manuelle :
 
 ```bash
 ln -s /home/leno-vo/git/repository/.claude ~/fixcve-worktrees/rhdemo/.claude
@@ -436,7 +457,7 @@ skill monolithique.
 
 | Événement | Écrit par | Quand |
 | --- | --- | --- |
-| `detect_phase_failed` | `fixcve-auto-poll.sh` | Phase 1 : pas de ligne `FIXCVE_DETECT_RESULT` exploitable, ou `detected.json` rejeté par le validateur de schéma — placeholder `{}` jamais édité y compris (`reason` : `no_result_line`, `schema_invalid` avec `detail` tronqué à ~1200 caractères) |
+| `detect_phase_failed` | `fixcve-auto-poll.sh` | Phase 1 (`fixcve-detect.py`) : pas de ligne `FIXCVE_DETECT_RESULT` exploitable, ou `detected.json` rejeté par le validateur de schéma — y compris le cas où le script plante avant d'écrire quoi que ce soit et laisse le placeholder `{}` intact (`reason` : `no_result_line`, `schema_invalid` avec `detail` tronqué à ~1200 caractères) |
 | `lookup_phase_failed` | `fixcve-auto-poll.sh` | Phase 2 : même logique, sur `lookup.json` (`reason` inclut aussi une référence croisée invalide vers `detected.json`) |
 | `automation_halted` (`reason:"max_consecutive_prepush_failures"`) | `fixcve-auto-poll.sh` | `MAX_CONSECUTIVE_PREPUSH_FAILURES` échecs pré-push consécutifs (sur des builds distincts) — voir « Halte après échecs pré-push répétés » dans les garde-fous |
 
@@ -480,7 +501,7 @@ Coût principal : toucher `Jenkinsfile-CI` (pipeline critique déjà volumineux)
 ## Voir aussi
 
 - [`.claude/skills/fixcve/SKILL.md`](../../.claude/skills/fixcve/SKILL.md) — version interactive avec validation humaine
-- [`.claude/skills/fixcve-auto-detect/SKILL.md`](../../.claude/skills/fixcve-auto-detect/SKILL.md) — phase 1/3, détection
+- [`fixcve-detect.py`](../scripts/fixcve-detect.py) — phase 1/3, détection (script déterministe, aucun LLM)
 - [`.claude/skills/fixcve-auto-lookup/SKILL.md`](../../.claude/skills/fixcve-auto-lookup/SKILL.md) — phase 2/3, recherche de correctif
 - [`.claude/skills/fixcve-auto-apply/SKILL.md`](../../.claude/skills/fixcve-auto-apply/SKILL.md) — phase 3/3, application/commit/push
 - [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — validateur de schéma déterministe entre les phases

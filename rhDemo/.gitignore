@@ -14,6 +14,7 @@ META-INF/
 # hors de l'arborescence du cwd de lancement même avec --add-dir — voir
 # rhDemo/docs/FIXCVE_AUTO.md, section "Séparation en 3 phases").
 .fixcve-cycle/
+scripts/__pycache__/
 
 ### Secrets ###
 # Ne pas commiter les secrets de dev local

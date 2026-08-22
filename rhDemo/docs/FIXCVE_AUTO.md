@@ -50,7 +50,7 @@ n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 | Phase | Implémentation | Détient | Ne détient pas | Touche du contenu externe non fiable |
 | --- | --- | --- | --- | --- |
 | 1. Détection | [`rhDemo/scripts/fixcve-detect.py`](../scripts/fixcve-detect.py) — **script déterministe, aucun LLM** | Accès Jenkins (lecture, via `fixcve-jenkins-fetch.sh`) | git, npm/Maven/Docker, aucun credential | Oui (rapports Trivy/OWASP) — **sans conséquence : pas de LLM, donc aucune cible pour une injection de prompt** |
-| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
+| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), OSV.dev (`fixcve-osv-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
 | 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` (Claude) | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
 
 ### Pourquoi la phase 1 est un script plutôt qu'un skill Claude
@@ -87,6 +87,29 @@ jamais une URL ou des flags curl :
 
 - [`rhDemo/scripts/fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) : hôte et netrc figés, chemin restreint par regex aux seuls endpoints Jenkins utilisés par la détection.
 - [`rhDemo/scripts/fixcve-maven-lookup.sh`](../scripts/fixcve-maven-lookup.sh) : hôte `search.maven.org` figé, `groupId`/`artifactId` validés par regex avant construction de l'URL — aucun SSRF possible.
+- [`rhDemo/scripts/fixcve-osv-lookup.sh`](../scripts/fixcve-osv-lookup.sh) : hôte `api.osv.dev` figé, revérifie si une CVE affectant un paquet système (Alpine/Debian/Ubuntu) dans une image Docker est désormais corrigée — via l'identifiant d'avisory prévisible de chaque distribution (`<DISTRO>-<CVE_ID>`), jamais un nom de paquet fourni par l'appelant (voir « Vérification des CVE Alpine/Debian/Ubuntu » ci-dessous pour le piège que ça évite).
+
+#### Vérification des CVE Alpine/Debian/Ubuntu dans les images Docker
+
+Pendant les tests de la phase 2, `docker manifest inspect` (seul outil Docker
+disponible) s'est révélé insuffisant pour revérifier un correctif OS-level :
+il ne donne qu'un digest d'image, jamais les versions de paquets internes.
+[OSV.dev](https://osv.dev) résout ça avec une seule API couvrant plusieurs
+distributions (pas besoin d'un wrapper par distribution), à condition
+d'interroger par **identifiant d'avisory** (`ALPINE-<CVE_ID>`,
+`DEBIAN-<CVE_ID>`, `UBUNTU-<CVE_ID>`) plutôt que par nom de paquet + version :
+un test empirique a montré qu'interroger avec le nom de paquet rapporté par
+Trivy (`libexpat`, le sous-paquet binaire) renvoie silencieusement une liste
+vide — lue à tort comme « corrigé » — alors que la distribution suit la CVE
+sous le nom du paquet source (`expat`). L'identifiant d'avisory ne dépend
+d'aucun nom de paquet et élimine ce risque. Red Hat n'est pas couvert : ses
+avisories (`RHSA-AAAA:NNNN`) ne sont pas dérivables du seul numéro de CVE.
+
+Pour que `fixcve-auto-lookup` (phase 2) sache quelle distribution/branche
+interroger, `fixcve-auto-apply` (phase 3) annote systématiquement les
+suppressions Critère B de paquets système avec un jeton `[OSV:<DISTRO>:<branche>]`
+(ex. `[OSV:ALPINE:v3.23]`) — voir `fixcve-auto-apply/SKILL.md` Priorité 2 et
+`fixcve-auto-lookup/SKILL.md` étape 1 pour le détail.
 
 ### Fichiers intermédiaires et validateur de schéma
 

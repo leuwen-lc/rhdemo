@@ -8,18 +8,78 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 
 ```text
 crontab (toutes les 15 min)
-   └─> rhDemo/scripts/fixcve-auto-poll.sh   (bash + jq + curl, PAS de LLM)
+   └─> rhDemo/scripts/fixcve-auto-poll.sh   (bash + jq + curl + python3, PAS de LLM)
          │
-         ├─ Phase A (idle) : détecte un nouveau build Jenkins en échec Trivy/OWASP
-         │     └─ invoque : claude -p "/fixcve-auto <build> <trivy|owasp>"
-         │           (.claude/skills/fixcve-auto/SKILL.md — remédiation + commit + push)
+         ├─ Phase A (idle) : détecte un nouveau build Jenkins en échec Trivy/OWASP,
+         │     puis exécute 3 invocations Claude séquentielles à privilèges
+         │     disjoints (voir "Séparation en 3 phases" ci-dessous) :
+         │       1. /fixcve-auto-detect  -> detected.json
+         │       2. /fixcve-auto-lookup  -> lookup.json
+         │       3. /fixcve-auto-apply   -> commit + push
+         │     un validateur de schéma déterministe (fixcve-validate-json.py)
+         │     s'exécute entre chaque phase ; tout échec (schéma invalide,
+         │     pas de résultat exploitable) arrête le cycle sans invoquer la
+         │     phase suivante ni toucher git — voir "Traçabilité et échecs".
          │
          └─ Phase B (pending_validation) : vérifie le build CI suivant
                ├─ SUCCESS  → marque résolu
                └─ FAILURE  → git revert automatique + halte après 2 rollbacks consécutifs
 ```
 
-Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué que pour la remédiation proprement dite (parsing des rapports, recherche de correctif, rédaction de suppression, édition de fichiers).
+Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué que pour la remédiation proprement dite (parsing des rapports, recherche de correctif, rédaction de suppression, édition de fichiers), répartie sur 3 invocations distinctes plutôt qu'une seule.
+
+---
+
+## Séparation en 3 phases
+
+Motivation : dans la conception initiale (une seule invocation `claude -p`), le
+même contexte LLM cumulait à la fois l'accès à du contenu externe non fiable
+(rapports Trivy/OWASP, réponses Maven Central/npm — descriptions de CVE dont
+la source ultime est publique et non maîtrisée), les credentials Jenkins, et
+les droits git push. C'est la combinaison classique dite du « lethal trifecta »
+(contenu non fiable + accès privé + capacité d'action externe) : une injection
+de prompt réussie via une description de CVE forgée aurait pu, en un seul
+contexte, exfiltrer un credential ou pousser du code malveillant.
+
+Le pipeline est donc scindé en 3 skills à permissions disjointes (fichiers
+`rhDemo/scripts/fixcve-auto-{detect,lookup,apply}-permissions.json`), chacun
+n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
+
+| Phase | Skill | Détient | Ne détient pas | Touche du contenu externe non fiable |
+| --- | --- | --- | --- | --- |
+| 1. Détection | `.claude/skills/fixcve-auto-detect/SKILL.md` | Accès Jenkins (lecture, via `fixcve-jenkins-fetch.sh`) | git, npm/Maven/Docker, Edit | Oui (rapports Trivy/OWASP) |
+| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` | Accès Maven Central (`fixcve-maven-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée et sans aucun secret** |
+| 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
+
+Propriété clé : même si la phase 2 (la seule exposée à de l'injection) était
+compromise, elle ne peut produire qu'un fichier de sortie erroné — ni
+exfiltrer un secret (elle n'en détient aucun), ni pousser du code (elle n'a
+aucun droit git).
+
+### Wrappers réseau dédiés (pas de `curl` générique)
+
+Plutôt qu'un `curl` restreint par liste blanche d'hôtes ou par verbe HTTP (un
+filtrage de flags curl est contournable — `-d`, `-K`/`--config`, `--upload-file`
+peuvent faire basculer une requête en écriture sans que ce soit visible dans un
+simple filtre de préfixe), chaque accès externe passe par un wrapper à usage
+unique qui construit lui-même l'URL et n'accepte que des paramètres typés,
+jamais une URL ou des flags curl :
+
+- [`rhDemo/scripts/fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) : hôte et netrc figés, chemin restreint par regex aux seuls endpoints Jenkins utilisés par la détection.
+- [`rhDemo/scripts/fixcve-maven-lookup.sh`](../scripts/fixcve-maven-lookup.sh) : hôte `search.maven.org` figé, `groupId`/`artifactId` validés par regex avant construction de l'URL — aucun SSRF possible.
+
+### Fichiers intermédiaires et validateur de schéma
+
+Les deux fichiers échangés entre phases vivent hors de l'arbre git (pour ne
+jamais déclencher le garde-fou « arbre de travail non propre » ni être
+committés par erreur) :
+
+- `~/.config/rhdemo-fixcve/cycle/detected.json` (phase 1 → 2 → 3)
+- `~/.config/rhdemo-fixcve/cycle/lookup.json` (phase 2 → 3)
+
+Entre chaque phase, [`rhDemo/scripts/fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — **déterministe, jamais un LLM** — valide strictement le schéma (clés exactes, aucun champ inconnu toléré, valeurs contraintes par regex/enum, champs texte libre bornés à 200 caractères ASCII imprimable sans retour à la ligne, référence croisée des `finding_id` entre les deux fichiers). La garantie de sécurité ne doit jamais reposer sur le bon vouloir du skill qui a produit le fichier — c'est le même principe déjà appliqué à l'étape de validation locale avant push (voir plus bas, garde-fou « Validation locale obligatoire avant push »).
+
+Un échec de validation arrête le cycle **avant tout push** : aucune remédiation n'est appliquée, aucune phase suivante n'est invoquée. Voir « Traçabilité et échecs » ci-dessous.
 
 ---
 
@@ -30,14 +90,16 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 | **Working tree propre requis** | Si des modifications locales non committées existent, le script ne touche à rien (évite d'interférer avec un travail en cours). |
 | **Branche à jour requise** | Si la branche locale est en retard/divergente par rapport à `origin`, le script s'arrête (pas de merge/rebase automatique). |
 | **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau, `git revert` immédiat + push. |
-| **Halte après rollbacks répétés** | Après `MAX_CONSECUTIVE_ROLLBACKS` (2) rollbacks consécutifs, le statut passe à `halted` : plus aucune action tant qu'un humain ne réinitialise pas `~/.config/rhdemo-fixcve/state.json`. |
-| **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque activation du skill (étape 0 de `SKILL.md`), remplacée par le vrai correctif dès qu'il sort. **CVSS ≥ 9.0 sans correctif** : seule exception restant hors périmètre — blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
-| **Revérification des exclusions temporaires (Critère B)** | À chaque activation du skill (quel que soit le build/stage déclencheur), `SKILL.md` étape 0 scanne `owasp-suppressions.xml`/`.trivyignore.yaml` pour le jeton `[PENDING_UPSTREAM_FIX]` et revérifie Maven Central/npm pour chacune ; si un correctif est sorti, applique le vrai correctif et retire l'exclusion. Ce mécanisme ne se déclenche que si le skill est réinvoqué (un build vert sur une CVE désormais supprimée n'invoque plus le skill tant qu'aucune autre CVE ne fait échouer le build) — jugé suffisant vu la fréquence d'activation réelle du skill sur ce projet (surface OWASP Dependency-Check large). |
-| **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, application, validation, rollback, halte). |
+| **Halte après rollbacks répétés** | Après `MAX_CONSECUTIVE_ROLLBACKS` (2) rollbacks consécutifs **post-push**, le statut passe à `halted` : plus aucune action tant qu'un humain ne réinitialise pas `~/.config/rhdemo-fixcve/state.json`. |
+| **Halte après échecs pré-push répétés (symétrique)** | Après `MAX_CONSECUTIVE_PREPUSH_FAILURES` (2) échecs consécutifs **avant** tout push (schéma invalide en sortie de phase 1/2, ou absence de ligne de résultat exploitable pour une des 3 phases), même halte `status="halted"`, avec `reason:"max_consecutive_prepush_failures"` et `failing_stage` (`detect`/`lookup`/`apply`) dans l'événement `automation_halted`. Distinct du rollback : rien n'a été poussé, donc rien à `git revert`, juste un arrêt du pipeline. Le compteur `consecutive_prepush_failures` (`state.json`) est remis à zéro dès qu'un cycle va au bout proprement (correctif appliqué, ou `NO_ACTION` légitime) — voir « Traçabilité et échecs » ci-dessous. |
+| **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque cycle par `/fixcve-auto-lookup` (phase 2), remplacée par le vrai correctif dès qu'il sort. **CVSS ≥ 9.0 sans correctif** : seule exception restant hors périmètre — blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
+| **Revérification des exclusions temporaires (Critère B)** | À chaque cycle atteignant la phase 2, `/fixcve-auto-lookup` (étape 1 de son `SKILL.md`) scanne `owasp-suppressions.xml`/`.trivyignore.yaml` pour le jeton `[PENDING_UPSTREAM_FIX]` et revérifie Maven Central/npm pour chacune ; si un correctif est sorti, l'entrée est ajoutée à `pending_reverified` dans `lookup.json` et `/fixcve-auto-apply` (phase 3) applique le vrai correctif et retire l'exclusion. Ce mécanisme ne se déclenche que si le pipeline est réinvoqué (un build vert sur une CVE désormais supprimée ne relance plus le pipeline tant qu'aucune autre CVE ne fait échouer le build) — jugé suffisant vu la fréquence d'activation réelle sur ce projet (surface OWASP Dependency-Check large). |
+| **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, échec de phase, application, validation, rollback, halte). |
 | **Verrou anti-chevauchement** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock` — un cycle CI (~2h max) ne peut pas se chevaucher avec le suivant. |
 | **Anti-boucle blocage confirmé** | Après un `blocked_needs_human` (CVE bloquante sans correctif dispo), le script mémorise `blocked_confirmed.{since,source_sha}` dans `state.json`. Tant que le code source n'a pas changé (SHA du dernier commit hors `fixcve-audit.jsonl` identique) et que `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) n'est pas écoulé, les cycles suivants n'appellent pas Claude et ne committent/poussent rien — évite la boucle auto-entretenue commit→build Jenkins→nouveau commit observée sur les builds #735-#744 (aucune information nouvelle à chaque cycle, seul le push relançait le build suivant). |
+| **Validation de schéma inter-phases** | Entre chaque invocation Claude, `fixcve-validate-json.py` (déterministe, aucun LLM) rejette tout fichier intermédiaire hors schéma strict (clés inconnues, valeurs hors regex/enum, référence croisée invalide) — voir « Séparation en 3 phases » ci-dessus. Aucune phase suivante n'est invoquée si la précédente échoue cette validation. |
 | **Validation par SHA, pas par numéro de build** | Phase B (`pending_validation`) vérifie que `fix_commit_sha` est un ancêtre (ou égal) du commit réellement bâti par le build suivant (`git merge-base --is-ancestor`), pas seulement que son numéro est supérieur à `trigger_build_seen`. Jenkins déclenche un build sur **chaque** push (webhook/poll SCM) — un push sans rapport intercalé entre la publication du correctif et le cycle cron suivant (commit de documentation, PR Renovate...) produit un build qui n'est pas celui du correctif ; sans cette vérification, ce build intercalé est pris pour la validation et peut faire annuler un correctif jamais réellement testé. Incident constaté build #749→#750 (`ee1061c` poussé, mais le build examiné était bâti sur un commit de documentation poussé entre-temps — rollback d'un correctif jamais validé, 2e rollback consécutif → halte automatique). |
-| **Validation locale obligatoire avant push** | `SKILL.md` étape 5bis : parse XML/YAML du fichier de suppression modifié (module `xml`/`yaml` Python) puis rejeu local de `./mvnw org.owasp:dependency-check-maven:check`, comparé à la liste consolidée de l'étape 3, avant tout `git commit`/`git push`. Incident constaté builds #759→#760 puis #761→#762 : un premier correctif (build #759) traitait des CVE DOMPurify déjà suppressées sans traiter le CVE réellement bloquant (`postcss:7.0.39`/CVE-2026-45623) ; le correctif suivant (build #761) a introduit un commentaire XML contenant `--` (interdit par la spec XML sauf en clôture `-->`) dans `owasp-suppressions.xml`, rendant tout le fichier illisible par `dependency-check-maven` et faisant réapparaître en échec toutes les suppressions déjà validées — 2 rollbacks consécutifs → halte automatique. Un simple parse local (quelques secondes) aurait détecté les deux avant push, sans attendre un cycle Jenkins complet (~15+ min) suivi d'un rollback. Ce rejeu utilise le cache NVD de l'hôte (`~/.m2/dependency-check-data`, `pom.xml` : `<dataDirectory>${user.home}/.m2/dependency-check-data</dataDirectory>`) — **distinct** de celui de Jenkins (volume Docker `rhdemo-jenkins-home`, non partagé, avec clé API NVD injectée que l'hôte n'a pas) : fiable pour confirmer que le correctif couvre les CVE visées et ne casse rien, mais pas une simulation identique au scan Jenkins seconde près ; la validation Phase B (Jenkins) reste le filet de sécurité final. |
+| **Validation locale obligatoire avant push** | `fixcve-auto-apply/SKILL.md` étape 3 : parse XML/YAML du fichier de suppression modifié (module `xml`/`yaml` Python) puis rejeu local de `./mvnw org.owasp:dependency-check-maven:check`, comparé à la liste consolidée de `detected.json`, avant tout `git commit`/`git push`. Incident constaté builds #759→#760 puis #761→#762 : un premier correctif (build #759) traitait des CVE DOMPurify déjà suppressées sans traiter le CVE réellement bloquant (`postcss:7.0.39`/CVE-2026-45623) ; le correctif suivant (build #761) a introduit un commentaire XML contenant `--` (interdit par la spec XML sauf en clôture `-->`) dans `owasp-suppressions.xml`, rendant tout le fichier illisible par `dependency-check-maven` et faisant réapparaître en échec toutes les suppressions déjà validées — 2 rollbacks consécutifs → halte automatique. Un simple parse local (quelques secondes) aurait détecté les deux avant push, sans attendre un cycle Jenkins complet (~15+ min) suivi d'un rollback. Ce rejeu utilise le cache NVD de l'hôte (`~/.m2/dependency-check-data`, `pom.xml` : `<dataDirectory>${user.home}/.m2/dependency-check-data</dataDirectory>`) — **distinct** de celui de Jenkins (volume Docker `rhdemo-jenkins-home`, non partagé, avec clé API NVD injectée que l'hôte n'a pas) : fiable pour confirmer que le correctif couvre les CVE visées et ne casse rien, mais pas une simulation identique au scan Jenkins seconde près ; la validation Phase B (Jenkins) reste le filet de sécurité final. |
 | **Aucun commentaire XML `<!-- -->` libre pour les suppressions** | Toute justification, même longue, va dans `<notes>` (contenu XML normal, jamais interprété comme commentaire) — jamais dans un bloc `<!-- ... -->` séparé, où un `--` littéral (ex. une commande `npm ... --force` citée dans le texte) casse le parsing de tout le fichier. Voir incident ci-dessus. |
 | **Journalisation de la cause réelle d'un rollback** | Phase B enrichit l'événement `validation_failed_rollback` avec `failure_stage` (premier stage Jenkins en échec) et `failure_detail` (extrait des lignes `[ERROR]` de `consoleText`), au lieu de se limiter à `commit`/`revert_commit`. Avant ce garde-fou, un post-mortem devait ressortir les logs Jenkins bruts à la main (constaté lors de l'analyse des rollbacks builds #760/#762). |
 
@@ -47,11 +109,13 @@ Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué 
 
 ⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessus — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
 
-⚠️ **Surface d'injection de prompt** : `/fixcve-auto` parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy). Le scope d'outils est restreint via `--permission-mode dontAsk` + règles `permissions.allow` (fichier versionné [`fixcve-auto-permissions.json`](../scripts/fixcve-auto-permissions.json)) : Claude n'a accès qu'aux commandes prévues (curl Jenkins/Maven Central, `npm audit`/`view`/`install` scopés à `frontend/`, `docker manifest inspect`, `git add`/`commit`/`push`) et aux fichiers de remédiation attendus (`pom.xml`, `Jenkinsfile-CI`, `frontend/package.json`, `frontend/package-lock.json`, `owasp-suppressions.xml`, `.trivyignore.yaml`, `docs/SECURITY_ADVISORIES.md`, `docs/fixcve-audit.jsonl`, les manifests de déploiement des images externes). Toute autre commande ou fichier est refusé sans prompt (mode non interactif). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks), qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
+⚠️ **Surface d'injection de prompt** : le pipeline parse du contenu externe non fiable (descriptions de CVE, rapport HTML OWASP, JSON Trivy, réponses Maven Central/npm). Depuis la séparation en 3 phases (voir plus haut), ce contenu n'est plus jamais lu par la même invocation Claude que celle qui détient les credentials Jenkins/git — chaque phase a son propre fichier `permissions.allow` versionné ([`fixcve-auto-detect-permissions.json`](../scripts/fixcve-auto-detect-permissions.json), [`fixcve-auto-lookup-permissions.json`](../scripts/fixcve-auto-lookup-permissions.json), [`fixcve-auto-apply-permissions.json`](../scripts/fixcve-auto-apply-permissions.json)), strictement plus étroit que l'ancien fichier unique. Toute commande ou fichier hors de la liste de la phase courante est refusé sans prompt (`--permission-mode dontAsk`). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks) et à la validation de schéma inter-phases, qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
 
-⚠️ **Limite du scoping par préfixe** : la règle `Bash(frontend/node/npm --prefix frontend audit:*)` autorise aussi bien `npm audit fix --package-lock-only` (voulu) que `npm audit fix --force` (interdit par consigne dans `SKILL.md`, jamais par le moteur de permissions lui-même — un préfixe `allow` ne peut pas exclure un flag précis). Le blocage de `--force` repose donc uniquement sur le respect de la consigne par le modèle, pas sur une barrière technique — à garder en tête vu la surface d'injection de prompt ci-dessus (une description de CVE malveillante pourrait tenter d'inciter à l'usage de `--force`). Les garde-fous git (rollback automatique après échec du build suivant) restent la protection de dernier recours si ça arrivait malgré tout.
+⚠️ **Limite du scoping par préfixe** : la règle `Bash(frontend/node/npm --prefix frontend audit:*)` (phase 3, `fixcve-auto-apply`) autorise aussi bien `npm audit fix --package-lock-only` (voulu) que `npm audit fix --force` (interdit par consigne dans `SKILL.md`, jamais par le moteur de permissions lui-même — un préfixe `allow` ne peut pas exclure un flag précis). Le blocage de `--force` repose donc uniquement sur le respect de la consigne par le modèle, pas sur une barrière technique. Ce risque reste présent en phase 3 mais son exposition a diminué : la phase 3 ne lit plus de contenu externe brut (seulement les fichiers structurés déjà validés des phases 1/2), donc une description de CVE malveillante ne peut plus l'atteindre directement — il faudrait qu'elle passe d'abord par la phase 2 puis survive à la validation de schéma stricte (aucun champ texte libre exploitable dans `lookup.json`, voir « Séparation en 3 phases »). La phase 2, elle, utilise volontairement la règle plus étroite `Bash(frontend/node/npm --prefix frontend audit --json:*)` (lecture seule, ne matche pas `audit fix`). Les garde-fous git (rollback automatique après échec du build suivant) restent la protection de dernier recours si ça arrivait malgré tout.
 
-⚠️ **`npm` absent du `PATH` sous cron** : constaté sur le build #715 (`npm : commande introuvable`, `blocked_needs_human` sur 39 CVE). Le `PATH` minimal de cron ne source aucun profil shell, donc un `npm` installé via nvm (disponible en session interactive) n'est pas résolu par le skill. `SKILL.md` et `fixcve-auto-permissions.json` utilisent donc le binaire `frontend/node/npm` (téléchargé par `frontend-maven-plugin`, chemin littéral dans le dépôt, indépendant du `PATH`) plutôt qu'un `npm` nu.
+⚠️ **`npm` absent du `PATH` sous cron** : constaté sur le build #715 (`npm : commande introuvable`, `blocked_needs_human` sur 39 CVE). Le `PATH` minimal de cron ne source aucun profil shell, donc un `npm` installé via nvm (disponible en session interactive) n'est pas résolu par les skills. Les `SKILL.md` et les fichiers `fixcve-auto-*-permissions.json` utilisent donc le binaire `frontend/node/npm` (téléchargé par `frontend-maven-plugin`, chemin littéral dans le dépôt, indépendant du `PATH`) plutôt qu'un `npm` nu.
+
+⚠️ **Exception assumée — npm et Docker gardent un accès réseau natif en phase 3** : contrairement à Maven (où la phase 3 se contente d'écrire une version déjà résolue par la phase 2 dans `pom.xml`, sans appel réseau), `npm audit fix --package-lock-only`/`npm install ... --package-lock-only` doivent recalculer eux-mêmes les hachages d'intégrité du lockfile au moment de l'application — impossible à pré-résoudre hors ligne en phase 2. Le digest Docker, lui, **est** entièrement pré-résolu par la phase 2 (`target_digest` dans `lookup.json`) : la phase 3 n'appelle plus `docker manifest inspect`. Le risque résiduel de l'appel npm en phase 3 est jugé acceptable : c'est un outil natif qui fait sa propre I/O réseau, et le LLM ne lit jamais la réponse brute du registre npm (seulement un diff de fichier ou un message de succès/échec), contrairement à un `curl` dont la réponse serait lue comme texte dans le contexte du modèle — la différence de risque n'est pas « réseau ou pas », mais « le LLM lit-il du texte non maîtrisé dans son contexte ».
 
 ⚠️ **`Bash(git restore:*)`** : ajouté après le build #718, où un `npm install <package>@<version>` sans `--save-dev` a ajouté à tort une dépendance transitive (`brace-expansion`, saut de version majeure 1.x→5.x) dans `dependencies` de production. Le skill a correctement voulu annuler sa propre erreur (`git restore`) mais n'en avait pas le droit, laissant l'arbre de travail sale — ce qui aurait bloqué tous les cycles cron suivants (garde-fou « arbre non propre ») jusqu'à intervention manuelle. `git restore` ne peut annuler que des modifications non committées (jamais l'historique), scope volontairement plus étroit que `git checkout`.
 
@@ -79,7 +143,7 @@ le clone car nécessaires à son fonctionnement — ils restent atteignables de 
 qu'avant en cas d'évasion. Aucun confinement réseau ni noyau non plus (contrairement à une
 microVM, option plus lourde restée hors scope pour l'instant).
 
-⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution de `/fixcve-auto`, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le skill utilise `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
+⚠️ **Comportement à connaître (toujours vrai sur `2.1.220`, distinct du bug ci-dessus)** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe. Vérifié empiriquement le 2026-07-29 (build Jenkins #709/#710, `permission_denials` dans la sortie `--output-format json`) : c'est ce qui bloquait le premier appel curl de chaque exécution du pipeline, quelle que soit la commande. Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le wrapper [`fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) utilise en interne `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande vue par le modèle — celui-ci ne fournit qu'un chemin Jenkins, jamais le netrc lui-même) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
 
 ---
 
@@ -187,11 +251,12 @@ cd ~/fixcve-worktrees/rhdemo
 git checkout "$(git -C /home/leno-vo/git/repository rev-parse --abbrev-ref HEAD)"
 ```
 
-`.claude/` (skills, dont `fixcve-auto`) est **volontairement gitignored** dans ce dépôt
-(`.gitignore` : « peut être vecteur d'injections », resté local plutôt que versionné) — un
-`git clone` classique ne le copie donc pas. Sans lui, `claude -p "/fixcve-auto ..."` échouerait
-dès le premier cycle (skill introuvable). Un symlink vers la copie principale garde le clone
-isolé automatiquement à jour de toute évolution du skill, sans étape de resynchronisation
+`.claude/` (skills, dont `fixcve-auto-detect`/`fixcve-auto-lookup`/`fixcve-auto-apply`) est
+**volontairement gitignored** dans ce dépôt (`.gitignore` : « peut être vecteur
+d'injections », resté local plutôt que versionné) — un `git clone` classique ne le copie
+donc pas. Sans lui, la première des 3 invocations `claude -p` échouerait dès le premier
+cycle (skill introuvable). Un symlink vers la copie principale garde le clone isolé
+automatiquement à jour de toute évolution des skills, sans étape de resynchronisation
 manuelle :
 
 ```bash
@@ -285,10 +350,10 @@ jq '.status="halted"' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tm
 
 ## Reprise après une halte manuelle
 
-Après avoir traité manuellement la cause des rollbacks répétés (visible dans `rhDemo/docs/fixcve-audit.jsonl`, événements `automation_halted`) :
+Après avoir traité manuellement la cause des rollbacks ou des échecs pré-push répétés (visible dans `rhDemo/docs/fixcve-audit.jsonl`, événements `automation_halted` — le champ `reason` distingue `max_consecutive_rollbacks` de `max_consecutive_prepush_failures`, et `failing_stage` indique la phase en cause pour ce second cas) :
 
 ```bash
-jq '.status="idle" | .consecutive_rollbacks=0' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
+jq '.status="idle" | .consecutive_rollbacks=0 | .consecutive_prepush_failures=0' ~/.config/rhdemo-fixcve/state.json > /tmp/s.json && mv /tmp/s.json ~/.config/rhdemo-fixcve/state.json
 ```
 
 ## Forcer une revérification immédiate d'un blocage confirmé
@@ -337,6 +402,51 @@ Régénérer manuellement la vue lisible si besoin (ex: après une modification 
 rhDemo/scripts/fixcve-audit-render.sh
 ```
 
+## Traçabilité et échecs du pipeline 3 phases
+
+Principe : c'est toujours `fixcve-auto-poll.sh` (déterministe) qui journalise un
+échec de phase — jamais le skill en échec lui-même, qui pourrait être celui
+compromis. Seule la phase 3 (`fixcve-auto-apply`, qui détient les droits git)
+journalise elle-même ses événements de remédiation substantielle
+(`remediation_applied`, `risk_accepted_pending_upstream_fix`,
+`pending_fix_resolved`, `blocked_needs_human`), exactement comme dans l'ancien
+skill monolithique.
+
+**Nouveaux événements** (en plus de ceux déjà existants avant la séparation en
+3 phases) :
+
+| Événement | Écrit par | Quand |
+| --- | --- | --- |
+| `detect_phase_failed` | `fixcve-auto-poll.sh` | Phase 1 : crash sans résultat exploitable, `detected.json` absent, ou rejeté par le validateur de schéma (`reason` : `no_result_line`, `missing_output_file`, `schema_invalid` avec `detail` tronqué à ~1200 caractères) |
+| `lookup_phase_failed` | `fixcve-auto-poll.sh` | Phase 2 : même logique, sur `lookup.json` (`reason` inclut aussi une référence croisée invalide vers `detected.json`) |
+| `automation_halted` (`reason:"max_consecutive_prepush_failures"`) | `fixcve-auto-poll.sh` | `MAX_CONSECUTIVE_PREPUSH_FAILURES` échecs pré-push consécutifs (sur des builds distincts) — voir « Halte après échecs pré-push répétés » dans les garde-fous |
+
+Un échec en phase 1 ou 2 (ou une validation de schéma ratée) survient
+**avant tout commit de correctif** : il n'y a donc rien à `git revert`, juste
+un cycle qui s'arrête et se journalise (`last_processed_build` est quand même
+avancé — pas de nouvelle tentative automatique sur le même build, un échec de
+schéma systématique n'a aucune raison de disparaître 15 minutes plus tard). Le
+mécanisme de rollback (`consecutive_rollbacks`) reste exclusivement pour la
+Phase B, après un vrai push de correctif.
+
+Un crash pur du process `claude -p` (réseau, API — distinct d'un résultat
+produit mais invalide) n'incrémente aucun des deux compteurs et n'avance pas
+`last_processed_build` : nouvelle tentative complète au cycle cron suivant.
+
+**Fichiers de cycle conservés pour le post-mortem** : `detected.json` et
+`lookup.json` ne sont jamais écrasés silencieusement en cas d'échec — ils sont
+copiés dans `~/.config/rhdemo-fixcve/cycle/archive/<build>-{detected,lookup}[-invalid].json`
+avant d'être nettoyés pour le cycle suivant (purge automatique au-delà des
+`CYCLE_ARCHIVE_RETENTION` fichiers les plus récents — ce répertoire n'est pas
+versionné, contrairement à `fixcve-audit.jsonl`). C'est le fichier exact que le
+validateur a rejeté, utile pour comprendre pourquoi sans attendre de
+reproduire le cycle.
+
+**`poll.log`** reste la seule trace des 3 invocations `claude -p` en texte
+brut (stdout/stderr complet) — avec 3 appels par cycle au lieu d'un seul, `log
+"..."` précède chaque invocation pour distinguer facilement quelle phase a
+produit quelle sortie lors d'un `grep`/`tail -f`.
+
 ## Évolution future : exécution via Jenkins plutôt que cron local
 
 Alternative envisageable si le besoin se présente (plusieurs machines, survie à l'arrêt du PC de dev) : héberger l'automatisation dans Jenkins plutôt que sur un cron local. Ce n'est **pas un simple portage**, à évaluer avant de s'engager :
@@ -351,6 +461,9 @@ Coût principal : toucher `Jenkinsfile-CI` (pipeline critique déjà volumineux)
 ## Voir aussi
 
 - [`.claude/skills/fixcve/SKILL.md`](../../.claude/skills/fixcve/SKILL.md) — version interactive avec validation humaine
-- [`.claude/skills/fixcve-auto/SKILL.md`](../../.claude/skills/fixcve-auto/SKILL.md) — instructions détaillées de la remédiation automatique
+- [`.claude/skills/fixcve-auto-detect/SKILL.md`](../../.claude/skills/fixcve-auto-detect/SKILL.md) — phase 1/3, détection
+- [`.claude/skills/fixcve-auto-lookup/SKILL.md`](../../.claude/skills/fixcve-auto-lookup/SKILL.md) — phase 2/3, recherche de correctif
+- [`.claude/skills/fixcve-auto-apply/SKILL.md`](../../.claude/skills/fixcve-auto-apply/SKILL.md) — phase 3/3, application/commit/push
+- [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — validateur de schéma déterministe entre les phases
 - [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) — historique des CVE traitées (manuel et automatique)
 - [SOPS_SETUP.md](SOPS_SETUP.md) — installation SOPS/AGE

@@ -92,18 +92,66 @@ devenu inutile depuis son remplacement par ce script déterministe.
 | **Working tree propre requis** | Si des modifications locales non committées existent, le script ne touche à rien (évite d'interférer avec un travail en cours). |
 | **Branche à jour requise** | Si la branche locale est en retard/divergente par rapport à `origin`, le script s'arrête (pas de merge/rebase automatique). |
 | **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau, `git revert` immédiat + push. |
-| **Halte après rollbacks répétés** | Après `MAX_CONSECUTIVE_ROLLBACKS` (2) rollbacks consécutifs **post-push**, le statut passe à `halted` : plus aucune action tant qu'un humain ne réinitialise pas `~/.config/rhdemo-fixcve/state.json`. |
-| **Halte après échecs pré-push répétés (symétrique)** | Après `MAX_CONSECUTIVE_PREPUSH_FAILURES` (2) échecs consécutifs **avant** tout push (schéma invalide en sortie de phase 1/2, ou absence de ligne de résultat exploitable pour une des 3 phases), même halte `status="halted"`, avec `reason:"max_consecutive_prepush_failures"` et `failing_stage` (`detect`/`lookup`/`apply`) dans l'événement `automation_halted`. Distinct du rollback : rien n'a été poussé, donc rien à `git revert`, juste un arrêt du pipeline. Le compteur `consecutive_prepush_failures` (`state.json`) est remis à zéro dès qu'un cycle va au bout proprement (correctif appliqué, ou `NO_ACTION` légitime) — voir « Traçabilité et échecs » ci-dessous. |
+| **Halte après rollbacks répétés** | `MAX_CONSECUTIVE_ROLLBACKS` (2) — voir « Machine à états ». |
+| **Halte après échecs pré-push répétés (symétrique)** | `MAX_CONSECUTIVE_PREPUSH_FAILURES` (2), champ `consecutive_prepush_failures`, `reason:"max_consecutive_prepush_failures"` + `failing_stage` dans `automation_halted` — voir « Machine à états » (lane CVE bloquée). |
 | **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque cycle par `/fixcve-auto-lookup` (phase 2), remplacée par le vrai correctif dès qu'il sort. **CVSS ≥ 9.0 sans correctif** : seule exception restant hors périmètre — blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
 | **Revérification des exclusions temporaires (Critère B)** | À chaque cycle atteignant la phase 2, `/fixcve-auto-lookup` (étape 1 de son `SKILL.md`) scanne `owasp-suppressions.xml`/`.trivyignore.yaml` pour le jeton `[PENDING_UPSTREAM_FIX]` et revérifie Maven Central/npm pour chacune ; si un correctif est sorti, l'entrée est ajoutée à `pending_reverified` dans `lookup.json` et `/fixcve-auto-apply` (phase 3) applique le vrai correctif et retire l'exclusion. Ce mécanisme ne se déclenche que si le pipeline est réinvoqué (un build vert sur une CVE désormais supprimée ne relance plus le pipeline tant qu'aucune autre CVE ne fait échouer le build) — jugé suffisant vu la fréquence d'activation réelle sur ce projet (surface OWASP Dependency-Check large). |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, échec de phase, application, validation, rollback, halte). |
 | **Verrou anti-chevauchement** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock` — un cycle CI (~2h max) ne peut pas se chevaucher avec le suivant. |
-| **Anti-boucle blocage confirmé** | Après un `blocked_needs_human` (CVE bloquante sans correctif dispo), le script mémorise `blocked_confirmed.{since,source_sha}` dans `state.json`. Tant que le code source n'a pas changé (SHA du dernier commit hors `fixcve-audit.jsonl` identique) et que `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) n'est pas écoulé, les cycles suivants n'appellent pas Claude et ne committent/poussent rien — évite une boucle auto-entretenue commit→build Jenkins→nouveau commit où chaque cycle ne produit aucune information nouvelle et seul le push relance le build suivant. |
+| **Anti-boucle blocage confirmé** | Champs `blocked_confirmed.{since,source_sha}`, délai `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) — voir « Machine à états » (lane CVE bloquée). |
+| **Anti-boucle hors périmètre** | Champs `out_of_scope_confirmed.{since,source_sha}`, `consecutive_out_of_scope_pushes`, seuil `MAX_CONSECUTIVE_OUT_OF_SCOPE_PUSHES` (2) — voir « Machine à états » (lane Hors périmètre). Incident ayant motivé ce garde-fou : builds #772/#774, #796/#797. |
 | **Validation de schéma inter-phases** | Entre chaque invocation Claude, `fixcve-validate-json.py` (déterministe, aucun LLM) rejette tout fichier intermédiaire hors schéma strict (clés inconnues, valeurs hors regex/enum, référence croisée invalide) — voir « Séparation en 3 phases » ci-dessus. Aucune phase suivante n'est invoquée si la précédente échoue cette validation. |
 | **Validation par SHA, pas par numéro de build** | Phase B (`pending_validation`) vérifie que `fix_commit_sha` est un ancêtre (ou égal) du commit réellement bâti par le build suivant (`git merge-base --is-ancestor`), pas seulement que son numéro est supérieur à `trigger_build_seen`. Jenkins déclenche un build sur **chaque** push (webhook/poll SCM) — un push sans rapport intercalé entre la publication du correctif et le cycle cron suivant (commit de documentation, PR Renovate...) produit un build qui n'est pas celui du correctif ; sans cette vérification, ce build intercalé serait pris pour la validation et pourrait faire annuler un correctif jamais réellement testé. |
 | **Validation locale obligatoire avant push** | `fixcve-auto-apply/SKILL.md` étape 3 : parse XML/YAML du fichier de suppression modifié, puis rejeu local de `./mvnw org.owasp:dependency-check-maven:check`, comparé à `detected.json`, avant tout `git commit`/`git push`. Ce double contrôle couvre deux échecs distincts : un correctif incomplet (le rejeu Maven le révèle) et un fichier de suppression rendu illisible — ex. un `--` littéral dans un commentaire XML (le parse le révèle immédiatement). Quelques secondes suffisent, contre un cycle Jenkins complet (~15+ min) suivi d'un rollback. Ce rejeu utilise le cache NVD de l'hôte (`~/.m2/dependency-check-data`), **distinct** de celui de Jenkins (clé API NVD que l'hôte n'a pas) : fiable pour confirmer la couverture des CVE, pas une simulation identique seconde près — la validation Phase B (Jenkins) reste le filet de sécurité final. |
 | **Aucun commentaire XML `<!-- -->` libre pour les suppressions** | Toute justification, même longue, va dans `<notes>` (contenu XML normal, jamais interprété comme commentaire) — jamais dans un bloc `<!-- ... -->` séparé, où un `--` littéral (ex. une commande `npm ... --force` citée dans le texte) casse le parsing de tout le fichier. |
 | **Journalisation de la cause réelle d'un rollback** | Phase B enrichit l'événement `validation_failed_rollback` avec `failure_stage` (premier stage Jenkins en échec) et `failure_detail` (extrait des lignes `[ERROR]` de `consoleText`), au lieu de se limiter à `commit`/`revert_commit` — un post-mortem sans ça devrait ressortir les logs Jenkins bruts à la main. |
+
+---
+
+## Machine à états
+
+États de `status` (`state.json`) et événements déclencheurs :
+
+```mermaid
+flowchart TD
+    IDLE["idle"]
+    PEND["pending_validation"]
+    HALT["halted"]
+
+    IDLE -- APPLIED --> PEND
+    PEND -- "resolved / rollback" --> IDLE
+    IDLE -- "seuil atteint" --> HALT
+    HALT -- "reset manuel" --> IDLE
+    PEND -- "rollback, seuil" --> HALT
+```
+
+`idle` et `pending_validation` bouclent aussi sur eux-mêmes sans changer d'état
+(build déjà traité, succès, notification déjà émise, ou build de validation
+pas encore vu) — non représenté ci-dessus pour la lisibilité.
+
+Détail de la Phase A (`idle`, build en échec) :
+
+```mermaid
+flowchart TD
+    subgraph HP["Hors périmètre (ni Trivy ni OWASP)"]
+        direction TB
+        A1[Build en échec] --> A2{même SHA que\nla dernière notif ?}
+        A2 -- oui --> A3[Silence\naucun commit/push] --> A4[idle]
+        A2 -- non --> A5[commit + push audit\n1 notification] --> A6{pushes ≥ 2 ?}
+        A6 -- oui --> A7[halted]
+        A6 -- non --> A8[idle\nSHA mémorisé]
+    end
+
+    subgraph CVE["CVE bloquée (Trivy / OWASP)"]
+        direction TB
+        B1[Build en échec] --> B2{CVE bloquée déjà\nconfirmée, même SHA,\n< 48h ?}
+        B2 -- oui --> B3[Silence\naucun appel Claude] --> B4[idle]
+        B2 -- non --> B5[Phase 1 → 2 → 3] --> B6{résultat}
+        B6 -- APPLIED --> B7[pending_validation]
+        B6 -- "NO_ACTION bloquant" --> B8[idle\nblocage mémorisé 48h]
+        B6 -- "échec schéma" --> B9[compteur pré-push +1\nseuil 2 → halted]
+    end
+```
 
 ---
 

@@ -49,7 +49,7 @@ n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 
 | Phase | Implémentation | Détient | Ne détient pas | Touche du contenu externe non fiable |
 | --- | --- | --- | --- | --- |
-| 1. Détection | [`rhDemo/scripts/fixcve-detect.py`](../scripts/fixcve-detect.py) — **script déterministe, aucun LLM** | Accès Jenkins (lecture, via `fixcve-jenkins-fetch.sh`) | git, npm/Maven/Docker, aucun credential | Oui (rapports Trivy/OWASP) — **sans conséquence : pas de LLM, donc aucune cible pour une injection de prompt** |
+| 1. Détection | [`rhDemo/scripts/fixcve-detect.py`](../scripts/fixcve-detect.py) — **script déterministe, aucun LLM** | Accès Jenkins (lecture, via curl direct — jamais `claude -p`, donc jamais soumis au moteur de permissions) | git, npm/Maven/Docker, aucun credential | Oui (rapports Trivy/OWASP) — **sans conséquence : pas de LLM, donc aucune cible pour une injection de prompt** |
 | 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), OSV.dev (`fixcve-osv-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
 | 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` (Claude) | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
 
@@ -61,18 +61,27 @@ n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 - Les schémas d'extraction (JSON Trivy, HTML OWASP DC) sont construits et vérifiés contre de vrais rapports du projet — voir les commentaires de [`fixcve-detect.py`](../scripts/fixcve-detect.py) pour le détail des cas réels couverts (identifiants GHSA en plus des CVE, `CVSS` multi-sources, `FixedVersion` multi-valeurs, avisories ne portant qu'un score CVSS v4...).
 - Même si la phase 2 (seule exposée à l'injection) était compromise, elle ne peut produire qu'un fichier erroné — ni exfiltrer un secret, ni pousser de code, faute d'accès git.
 
-### Wrappers réseau dédiés (pas de `curl` générique)
+### Wrappers réseau dédiés (pas de `curl` générique) — phase 2 uniquement
 
-Plutôt qu'un `curl` restreint par liste blanche d'hôtes ou par verbe HTTP (un
-filtrage de flags curl est contournable — `-d`, `-K`/`--config`, `--upload-file`
-peuvent faire basculer une requête en écriture sans que ce soit visible dans un
-simple filtre de préfixe), chaque accès externe passe par un wrapper à usage
-unique qui construit lui-même l'URL et n'accepte que des paramètres typés,
-jamais une URL ou des flags curl :
+Ces wrappers défendent contre un cas précis : un `claude -p` (donc soumis au
+moteur de permissions Claude Code) à qui l'on donnerait un accès `curl` large
+pourrait, via une injection de prompt, faire basculer une requête en écriture
+ou viser un hôte arbitraire — un filtrage de flags curl est contournable
+(`-d`, `-K`/`--config`, `--upload-file` ne sont pas toujours visibles dans un
+simple filtre de préfixe). Chaque accès réseau de la **phase 2** (seule phase
+invoquée via `claude -p` à toucher un service externe) passe donc par un
+wrapper à usage unique qui construit lui-même l'URL et n'accepte que des
+paramètres typés, jamais une URL ou des flags curl :
 
-- [`rhDemo/scripts/fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) : hôte et netrc figés, chemin restreint par regex aux seuls endpoints Jenkins utilisés par la détection.
 - [`rhDemo/scripts/fixcve-maven-lookup.sh`](../scripts/fixcve-maven-lookup.sh) : hôte `search.maven.org` figé, `groupId`/`artifactId` validés par regex avant construction de l'URL — aucun SSRF possible.
 - [`rhDemo/scripts/fixcve-osv-lookup.sh`](../scripts/fixcve-osv-lookup.sh) : hôte `api.osv.dev` figé, revérifie si une CVE affectant un paquet système (Alpine/Debian/Ubuntu) dans une image Docker est désormais corrigée — via l'identifiant d'avisory prévisible de chaque distribution (`<DISTRO>-<CVE_ID>`), jamais un nom de paquet fourni par l'appelant (voir « Vérification des CVE Alpine/Debian/Ubuntu » ci-dessous pour le piège que ça évite).
+
+La phase 1 (détection) n'a pas ce besoin : `fixcve-detect.py` appelle Jenkins
+par un curl direct, comme `curl_jenkins()` dans `fixcve-auto-poll.sh` — les
+deux sont des sous-processus lancés directement par le cron, jamais via
+`claude -p`, donc jamais soumis à ce moteur de permissions. Un wrapper dédié y
+avait un sens du temps de l'ancien skill Claude `/fixcve-auto-detect` ; il est
+devenu inutile depuis son remplacement par ce script déterministe.
 
 #### Vérification des CVE Alpine/Debian/Ubuntu dans les images Docker
 
@@ -149,8 +158,7 @@ la limite la plus sérieuse du modèle de permissions actuel. Le moteur ne
 matche que le *texte* de la commande (`python3 ...`), jamais ce qu'elle fait
 une fois lancée — un script Python peut donc atteindre n'importe quel hôte
 (contournant les wrappers `curl`) ou lire n'importe quel fichier accessible à
-l'utilisateur cron (dont `jenkins.netrc`), hors de portée de
-`permissions.allow`. Sans objet pour la phase 1, dont le `python3` est un
+l'utilisateur cron, hors de portée de `permissions.allow`. Sans objet pour la phase 1, dont le `python3` est un
 script versionné et relu, jamais composé à la volée par un LLM exposé à du
 contenu externe.
 
@@ -192,8 +200,6 @@ faire `git fetch`/`git pull` dans la copie principale pour les voir ; (2) ce clo
 le clone car nécessaires à son fonctionnement — ils restent atteignables de la même façon
 qu'avant en cas d'évasion. Aucun confinement réseau ni noyau non plus (contrairement à une
 microVM, option plus lourde restée hors scope pour l'instant).
-
-⚠️ **Comportement à connaître** : sous `dontAsk`, une commande Bash contenant une expansion de variable shell (`${VAR}`) est refusée **même si son préfixe correspond à une règle `allow`** — ex. `Bash(curl:*)` ne matche pas `curl -sf -u "${JENKINS_USER}:${JENKINS_TOKEN}" ...`, alors que la même commande avec des valeurs littérales passe (visible dans `permission_denials`, sortie `--output-format json`). Contournement retenu : `rhDemo/scripts/fixcve-auto-poll.sh` régénère à chaque cycle `/home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin littéral, `chmod 600`) à partir des identifiants déchiffrés, et le wrapper [`fixcve-jenkins-fetch.sh`](../scripts/fixcve-jenkins-fetch.sh) utilise en interne `curl --netrc-file /home/leno-vo/.config/rhdemo-fixcve/jenkins.netrc` (chemin statique, aucune variable dans le texte de la commande vue par le modèle — celui-ci ne fournit qu'un chemin Jenkins, jamais le netrc lui-même) au lieu de `-u "${JENKINS_USER}:${JENKINS_TOKEN}"`. Le mécanisme `GIT_ASKPASS` pour `git push` n'est pas concerné : la substitution s'y fait à l'intérieur du script `git-askpass.sh`, jamais dans le texte de la commande vue par Claude.
 
 ⚠️ **Agent spécialisé plutôt que skill pour la phase 2 (évalué, non retenu)** :
 un agent dispatché par une session orchestratrice unique recréerait le lethal

@@ -74,7 +74,7 @@ wrapper à usage unique qui construit lui-même l'URL et n'accepte que des
 paramètres typés, jamais une URL ou des flags curl :
 
 - [`rhDemo/scripts/fixcve-maven-lookup.sh`](../scripts/fixcve-maven-lookup.sh) : hôte `search.maven.org` figé, `groupId`/`artifactId` validés par regex avant construction de l'URL — aucun SSRF possible.
-- [`rhDemo/scripts/fixcve-osv-lookup.sh`](../scripts/fixcve-osv-lookup.sh) : hôte `api.osv.dev` figé, revérifie si une CVE affectant un paquet système (Alpine/Debian/Ubuntu) dans une image Docker est désormais corrigée — via l'identifiant d'avisory prévisible de chaque distribution (`<DISTRO>-<CVE_ID>`), jamais un nom de paquet fourni par l'appelant (voir « Vérification des CVE Alpine/Debian/Ubuntu » ci-dessous pour le piège que ça évite).
+- [`rhDemo/scripts/fixcve-osv-lookup.sh`](../scripts/fixcve-osv-lookup.sh) : hôte `api.osv.dev` figé, revérifie si une CVE affectant un paquet système (Alpine/Debian/Ubuntu) dans une image Docker est désormais corrigée — via l'identifiant d'avisory prévisible de chaque distribution (`<DISTRO>-<CVE_ID>`), jamais un nom de paquet fourni par l'appelant (voir « Vérification des CVE Alpine/Debian/Ubuntu » dans « Points d'attention » pour le piège que ça évite).
 
 La phase 1 (détection) n'a pas ce besoin : `fixcve-detect.py` appelle Jenkins
 par un curl direct, comme `curl_jenkins()` dans `fixcve-auto-poll.sh` — les
@@ -82,46 +82,6 @@ deux sont des sous-processus lancés directement par le cron, jamais via
 `claude -p`, donc jamais soumis à ce moteur de permissions. Un wrapper dédié y
 avait un sens du temps de l'ancien skill Claude `/fixcve-auto-detect` ; il est
 devenu inutile depuis son remplacement par ce script déterministe.
-
-#### Vérification des CVE Alpine/Debian/Ubuntu dans les images Docker
-
-`docker manifest inspect` ne donne qu'un digest d'image, pas les versions de
-paquets internes — insuffisant pour revérifier un correctif OS-level.
-[OSV.dev](https://osv.dev) couvre plusieurs distributions via une seule API, à
-condition d'interroger par **identifiant d'avisory** (`ALPINE-<CVE_ID>`,
-`DEBIAN-<CVE_ID>`, `UBUNTU-<CVE_ID>`) plutôt que par nom de paquet : le nom
-rapporté par Trivy (ex. `libexpat`) diffère souvent du nom suivi par la
-distribution (`expat`), et une requête par ce nom renverrait à tort un
-résultat vide lu comme « corrigé ». Cette revérification automatique (phase 2
-seulement — pas la détection en phase 1) ne couvre pas Red Hat/UBI, dont les
-avisories `RHSA-AAAA:NNNN` ne se dérivent pas du numéro de CVE.
-
-Pour que `fixcve-auto-lookup` (phase 2) sache quelle distribution/branche
-interroger, `fixcve-auto-apply` (phase 3) annote systématiquement les
-suppressions Critère B de paquets système avec un jeton `[OSV:<DISTRO>:<branche>]`
-(ex. `[OSV:ALPINE:v3.23]`) — voir `fixcve-auto-apply/SKILL.md` Priorité 2 et
-`fixcve-auto-lookup/SKILL.md` étape 1 pour le détail.
-
-### Fichiers intermédiaires et validateur de schéma
-
-⚠️ **Contrainte du moteur de permissions** : sous `--permission-mode dontAsk`,
-`Write` est **toujours refusé**, quel que soit le chemin ou les règles
-`permissions.allow`. Seul `Edit` fonctionne, et uniquement sur un fichier
-**déjà existant** dans l'arborescence du `cwd` de lancement. Conséquence : les
-fichiers intermédiaires doivent vivre dans le clone isolé, pré-créés par
-`fixcve-auto-poll.sh` (placeholder `{}`) avant chaque invocation, puis remplis
-par les skills via `Edit`.
-
-Les deux fichiers échangés vivent donc **dans** le clone isolé, gitignorés
-(`rhDemo/.fixcve-cycle/`) pour ne jamais déclencher le garde-fou « arbre de
-travail non propre » ni être committés par erreur :
-
-- `.fixcve-cycle/detected.json` (phase 1 → 2 → 3)
-- `.fixcve-cycle/lookup.json` (phase 2 → 3)
-
-Entre chaque phase, [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — déterministe, jamais un LLM — valide strictement le schéma (clés exactes, valeurs contraintes par regex/enum, texte libre borné à 200 caractères ASCII, référence croisée des `finding_id`). Un placeholder `{}` non édité échoue automatiquement cette validation (clés requises absentes) : la garantie de sécurité ne repose jamais sur le bon vouloir du skill qui a produit le fichier — même principe que la validation locale avant push (voir « Validation locale obligatoire avant push »).
-
-Un échec de validation arrête le cycle **avant tout push** : voir « Traçabilité et échecs » ci-dessous.
 
 ---
 
@@ -152,6 +112,37 @@ Un échec de validation arrête le cycle **avant tout push** : voir « Traçabil
 ⚠️ Ce document décrit une automatisation qui **committe et pousse du code sur la branche courante sans revue humaine**, y compris des décisions d'acceptation de risque (suppression de CVE). C'est un choix assumé en échange des garde-fous ci-dessus — à désactiver si ces garde-fous ne sont plus jugés suffisants pour le contexte du moment (ex: montée en criticité du projet).
 
 ⚠️ **Surface d'injection de prompt** : les phases 2 et 3 parsent du contenu externe non fiable (réponses Maven Central/npm pour la phase 2 ; fichiers déjà structurés et validés pour la phase 3). La phase 1 (détection) est un script déterministe sans LLM (voir « Séparation en 3 phases » ci-dessus) : elle parse aussi du contenu externe (rapports Trivy/OWASP), mais aucune injection de prompt n'y a de prise puisqu'aucun modèle n'y "lit" quoi que ce soit. Pour les phases 2/3, ce contenu n'est jamais lu par la même invocation Claude que celle qui détient les credentials git — chaque phase a son propre fichier `permissions.allow` versionné ([`fixcve-auto-lookup-permissions.json`](../scripts/fixcve-auto-lookup-permissions.json), [`fixcve-auto-apply-permissions.json`](../scripts/fixcve-auto-apply-permissions.json)), strictement plus étroit que l'ancien fichier unique. Toute commande ou fichier hors de la liste de la phase courante est refusé sans prompt (`--permission-mode dontAsk`). Ce scoping s'ajoute aux garde-fous **git** ci-dessus (working tree propre, rollback automatique, halte après rollbacks) et à la validation de schéma inter-phases, qui restent la protection de dernier recours si une commande scoping-compatible était malgré tout détournée.
+
+⚠️ **Fichiers intermédiaires et validateur de schéma** : sous `--permission-mode dontAsk`, `Write` est **toujours refusé**, quel que soit le chemin ou les règles `permissions.allow`. Seul `Edit` fonctionne, et uniquement sur un fichier **déjà existant** dans l'arborescence du `cwd` de lancement. Conséquence : les fichiers intermédiaires doivent vivre dans le clone isolé, pré-créés par `fixcve-auto-poll.sh` (placeholder `{}`) avant chaque invocation, puis remplis par les skills via `Edit`.
+
+Les deux fichiers échangés vivent donc **dans** le clone isolé, gitignorés
+(`rhDemo/.fixcve-cycle/`) pour ne jamais déclencher le garde-fou « arbre de
+travail non propre » ni être committés par erreur :
+
+- `.fixcve-cycle/detected.json` (phase 1 → 2 → 3)
+- `.fixcve-cycle/lookup.json` (phase 2 → 3)
+
+Entre chaque phase, [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — déterministe, jamais un LLM — valide strictement le schéma (clés exactes, valeurs contraintes par regex/enum, texte libre borné à 200 caractères ASCII, référence croisée des `finding_id`). Un placeholder `{}` non édité échoue automatiquement cette validation (clés requises absentes) : la garantie de sécurité ne repose jamais sur le bon vouloir du skill qui a produit le fichier — même principe que la validation locale avant push (voir « Validation locale obligatoire avant push »).
+
+Un échec de validation arrête le cycle **avant tout push** : voir « Traçabilité et échecs » ci-dessous.
+
+⚠️ **Vérification des CVE Alpine/Debian/Ubuntu dans les images Docker** :
+`docker manifest inspect` ne donne qu'un digest d'image, pas les versions de
+paquets internes — insuffisant pour revérifier un correctif OS-level.
+[OSV.dev](https://osv.dev) couvre plusieurs distributions via une seule API, à
+condition d'interroger par **identifiant d'avisory** (`ALPINE-<CVE_ID>`,
+`DEBIAN-<CVE_ID>`, `UBUNTU-<CVE_ID>`) plutôt que par nom de paquet : le nom
+rapporté par Trivy (ex. `libexpat`) diffère souvent du nom suivi par la
+distribution (`expat`), et une requête par ce nom renverrait à tort un
+résultat vide lu comme « corrigé ». Cette revérification automatique (phase 2
+seulement — pas la détection en phase 1) ne couvre pas Red Hat/UBI, dont les
+avisories `RHSA-AAAA:NNNN` ne se dérivent pas du numéro de CVE.
+
+Pour que `fixcve-auto-lookup` (phase 2) sache quelle distribution/branche
+interroger, `fixcve-auto-apply` (phase 3) annote systématiquement les
+suppressions Critère B de paquets système avec un jeton `[OSV:<DISTRO>:<branche>]`
+(ex. `[OSV:ALPINE:v3.23]`) — voir `fixcve-auto-apply/SKILL.md` Priorité 2 et
+`fixcve-auto-lookup/SKILL.md` étape 1 pour le détail.
 
 ⚠️ **`Bash(python3:*)` reste un joker complet dans les phases 2 et 3** : c'est
 la limite la plus sérieuse du modèle de permissions actuel. Le moteur ne

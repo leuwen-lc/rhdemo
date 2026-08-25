@@ -100,6 +100,7 @@ devenu inutile depuis son remplacement par ce script déterministe.
 | **Verrou anti-chevauchement** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock` — un cycle CI (~2h max) ne peut pas se chevaucher avec le suivant. |
 | **Anti-boucle blocage confirmé** | Champs `blocked_confirmed.{since,source_sha}`, délai `BLOCKED_RECHECK_INTERVAL_SECONDS` (48h) — voir « Machine à états » (lane CVE bloquée). |
 | **Anti-boucle hors périmètre** | Champs `out_of_scope_confirmed.{since,source_sha}`, `consecutive_out_of_scope_pushes`, seuil `MAX_CONSECUTIVE_OUT_OF_SCOPE_PUSHES` (2) — voir « Machine à états » (lane Hors périmètre). Incident ayant motivé ce garde-fou : builds #772/#774, #796/#797. |
+| **Anti-boucle no_action en périmètre (symétrique)** | Champs `no_action_confirmed.{since,source_sha}`, `consecutive_no_action_pushes`, seuil `MAX_CONSECUTIVE_NO_ACTION_PUSHES` (2) — voir « Machine à états » (lane CVE bloquée). Couvre le cas où le stage racine EST en périmètre (trivy/owasp) mais `fixcve-detect.py` répond `NO_ACTION` (ex: `owasp_no_finding_above_threshold`). Incident ayant motivé ce garde-fou : builds #799-#802, apparu juste après le correctif de « Anti-boucle hors périmètre » ci-dessus, qui n'avait couvert que cette branche-là et pas celle-ci. |
 | **Validation de schéma inter-phases** | Entre chaque invocation Claude, `fixcve-validate-json.py` (déterministe, aucun LLM) rejette tout fichier intermédiaire hors schéma strict (clés inconnues, valeurs hors regex/enum, référence croisée invalide) — voir « Séparation en 3 phases » ci-dessus. Aucune phase suivante n'est invoquée si la précédente échoue cette validation. |
 | **Validation par SHA, pas par numéro de build** | Phase B (`pending_validation`) vérifie que `fix_commit_sha` est un ancêtre (ou égal) du commit réellement bâti par le build suivant (`git merge-base --is-ancestor`), pas seulement que son numéro est supérieur à `trigger_build_seen`. Jenkins déclenche un build sur **chaque** push (webhook/poll SCM) — un push sans rapport intercalé entre la publication du correctif et le cycle cron suivant (commit de documentation, PR Renovate...) produit un build qui n'est pas celui du correctif ; sans cette vérification, ce build intercalé serait pris pour la validation et pourrait faire annuler un correctif jamais réellement testé. |
 | **Validation locale obligatoire avant push** | `fixcve-auto-apply/SKILL.md` étape 3 : parse XML/YAML du fichier de suppression modifié, puis rejeu local de `./mvnw org.owasp:dependency-check-maven:check`, comparé à `detected.json`, avant tout `git commit`/`git push`. Ce double contrôle couvre deux échecs distincts : un correctif incomplet (le rejeu Maven le révèle) et un fichier de suppression rendu illisible — ex. un `--` littéral dans un commentaire XML (le parse le révèle immédiatement). Quelques secondes suffisent, contre un cycle Jenkins complet (~15+ min) suivi d'un rollback. Ce rejeu utilise le cache NVD de l'hôte (`~/.m2/dependency-check-data`), **distinct** de celui de Jenkins (clé API NVD que l'hôte n'a pas) : fiable pour confirmer la couverture des CVE, pas une simulation identique seconde près — la validation Phase B (Jenkins) reste le filet de sécurité final. |
@@ -142,14 +143,20 @@ flowchart TD
         A6 -- non --> A8[idle\nSHA mémorisé]
     end
 
-    subgraph CVE["CVE bloquée (Trivy / OWASP)"]
+    subgraph CVE["CVE bloquée / no finding exploitable (Trivy / OWASP)"]
         direction TB
         B1[Build en échec] --> B2{CVE bloquée déjà\nconfirmée, même SHA,\n< 48h ?}
         B2 -- oui --> B3[Silence\naucun appel Claude] --> B4[idle]
-        B2 -- non --> B5[Phase 1 → 2 → 3] --> B6{résultat}
-        B6 -- APPLIED --> B7[pending_validation]
-        B6 -- "NO_ACTION bloquant" --> B8[idle\nblocage mémorisé 48h]
-        B6 -- "échec schéma" --> B9[compteur pré-push +1\nseuil 2 → halted]
+        B2 -- non --> B5[Phase 1 détection] --> B5N1{NO_ACTION\npas de finding\nau-dessus du seuil ?}
+        B5N1 -- oui --> B5N2{même SHA que\nla dernière notif ?}
+        B5N2 -- oui --> B5N3[Silence\naucun commit/push] --> B4
+        B5N2 -- non --> B5N4[commit + push audit\n1 notification] --> B5N5{pushes ≥ 2 ?}
+        B5N5 -- oui --> B5N6[halted]
+        B5N5 -- non --> B4
+        B5N1 -- non --> B6[Phase 1 OK → 2 → 3] --> B7{résultat}
+        B7 -- APPLIED --> B8[pending_validation]
+        B7 -- "NO_ACTION bloquant" --> B9[idle\nblocage mémorisé 48h]
+        B7 -- "échec schéma" --> B10[compteur pré-push +1\nseuil 2 → halted]
     end
 ```
 

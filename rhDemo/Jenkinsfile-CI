@@ -51,7 +51,7 @@ pipeline {
         // renovate: datasource=docker depName=postgres
         POSTGRES_IMAGE = "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
         // renovate: datasource=docker depName=quay.io/keycloak/keycloak
-        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.6.2@sha256:3e58dc82a9b72f364f37dac17f99fcaf53d0052a3c1ad7f00b069a1ed43201c0"
+        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.6.3@sha256:29b2ce19cc0b4815d4c3f043fdae70d9df3089b3f917d0f39eafce4428298ac5"
         // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
         // renovate: datasource=docker depName=ghcr.io/nginx/nginx-gateway-fabric
         NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.7@sha256:bc1e0677ab0c077fc12851dbd2311fce9358d0f6f3140035f8dc5e5ede7b9cc1"

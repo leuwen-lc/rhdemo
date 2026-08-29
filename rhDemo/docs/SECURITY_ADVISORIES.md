@@ -4,6 +4,25 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## keycloak-services (build #826) — CVE-2026-18963 (CVSS 9.1)
+
+### Détection
+
+- **Date de détection** : 2026-08-29 (build Jenkins RHDemo-CI #826 ; reconfirmée depuis le build #812)
+- **Outil** : Trivy (scan image `quay.io/keycloak/keycloak`)
+- **Composant affecté** : `org.keycloak:keycloak-services` 26.6.2 (jar embarqué dans l'image `quay.io/keycloak/keycloak:26.6.2`, `KEYCLOAK_IMAGE` de `Jenkinsfile-CI`)
+
+### Description
+
+keycloak-services: Unauthenticated account takeover via reset-credentials flow bypass. Prise de contrôle de compte non authentifiée via un contournement du flux `reset-credentials`. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`. Corrigé dans les branches Keycloak 26.4.15, 26.6.6 et 26.7.2.
+
+### Remédiation automatique (2026-08-29, build #826)
+
+- **Action** : montée de l'image Keycloak `quay.io/keycloak/keycloak` de `26.6.2` (et `26.6.3` sur les environnements dev/ephemere) vers `26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0` dans tous les fichiers concernés : `Jenkinsfile-CI` (`KEYCLOAK_IMAGE`), `infra/ephemere/docker-compose.yml`, `infra/dev/docker-compose.yml`, `infra/stagingkub/helm/rhdemo/values.yaml`.
+- **Justification** : `26.7.2` est une montée de version en avant par rapport à la `26.6.2` déployée (contrairement au `fixed_version_hint` `26.4.15` de Trivy, une rétrograde écartée par le garde-fou de la phase 2) et intègre le correctif du flux `reset-credentials`. La phase 2 a résolu un tag d'image reproductible avec digest via le registre Docker, ce qui n'était pas le cas aux builds #812/#813/#815/#823 (`target_digest` null → hors périmètre à l'époque).
+
+---
+
 ## nanoid (build #783) — CVE-2026-67214 (CVSS 7.5)
 
 ### Détection

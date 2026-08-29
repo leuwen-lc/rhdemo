@@ -304,11 +304,20 @@ SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d ~/.config/rhdemo-fixcve/cr
 
 Le token Jenkins doit être **régénéré** si une ancienne valeur a pu fuiter — révoquer l'ancien dans Jenkins avant de créer le nouveau. **Migration depuis l'ancien token personnel** : si `credentials.sops.yaml` contient encore `codeberg.user: leuwen-lc`, relancer le script une fois le compte `fixcvebot-leuwen-lc` créé, puis révoquer l'ancien token sur `https://codeberg.org/user/settings/applications`.
 
-### 3. Identité des commits automatiques (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`)
+### 3. Confiance du workspace Claude Code
+
+`claude -p` (non-interactif) n'accepte jamais le dialogue de confiance tout seul. Tant que ce n'est pas fait pour le clone isolé, les fichiers `--settings` des phases 2/3 sont ignorés silencieusement (symptôme dans `poll.log` : `this workspace has not been trusted`, incident build #806).
+
+```bash
+jq --arg p "$HOME/fixcve-worktrees/rhdemo" '.projects[$p].hasTrustDialogAccepted = true' ~/.claude.json > ~/.claude.json.tmp \
+  && mv ~/.claude.json.tmp ~/.claude.json
+```
+
+### 4. Identité des commits automatiques (`GIT_AUTHOR_*`/`GIT_COMMITTER_*`)
 
 `fixcve-auto-poll.sh` exporte `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` plutôt que `git config` (le clone isolé n'affecterait de toute façon plus vos commits manuels, mais ça reste sûr par construction si `REPO_DIR` redevenait un jour la copie principale). Ces variables s'appliquent aussi au sous-processus `claude -p` invoqué, qui les hérite. Résultat : les commits automatiques apparaissent sous l'identité `RHDemo FixCVE Bot`, distincte de vos commits manuels et de `RHDemo CI Bot` (Renovate).
 
-### 4. Activation du cron
+### 5. Activation du cron
 
 **Ne pas installer sans avoir relu `rhDemo/scripts/fixcve-auto-poll.sh` et compris les garde-fous ci-dessus.** Geste délibéré et volontairement laissé hors du script d'installation : `crontab -e`, ajouter :
 

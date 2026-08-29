@@ -912,7 +912,7 @@ Passage à la version springdoc-openapi 3.0.2
 - **Outil** : Trivy Security Scanner
 - **Sévérité** : CRITICAL (CVSS v3.1 : 9.8) / MEDIUM (CVSS v4.0 : 4.6)
 - **Composant affecté** : `zlib-1.3.1-r2` (paquet Alpine) — utilitaire `contrib/untgz`
-- **Statut** : Risque accepté — exclusion `.trivyignore.yaml` en attente de patch Alpine
+- **Statut** : ✅ Résolu le 2026-08-27 (build #806) — Alpine a publié `zlib-1.3.2-r0`, correctif désormais disponible
 
 ### Description
 
@@ -983,6 +983,13 @@ Retirer `CVE-2026-22184` du `.trivyignore.yaml` quand Alpine publie `zlib-1.3.1-
 supérieur avec le correctif intégré, et qu'une image `nginx:*-alpine` basée sur ce paquet
 est disponible.
 
+**Clôturé le 2026-08-27 (build #806)** : revérification automatique (`fixcve-osv-lookup.sh`,
+jeton `[OSV:ALPINE:v3.23]`) — Alpine publie désormais `zlib-1.3.2-r0` avec le correctif
+intégré. L'image `nginx:1.31.3-alpine` actuellement épinglée (`Jenkinsfile-CI`,
+`infra/ephemere/docker-compose.yml`, montée de version antérieure indépendante de cette
+CVE) embarque déjà ce paquet corrigé. Exclusion retirée de `.trivyignore.yaml`, aucune
+mise à jour d'image supplémentaire requise.
+
 ### Timeline
 
 | Date | Action |
@@ -993,6 +1000,7 @@ est disponible.
 | 2026-03-10 | Analyse : Alpine 3.23.3 embarque toujours `zlib-1.3.1-r2` non patché |
 | 2026-03-10 | Exclusion `.trivyignore.yaml` avec justification documentée |
 | 2026-03-19 | Mise à jour nginx:1.29.5 → 1.29.6 (dernière disponible) — CVE-2026-32767 et CVE-2026-22184 toujours présentes |
+| 2026-08-27 | **Résolu** (build #806) — Alpine publie `zlib-1.3.2-r0` ; exclusion retirée de `.trivyignore.yaml` (remédiation automatique) |
 
 ### Références
 

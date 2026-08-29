@@ -4,6 +4,25 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## keycloak-services (build #818) — CVE-2026-18963 (CVSS 9.1)
+
+### Détection
+
+- **Date de détection** : 2026-08-29 (build Jenkins RHDemo-CI #818, stage Trivy ; déjà signalée aux builds #812, #813 et #815 comme hors périmètre, faute de montée de version en avant disponible)
+- **Outil** : Trivy
+- **Composant affecté** : `org.keycloak:keycloak-services` 26.6.2, jar embarqué dans l'image tierce `quay.io/keycloak/keycloak:26.6.2` (`KEYCLOAK_IMAGE` de `Jenkinsfile-CI`) — pas une dépendance du `pom.xml` du projet
+
+### Description
+
+keycloak-services : prise de contrôle de compte non authentifiée via un contournement du flux `reset-credentials`. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`. Corrigé dans Keycloak 26.6.3.
+
+### Remédiation automatique (2026-08-29, build #818)
+
+- **Action** : montée de l'image Keycloak `26.6.2` → `26.6.3` avec repin du digest `sha256:9b0330756022422149aa6502eb2def8cd47c6e1b000c7c65cdb13e7c0133e992` (résolu par la phase 2 sur le registre `quay.io`) dans `Jenkinsfile-CI` (`KEYCLOAK_IMAGE`), `infra/ephemere/docker-compose.yml`, `infra/dev/docker-compose.yml` et `infra/stagingkub/helm/rhdemo/values.yaml`. Les fichiers `infra/dev` et `infra/ephemere`, déjà en `26.6.3` mais sur un digest antérieur (`sha256:29b2ce19…`), sont réalignés sur le digest validé par la phase 2.
+- **Justification** : `fix_status: fix_available`, `target_version: 26.6.3` — première montée de version en avant réellement disponible depuis le premier signalement (les builds #812/#813/#815 ne disposaient que du `fixed_version_hint` 26.4.15, une rétrograde écartée par le garde-fou de la phase 2). CVSS 9.1 ≥ 9.0 mais correctif disponible : la remédiation automatique s'applique.
+
+---
+
 ## nanoid (build #783) — CVE-2026-67214 (CVSS 7.5)
 
 ### Détection

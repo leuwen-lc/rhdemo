@@ -1,30 +1,44 @@
 # Montées de version Kubernetes 1.36 et Helm 4 — en attente
 
-**Statut** : ⏸️ Reportées, non appliquées à ce jour (23/07/2026)
+**Statut** : ✅ **Les deux verrous sont levés (30/08/2026).** Analyse initiale du
+23/07/2026 conservée ci-dessous pour l'historique.
+- **Helm 4** : migré, cf. [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md).
+- **Kubernetes 1.36** : débloqué (Cilium 1.20 stable supporte 1.36) — changements
+  de config appliqués sur la branche `migration-helm-4`, à valider lors de la
+  reconstruction de cluster de la phase 5 Helm 4.
+
 **Concerne** : `kindest/node` (stagingkub) et le CLI `helm` utilisé par les scripts
 `rhDemo/infra/stagingkub/scripts/`
 
 Ce document trace l'analyse de risque qui a mené à repousser ces deux montées
 de version, pour ne pas avoir à la refaire à chaque fois qu'elles reviennent
-sur le tapis. Décision prise en marge de la migration Alloy (cf.
-[`ALLOY_MIGRATION.md`](ALLOY_MIGRATION.md)) : le cluster stagingkub va être
-recréé pour cette migration, occasion naturelle de se poser la question des
-deux bumps — réponse : pas maintenant.
+sur le tapis.
 
 ---
 
 ## 1. Kubernetes 1.36 (`kindest/node`)
 
-**Pin actuel** : `kindest/node:v1.35.0` (`kind-config.yaml`). CLI `kind` local en
-v0.31.0 ; la dernière release (v0.32.0) supporte/défaut sur Kubernetes 1.36.1.
+> **✅ LEVÉ (30/08/2026).** Cilium **1.20** est sorti en stable et sa matrice de
+> compatibilité officielle liste **K8s 1.33 → 1.36** en e2e-testé. Le projet
+> était déjà passé à `CILIUM_VERSION="1.20.1"`. NGF 2.6.0 (K8s 1.31+) et
+> kube-prometheus-stack 87.21.0 / Prom Operator v0.88.1 (K8s 1.25+) n'ont pas de
+> plafond. Aucun `kubeadmConfigPatches` dans `kind-config.yaml` → le passage
+> kubeadm v1beta3→v1beta4 de K8s 1.36 est transparent.
+>
+> Appliqué sur la branche `migration-helm-4` :
+> - `kind-config.yaml` : `kindest/node:v1.36.1@sha256:3489c7674813…` (+ marqueur `# renovate:`)
+> - `kind` CLI hôte : **v0.32.0 requis** (non versionné dans le dépôt)
+> - docs/bannières : refs KinD 0.30/0.31 → 0.32, Cilium 1.18 → 1.20
+>
+> **Reste à valider** (phase 5 Helm 4, reconstruction de cluster) : que le nœud
+> passe `Ready` avec Cilium 1.20.1 sur l'API 1.36 — c'est le risque ci-dessous.
 
-**Risque principal : Cilium n'est pas encore validé sur 1.36.** Vérifié sur la
-documentation officielle de compatibilité Cilium 1.19.6 (version stable
-correspondant au pin projet `CILIUM_VERSION=1.19.5`) : Kubernetes versions
-listées comme e2e-testées et garanties compatibles = **1.32 à 1.35**, pas
-1.36. La version qui ajouterait le support 1.36 serait Cilium 1.20, **encore
-en pré-release** (`v1.20.0-pre.0`) à ce jour — aucune version stable
-disponible.
+**Pin (avant bascule)** : `kindest/node:v1.35.0`. CLI `kind` local en v0.31.0 ;
+v0.32.0 défaut sur Kubernetes 1.36.1.
+
+**Risque principal (analyse du 23/07) : Cilium n'était pas encore validé sur
+1.36.** À l'époque, Cilium stable = 1.19.x (e2e-testé **1.32 à 1.35**), et
+Cilium 1.20 encore en pré-release. Ce n'est plus le cas (cf. encadré).
 
 **Pourquoi c'est bloquant et pas juste "à surveiller"** : `kind-config.yaml`
 a `disableDefaultCNI: true` + `kubeProxyMode: none` (Cilium remplace
@@ -100,17 +114,21 @@ Pour la recréation du cluster stagingkub (migration Alloy) : **rester sur
 `kindest/node:v1.35.0` et Helm 3.x**. Aucun changement de version de ces deux
 outils dans cette opération.
 
-**Mise à jour (30/08/2026)** : le volet Helm 4 a été détaché et exécuté
-séparément (cf. [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md)). Seule la montée
-`kindest/node` v1.36 reste en attente (bloquée par la compatibilité Cilium,
-cf. section 1).
+**Mise à jour (30/08/2026)** : décision révisée. Le volet Helm 4 a été exécuté
+(cf. [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md)). Le volet Kubernetes 1.36 est
+lui aussi débloqué (Cilium 1.20 stable) et **bundlé avec la reconstruction de
+cluster de la phase 5 Helm 4** — puisqu'il faut de toute façon détruire/recréer
+le cluster pour Helm 4, et que `kindest/node` ne se change pas autrement. La
+phase 5 est séquencée (cluster 1.36 + Cilium d'abord, `Ready` confirmé, puis
+reste des composants) pour garder les signaux de validation distincts.
 
-## 4. Fichiers concernés si ces montées sont faites plus tard
+## 4. Fichiers concernés (état sur la branche `migration-helm-4`)
 
 | Fichier | Impact |
 |---------|--------|
-| `kind-config.yaml` | Digest `kindest/node` (déjà suivi par le `customManager` Renovate générique, cf. `renovate.json`) |
-| `scripts/components/install-or-upgrade-cilium.sh` | `CILIUM_VERSION`, à monter en même temps que le bump Kubernetes |
+| `kind-config.yaml` | ✅ `kindest/node` → `v1.36.1@sha256:3489c76…` + marqueur `# renovate: datasource=docker depName=kindest/node` ajouté (le digest n'était **pas** réellement suivi avant, faute de ce marqueur) |
+| `scripts/components/install-or-upgrade-cilium.sh` | déjà en `CILIUM_VERSION="1.20.1"` (compatible K8s 1.36) — rien à faire |
+| `kind` CLI (poste hôte / doc) | v0.31.0 → **v0.32.0** (hors dépôt) |
 | ~~`scripts/components/install-or-upgrade-*.sh` (les 6) — `--atomic` → `--rollback-on-failure`~~ | ✅ fait (Helm 4, cf. `MIGRATION_HELM_4.md`) |
 | ~~`infra/jenkins-docker/Dockerfile.agent` — `HELM_VERSION`~~ | ✅ fait : `4.2.4` |
 | `docs/STAGINGKUB_REBUILD_PIPELINE.md` | Rappel : `kindest/node` reste hors périmètre de la mise à jour en place (`jenkins-infra-upgrader`), toute montée de version Kubernetes passe par une reconstruction complète du cluster |

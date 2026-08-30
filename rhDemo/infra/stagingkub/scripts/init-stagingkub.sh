@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Initialisation de l'environnement stagingkub (KinD)${NC}"
-echo -e "${BLUE}  CNI: Cilium 1.18 | Gateway: NGINX Gateway Fabric 2.6.0${NC}"
+echo -e "${BLUE}  K8s: 1.36.1 | CNI: Cilium 1.20 | Gateway: NGINX Gateway Fabric 2.6.0${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
 # Vérifier que KinD est installé

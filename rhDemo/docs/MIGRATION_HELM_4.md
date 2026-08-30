@@ -221,6 +221,15 @@ Légende : ✅ fait · ⬜ à faire · ➖ non retenue.
 - [ ] **Poste dev local** : passer `helm` (3.21.3) en 4.2.4 avant de rejouer les scripts localement.
 
 ### Phase 5 — Validation end-to-end ⬜ à faire (sur stagingkub, avec l'agent Helm 4)
+
+> **Bundlé avec la montée Kubernetes 1.35 → 1.36.1** (cf.
+> [`MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md`](MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)) :
+> la reconstruction de cluster ci-dessous se fait directement sur
+> `kindest/node:v1.36.1` avec le CLI `kind` 0.32+. **Séquencer** : créer le
+> cluster 1.36 + installer Cilium 1.20.1 **d'abord**, confirmer le nœud `Ready`
+> (pas de filet : `disableDefaultCNI` + `kubeProxyMode: none`), **puis** dérouler
+> le reste — une panne reste ainsi attribuable à l'un ou l'autre changement.
+
 - [ ] **Mise à jour en place, composant par composant** via
       `Jenkinsfile-Stagingkub-Upgrade-Deploy`, en commençant par **Cilium** (le
       plus risqué : `disableDefaultCNI: true` + `kubeProxyMode: none`, aucun
@@ -231,10 +240,12 @@ Légende : ✅ fait · ⬜ à faire · ➖ non retenue.
 - [ ] **`Jenkinsfile-CD` complet** : `helm upgrade --install rhdemo` sur la
       release existante (= `upgrade`, pas d'SSA par défaut) → smoke tests,
       HTTPRoute, app accessible.
-- [ ] **Recréation complète du cluster** sur une fenêtre dédiée (c'est LE
-      scénario où l'SSA-par-défaut de `helm install` s'active) :
-      `init-stagingkub.sh` + `install-observability.sh`. Valider :
-  - [ ] Cilium s'installe, le nœud passe `Ready`.
+- [ ] **Recréation complète du cluster** sur une fenêtre dédiée, **sur
+      `kindest/node:v1.36.1`** (kind CLI ≥ 0.32) — c'est aussi LE scénario où
+      l'SSA-par-défaut de `helm install` s'active : `init-stagingkub.sh` +
+      `install-observability.sh`. Valider :
+  - [ ] `kind create cluster` OK avec le CLI 0.32+ (config `v1alpha4` inchangée).
+  - [ ] Cilium 1.20.1 s'installe, le nœud passe `Ready` sur l'API 1.36.
   - [ ] NGF + CRDs Gateway API opérationnels.
   - [ ] kube-prometheus-stack (CRDs déjà en SSA explicite) OK.
   - [ ] loki, alloy, grafana OK.

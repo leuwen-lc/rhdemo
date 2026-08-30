@@ -96,7 +96,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 - Pour exécution en env de développement : PostgresSQL 18 ou supérieur, Keycloak 26.5 ou supérieur
 - Pour chaine CI/CD  Jenkins 2.555.1 avec un Docker Compose et un réseau dédié qui se connecte dynamiquement aux réseaux de ephemere et stagingkub. Uniquement un master pour l'instant (ressources limitées)
 - Pour déploiement env de ephemere (CI) : Docker Compose avec un réseau dédié.
-- Pour déploiement env staginkub (CD) : KinD 0.31+, Helm 4.2+, Kubectl v1.31+
+- Pour déploiement env staginkub (CD) : KinD 0.32+, Helm 4.2+, Kubectl v1.31+
 
 ## Limites
 
@@ -137,7 +137,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 ### Utliser la chaine CD et déployer dans l'environnement stagingkub
 
 - Installez et utilisez la chaine CI (ci-dessus)
-- Installez Kind 0.31 et supérieur et des versions récentes kubectl et helm
+- Installez Kind 0.32 et supérieur et des versions récentes kubectl et helm
 - Suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
 - Lancez le pipelne rhDemo/Jenkinsfile-CD
 
@@ -147,6 +147,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 Infrastructure :
 - Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh` de stagingkub, `--dry-run=client` explicité dans `test-deploy-helm.sh` ; point de vigilance server-side apply par défaut à l'installation neuve (voir rhDemo/docs/MIGRATION_HELM_4.md)
+- Montée stagingkub Kubernetes 1.35 → 1.36.1 (`kindest/node`, KinD CLI 0.32+), débloquée par Cilium 1.20 (matrice officielle K8s 1.33→1.36) ; appliquée lors de la reconstruction de cluster de la migration Helm 4 (voir rhDemo/docs/MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)
 
 ### Version 1.1.9
 

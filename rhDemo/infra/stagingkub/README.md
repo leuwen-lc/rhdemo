@@ -24,8 +24,9 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 
 | Composant | Version | Description |
 |-----------|---------|-------------|
-| **KinD** | 0.30+ | Cluster Kubernetes local |
-| **Cilium** | 1.18.6 | CNI avec kube-proxy replacement (eBPF) |
+| **KinD** | 0.32+ | Cluster Kubernetes local (node image K8s 1.36.1) |
+| **Kubernetes** | 1.36.1 | `kindest/node` pinné par digest dans `kind-config.yaml` |
+| **Cilium** | 1.20.1 | CNI avec kube-proxy replacement (eBPF) |
 | **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
 | **PostgreSQL** | 16-alpine | Base de données |
 | **Keycloak** | 26.4.2 | IAM / OAuth2 |
@@ -64,7 +65,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    helm version
    ```
 
-4. **KinD** (version 0.30+)
+4. **KinD** (version 0.32+ — requis pour l'image de nœud Kubernetes 1.36)
    ```bash
    kind version
    ```
@@ -72,7 +73,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    Installation KinD :
    ```bash
    # Linux
-   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64
+   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
    chmod +x ./kind
    sudo mv ./kind /usr/local/bin/kind
 
@@ -115,7 +116,7 @@ sudo sysctl --system
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Cluster KinD "rhdemo"                    │
-│                    CNI: Cilium 1.18 (eBPF)                  │
+│              CNI: Cilium 1.20 (eBPF) — K8s 1.36.1           │
 ├─────────────────────────────────────────────────────────────┤
 │  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
@@ -215,7 +216,7 @@ Ce script :
 - ✅ Vérifie les prérequis système (limites inotify)
 - ✅ Configure le registry Docker local
 - ✅ Crée le cluster KinD `rhdemo` avec `kind-config.yaml`
-- ✅ Installe **Cilium 1.18** (CNI avec kube-proxy replacement)
+- ✅ Installe **Cilium 1.20** (CNI avec kube-proxy replacement)
 - ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Crée les secrets Kubernetes (depuis SOPS)

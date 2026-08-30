@@ -77,14 +77,24 @@ rm -f "${NGF_CRDS_TMP}"
 # sur un cluster vierge il n'existe pas encore.
 kubectl create namespace "${NGF_NAMESPACE}" 2>/dev/null || true
 
+# NodePorts du Service data-plane : clé `nginx.service.nodePorts[]` du chart
+# 2.6.0 (liste de {port = NodePort exposé, listenerPort = port du listener
+# Gateway associé}) → rendue dans NginxProxy.spec.kubernetes.service.nodePorts.
+# L'ancienne clé `nginx.service.ports[].nodePort` n'existe plus : sous Helm 3
+# (apply client-side) le champ inconnu était silencieusement élagué par le
+# schéma structurel de la CRD ; sous Helm 4 (server-side apply par défaut à
+# l'installation) il fait échouer tout le release (« field not declared in
+# schema »). 31792→listener 80, 32616→listener 443 (cf. extraPortMappings de
+# kind-config.yaml).
+
 rbac_preflight_check ngf "${NGF_NAMESPACE}" oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --version "${NGF_VERSION}" \
     --set nginx.service.type=NodePort \
     --set nginx.service.externalTrafficPolicy=Local \
-    --set 'nginx.service.ports[0].port=80' \
-    --set 'nginx.service.ports[0].nodePort=31792' \
-    --set 'nginx.service.ports[1].port=443' \
-    --set 'nginx.service.ports[1].nodePort=32616' || exit 1
+    --set 'nginx.service.nodePorts[0].port=31792' \
+    --set 'nginx.service.nodePorts[0].listenerPort=80' \
+    --set 'nginx.service.nodePorts[1].port=32616' \
+    --set 'nginx.service.nodePorts[1].listenerPort=443' || exit 1
 
 helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --version "${NGF_VERSION}" \
@@ -92,10 +102,10 @@ helm upgrade --install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --namespace "${NGF_NAMESPACE}" \
     --set nginx.service.type=NodePort \
     --set nginx.service.externalTrafficPolicy=Local \
-    --set 'nginx.service.ports[0].port=80' \
-    --set 'nginx.service.ports[0].nodePort=31792' \
-    --set 'nginx.service.ports[1].port=443' \
-    --set 'nginx.service.ports[1].nodePort=32616' \
+    --set 'nginx.service.nodePorts[0].port=31792' \
+    --set 'nginx.service.nodePorts[0].listenerPort=80' \
+    --set 'nginx.service.nodePorts[1].port=32616' \
+    --set 'nginx.service.nodePorts[1].listenerPort=443' \
     ${HELM_MODE_ARGS}
 
 if [ "$HELM_DRY_RUN" = "true" ]; then

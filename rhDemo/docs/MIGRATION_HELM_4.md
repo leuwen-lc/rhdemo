@@ -240,6 +240,17 @@ Légende : ✅ fait · ⬜ à faire · ➖ non retenue.
 >    `[apiVersion not set, kind not set]`. Corrigé dans `install-or-upgrade-ngf.sh` :
 >    `sed -n '/^---$/,$p'` pour ne garder que le flux de manifestes.
 >    kube-prometheus-stack non touché (chart de dépôt HTTP classique, pas d'OCI).
+>
+> 3. **SSA-par-défaut de `helm install` (§3.2) — matérialisé sur NGF** — l'install
+>    NGF passait `--set nginx.service.ports[].nodePort=…`, clé **inexistante** dans
+>    le chart 2.6.0 (renommée `nginx.service.nodePorts[]` = `{port, listenerPort}`).
+>    Sous Helm 3 (apply client-side) le champ inconnu était silencieusement élagué
+>    par le schéma structurel de la CRD `NginxProxy` — le NodePort n'était donc
+>    **jamais réellement appliqué**. Sous Helm 4 (server-side apply par défaut à
+>    l'installation) : `server-side apply failed … .spec.kubernetes.service.ports:
+>    field not declared in schema` → release entière annulée par
+>    `--rollback-on-failure`. Corrigé : `--set nginx.service.nodePorts[0]={port:31792,listenerPort:80}`,
+>    `nodePorts[1]={port:32616,listenerPort:443}` (validé `helm upgrade --dry-run=server`).
 
 > **Bundlé avec la montée Kubernetes 1.35 → 1.36.4** (cf.
 > [`MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md`](MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)) :

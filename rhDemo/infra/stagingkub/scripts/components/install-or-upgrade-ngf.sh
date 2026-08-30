@@ -69,6 +69,10 @@ fi
 rm -f "${NGF_CRDS_TMP}"
 
 # ─── 3. Release Helm NGF (ou validation dry-run=server) ───
+# Namespace créé avant le préflight RBAC (cf. install-or-upgrade-cilium.sh) :
+# sur un cluster vierge il n'existe pas encore.
+kubectl create namespace "${NGF_NAMESPACE}" 2>/dev/null || true
+
 rbac_preflight_check ngf "${NGF_NAMESPACE}" oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
     --version "${NGF_VERSION}" \
     --set nginx.service.type=NodePort \

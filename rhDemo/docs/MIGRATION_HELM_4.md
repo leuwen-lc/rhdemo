@@ -220,7 +220,18 @@ Légende : ✅ fait · ⬜ à faire · ➖ non retenue.
 - [ ] **Rebuild + push de l'image agent Jenkins**, mise à jour de la référence utilisée (opération infra, hors branche).
 - [ ] **Poste dev local** : passer `helm` (3.21.3) en 4.2.4 avant de rejouer les scripts localement.
 
-### Phase 5 — Validation end-to-end ⬜ à faire (sur stagingkub, avec l'agent Helm 4)
+### Phase 5 — Validation end-to-end 🚧 en cours (sur stagingkub, avec l'agent Helm 4)
+
+> **Bug trouvé et corrigé pendant la validation (30/08/2026)** : sur une
+> reconstruction depuis un cluster vierge, `rbac_preflight_check` échouait
+> (`namespaces "cilium-system"/"cilium-secrets" not found`) — le
+> `kubectl apply --dry-run=server` des Role/RoleBinding namespacés du chart
+> Cilium tourne avant que le `helm install --create-namespace` n'ait créé le
+> namespace. Corrigé : `rbac-preflight-check.sh` tolère désormais les erreurs
+> « namespace not found » (skip doux, l'anti-élévation RBAC native s'applique
+> toujours au apply réel) et ne fait échouer que sur les autres erreurs ;
+> `install-or-upgrade-cilium.sh` / `-ngf.sh` créent leur namespace avant le
+> préflight, comme le font déjà loki/alloy/grafana/kube-prometheus-stack.
 
 > **Bundlé avec la montée Kubernetes 1.35 → 1.36.1** (cf.
 > [`MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md`](MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)) :

@@ -49,10 +49,32 @@ rbac_preflight_check() {
     fi
 
     echo -e "${YELLOW}  - Préflight RBAC : vérification que jenkins-infra-upgrader détient déjà toutes les règles Role/ClusterRole rendues par ce chart...${NC}"
-    if ! kubectl apply --server-side --dry-run=server --force-conflicts -f "$manifest" >/dev/null; then
-        echo -e "${RED}❌ Préflight RBAC échoué : ce chart requiert des permissions Role/ClusterRole que jenkins-infra-upgrader ne détient pas encore.${NC}"
-        echo -e "${YELLOW}   Mettez à jour rhDemo/infra/stagingkub/rbac/jenkins-infra-upgrader-clusterrole.yaml (ou le Role namespacé concerné) avant de rejouer.${NC}"
-        return 1
+
+    local apply_err other_err
+    apply_err="$(kubectl apply --server-side --dry-run=server --force-conflicts -f "$manifest" 2>&1 >/dev/null || true)"
+
+    if [ -z "$apply_err" ]; then
+        echo -e "${GREEN}  ✓ Préflight RBAC OK${NC}"
+        return 0
     fi
-    echo -e "${GREEN}  ✓ Préflight RBAC OK${NC}"
+
+    # Le seul échec que ce garde-fou doit intercepter est l'anti-élévation RBAC
+    # native de Kubernetes (« attempting to grant RBAC permissions not currently
+    # held »). Sur une reconstruction complète depuis un cluster vierge
+    # (init-stagingkub.sh), les namespaces cibles namespacés du chart n'existent
+    # pas encore → « namespaces "X" not found » : ce n'est pas un problème de
+    # droits, le `helm upgrade --install --create-namespace` qui suit les créera,
+    # et le contrôle anti-élévation natif s'appliquera de toute façon au apply
+    # réel. On ne fait donc échouer le préflight que sur les AUTRES erreurs.
+    other_err="$(printf '%s\n' "$apply_err" | grep -vE '^[[:space:]]*$' | grep -vE 'namespaces?\s+"[^"]+"\s+not found' || true)"
+
+    if [ -z "$other_err" ]; then
+        echo -e "${YELLOW}  ⚠ Préflight RBAC ignoré : namespace(s) cible(s) pas encore créé(s) (reconstruction complète). Le contrôle anti-élévation RBAC natif s'appliquera au « helm upgrade » réel.${NC}"
+        return 0
+    fi
+
+    echo -e "${RED}❌ Préflight RBAC échoué : ce chart requiert des permissions Role/ClusterRole que jenkins-infra-upgrader ne détient pas encore (ou erreur inattendue de kubectl apply --dry-run=server).${NC}"
+    echo -e "${YELLOW}   Mettez à jour rhDemo/infra/stagingkub/rbac/jenkins-infra-upgrader-clusterrole.yaml (ou le Role namespacé concerné) avant de rejouer.${NC}"
+    printf '%s\n' "$other_err" | sed 's/^/     /'
+    return 1
 }

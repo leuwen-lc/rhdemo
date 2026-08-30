@@ -137,6 +137,12 @@ else
     HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 5m"
 fi
 
+# Namespace créé avant le préflight RBAC (comme loki/alloy/grafana/kube-prometheus-stack) :
+# sur un cluster vierge il n'existe pas encore et `kubectl apply --dry-run=server`
+# des Role/RoleBinding namespacés du chart échouerait sur « namespace not found ».
+# Le chart Cilium gère lui-même le namespace `cilium-secrets` (toléré par le préflight).
+kubectl create namespace "${CILIUM_NAMESPACE}" 2>/dev/null || true
+
 rbac_preflight_check cilium "${CILIUM_NAMESPACE}" cilium/cilium --version "${CILIUM_VERSION}" \
     --set kubeProxyReplacement=true \
     --set k8sServiceHost="${CILIUM_K8S_API_SERVER}" \

@@ -45,7 +45,7 @@ if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
     KUBECTL_APPLY_ARGS="--server-side --force-conflicts"
-    HELM_MODE_ARGS="--atomic --wait --timeout 5m"
+    HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 5m"
 fi
 
 # ─── 1. CRDs Gateway API (vendorées) ───

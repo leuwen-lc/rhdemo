@@ -135,7 +135,7 @@ empêche nativement l'auto-élévation de privilèges via RBAC (verbe spécial
 `escalate`) — `jenkins-infra-upgrader` ne pourra jamais réécrire les règles
 du ClusterRole `cilium` pour lui accorder des droits qu'il ne détient pas
 déjà lui-même. Si une future version de Cilium a besoin d'étendre son propre
-ClusterRole, l'upgrade échoue proprement (rollback `--atomic`) plutôt que de
+ClusterRole, l'upgrade échoue proprement (rollback `--rollback-on-failure`) plutôt que de
 réussir silencieusement avec des droits élargis. Conséquence pour
 `cilium-pre-flight` : sa première création (par version majeure/mineure
 introduisant ce garde-fou) reste une opération admin ponctuelle, comme pour

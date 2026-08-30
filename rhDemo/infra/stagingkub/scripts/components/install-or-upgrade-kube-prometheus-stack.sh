@@ -47,7 +47,7 @@ if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
     KUBECTL_APPLY_ARGS="--server-side --force-conflicts"
-    HELM_MODE_ARGS="--atomic --wait --timeout 10m"
+    HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 10m"
 fi
 
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true

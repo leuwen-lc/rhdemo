@@ -504,7 +504,7 @@ jobs:
 
         ServiceAccount dédié jenkins-infra-upgrader (credential
         kubeconfig-stagingkub-infra-upgrader), distinct de jenkins-deployer/RHDemo-CD.
-        Rollback automatique porté par --atomic dans chaque script composant.
+        Rollback automatique porté par --rollback-on-failure dans chaque script composant.
 
         📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md''')
 

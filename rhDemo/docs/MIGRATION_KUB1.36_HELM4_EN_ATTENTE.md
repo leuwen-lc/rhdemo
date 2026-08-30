@@ -54,9 +54,15 @@ Kubernetes 1.36 dans sa matrice de compatibilité officielle.
 
 ## 2. Helm 4
 
-**CLI actuel** : `helm v3.19.2` en local ; l'image Jenkins agent
-(`Dockerfile.agent`) pin `HELM_VERSION=3.20.0` (léger écart déjà existant,
-sans rapport avec ce document).
+> **✅ RÉALISÉE (branche `migration-helm-4`, cible v1.1.10).** Le plan
+> d'exécution complet et le suivi sont dans
+> [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md). L'agent Jenkins est passé à
+> `HELM_VERSION=4.2.4`, les 6 scripts composants utilisent
+> `--rollback-on-failure`. La section ci-dessous est conservée pour l'historique
+> de l'analyse de risque.
+
+**CLI au moment de l'analyse (23/07/2026)** : `helm v3.19.2` en local ; image
+Jenkins agent `HELM_VERSION=3.20.0`.
 
 **Helm 3 n'est pas EOL** : dernière feature release prévue le 09/09/2026,
 patchs de sécurité jusqu'à février 2027. Rester/monter dans la branche 3.x
@@ -94,12 +100,17 @@ Pour la recréation du cluster stagingkub (migration Alloy) : **rester sur
 `kindest/node:v1.35.0` et Helm 3.x**. Aucun changement de version de ces deux
 outils dans cette opération.
 
+**Mise à jour (30/08/2026)** : le volet Helm 4 a été détaché et exécuté
+séparément (cf. [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md)). Seule la montée
+`kindest/node` v1.36 reste en attente (bloquée par la compatibilité Cilium,
+cf. section 1).
+
 ## 4. Fichiers concernés si ces montées sont faites plus tard
 
 | Fichier | Impact |
 |---------|--------|
 | `kind-config.yaml` | Digest `kindest/node` (déjà suivi par le `customManager` Renovate générique, cf. `renovate.json`) |
 | `scripts/components/install-or-upgrade-cilium.sh` | `CILIUM_VERSION`, à monter en même temps que le bump Kubernetes |
-| `scripts/components/install-or-upgrade-*.sh` (les 6) | `--atomic` → `--rollback-on-failure` si passage à Helm 4 |
-| `infra/jenkins-docker/Dockerfile.agent` | `HELM_VERSION` du CLI embarqué dans les agents Jenkins |
+| ~~`scripts/components/install-or-upgrade-*.sh` (les 6) — `--atomic` → `--rollback-on-failure`~~ | ✅ fait (Helm 4, cf. `MIGRATION_HELM_4.md`) |
+| ~~`infra/jenkins-docker/Dockerfile.agent` — `HELM_VERSION`~~ | ✅ fait : `4.2.4` |
 | `docs/STAGINGKUB_REBUILD_PIPELINE.md` | Rappel : `kindest/node` reste hors périmètre de la mise à jour en place (`jenkins-infra-upgrader`), toute montée de version Kubernetes passe par une reconstruction complète du cluster |

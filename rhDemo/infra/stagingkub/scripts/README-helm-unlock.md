@@ -90,9 +90,9 @@ Pour éviter les verrous Helm :
 
 ### ✅ Bonnes pratiques :
 
-1. **Toujours utiliser `--atomic`** : Rollback automatique en cas d'échec
+1. **Toujours utiliser `--rollback-on-failure`** (ex-`--atomic`, renommé en Helm 4) : Rollback automatique en cas d'échec
    ```bash
-   helm upgrade --install myapp ./chart --atomic
+   helm upgrade --install myapp ./chart --rollback-on-failure
    ```
 
 2. **Définir un timeout raisonnable** : Évite les attentes infinies

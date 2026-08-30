@@ -42,7 +42,7 @@ fi
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
-    HELM_MODE_ARGS="--atomic --wait --timeout 3m"
+    HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 3m"
 fi
 
 # --force-update : voir install-or-upgrade-alloy.sh (alias "grafana" partagé

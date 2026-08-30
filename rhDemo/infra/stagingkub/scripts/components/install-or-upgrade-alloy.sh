@@ -10,8 +10,8 @@ set -e
 # namespaces/endpoints/endpointslices/ingresses/services pour la découverte
 # de service), CRD podlogs.monitoring.grafana.com désactivée (crds.create:
 # false dans alloy-values.yaml, non utilisée par la config statique
-# ci-dessous), aucun webhook d'admission. Simple `helm upgrade --atomic
-# --wait` suffit, sans préflight ni contrainte de saut de version.
+# ci-dessous), aucun webhook d'admission. Simple `helm upgrade
+# --rollback-on-failure --wait` suffit, sans préflight ni contrainte de saut de version.
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +39,7 @@ echo -e "${YELLOW}▶ Installation/mise à jour d'Alloy ${ALLOY_VERSION}...${NC}
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
-    HELM_MODE_ARGS="--atomic --wait --timeout 2m"
+    HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 2m"
 fi
 
 # --force-update : l'alias "grafana" est aussi utilisé par install-or-upgrade-loki.sh

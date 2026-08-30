@@ -121,7 +121,7 @@ fi
 # le cluster KinD n'a qu'un seul nœud control-plane — la 2e réplique ne peut
 # jamais se scheduler (conflit de port), donc `--wait` attend une
 # disponibilité 2/2 qui n'arrivera jamais et finit par expirer (vérifié lors
-# de la première exécution réelle : timeout 5 min, rollback --atomic propre).
+# de la première exécution réelle : timeout 5 min, rollback --rollback-on-failure propre).
 #
 # ─── operator.affinity=null : même classe de problème rencontrée sur le
 # gateway Loki (cf. install-or-upgrade-loki.sh) — le chart pose par défaut un
@@ -134,7 +134,7 @@ fi
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"
 else
-    HELM_MODE_ARGS="--atomic --wait --timeout 5m"
+    HELM_MODE_ARGS="--rollback-on-failure --wait --timeout 5m"
 fi
 
 rbac_preflight_check cilium "${CILIUM_NAMESPACE}" cilium/cilium --version "${CILIUM_VERSION}" \

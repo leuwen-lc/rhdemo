@@ -573,7 +573,7 @@ RENOVATE_SCAN_EOF
                                     // ci-dessus). N'échoue pas la boucle Renovate si ce déclenchement rate :
                                     // la PR est déjà mergée, un échec de déploiement est de la responsabilité
                                     // du job RHDemo-Stagingkub-Upgrade-Deploy (qui fait son propre rollback
-                                    // --atomic), pas de celle de Jenkinsfile-Renovate.
+                                    // --rollback-on-failure), pas de celle de Jenkinsfile-Renovate.
                                     if (isInfraComponentPr && env.RENOVATE_TARGET_COMPONENT) {
                                         try {
                                             build(

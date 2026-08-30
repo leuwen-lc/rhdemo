@@ -87,7 +87,7 @@ resultsCache:
 # le pod surplus du rolling update (maxSurge) ne peut jamais être scheduled
 # à côté de l'ancien pod tant que cette contrainte est active — deadlock
 # vécu en conditions réelles (pod loki-gateway restant Pending indéfiniment,
-# provoquant le timeout puis le rollback --atomic en cascade).
+# provoquant le timeout puis le rollback --rollback-on-failure en cascade).
 # IMPORTANT : `null` explicite, pas `{}` — une carte vide ne supprime pas un
 # champ par défaut du chart lors du merge des values Helm (deep-merge : {}
 # n'apporte aucune clé à substituer, donc le défaut du chart survit tel quel

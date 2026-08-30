@@ -39,7 +39,7 @@ prometheusOperator:
   # par admissionWebhooks.enabled: false ci-dessus. Sans ce flag, le Secret
   # "prometheus-kube-prometheus-admission" que le Deployment monte n'existe
   # jamais : le pod reste bloqué en ContainerCreating (FailedMount) jusqu'au
-  # timeout Helm, --atomic déclenche alors un rollback.
+  # timeout Helm, --rollback-on-failure déclenche alors un rollback.
   #
   # Impact sécurité de la désactivation (analyse actée) :
   #   - Ne concerne que /healthz (probes kubelet) et /metrics (scrape

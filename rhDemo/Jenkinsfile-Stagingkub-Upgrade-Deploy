@@ -21,7 +21,7 @@
  *     `kubeconfig-stagingkub-infra-upgrader`), JAMAIS `kubeconfig-stagingkub`
  *     (réservé à RHDemo-CD / jenkins-deployer).
  *   - Agent éphémère standard (pas de docker.sock, pas de `kind` installé).
- *   - Rollback automatique porté par `--atomic` dans chaque script composant
+ *   - Rollback automatique porté par `--rollback-on-failure` dans chaque script composant
  *     (rhDemo/infra/stagingkub/scripts/components/).
  *
  * 📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md
@@ -222,13 +222,13 @@ pipeline {
         }
         failure {
             script {
-                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --atomic dans le script composant."
+                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --rollback-on-failure dans le script composant."
                 echo "   Consultez les logs ci-dessus pour le détail de l'échec."
 
                 try {
                     emailext to: env.NOTIFICATION_EMAIL,
                              subject: "❌ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : échec (${env.TARGET_COMPONENT ?: 'N/A'})",
-                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback automatique déclenché par --atomic dans le script composant.\nConsultez les logs : ${env.BUILD_URL}console"
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback automatique déclenché par --rollback-on-failure dans le script composant.\nConsultez les logs : ${env.BUILD_URL}console"
                 } catch (Exception e) {
                     echo "⚠️  Notification email non envoyée : ${e.message}"
                 }

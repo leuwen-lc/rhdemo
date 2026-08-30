@@ -23,7 +23,7 @@
 # Prérequis:
 #   - Cluster KinD stagingkub démarré
 #   - kubectl configuré (context: kind-rhdemo)
-#   - Helm 3 installé
+#   - Helm 4 installé (flag --rollback-on-failure, ex-Helm 3 --atomic)
 # ═══════════════════════════════════════════════════════════════
 
 set -e

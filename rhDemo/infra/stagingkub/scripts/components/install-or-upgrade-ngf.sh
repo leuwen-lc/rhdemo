@@ -59,8 +59,12 @@ kubectl apply ${KUBECTL_APPLY_ARGS} -f "${CRD_MANIFEST}"
 echo -e "${GREEN}  ✓ CRDs Gateway API à jour (manifeste vendoré ${CRD_MANIFEST})${NC}"
 
 # ─── 2. CRDs propres à NGF (gateway.nginx.org), extraites du chart ───
+# Helm 4 : pour un chart OCI, `helm show crds` préfixe stdout de lignes
+# « Pulled: ... » / « Digest: ... » (Helm 3 les envoyait sur stderr). On ne
+# garde donc que le flux de manifestes à partir du premier séparateur `---`.
 NGF_CRDS_TMP="$(mktemp)"
-if helm show crds oci://ghcr.io/nginx/charts/nginx-gateway-fabric --version "${NGF_VERSION}" > "${NGF_CRDS_TMP}" 2>/dev/null && [ -s "${NGF_CRDS_TMP}" ]; then
+if helm show crds oci://ghcr.io/nginx/charts/nginx-gateway-fabric --version "${NGF_VERSION}" 2>/dev/null \
+        | sed -n '/^---$/,$p' > "${NGF_CRDS_TMP}" && [ -s "${NGF_CRDS_TMP}" ]; then
     kubectl apply ${KUBECTL_APPLY_ARGS} -f "${NGF_CRDS_TMP}"
     echo -e "${GREEN}  ✓ CRDs NGF (gateway.nginx.org) à jour${NC}"
 else

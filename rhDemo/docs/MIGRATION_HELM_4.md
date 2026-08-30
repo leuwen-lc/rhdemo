@@ -222,16 +222,24 @@ Légende : ✅ fait · ⬜ à faire · ➖ non retenue.
 
 ### Phase 5 — Validation end-to-end 🚧 en cours (sur stagingkub, avec l'agent Helm 4)
 
-> **Bug trouvé et corrigé pendant la validation (30/08/2026)** : sur une
-> reconstruction depuis un cluster vierge, `rbac_preflight_check` échouait
-> (`namespaces "cilium-system"/"cilium-secrets" not found`) — le
-> `kubectl apply --dry-run=server` des Role/RoleBinding namespacés du chart
-> Cilium tourne avant que le `helm install --create-namespace` n'ait créé le
-> namespace. Corrigé : `rbac-preflight-check.sh` tolère désormais les erreurs
-> « namespace not found » (skip doux, l'anti-élévation RBAC native s'applique
-> toujours au apply réel) et ne fait échouer que sur les autres erreurs ;
-> `install-or-upgrade-cilium.sh` / `-ngf.sh` créent leur namespace avant le
-> préflight, comme le font déjà loki/alloy/grafana/kube-prometheus-stack.
+> **Bugs trouvés et corrigés pendant la validation (30/08/2026)** :
+>
+> 1. **Préflight RBAC sur cluster vierge** — `rbac_preflight_check` échouait
+>    (`namespaces "cilium-system"/"cilium-secrets" not found`) : le
+>    `kubectl apply --dry-run=server` des Role/RoleBinding namespacés du chart
+>    Cilium tourne avant que le `helm install --create-namespace` n'ait créé le
+>    namespace. Corrigé : `rbac-preflight-check.sh` tolère les erreurs
+>    « namespace not found » (skip doux, l'anti-élévation RBAC native s'applique
+>    toujours au apply réel), échec dur conservé pour le reste ;
+>    `install-or-upgrade-cilium.sh` / `-ngf.sh` créent leur namespace avant le
+>    préflight, comme loki/alloy/grafana/kube-prometheus-stack.
+>
+> 2. **`helm show crds` sur chart OCI en Helm 4** — pour `oci://…/nginx-gateway-fabric`,
+>    Helm 4 préfixe **stdout** de lignes `Pulled: …` / `Digest: …` (Helm 3 les
+>    mettait sur stderr) → `kubectl apply -f` du fichier échouait avec
+>    `[apiVersion not set, kind not set]`. Corrigé dans `install-or-upgrade-ngf.sh` :
+>    `sed -n '/^---$/,$p'` pour ne garder que le flux de manifestes.
+>    kube-prometheus-stack non touché (chart de dépôt HTTP classique, pas d'OCI).
 
 > **Bundlé avec la montée Kubernetes 1.35 → 1.36.4** (cf.
 > [`MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md`](MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)) :

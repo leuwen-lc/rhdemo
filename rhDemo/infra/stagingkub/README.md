@@ -24,8 +24,8 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 
 | Composant | Version | Description |
 |-----------|---------|-------------|
-| **KinD** | 0.32+ | Cluster Kubernetes local (node image K8s 1.36.1) |
-| **Kubernetes** | 1.36.1 | `kindest/node` pinné par digest dans `kind-config.yaml` |
+| **KinD** | 0.33+ | Cluster Kubernetes local (node image K8s 1.36.4) |
+| **Kubernetes** | 1.36.4 | `kindest/node` pinné par digest dans `kind-config.yaml` (1.37 exclu : hors matrice Cilium 1.20) |
 | **Cilium** | 1.20.1 | CNI avec kube-proxy replacement (eBPF) |
 | **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
 | **PostgreSQL** | 16-alpine | Base de données |
@@ -65,7 +65,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    helm version
    ```
 
-4. **KinD** (version 0.32+ — requis pour l'image de nœud Kubernetes 1.36)
+4. **KinD** (version 0.33+ — requis pour l'image de nœud Kubernetes 1.36.4)
    ```bash
    kind version
    ```
@@ -73,7 +73,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    Installation KinD :
    ```bash
    # Linux
-   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
+   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
    chmod +x ./kind
    sudo mv ./kind /usr/local/bin/kind
 
@@ -116,7 +116,7 @@ sudo sysctl --system
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Cluster KinD "rhdemo"                    │
-│              CNI: Cilium 1.20 (eBPF) — K8s 1.36.1           │
+│              CNI: Cilium 1.20 (eBPF) — K8s 1.36.4           │
 ├─────────────────────────────────────────────────────────────┤
 │  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │

@@ -26,15 +26,20 @@ sur le tapis.
 > kubeadm v1beta3→v1beta4 de K8s 1.36 est transparent.
 >
 > Appliqué sur la branche `migration-helm-4` :
-> - `kind-config.yaml` : `kindest/node:v1.36.1@sha256:3489c7674813…` (+ marqueur `# renovate:`)
-> - `kind` CLI hôte : **v0.32.0 requis** (non versionné dans le dépôt)
-> - docs/bannières : refs KinD 0.30/0.31 → 0.32, Cilium 1.18 → 1.20
+> - `kind-config.yaml` : `kindest/node:v1.36.4@sha256:099e049362a1…` (+ marqueur `# renovate:`)
+> - `kind` CLI hôte : **v0.33.0 requis** (non versionné dans le dépôt)
+> - docs/bannières : refs KinD 0.30/0.31 → 0.33, Cilium 1.18 → 1.20
+>
+> **K8s 1.37 écarté** : `kindest/node:v1.37.0` est publié avec kind 0.33.0, mais
+> 1.37 est **hors** de la matrice de compatibilité officielle Cilium 1.20
+> (1.33 → 1.36) et Cilium 1.21 n'est qu'en `1.21.0-dev`. On reste donc sur le
+> dernier patch 1.36 (`v1.36.4`).
 >
 > **Reste à valider** (phase 5 Helm 4, reconstruction de cluster) : que le nœud
 > passe `Ready` avec Cilium 1.20.1 sur l'API 1.36 — c'est le risque ci-dessous.
 
 **Pin (avant bascule)** : `kindest/node:v1.35.0`. CLI `kind` local en v0.31.0 ;
-v0.32.0 défaut sur Kubernetes 1.36.1.
+kind v0.33.0 défaut sur Kubernetes 1.37.0 (on force `v1.36.4`).
 
 **Risque principal (analyse du 23/07) : Cilium n'était pas encore validé sur
 1.36.** À l'époque, Cilium stable = 1.19.x (e2e-testé **1.32 à 1.35**), et
@@ -126,9 +131,9 @@ reste des composants) pour garder les signaux de validation distincts.
 
 | Fichier | Impact |
 |---------|--------|
-| `kind-config.yaml` | ✅ `kindest/node` → `v1.36.1@sha256:3489c76…` + marqueur `# renovate: datasource=docker depName=kindest/node` ajouté (le digest n'était **pas** réellement suivi avant, faute de ce marqueur) |
-| `scripts/components/install-or-upgrade-cilium.sh` | déjà en `CILIUM_VERSION="1.20.1"` (compatible K8s 1.36) — rien à faire |
-| `kind` CLI (poste hôte / doc) | v0.31.0 → **v0.32.0** (hors dépôt) |
+| `kind-config.yaml` | ✅ `kindest/node` → `v1.36.4@sha256:099e0493…` + marqueur `# renovate: datasource=docker depName=kindest/node` ajouté (le digest n'était **pas** réellement suivi avant, faute de ce marqueur) |
+| `scripts/components/install-or-upgrade-cilium.sh` | déjà en `CILIUM_VERSION="1.20.1"` (compatible K8s 1.33→1.36) — rien à faire |
+| `kind` CLI (poste hôte / doc) | v0.31.0 → **v0.33.0** (hors dépôt) |
 | ~~`scripts/components/install-or-upgrade-*.sh` (les 6) — `--atomic` → `--rollback-on-failure`~~ | ✅ fait (Helm 4, cf. `MIGRATION_HELM_4.md`) |
 | ~~`infra/jenkins-docker/Dockerfile.agent` — `HELM_VERSION`~~ | ✅ fait : `4.2.4` |
 | `docs/STAGINGKUB_REBUILD_PIPELINE.md` | Rappel : `kindest/node` reste hors périmètre de la mise à jour en place (`jenkins-infra-upgrader`), toute montée de version Kubernetes passe par une reconstruction complète du cluster |

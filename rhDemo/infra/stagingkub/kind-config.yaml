@@ -2,7 +2,8 @@
 # Permet la persistance des données PostgreSQL via extraMounts
 # Configure l'accès HTTPS au registry Docker local
 # Utilise Cilium 1.20 comme CNI (remplace kindnet)
-# Node image K8s 1.36.1 : nécessite kind CLI >= v0.32.0
+# Node image K8s 1.36.4 : nécessite kind CLI >= v0.33.0
+# (K8s 1.37 exclu : hors matrice de compatibilité officielle Cilium 1.20 = 1.33→1.36)
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 
@@ -24,7 +25,7 @@ nodes:
 - role: control-plane
   # Liste des images disponibles : https://github.com/kubernetes-sigs/kind/releases
   # renovate: datasource=docker depName=kindest/node
-  image: kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5
+  image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
   extraMounts:
   # Montage pour persistance PostgreSQL rhdemo
   - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo

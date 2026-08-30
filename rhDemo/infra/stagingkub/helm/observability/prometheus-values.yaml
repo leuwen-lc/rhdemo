@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 # Configuration Prometheus pour stagingkub
 # ═══════════════════════════════════════════════════════════════
-# Chart: prometheus-community/kube-prometheus-stack 87.16.1 (Prometheus Operator v0.88.1)
+# Chart: prometheus-community/kube-prometheus-stack 88.5.4 (Prometheus Operator v0.93.1)
 # Version figée dans install-observability.sh
 #
 # Installation via kube-prometheus-stack (Prometheus + Operator + Grafana)

@@ -2,7 +2,7 @@
 # PLUGINS JENKINS - Liste verrouillée pour RHDemo CI/CD
 # ═══════════════════════════════════════════════════════════════════
 #
-# Versions pinnées depuis l'instance Jenkins le 2026-07-22.
+# Versions pinnées depuis l'instance Jenkins le 2026-08-30.
 # Pour mettre à jour : ./start-jenkins.sh --clean-plugins
 # Puis régénérer avec : docker compose exec jenkins jenkins-plugin-cli --list
 #
@@ -16,7 +16,7 @@
 git:5.10.1                                          # checkout scm
 workflow-aggregator:608.v67378e9d3db_1              # pipeline {}, stages, steps
 pipeline-stage-view:2.41                            # Visualisation des stages
-credentials:1506.v948b_b_b_7dec44                      # Gestion des credentials
+credentials:1511.v2e3cb_0008ef0                      # Gestion des credentials
 credentials-binding:728.v902a_273b_8947              # withCredentials([file(...)])
 matrix-auth:3.3                                   # Stratégie globalMatrix (droits par utilisateur)
 
@@ -26,18 +26,18 @@ jdk-tool:83.v417146707a_3d                          # tools { jdk 'JDK21' }
 
 # Qualité du code
 sonar:2.18.3                                        # withSonarQubeEnv, waitForQualityGate
-coverage:3.3256.va_c056a_db_61b_3                       # recordCoverage(tools: [[parser: 'JACOCO']])
+coverage:3.3358.v9487dde48783                       # recordCoverage(tools: [[parser: 'JACOCO']])
 
 # Tests & Rapports
-junit:1415.vcb_3245e24402                            # junit 'target/surefire-reports/*.xml'
-htmlpublisher:427.1                                   # publishHTML([...]) pour Trivy, ZAP, OWASP
+junit:1424.vc64a_edde7777                            # junit 'target/surefire-reports/*.xml'
+htmlpublisher:429                                   # publishHTML([...]) pour Trivy, ZAP, OWASP
 
 # Sécurité
-dependency-check-jenkins-plugin:5.6.3               # OWASP Dependency-Check tool config
+dependency-check-jenkins-plugin:5.6.4               # OWASP Dependency-Check tool config
 
 # Docker
-docker-plugin:1324.v2fb_b_df97fe1d                 # Agents éphémères Docker (Docker Cloud)
-docker-workflow:634.vedc7242b_eda_7                 # Commandes Docker dans pipeline
+docker-plugin:1327.v9524f1ee134e                 # Agents éphémères Docker (Docker Cloud)
+docker-workflow:653.v2f2c08eff0ec                 # Commandes Docker dans pipeline
 
 # Notifications
 mailer:534.v1b_36f5864073                           # Dépendance de email-ext
@@ -45,12 +45,12 @@ email-ext:2038.v7b_8817a_499d9                      # emailext() step, notificat
 
 # Pipeline options
 timestamper:1.30                                    # options { timestamps() }
-build-timeout:1.40                                  # timeout(time: 2, unit: 'HOURS')
+build-timeout:1.41                                  # timeout(time: 2, unit: 'HOURS')
 ws-cleanup:0.49                                     # Nettoyage workspace
 
 # Configuration as Code
-configuration-as-code:2100.vb_fd699d2a_09c           # jenkins-casc.yaml
-job-dsl:3654.vdf58f53e2d15                          # Définition des jobs RHDemo-CI/CD
+configuration-as-code:2117.vc05a_0b_e6b_f4e           # jenkins-casc.yaml
+job-dsl:3732.v9a_c49a_61a_313                          # Définition des jobs RHDemo-CI/CD
 
 # Utilitaires
 pipeline-utility-steps:3.810.va_7672d206740                       # readJSON, readYaml, etc.
@@ -70,8 +70,8 @@ branch-api:2.1280.v0d4e5b_b_460ef
 caffeine-api:3.2.4-208.v7e2da_a_7db_82b_
 checks-api:415.vf022234a_931d
 cloud-stats:423.v63f017a_f582c
-cloudbees-folder:6.1100.ve9eed61d16c4
-commons-compress-api:1.28.0-82.v4df6c060eb_66
+cloudbees-folder:6.1106.v3a_d9a_6d2465e
+commons-compress-api:1.28.0-89.v706d5e672f99
 commons-lang3-api:3.20.0-109.ve43756e2d2b_4
 commons-text-api:1.15.0-218.va_61573470393
 data-tables-api:2.3.8-1570.v1cb_1cd2a_0fb_c
@@ -79,32 +79,32 @@ display-url-api:2.217.va_6b_de84cc74b_
 docker-commons:477.v289085a_b_6896
 docker-java-api:3.7.1-136.v5d70f77a_c3d6
 durable-task:686.v80ff80875b_82
-echarts-api:6.0.0-1287.vfd24c22a_3d00
+echarts-api:6.1.0-1306.vcee1648c16a_4
 eddsa-api:0.3.0.1-29.v67e9a_1c969b_b_
-font-awesome-api:7.2.0-990.vf220b_2a_496f9
-forensics-api:4.1891.v5e60f3377506
+font-awesome-api:7.3.1-1013.v0835a_879ec6d
+forensics-api:4.1923.v445c56df9b_2e
 git-client:6.6.1
 gson-api:2.14.0-201.v8eefe5515533
 instance-identity:203.v15e81a_1b_7a_38
 ionicons-api:94.vcc3065403257
 jackson-annotations2-api:2.22-19.v10a_a_582ea_26e
-jackson2-api:2.22.0-439.vb_b_43658d6176
-jackson3-api:3.2.1-92.vd25c2e23c180
+jackson2-api:2.22.2-445.vdc613f1d8012
+jackson3-api:3.2.2-96.v599957900a_1a_
 jakarta-activation-api:2.1.4-1
 jakarta-mail-api:2.1.5-1
 jakarta-xml-bind-api:4.0.9-19.v2b_a_5b_44d9a_1c
 javadoc:354.vee1a_660b_4990
 javax-activation-api:1.2.0-8
 jaxb:2.3.9-143.v5979df3304e6
-joda-time-api:2.14.2-193.v422b_efce56e0
+joda-time-api:2.14.3-200.v65623733c99f
 jquery3-api:3.7.1-687.v68d468e40b_30
 jsch:0.2.16-95.v3eecb_55fa_b_78
-json-api:20260719-223.va_81f828cdb_58
+json-api:20260814-226.v20f9685d642c
 json-path-api:3.0.0-218.vcd4dd1355de2
-jsoup:1.22.2-95.vc5d00f1eb_42d
-matrix-project:870.v9db_fcfc2f45b_
-mina-sshd-api-common:2.17.1-187.v0341274c2905
-mina-sshd-api-core:2.17.1-187.v0341274c2905
+jsoup:1.23.2-106.v1161f282b_eb_f
+matrix-project:917.v22eda_817646e
+mina-sshd-api-common:2.19.0-192.v2b_a_7b_2c1dc71
+mina-sshd-api-core:2.19.0-192.v2b_a_7b_2c1dc71
 okhttp-api:5.3.2-200.vedb_720a_cf1f8
 oss-symbols-api:465.v25d9fdc88c26
 pipeline-build-step:599.v4b_67ea_11b_152
@@ -112,33 +112,33 @@ pipeline-graph-analysis:254.v0f63a_a_447dca_
 pipeline-groovy-lib:798.v5cc688825312
 pipeline-input-step:560.v56198a_642157
 pipeline-milestone-step:152.v6e22b_8cfc66c
-pipeline-model-api:2.2291.v2934911987b_6
-pipeline-model-definition:2.2291.v2934911987b_6
-pipeline-model-extensions:2.2291.v2934911987b_6
+pipeline-model-api:2.2293.v6e7193cec599
+pipeline-model-definition:2.2293.v6e7193cec599
+pipeline-model-extensions:2.2293.v6e7193cec599
 pipeline-rest-api:2.41
 pipeline-stage-step:345.va_96187909426
-pipeline-stage-tags-metadata:2.2291.v2934911987b_6
+pipeline-stage-tags-metadata:2.2293.v6e7193cec599
 plain-credentials:199.v9f8e1f741799
 plugin-util-api:7.1341.v039f146993d9
 prism-api:1.30.0-741.v034eb_0b_0a_a_fa_
 resource-disposer:0.25
 scm-api:728.vc30dcf7a_0df5
-script-security:1402.1405.vc96e74964250
+script-security:1412.v7737b_3405f86
 snakeyaml-api:2.5-149.v72471e9c6371
-snakeyaml-engine-api:3.0.1-5.vd98ea_ff3b_92e
+snakeyaml-engine-api:3.1.1-12.v4320c7d6f89c
 ssh-credentials:372.va_250881b_08cd
 ssh-slaves:3.1097.v868116049892
 structs:362.va_b_695ef4fdf9
 token-macro:477.vd4f0dc3cb_cf1
 trilead-api:2.284.v1974ea_324382
 variant:70.va_d9f17f859e0
-woodstox-core-api:7.2.1-6.v3718a_a_11f5c4
+woodstox-core-api:7.2.2-10.vcb_629759b_2c2
 workflow-api:1413.v2ff1a_5e720fa_
 workflow-basic-steps:1098.v808b_fd7f8cf4
-workflow-cps:4350.vcc65d4958821
+workflow-cps:4370.v49a_6937566b_6
 workflow-durable-task-step:1479.v56e587f413a_7
-workflow-job:1571.1580.v18e46842c125
-workflow-multibranch:821.vc3b_4ea_780798
+workflow-job:1595.v0ee1a_de2c0a_3
+workflow-multibranch:841.vec5b_9e1806ec
 workflow-scm-step:466.va_d69e602552b_
 workflow-step-api:724.v538c2362b_dfb_
 workflow-support:1015.v785e5a_b_b_8b_22

@@ -155,13 +155,29 @@ tool:
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
 #
-# 5. forgejo-api-token
+# 5. ci-bot-forgejo-token
 #    - Type: Secret text
-#    - ID: forgejo-api-token
-#    - Secret: token dédié Codeberg, scopes "repository" + "issue" (read/write, pas d'accès admin)
-#      — le scope "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
+#    - ID: ci-bot-forgejo-token
+#    - Secret: token du compte Codeberg dédié "rhdemo-ci-bot" (PAS le compte personnel
+#      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope
+#      "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
 #      "repository" seul ne suffit pas.
-#    - Généré sur: https://codeberg.org/user/settings/applications
+#    - Prérequis avant de générer le token :
+#        1. Créer le compte "rhdemo-ci-bot" sur https://codeberg.org
+#        2. L'ajouter comme collaborateur du repo leuwen-lc/rhdemo avec la permission
+#           "Write" (pas "Admin") : Settings > Collaborators
+#        3. Se connecter avec ce compte et générer le token sur
+#           https://codeberg.org/user/settings/applications
+#    - Pourquoi un compte dédié plutôt qu'un token scope-limité sur le compte personnel :
+#      un token hérite de l'identité qui l'a créé — même scope-limité, une fuite du
+#      credential Jenkins authentifie l'attaquant "en tant que vous" sur Codeberg (accès aux
+#      autres repos/org du compte). Un compte bot dédié limite le blast radius au repo où il
+#      est collaborateur, rend les merges automatiques identifiables dans l'historique
+#      Forgejo (pas confondus avec vos actions manuelles), et découple le cycle de vie du
+#      token de celui de votre compte perso (rotation MDP/2FA ne casse pas la CI).
+#    - Distinct de renovate-forgejo-token (compte bot Renovate, qui propose les PRs) : deux
+#      identités séparées pour "propose" (Renovate) vs "valide/merge" (ci-bot), comme une
+#      revue à deux acteurs même si le second est automatisé.
 #    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires
 #    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
 #
@@ -184,13 +200,30 @@ tool:
 #    - Type: Secret text
 #    - ID: renovate-forgejo-token
 #    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
-#      Renovate lui-même, distinct de forgejo-api-token)
-#    - Pourquoi un token séparé : forgejo-api-token (scopes repository+issue) ne suffit pas pour
+#      Renovate lui-même, distinct de ci-bot-forgejo-token)
+#    - Pourquoi un token séparé : ci-bot-forgejo-token (scopes repository+issue) ne suffit pas pour
 #      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
 #      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
 #      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
 #      déterminer/régénérer le scope exact requis.
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
+#
+# 9. smtp-infomaniak-credentials
+#    - Type: Username with password
+#    - ID: smtp-infomaniak-credentials
+#    - Username: lcpro@etik.com
+#    - Password: mot de passe IMAP/SMTP de l'adresse mail Infomaniak — géré et mis à jour
+#      manuellement par l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
+#    - Usage: notification email de succès/échec de RHDemo-CI (step emailext, plugin email-ext)
+#    - Serveur SMTP: mail.infomaniak.com:465 (SSL/TLS implicite)
+#    - Pourquoi pas géré par JCasC : le plugin Mailer basique (hudson.tasks.SMTPAuthentication)
+#      n'accepte que username/password en clair via JCasC, pas credentialsId — testé, provoque un
+#      UnknownAttributesException fatal au boot. Le plugin email-ext gère bien un vrai credential
+#      en interne (StandardUsernamePasswordCredentials), mais le configurateur JCasC ne sait pas
+#      piloter ce champ non plus (bug connu : jenkinsci/configuration-as-code-plugin#679). D'où
+#      une configuration entièrement manuelle via Manage Jenkins > System > Extended E-mail
+#      Notification (host mail.infomaniak.com:465 SSL, credential ci-dessus) — JCasC ne gérant
+#      pas ce bloc, il ne l'écrase pas non plus au redémarrage.
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -204,12 +237,22 @@ unclassified:
         serverUrl: "${SONAR_URL:-http://sonarqube:9000}"
         credentialsId: "jenkins-sonar-token"
 
-  
+  # Configuration SMTP (notifications email RHDemo-CI) : plugin email-ext, configuré
+  # entièrement à la main via Manage Jenkins > System > Extended E-mail Notification —
+  # voir credential #9 (smtp-infomaniak-credentials) dans la section CREDENTIALS ci-dessus.
+  # Pas de bloc JCasC ici : le configurateur ne gère pas le champ credentialsId de ce plugin.
 
   # Configuration Location
+  # adminAddress doit correspondre au compte SMTP authentifié (smtp-infomaniak-credentials,
+  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Stagingkub-Upgrade-Deploy) n'a pas de
+  # "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
+  # avec le compte authentifié fait rejeter l'envoi par Infomaniak (observé en pratique :
+  # un override manuel via l'UI avait corrigé cette valeur, mais un redémarrage Jenkins a
+  # réappliqué ce fichier JCasC et donc écrasé silencieusement l'override, cassant les
+  # notifications email de tous les pipelines pendant plusieurs jours sans erreur visible).
   location:
     url: "http://jenkins:8080/"
-    adminAddress: "jenkins@example.com"
+    adminAddress: "lcpro@etik.com"
 
 # ═══════════════════════════════════════════════════════════════════
 # JOBS - Pipelines RHDemo
@@ -441,6 +484,74 @@ jobs:
           // Scan Renovate désormais inclus dans ce job (plus de dépendance à Codeberg
           // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate
           cron('H 3 * * *')
+        }
+      }
+
+  # ─────────────────────────────────────────────────────────────────
+  # PIPELINE STAGINGKUB UPGRADE DEPLOY - Mise à jour en place de l'infra
+  # (Option 3, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md)
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-Stagingkub-Upgrade-Deploy') {
+        displayName('RHDemo - Stagingkub Upgrade Deploy')
+        description('''Application réelle (post-merge) d\'une mise à jour en place d\'un
+        composant d\'infrastructure stagingkub : Cilium, NGINX Gateway Fabric,
+        kube-prometheus-stack, Loki, Alloy ou Grafana.
+
+        Déclenché uniquement après un merge réussi d\'une PR Renovate d\'infra par
+        RHDemo-Renovate (jamais avant — la validation pré-merge se fait en dry-run
+        dans RHDemo-Renovate, sans muter le cluster).
+
+        ServiceAccount dédié jenkins-infra-upgrader (credential
+        kubeconfig-stagingkub-infra-upgrader), distinct de jenkins-deployer/RHDemo-CD.
+        Rollback automatique porté par --rollback-on-failure dans chaque script composant.
+
+        📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md''')
+
+        parameters {
+          string {
+            name('COMPONENT')
+            defaultValue('')
+            description('Composant à mettre à jour : cilium, ngf, kube-prometheus-stack, loki, alloy ou grafana. Si vide, déduit du dernier commit.')
+            trim(true)
+          }
+        }
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                  // Pas de credentials nécessaire pour un repository public
+                }
+                branches('*/evolutions-post-1.1.9')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-Stagingkub-Upgrade-Deploy')
+            lightweight(true)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('30')
+                daysToKeepStr('90')
+                artifactNumToKeepStr('-1')
+                artifactDaysToKeepStr('-1')
+              }
+            }
+          }
+          disableConcurrentBuilds()
         }
       }
 

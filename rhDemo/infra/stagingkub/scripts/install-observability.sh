@@ -6,9 +6,16 @@
 #
 # Ce script installe:
 #   - Prometheus (métriques) + Prometheus Operator + AlertManager
-#   - Loki (logs) + Promtail + Grafana
+#   - Loki (logs) + Alloy + Grafana
 #   - Configuration Grafana avec les deux datasources
 #   - Dashboards: Logs, Métriques Pods, Spring Boot Actuator, PostgreSQL
+#   - NetworkPolicies des namespaces monitoring/loki-stack
+#
+# Les commandes Helm par composant sont factorisées dans
+# scripts/components/install-or-upgrade-*.sh — ce script (chemin
+# "reconstruction complète") et le pipeline Jenkins de mise à jour en
+# place (RHDemo-Stagingkub-Upgrade-Deploy) appellent les mêmes scripts,
+# pour ne jamais diverger.
 #
 # Utilisation:
 #   ./install-observability.sh
@@ -16,18 +23,10 @@
 # Prérequis:
 #   - Cluster KinD stagingkub démarré
 #   - kubectl configuré (context: kind-rhdemo)
-#   - Helm 3 installé
+#   - Helm 4 installé (flag --rollback-on-failure, ex-Helm 3 --atomic)
 # ═══════════════════════════════════════════════════════════════
 
 set -e
-
-# ═══════════════════════════════════════════════════════════════
-# Versions des charts Helm (figées pour reproductibilité)
-# ═══════════════════════════════════════════════════════════════
-KUBE_PROMETHEUS_STACK_VERSION="81.5.1"  # App: Prometheus Operator v0.88.1
-LOKI_VERSION="6.52.0"                   # App: Loki 3.6.4
-PROMTAIL_VERSION="6.17.1"               # App: Promtail 3.5.1
-GRAFANA_VERSION="10.5.15"               # App: Grafana 12.3.1
 
 # Couleurs
 GREEN='\033[0;32m'
@@ -38,6 +37,8 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_DIR="${SCRIPT_DIR}/../helm/observability"
+COMPONENTS_DIR="${SCRIPT_DIR}/components"
+NETPOL_SCRIPT="${SCRIPT_DIR}/../networkpolicies/apply-networkpolicies.sh"
 
 log() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -75,204 +76,68 @@ echo ""
 log "Vérification des fichiers de configuration..."
 [ -f "$VALUES_DIR/prometheus-values.yaml" ] || error "Fichier prometheus-values.yaml manquant"
 [ -f "$VALUES_DIR/loki-modern-values.yaml" ] || error "Fichier loki-modern-values.yaml manquant"
-[ -f "$VALUES_DIR/promtail-values.yaml" ] || error "Fichier promtail-values.yaml manquant"
+[ -f "$VALUES_DIR/alloy-values.yaml" ] || error "Fichier alloy-values.yaml manquant"
 [ -f "$VALUES_DIR/grafana-values.yaml" ] || error "Fichier grafana-values.yaml manquant"
+[ -f "$NETPOL_SCRIPT" ] || error "Script apply-networkpolicies.sh manquant"
 success "Fichiers de configuration OK"
 echo ""
 
-# Vérifier le mot de passe Grafana
-log "Vérification de la configuration Grafana..."
-GRAFANA_PASSWORD=$(grep "^adminPassword:" $VALUES_DIR/grafana-values.yaml | awk '{print $2}' | tr -d '"')
-if [ -z "$GRAFANA_PASSWORD" ] || [ "$GRAFANA_PASSWORD" = '""' ]; then
-    error "Le mot de passe Grafana n'est pas configuré dans $VALUES_DIR/grafana-values.yaml"
-fi
-success "Configuration Grafana validée"
-echo ""
-
 # ═══════════════════════════════════════════════════════════════
-# 2. Ajout des repositories Helm
-# ═══════════════════════════════════════════════════════════════
-
-log "Ajout des repositories Helm..."
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
-helm repo add grafana https://grafana.github.io/helm-charts >/dev/null 2>&1 || true
-helm repo update >/dev/null 2>&1
-success "Repositories Helm ajoutés"
-echo ""
-
-# ═══════════════════════════════════════════════════════════════
-# 3. Installation de Prometheus (namespace: monitoring)
+# 2. Installation/mise à jour des composants (scripts factorisés)
 # ═══════════════════════════════════════════════════════════════
 
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Étape 1/2 : Installation de Prometheus + Operator${NC}"
+echo -e "${BLUE}  Étape 1/4 : Prometheus + Operator${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
 echo ""
-
-MONITORING_NS="monitoring"
-
-log "Création du namespace $MONITORING_NS..."
-kubectl create namespace $MONITORING_NS 2>/dev/null || warn "Namespace existe déjà"
-success "Namespace $MONITORING_NS prêt"
+"${COMPONENTS_DIR}/install-or-upgrade-kube-prometheus-stack.sh"
 echo ""
 
-log "Installation de kube-prometheus-stack..."
-echo -e "${BLUE}  - Prometheus (métriques)${NC}"
-echo -e "${BLUE}  - Prometheus Operator (gestion automatique)${NC}"
-echo -e "${BLUE}  - AlertManager (alertes)${NC}"
-echo -e "${BLUE}  - Node Exporter (métriques nodes)${NC}"
-echo -e "${BLUE}  - Kube State Metrics (métriques Kubernetes)${NC}"
-echo -e "${BLUE}  - Rétention: 7 jours, Storage: 10Gi${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  Étape 2/4 : Loki${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo ""
+"${COMPONENTS_DIR}/install-or-upgrade-loki.sh"
 echo ""
 
-helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
-    --version $KUBE_PROMETHEUS_STACK_VERSION \
-    --namespace $MONITORING_NS \
-    --values "$VALUES_DIR/prometheus-values.yaml" \
-    --wait \
-    --timeout 10m >/dev/null 2>&1
-
-success "Prometheus installé"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  Étape 3/4 : Alloy${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo ""
+"${COMPONENTS_DIR}/install-or-upgrade-alloy.sh"
 echo ""
 
-# Vérifier les pods Prometheus
-log "Vérification des pods Prometheus..."
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n $MONITORING_NS --timeout=5m 2>/dev/null || warn "Timeout en attente des pods"
-success "Pods Prometheus prêts"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  Étape 4/4 : Grafana (release + HTTPRoute + datasource + dashboards)${NC}"
+echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
+echo ""
+"${COMPONENTS_DIR}/install-or-upgrade-grafana.sh"
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
-# 4. Installation de Loki + Grafana (namespace: loki-stack)
+# 3. NetworkPolicies (namespaces externes : monitoring, loki-stack)
 # ═══════════════════════════════════════════════════════════════
+# Les charts installés ci-dessus ne créent aucune NetworkPolicy — sans cette
+# étape, les namespaces monitoring/loki-stack restent grands ouverts (pas de
+# default-deny) jusqu'à ce que quelqu'un pense à relancer le script à la
+# main. Appliqué en dernier, une fois tous les pods Running/Ready (chaque
+# install-or-upgrade-*.sh ci-dessus attend déjà la fin de son propre
+# rollout), pour ne jamais bloquer un pod en cours de démarrage.
 
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Étape 2/2 : Installation de Loki + Grafana${NC}"
+echo -e "${BLUE}  NetworkPolicies (monitoring, loki-stack)${NC}"
 echo -e "${BLUE}══════════════════════════════════════════════════════${NC}"
 echo ""
+"${NETPOL_SCRIPT}"
+echo ""
 
-LOKI_NS="loki-stack"
+# ═══════════════════════════════════════════════════════════════
+# 4. Configuration DNS
+# ═══════════════════════════════════════════════════════════════
+
 DOMAIN="grafana-stagingkub.intra.leuwen-lc.fr"
-
-log "Création du namespace $LOKI_NS..."
-kubectl create namespace $LOKI_NS 2>/dev/null || warn "Namespace existe déjà"
-success "Namespace $LOKI_NS prêt"
-echo ""
-
-# Installation Loki
-log "Installation de Loki..."
-helm upgrade --install loki grafana/loki \
-    --version $LOKI_VERSION \
-    -n $LOKI_NS \
-    -f $VALUES_DIR/loki-modern-values.yaml \
-    --wait --timeout 3m >/dev/null 2>&1
-success "Loki installé"
-echo ""
-
-# Installation Promtail
-log "Installation de Promtail..."
-helm upgrade --install promtail grafana/promtail \
-    --version $PROMTAIL_VERSION \
-    -n $LOKI_NS \
-    -f $VALUES_DIR/promtail-values.yaml \
-    --wait --timeout 2m >/dev/null 2>&1
-success "Promtail installé"
-echo ""
-
-# Installation Grafana
-log "Installation de Grafana..."
-helm upgrade --install grafana grafana/grafana \
-    --version $GRAFANA_VERSION \
-    -n $LOKI_NS \
-    -f $VALUES_DIR/grafana-values.yaml \
-    --wait --timeout 3m >/dev/null 2>&1
-success "Grafana installé"
-echo ""
-
-# Application des ressources Gateway API pour Grafana
-log "Application des ressources Gateway API pour Grafana..."
-
-# Création de l'HTTPRoute pour Grafana (attachée au Gateway partagé)
-# Utilise le Gateway partagé 'shared-gateway' dans nginx-gateway qui écoute déjà sur le NodePort 32616
-cat <<EOF | kubectl apply -f -
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: grafana-route
-  namespace: $LOKI_NS
-spec:
-  parentRefs:
-  - name: shared-gateway
-    namespace: nginx-gateway
-    sectionName: https
-  hostnames:
-  - "$DOMAIN"
-  rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    backendRefs:
-    - name: grafana
-      port: 80
-EOF
-
-success "HTTPRoute Grafana créée (attachée au Gateway partagé)"
-
-log "Vérification du statut de l'HTTPRoute..."
-sleep 2
-kubectl get httproute grafana-route -n $LOKI_NS
-echo ""
-
-# ═══════════════════════════════════════════════════════════════
-# 5. Configuration de la datasource Prometheus dans Grafana
-# ═══════════════════════════════════════════════════════════════
-
-log "Configuration de la datasource Prometheus dans Grafana..."
-
-# Créer une ConfigMap pour la datasource Prometheus
-cat <<EOF | kubectl apply -n $LOKI_NS -f - >/dev/null 2>&1
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-datasource-prometheus
-  namespace: $LOKI_NS
-  labels:
-    grafana_datasource: "1"
-data:
-  prometheus-datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
-        isDefault: false
-        editable: true
-        jsonData:
-          timeInterval: 30s
-EOF
-
-success "Datasource Prometheus configurée"
-echo ""
-
-# Redémarrer Grafana pour charger la datasource
-log "Redémarrage de Grafana pour charger la configuration..."
-kubectl rollout restart deployment/grafana -n $LOKI_NS >/dev/null 2>&1
-kubectl rollout status deployment/grafana -n $LOKI_NS --timeout=2m >/dev/null 2>&1 || warn "Timeout redémarrage Grafana"
-success "Grafana redémarré"
-echo ""
-
-# ═══════════════════════════════════════════════════════════════
-# 6. Déploiement des dashboards Grafana
-# ═══════════════════════════════════════════════════════════════
-
-log "Deploiement des dashboards Grafana via deploy-grafana-dashboard.sh..."
-"${SCRIPT_DIR}/deploy-grafana-dashboard.sh" all
-echo ""
-
-# ═══════════════════════════════════════════════════════════════
-# 7. Configuration DNS
-# ═══════════════════════════════════════════════════════════════
+MONITORING_NS="monitoring"
+LOKI_NS="loki-stack"
 
 log "Configuration DNS..."
 if ! grep -q "$DOMAIN" /etc/hosts 2>/dev/null; then
@@ -284,7 +149,7 @@ fi
 echo ""
 
 # ═══════════════════════════════════════════════════════════════
-# 8. Affichage final
+# 5. Affichage final
 # ═══════════════════════════════════════════════════════════════
 
 echo ""
@@ -366,4 +231,5 @@ echo ""
 echo -e "${GREEN}✅ La stack Observabilité est maintenant prête !${NC}"
 echo -e "${GREEN}✅ Prometheus collecte automatiquement les métriques des composants${NC}"
 echo -e "${GREEN}✅ Loki collecte déjà les logs de tous les pods${NC}"
+echo -e "${GREEN}✅ NetworkPolicies appliquées sur monitoring/loki-stack (Zero Trust)${NC}"
 echo ""

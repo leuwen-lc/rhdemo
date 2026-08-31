@@ -139,6 +139,21 @@ spec:
       ports:
         - protocol: TCP
           port: 9000
+    # Backend: rhdemo-app, port management (HTTPRoute rhdemo-route expose
+    # /actuator/health sur ce port — healthcheck de
+    # Jenkinsfile-Stagingkub-Upgrade-Deploy). Manquait ici : seul le port 9000
+    # était autorisé en egress, donc le trafic était dropé côté source malgré
+    # une NetworkPolicy d'ingress correcte côté rhdemo-app-netpol.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rhdemo-stagingkub
+          podSelector:
+            matchLabels:
+              app: rhdemo-app
+      ports:
+        - protocol: TCP
+          port: 9001
     # Backend: keycloak (authentification)
     - to:
         - namespaceSelector:

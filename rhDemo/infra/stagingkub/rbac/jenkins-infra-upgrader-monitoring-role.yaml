@@ -1,0 +1,66 @@
+# Role pour jenkins-infra-upgrader dans le namespace monitoring
+# (release Helm "prometheus" — kube-prometheus-stack : Prometheus Operator,
+# Prometheus/Alertmanager, Kube State Metrics, Node Exporter).
+#
+# Distinct de jenkins-monitoring-role.yaml (celui de jenkins-deployer, qui
+# ne couvre que la CRUD des ServiceMonitors/PodMonitors applicatifs) : ici
+# on couvre en plus les objets namespaced de la release elle-même (CR
+# Prometheus/Alertmanager/PrometheusRule, workloads de l'Operator).
+#
+# Les admission webhooks du Prometheus Operator sont désactivés
+# explicitement (prometheus-values.yaml), donc aucun droit
+# admissionregistration.k8s.io n'est nécessaire ici.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-monitoring-role
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "serviceaccounts", "persistentvolumeclaims", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale", "statefulsets", "statefulsets/scale", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # CR instances gérées par le Prometheus Operator (namespaced,
+  # monitoring.coreos.com) — distinctes des CRDs elles-mêmes (cluster-scoped,
+  # cf. jenkins-infra-upgrader-clusterrole.yaml)
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - prometheuses
+      - alertmanagers
+      - prometheusrules
+      - probes
+      - thanosrulers
+      - alertmanagerconfigs
+      - scrapeconfigs
+      - prometheusagents
+      - servicemonitors
+      - podmonitors
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-monitoring-rolebinding
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-monitoring-role
+  apiGroup: rbac.authorization.k8s.io

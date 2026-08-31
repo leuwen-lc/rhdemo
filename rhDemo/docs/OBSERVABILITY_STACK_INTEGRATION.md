@@ -1,10 +1,20 @@
 # INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 22 janvier 2026
-**Version:** 3.1 (Stack Complète: Prometheus + Loki + Métriques Spring Boot Actuator)
+**Version:** 4 (Prometheus + Loki + Grafana Alloy + métriques Spring Boot Actuator)
 **Environnement:** stagingkub (Kubernetes KinD)
 
-**⚠️ Sécurité:** Consultez [/infra/stagingkub/SECURITY.md](../infra/stagingkub/SECURITY.md) pour les bonnes pratiques de configuration sécurisée.
+> **⚠️ Versions.** Ce document décrit l'architecture et le mode opératoire. Les
+> **numéros de version** des charts (kube-prometheus-stack, Loki, Alloy, Grafana,
+> Cilium) évoluent au fil des PR Renovate — la source de vérité est
+> `infra/stagingkub/scripts/components/install-or-upgrade-*.sh` (variables
+> `*_VERSION`, marqueurs `# renovate:`), pas les exemples ci-dessous.
+>
+> **Points à jour non repris partout dans le corps :**
+> - **Helm 4** (agent Jenkins) — les `helm upgrade --install` d'exemple restent valides ; le flag rollback est `--rollback-on-failure` (ex-`--atomic`). Cf. [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md).
+> - **Loki** : chart `grafana/loki` servi par le **fork communautaire** `https://grafana-community.github.io/helm-charts` (le dépôt `grafana/helm-charts` est passé AGPLv3 en chart 7.0.0). Chart ~v18, Loki 3.6.x.
+> - **Grafana Alloy** remplace Promtail (EOL 02/03/2026) — cf. [ALLOY_MIGRATION.md](ALLOY_MIGRATION.md).
+> - **Cilium** vit dans un namespace dédié `cilium-system`.
+> - Le plugin Grafana `grafana-piechart-panel` a été retiré (déprécié).
 
 ---
 
@@ -30,19 +40,19 @@
 Déployer une stack d'observabilité complète pour l'environnement stagingkub avec:
 - **Prometheus + Operator**: Collecte et stockage des métriques (métriques applicatives, infrastructure, bases de données)
 - **Loki**: Système d'agrégation et indexation des logs
-- **Promtail**: Agent de collecte des logs (DaemonSet)
+- **Alloy**: Agent de collecte des logs (DaemonSet)
 - **Grafana**: Interface unifiée de visualisation (métriques + logs)
 
 ### 1.2 Stack Complète (Prometheus + Loki + Grafana)
 
 **Architecture de collecte:**
 - **Métriques**: Prometheus scrape les endpoints `/metrics` → Stocke dans TSDB → Grafana visualise
-- **Logs**: Promtail collecte les logs → Loki les stocke et indexe → Grafana visualise
+- **Logs**: Alloy collecte les logs → Loki les stocke et indexe → Grafana visualise
 
 **Charts utilisés:**
 - `prometheus-community/kube-prometheus-stack` (Prometheus + Operator + AlertManager)
 - `grafana/loki` v6.x (mode SingleBinary)
-- `grafana/promtail` v6.x
+- `grafana/alloy` v1.x
 - `grafana/grafana` v8.x
 
 ### 1.3 Bénéfices
@@ -75,7 +85,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 
 **Deux namespaces:**
 - `monitoring`: Prometheus + Operator + AlertManager
-- `loki-stack`: Loki + Promtail + Grafana
+- `loki-stack`: Loki + Alloy + Grafana
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -122,7 +132,7 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ Promtail (DaemonSet)                                │  │
+│  │ Alloy (DaemonSet)                                   │  │
 │  │ - 1 pod par node (KinD: 1 node control-plane)      │  │
 │  │ - Lit /var/log/pods/**/*.log                       │  │
 │  │ - Envoie à Loki via HTTP (port 3100)              │  │
@@ -158,9 +168,9 @@ Déployer une stack d'observabilité complète pour l'environnement stagingkub a
 
 ### 2.2 Labels et Métriques Collectés
 
-**Labels Logs (Loki via Promtail):**
+**Labels Logs (Loki via Alloy):**
 
-Promtail enrichit automatiquement les logs avec ces labels:
+Alloy enrichit automatiquement les logs avec ces labels:
 
 | Label | Exemple | Description |
 |-------|---------|-------------|
@@ -188,7 +198,7 @@ Prometheus collecte automatiquement via ServiceMonitors et PodMonitors:
 ```
 [rhdemo-app Pod] → stdout/stderr → /var/log/pods/rhdemo-stagingkub_rhdemo-app-xxx/
                                                     ↓
-                                          [Promtail DaemonSet]
+                                          [Alloy DaemonSet]
                                                     ↓
                                            Enrichissement labels
                                                     ↓
@@ -251,7 +261,7 @@ kind version  # v0.20+
 
 | Composant | CPU Request | Memory Request | Storage |
 |-----------|-------------|----------------|---------|
-| Promtail | 100m | 128Mi | - |
+| Alloy | 100m | 128Mi | - |
 | Loki | 250m | 256Mi | 5Gi (PVC) |
 | Grafana | 250m | 256Mi | - |
 | **Sous-total loki-stack** | **600m** | **640Mi** | **5Gi** |
@@ -318,7 +328,7 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 
 **Namespace loki-stack:**
 - ✅ Loki (logs, mode SingleBinary)
-- ✅ Promtail (collecte logs DaemonSet)
+- ✅ Alloy (collecte logs DaemonSet)
 - ✅ Grafana (visualisation unifiée)
 - ✅ Datasource Prometheus auto-configurée
 - ✅ Datasource Loki auto-configurée
@@ -347,25 +357,27 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 # Repository Prometheus Community
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
-# Repository Grafana
+# Repository Grafana — Alloy et Grafana depuis le dépôt Grafana Labs,
+# mais LOKI depuis le fork communautaire (dépôt d'origine passé AGPLv3)
 helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add grafana-community https://grafana-community.github.io/helm-charts
 
 # Mettre à jour
 helm repo update
 
 # Vérifier charts disponibles
 helm search repo prometheus-community/kube-prometheus-stack
-helm search repo grafana/loki
-helm search repo grafana/promtail
+helm search repo grafana-community/loki
+helm search repo grafana/alloy
 helm search repo grafana/grafana
 ```
 
-**Output attendu:**
+**Ordres de grandeur (les versions exactes sont dans les scripts `install-or-upgrade-*.sh`):**
 ```
 NAME                                            CHART VERSION   APP VERSION     DESCRIPTION
-prometheus-community/kube-prometheus-stack      65.x.x          v0.77.x         Prometheus Operator + Prometheus + ...
-grafana/loki                                    6.x.x           3.x.x           Loki: like Prometheus, but for logs
-grafana/promtail                                6.x.x           3.x.x           Promtail log collector
+prometheus-community/kube-prometheus-stack      88.x.x          v0.93.x         Prometheus Operator + Prometheus + ...
+grafana-community/loki                          18.x.x          3.6.x           Loki: like Prometheus, but for logs
+grafana/alloy                                   1.x.x           v1.x.x          Grafana Alloy
 grafana/grafana                                 8.x.x           11.x.x          The open observability platform
 ```
 
@@ -464,7 +476,7 @@ kubeEtcd:
 
 ```yaml
 # Configuration Loki moderne (chart grafana/loki)
-# Chart: grafana/loki v6.x
+# Chart: grafana-community/loki (~v18, Loki app 3.6.x)
 deploymentMode: SingleBinary
 
 loki:
@@ -509,70 +521,54 @@ backend:
   replicas: 0
 ```
 
-**Promtail:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml`
+**Alloy:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/alloy-values.yaml`
+
+Remplace Promtail (EOL depuis le 02/03/2026). La config est écrite dans le
+langage Alloy (pas du YAML) et reproduit exactement le même comportement que
+l'ancienne config Promtail : découverte des pods du namespace
+`rhdemo-stagingkub`, mêmes labels (`namespace`/`pod`/`container`/`app`/
+`component`/`job`), lecture des logs via hostPath (`/var/log/pods`, pas de
+flux réseau vers les pods sources), parsing CRI, push vers Loki. Voir le
+fichier source pour le détail complet des blocs `discovery.kubernetes`/
+`discovery.relabel`/`loki.source.file`/`loki.process`/`loki.write`.
 
 ```yaml
-# Configuration Promtail
-# Chart: grafana/promtail v6.x
-config:
-  # URL de Loki (FQDN pour résolution DNS cross-namespace)
-  clients:
-    - url: http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push
-      tenant_id: ""
+crds:
+  create: false   # CRD podlogs non utilisée (config statique ci-dessous)
 
-  # Position des logs - utiliser le volume monté en écriture
-  positions:
-    filename: /run/promtail/positions.yaml
-
-  # Scrape configs
-  snippets:
-    scrapeConfigs: |
-      - job_name: kubernetes-pods
-        kubernetes_sd_configs:
-          - role: pod
-            namespaces:
-              names:
-                - rhdemo-stagingkub
-        pipeline_stages:
-          - cri: {}
-        relabel_configs:
-          # Garder seulement les pods avec label app
-          - source_labels: [__meta_kubernetes_pod_label_app]
-            action: keep
-            regex: .+
-          # Namespace
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          # Pod name
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-          # Container name
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            target_label: container
-          # App label
-          - source_labels: [__meta_kubernetes_pod_label_app]
-            target_label: app
-          # Component label
-          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
-            target_label: component
-          # Job: namespace/app
-          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_label_app]
-            separator: /
-            target_label: job
-          # Path to logs - Format: /var/log/pods/<namespace>_<podname>_<uid>/<container>/*.log
-          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name, __meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
-            target_label: __path__
-            separator: ;
-            regex: (.+);(.+);(.+);(.+)
-            replacement: /var/log/pods/${1}_${2}_${3}/${4}/*.log
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 200m
-    memory: 256Mi
+alloy:
+  configMap:
+    content: |
+      discovery.kubernetes "pods" {
+        role = "pod"
+        namespaces { names = ["rhdemo-stagingkub"] }
+      }
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+        # ... règles de relabeling (namespace/pod/container/app/component/job/__path__)
+      }
+      local.file_match "pods" { path_targets = discovery.relabel.pods.output }
+      loki.source.file "pods" {
+        targets    = local.file_match.pods.targets
+        forward_to = [loki.process.cri.receiver]
+      }
+      loki.process "cri" {
+        stage.cri {}
+        forward_to = [loki.write.default.receiver]
+      }
+      loki.write "default" {
+        endpoint {
+          url       = "http://loki-gateway.loki-stack.svc.cluster.local/loki/api/v1/push"
+          tenant_id = ""
+        }
+      }
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 ```
 
 **Grafana:** `/home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/grafana-values.yaml`
@@ -671,7 +667,7 @@ rm -rf $TMP
 
 #### 4.2.5 Installer les Charts
 
-**Ordre d'installation: Prometheus → Loki → Promtail → Grafana**
+**Ordre d'installation: Prometheus → Loki → Alloy → Grafana**
 
 ```bash
 # 1. Installer Prometheus + Operator (namespace monitoring)
@@ -684,16 +680,16 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
 kubectl get pods -n monitoring
 helm list -n monitoring
 
-# 2. Installer Loki (mode SingleBinary)
-helm upgrade --install loki grafana/loki \
+# 2. Installer Loki (mode SingleBinary) — chart du fork communautaire
+helm upgrade --install loki grafana-community/loki \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml \
   --wait --timeout 3m
 
-# 3. Installer Promtail
-helm upgrade --install promtail grafana/promtail \
+# 3. Installer Alloy
+helm upgrade --install alloy grafana/alloy \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml \
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/alloy-values.yaml \
   --wait --timeout 2m
 
 # 4. Installer Grafana (avec les 2 datasources)
@@ -712,12 +708,12 @@ helm list -n loki-stack
 ```
 # Namespace monitoring
 NAME            NAMESPACE       REVISION        STATUS          CHART                              APP VERSION
-prometheus      monitoring      1               deployed        kube-prometheus-stack-65.x.x       v0.77.x
+prometheus      monitoring      1               deployed        kube-prometheus-stack-88.x.x       v0.93.x
 
 # Namespace loki-stack
 NAME            NAMESPACE       REVISION        STATUS          CHART                   APP VERSION
-loki            loki-stack      1               deployed        loki-6.x.x              3.x.x
-promtail        loki-stack      1               deployed        promtail-6.x.x          3.x.x
+loki            loki-stack      1               deployed        loki-18.x.x            3.6.x
+alloy           loki-stack      1               deployed        alloy-1.x.x             v1.x.x
 grafana         loki-stack      1               deployed        grafana-8.x.x           11.x.x
 ```
 
@@ -741,7 +737,7 @@ kubectl get pods -n loki-stack
 # Output attendu:
 # NAME                            READY   STATUS    RESTARTS   AGE
 # loki-0                          1/1     Running   0          2m
-# promtail-xxxxx                  1/1     Running   0          2m
+# alloy-xxxxx                     1/1     Running   0          2m
 # grafana-xxxxx                   1/1     Running   0          2m
 
 # Vérifier les services (monitoring)
@@ -1490,18 +1486,18 @@ loki:
     runAsNonRoot: true
 ```
 
-### 9.2 Promtail ne Collecte Pas de Logs
+### 9.2 Alloy ne Collecte Pas de Logs
 
 **Symptôme:** Aucun log dans Grafana
 
 **Vérification:**
 
 ```bash
-# Logs Promtail
-kubectl logs -n loki-stack -l app=promtail
+# Logs Alloy
+kubectl logs -n loki-stack -l app.kubernetes.io/name=alloy
 
-# Vérifier que Promtail trouve des pods
-kubectl logs -n loki-stack -l app=promtail | grep "discovered"
+# Vérifier qu'Alloy trouve des pods
+kubectl logs -n loki-stack -l app.kubernetes.io/name=alloy | grep "discovered"
 ```
 
 **Causes fréquentes:**
@@ -1509,14 +1505,14 @@ kubectl logs -n loki-stack -l app=promtail | grep "discovered"
 | Problème | Solution |
 |----------|----------|
 | Namespace filter trop strict | Vérifier `scrape_configs.relabel_configs` dans values.yaml |
-| Promtail ne peut pas lire /var/log/pods | Vérifier mountPath et hostPath dans DaemonSet |
-| Logs en JSON non parsés | Ajouter pipeline stage `json` dans Promtail config |
+| Alloy ne peut pas lire /var/log/pods | Vérifier mountPath et hostPath dans DaemonSet |
+| Logs en JSON non parsés | Ajouter `stage.json` dans le `loki.process` de la config Alloy |
 
 **Vérifier collecte manuelle:**
 
 ```bash
-# Exec dans Promtail
-kubectl exec -n loki-stack -it loki-stack-promtail-xxxxx -- sh
+# Exec dans Alloy
+kubectl exec -n loki-stack -it alloy-xxxxx -- sh
 
 # Lister logs accessibles
 ls -la /var/log/pods/rhdemo-stagingkub*/
@@ -1804,7 +1800,7 @@ helm repo update
 # Vérifier nouvelles versions
 helm search repo prometheus-community/kube-prometheus-stack
 helm search repo grafana/loki
-helm search repo grafana/promtail
+helm search repo grafana/alloy
 helm search repo grafana/grafana
 
 # Upgrade Prometheus Stack
@@ -1817,10 +1813,10 @@ helm upgrade loki grafana/loki \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml
 
-# Upgrade Promtail
-helm upgrade promtail grafana/promtail \
+# Upgrade Alloy
+helm upgrade alloy grafana/alloy \
   -n loki-stack \
-  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/promtail-values.yaml
+  -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/alloy-values.yaml
 
 # Upgrade Grafana
 helm upgrade grafana grafana/grafana \
@@ -1830,7 +1826,7 @@ helm upgrade grafana grafana/grafana \
 # Vérifier rollouts
 kubectl rollout status statefulset -n monitoring prometheus-prometheus-kube-prometheus-prometheus
 kubectl rollout status statefulset -n loki-stack loki
-kubectl rollout status daemonset -n loki-stack promtail
+kubectl rollout status daemonset -n loki-stack alloy
 kubectl rollout status deployment -n loki-stack grafana
 ```
 
@@ -1902,7 +1898,7 @@ helm uninstall prometheus -n monitoring
 
 # Désinstaller Loki Stack
 helm uninstall loki -n loki-stack
-helm uninstall promtail -n loki-stack
+helm uninstall alloy -n loki-stack
 helm uninstall grafana -n loki-stack
 
 # Supprimer PVCs (ATTENTION: perte de données)
@@ -1942,7 +1938,7 @@ kubectl delete namespace monitoring
 
 **Loki:**
 - **Loki:** https://grafana.com/docs/loki/latest/
-- **Promtail:** https://grafana.com/docs/loki/latest/send-data/promtail/
+- **Alloy:** https://grafana.com/docs/alloy/latest/
 - **LogQL:** https://grafana.com/docs/loki/latest/query/
 
 **Grafana:**
@@ -1951,8 +1947,8 @@ kubectl delete namespace monitoring
 
 **Helm Charts:**
 - Prometheus Stack: https://github.com/prometheus-community/helm-charts
-- Loki: https://github.com/grafana/helm-charts/tree/main/charts/loki
-- Promtail: https://github.com/grafana/helm-charts/tree/main/charts/promtail
+- Loki (chart, fork communautaire) : https://github.com/grafana-community/helm-charts/tree/main/charts/loki
+- Alloy: https://github.com/grafana/alloy/tree/main/operations/helm/charts/alloy
 - Grafana: https://github.com/grafana/helm-charts/tree/main/charts/grafana
 
 ### Tutoriels

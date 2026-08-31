@@ -73,7 +73,7 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 │  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐   │
 │  │                              Namespace: loki-stack                                               │   │
 │  │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                                        │   │
-│  │  │   Grafana    │◄───│     Loki     │◄───│   Promtail   │                                        │   │
+│  │  │   Grafana    │◄───│     Loki     │◄───│    Alloy     │                                        │   │
 │  │  │   :80/:3000  │    │   :3100      │    │  (DaemonSet) │                                        │   │
 │  │  └──────────────┘    └──────────────┘    └──────────────┘                                        │   │
 │  └─────────────────────────────────────────────────────────────────────────────────────────────────┘   │
@@ -116,7 +116,7 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 | Prometheus | nginx-gateway-fabric | 9113 | HTTP | Scrape métriques NGINX |
 | Prometheus | Loki | 3100 | HTTP | Scrape métriques Loki |
 | Prometheus | Grafana | 80 | HTTP | Scrape métriques Grafana |
-| Promtail | Loki | 3100 | HTTP | Push des logs |
+| Alloy | Loki | 3100 | HTTP | Push des logs |
 | Grafana | Prometheus | 9090 | HTTP | Requêtes métriques (PromQL) |
 | Grafana | Loki | 3100 | HTTP | Requêtes logs (LogQL) |
 
@@ -133,7 +133,7 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 |--------|-------------|------|-----------|-------------|
 | Tous les pods | kube-dns | 53 | UDP/TCP | Résolution DNS |
 | kubelet | Tous les pods | * | TCP | Health checks (liveness/readiness) |
-| Promtail | API Server (host) | 6443 | TCP | Découverte des pods (`kubernetes_sd_configs`) |
+| Alloy | API Server (host) | 6443 | TCP | Découverte des pods (`discovery.kubernetes`) |
 | Prometheus Operator | API Server (host) | 6443 | TCP | Gestion des ServiceMonitors/PrometheusRules |
 | Kube State Metrics | API Server (host) | 6443 | TCP | Collecte métriques état du cluster |
 | NGF Controller | API Server (host) | 6443 | TCP | Watch des Gateway/HTTPRoute |
@@ -173,7 +173,7 @@ Grafana              │     ✗      │    ✗     │     ✗     │      �
 Loki                 │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  -   │   ✗    │    ✗     │
 NGF Data Plane       │     ✓      │    ✓     │     ✗     │      ✗      │     ✗      │    ✓    │  ✗   │   -    │    ✓     │
 NGF Controller       │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✗   │   ✗    │    -     │
-Promtail             │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✓   │   ✗    │    ✗     │
+Alloy                │     ✗      │    ✗     │     ✗     │      ✗      │     ✗      │    ✗    │  ✓   │   ✗    │    ✗     │
 Backup CronJobs      │     ✗      │    ✗     │     ✓     │      ✓      │     ✗      │    ✗    │  ✗   │   ✗    │    ✗     │
 ```
 
@@ -206,7 +206,7 @@ Les Network Policies sont réparties en deux emplacements :
 | Fichier | Namespace | Description |
 |---------|-----------|-------------|
 | `networkpolicies/monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, etc. + CiliumNetworkPolicies API Server |
-| `networkpolicies/loki-stack-networkpolicies.yaml` | loki-stack | Loki, Promtail, Grafana + CiliumNetworkPolicy API Server |
+| `networkpolicies/loki-stack-networkpolicies.yaml` | loki-stack | Loki, Alloy, Grafana + CiliumNetworkPolicy API Server |
 | `networkpolicies/nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric + CiliumNetworkPolicy API Server |
 
 > **Note** : Chaque fichier YAML peut contenir à la fois des `NetworkPolicy` Kubernetes standard
@@ -375,7 +375,7 @@ Si vous ajoutez un nouveau service exposé via la Gateway, modifiez `nginx-gatew
 
 1. Vérifiez que Cilium est bien installé et fonctionnel :
    ```bash
-   kubectl get pods -n kube-system -l k8s-app=cilium
+   kubectl get pods -n cilium-system -l k8s-app=cilium
    ```
 
 2. Vérifiez les labels des pods :
@@ -436,8 +436,8 @@ kubectl logs -n nginx-gateway -l app.kubernetes.io/name=shared-gateway-nginx --t
 
 # Si vous voyez "dial tcp <IP>:443: i/o timeout", la communication gRPC est bloquée
 # Vérifier les drops Cilium
-kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
 ```
 
 **3. Vérifier que les HTTPRoutes sont acceptées**
@@ -447,9 +447,9 @@ kubectl get httproutes -n rhdemo-stagingkub -o wide
 kubectl get gateway -n nginx-gateway
 ```
 
-### Promtail ne collecte aucun log (i/o timeout vers l'API Server)
+### Alloy ne collecte aucun log (i/o timeout vers l'API Server)
 
-Si Promtail affiche des erreurs `failed to list *v1.Pod: dial tcp 10.96.0.1:443: i/o timeout`,
+Si Alloy affiche des erreurs `failed to list *v1.Pod: dial tcp 10.96.0.1:443: i/o timeout`,
 c'est que l'accès à l'API Server est bloqué. Avec Cilium, il faut une CiliumNetworkPolicy :
 
 ```bash
@@ -459,8 +459,8 @@ kubectl get ciliumnetworkpolicies -n loki-stack
 # Si elle manque, l'appliquer
 kubectl apply -f rhDemo/infra/stagingkub/networkpolicies/loki-stack-networkpolicies.yaml
 
-# Redémarrer Promtail
-kubectl rollout restart daemonset/promtail -n loki-stack
+# Redémarrer Alloy
+kubectl rollout restart daemonset/alloy -n loki-stack
 ```
 
 Voir la section [CiliumNetworkPolicy et accès API Server](#ciliumnetworkpolicy-et-accès-api-server) pour plus de détails.
@@ -508,7 +508,7 @@ spec:
 
 | Namespace | Nom | Pod cible | Raison |
 |-----------|-----|-----------|--------|
-| loki-stack | `allow-apiserver-promtail` | Promtail | `kubernetes_sd_configs` (découverte des pods) |
+| loki-stack | `allow-apiserver-alloy` | Alloy | `discovery.kubernetes` (découverte des pods) |
 | monitoring | `allow-apiserver-prometheus-operator` | Prometheus Operator | Watch ServiceMonitors/PrometheusRules |
 | monitoring | `allow-apiserver-kube-state-metrics` | Kube State Metrics | Collecte métriques état cluster |
 | nginx-gateway | `allow-apiserver-access` | NGINX Gateway Fabric | Watch Gateway/HTTPRoute |
@@ -519,10 +519,10 @@ Pour vérifier si un pod est bloqué par une NetworkPolicy vers l'API Server :
 
 ```bash
 # Identifier l'endpoint Cilium du pod
-kubectl exec -n kube-system ds/cilium -- cilium-dbg endpoint list | grep <pod-name>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg endpoint list | grep <pod-name>
 
 # Monitorer les drops en temps réel (remplacer <ID> par l'endpoint ID)
-kubectl exec -n kube-system ds/cilium -- cilium-dbg monitor --type drop --from <ID>
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg monitor --type drop --from <ID>
 
 # Lister les CiliumNetworkPolicies
 kubectl get ciliumnetworkpolicies -A

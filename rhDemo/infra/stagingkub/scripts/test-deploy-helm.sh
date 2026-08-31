@@ -55,7 +55,7 @@ helm upgrade --install rhdemo $HELM_DIR \
   --set rhdemo.image.repository=localhost:5000/rhdemo-api \
   --set rhdemo.image.tag=latest \
   --set rhdemo.image.pullPolicy=Always \
-  --dry-run \
+  --dry-run=client \
   --debug > /tmp/helm-dry-run.yaml 2>&1 || {
     error "Erreur de syntaxe Helm. Voir /tmp/helm-dry-run.yaml"
 }

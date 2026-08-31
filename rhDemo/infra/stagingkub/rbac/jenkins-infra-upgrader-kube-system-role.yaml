@@ -1,0 +1,41 @@
+# Role pour jenkins-infra-upgrader dans le namespace kube-system.
+#
+# Depuis la bascule de Cilium vers son propre namespace dédié
+# (`cilium-system`, cf. jenkins-infra-upgrader-cilium-system-role.yaml et
+# install-or-upgrade-cilium.sh), le seul objet de kube-system encore géré par
+# une release Helm de jenkins-infra-upgrader est ce Service : la release
+# "prometheus" (kube-prometheus-stack, namespace `monitoring`) crée un
+# Service headless dans kube-system pour scraper les métriques CoreDNS.
+# `prometheus-kube-prometheus-kubelet` (autre Service de kube-system) n'est
+# PAS géré par Helm (annotation app.kubernetes.io/managed-by=prometheus-operator,
+# reconcilié par l'Operator lui-même) — aucun droit RBAC nécessaire dessus.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-kube-system-role
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["prometheus-kube-prometheus-coredns"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-kube-system-rolebinding
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-kube-system-role
+  apiGroup: rbac.authorization.k8s.io

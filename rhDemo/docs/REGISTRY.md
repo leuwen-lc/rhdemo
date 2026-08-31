@@ -113,11 +113,14 @@ containerdConfigPatches:
 ### 1. Build de l'image (hôte)
 
 ```bash
-./mvnw clean spring-boot:build-image \
-  -Dspring-boot.build-image.imageName=rhdemo-api:1.1.0-SNAPSHOT
+# Voie standard (celle du pipeline CI) : Dockerfile multi-stage, base Temurin 25
+docker build -t rhdemo-api:$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout) rhDemo/
+
+# Voie alternative encore configurée dans pom.xml : buildpacks Paketo
+./mvnw clean spring-boot:build-image
 ```
 
-→ Crée l'image `rhdemo-api:1.1.0-SNAPSHOT` sur l'hôte
+→ Crée l'image `rhdemo-api:<version pom.xml>` sur l'hôte
 
 ### 2. Tag pour le registry (hôte)
 

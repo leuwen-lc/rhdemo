@@ -59,6 +59,10 @@ pipeline {
         // URLs
         APP_URL = 'https://rhdemo-stagingkub.intra.leuwen-lc.fr'
         KEYCLOAK_URL = 'https://keycloak-stagingkub.intra.leuwen-lc.fr'
+
+        // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials)
+        NOTIFICATION_EMAIL = 'lcpro@etik.com'
     }
 
     parameters {
@@ -904,6 +908,17 @@ EOF
                 echo "Pour vérifier l'état:"
                 echo "   kubectl get pods -n ${env.K8S_NAMESPACE}"
                 echo "   kubectl logs -f deployment/rhdemo -n ${env.K8S_NAMESPACE}"
+
+                // Best-effort : une panne SMTP ne doit pas faire échouer un build par ailleurs réussi.
+                // emailext (plugin email-ext) et non le step "mail" basique : credential SMTP
+                // géré côté serveur (Extended E-mail Notification), voir jenkins-casc.yaml.
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "✅ RHDemo-CD #${env.BUILD_NUMBER} : succès",
+                             body: "Le pipeline RHDemo-CD #${env.BUILD_NUMBER} a réussi.\n\nImage déployée : ${env.DOCKER_IMAGE_NAME}:${env.DEPLOY_IMAGE_TAG}\nApplication : ${env.APP_URL}\n\nDétails : ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
             }
         }
         failure {
@@ -913,6 +928,14 @@ EOF
                 echo "   kubectl get pods -n ${env.K8S_NAMESPACE}"
                 echo "   kubectl describe pods -n ${env.K8S_NAMESPACE}"
                 echo "   kubectl logs -n ${env.K8S_NAMESPACE} <pod-name>"
+
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-CD #${env.BUILD_NUMBER} : échec",
+                             body: "Le pipeline RHDemo-CD #${env.BUILD_NUMBER} a échoué.\n\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
             }
         }
     }

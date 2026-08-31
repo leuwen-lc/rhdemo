@@ -1,7 +1,9 @@
 # Configuration KinD pour le cluster rhdemo
 # Permet la persistance des données PostgreSQL via extraMounts
 # Configure l'accès HTTPS au registry Docker local
-# Utilise Cilium 1.18 comme CNI (remplace kindnet)
+# Utilise Cilium 1.20 comme CNI (remplace kindnet)
+# Node image K8s 1.36.4 : nécessite kind CLI >= v0.33.0
+# (K8s 1.37 exclu : hors matrice de compatibilité officielle Cilium 1.20 = 1.33→1.36)
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 
@@ -22,7 +24,8 @@ networking:
 nodes:
 - role: control-plane
   # Liste des images disponibles : https://github.com/kubernetes-sigs/kind/releases
-  image: kindest/node:v1.35.0@sha256:452d707d4862f52530247495d180205e029056831160e22870e37e3f6c1ac31f
+  # renovate: datasource=docker depName=kindest/node
+  image: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
   extraMounts:
   # Montage pour persistance PostgreSQL rhdemo
   - hostPath: /home/leno-vo/kind-data/rhdemo-stagingkub/postgresql-rhdemo
@@ -46,7 +49,7 @@ nodes:
     protocol: TCP
 
 # ═══════════════════════════════════════════════════════════════
-# Notes d'installation Cilium 1.18 (via Helm)
+# Notes d'installation Cilium 1.20 (via Helm)
 # ═══════════════════════════════════════════════════════════════
 # Le script init-stagingkub.sh installe automatiquement Cilium via Helm.
 #
@@ -56,8 +59,8 @@ nodes:
 #
 # Installation manuelle (si nécessaire) :
 #   helm repo add cilium https://helm.cilium.io/
-#   helm install cilium cilium/cilium --version 1.18.6 \
-#     --namespace kube-system \
+#   helm install cilium cilium/cilium --version 1.20.1 \
+#     --namespace cilium-system --create-namespace \
 #     --set kubeProxyReplacement=true \
 #     --set k8sServiceHost=rhdemo-control-plane \
 #     --set k8sServicePort=6443 \
@@ -65,5 +68,5 @@ nodes:
 #     --set ipam.mode=kubernetes
 #
 # Vérification :
-#   kubectl get pods -n kube-system -l k8s-app=cilium
+#   kubectl get pods -n cilium-system -l k8s-app=cilium
 # ═══════════════════════════════════════════════════════════════

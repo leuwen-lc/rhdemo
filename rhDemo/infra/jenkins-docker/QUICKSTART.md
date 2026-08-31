@@ -43,7 +43,30 @@ Jenkins est accessible sur **http://localhost:8080**.
 | ID | Kind | Usage |
 |----|------|-------|
 | `ossindex-credentials` | Username/password | Accélère les téléchargements OWASP Dependency-Check |
-| `mail.credentials` | Username/password | Notifications email SMTP |
+| `smtp-credentials` (nom au choix) | **Username with password** (pas Secret text, sinon invisible dans la liste déroulante SMTP) | Notifications email `RHDemo-CI` — plugin email-ext, à configurer entièrement à la main dans Jenkins UI (pas via JCasC), voir `README.md` → section Email |
+
+### Pour Jenkinsfile-Renovate (pipeline `RHDemo-Renovate`, automerge des PRs de dépendances)
+
+Réutilise `nvd-api-key` et `ossindex-credentials` déjà créés ci-dessus. En plus, à créer :
+
+| ID | Kind | Comment obtenir |
+|----|------|-----------------|
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `rhdemo-ci-bot` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + **`user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) |
+| `renovate-gpg-key` | Secret text | Clé GPG privée dédiée à la signature des commits Renovate, exportée en base64 : `gpg --export-secret-keys <KEY_ID> \| base64 -w0` |
+| `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) pour les lookups de changelogs/release notes des dépendances hébergées sur GitHub |
+
+> Pourquoi deux comptes bot distincts (`rhdemo-ci-bot` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md` sections 1 et « Credentials Jenkins nécessaires ».
+
+### Pour la mise à jour en place de l'infra stagingkub (`RHDemo-Stagingkub-Upgrade-Deploy`)
+
+Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus-stack/Loki/Alloy/Grafana. À créer :
+
+| ID | Kind | Comment obtenir |
+|----|------|-----------------|
+| `kubeconfig-stagingkub-infra-upgrader` | Secret file | Fichier `rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-infra-upgrader-rbac.yaml`, généré automatiquement par `./scripts/init-stagingkub.sh` (ServiceAccount dédié `jenkins-infra-upgrader`, distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`) |
+
+> Détail de l'étude et du RBAC : `docs/STAGINGKUB_REBUILD_PIPELINE.md` et `infra/stagingkub/rbac/README.md`.
 
 ### Secrets SOPS (environnement ephemere)
 

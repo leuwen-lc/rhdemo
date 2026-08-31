@@ -1,0 +1,55 @@
+# Role pour jenkins-infra-upgrader dans le namespace nginx-gateway
+# (release Helm "ngf" — NGINX Gateway Fabric). Ressources 100% namespaced,
+# aucun risque particulier au-delà de la gestion normale d'une release Helm.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jenkins-infra-upgrader-nginx-gateway-role
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "serviceaccounts", "endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "gateways/status"]
+    verbs: ["get", "list", "watch"]
+  # Role/RoleBinding "ngf-nginx-gateway-fabric-cert-generator" (hook Helm
+  # pre-install, cf. templates/certs-job.yaml du chart) : mêmes principes
+  # que les ClusterRoles cluster-scoped (jenkins-infra-upgrader-clusterrole.
+  # yaml) — restreint par resourceNames à l'objet exact déjà connu, jamais
+  # de `create`, soumis au même garde-fou `escalate` (la règle secrets
+  # create/update/get qu'il porte est déjà couverte ci-dessus).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames:
+      - ngf-nginx-gateway-fabric-cert-generator
+    verbs: ["update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-infra-upgrader-nginx-gateway-rolebinding
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: Role
+  name: jenkins-infra-upgrader-nginx-gateway-role
+  apiGroup: rbac.authorization.k8s.io

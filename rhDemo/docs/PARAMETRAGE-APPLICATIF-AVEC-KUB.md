@@ -177,7 +177,10 @@ env:
   - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
     value: "health,info,metrics,prometheus"
 
-  # JVM Paketo Buildpack
+  # Réglages JVM
+  # NB : les variables BPL_* sont un héritage de l'image Paketo. L'image
+  # actuelle est construite depuis rhDemo/Dockerfile (Temurin 25) et ne les
+  # interprète pas — seul JAVA_TOOL_OPTIONS est honoré nativement par la JVM.
   - name: BPL_JVM_THREAD_COUNT
     value: "50"
   - name: JAVA_TOOL_OPTIONS

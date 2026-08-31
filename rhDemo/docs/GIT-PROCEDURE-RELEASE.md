@@ -64,9 +64,13 @@ Le script effectue dans l'ordre :
 git fetch origin
 git checkout master
 git merge --squash origin/evolutions-post-1.1.7
-git commit -S -m "release: merge evolutions-post-1.1.7"
+git commit -S -m "release: merge evolutions-post-1.1.7" -m "$(cat .git/SQUASH_MSG)"
 git push origin master
 ```
+
+> `-m "$(cat .git/SQUASH_MSG)"` reprend dans le corps du commit la liste des commits squashés
+> (générée automatiquement par `git merge --squash` dans `.git/SQUASH_MSG`) — sans ça, un `-m`
+> unique écrase ce template et le détail des commits d'origine est perdu.
 
 ---
 
@@ -89,6 +93,11 @@ Le script effectue dans l'ordre :
 8. Met à jour `Jenkinsfile-Renovate` (`BASE_BRANCH`) et `renovate.json` (`baseBranchPatterns`) → `evolutions-post-1.1.8`
 9. Commit `chore: retour à 1.1.9-SNAPSHOT après 1.1.8-RELEASE`
 10. Push
+
+> ⚠️ Après le bump, le polling Git de `RHDemo-CI` reste ancré sur l'ancienne branche (le plugin Git
+> compare au dernier `BuildData` enregistré, pas au `BranchSpec` courant) tant qu'aucun build n'a
+> tourné sur la nouvelle branche — les polls suivants concluent alors « aucun changement » même après
+> des merges Renovate. Lancer un **Build Now** manuel sur `RHDemo-CI` une fois l'étape 5 faite.
 
 ---
 

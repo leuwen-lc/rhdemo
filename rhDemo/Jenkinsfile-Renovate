@@ -20,6 +20,11 @@
  * Selenium/ZAP et SonarQube ne sont pas exécutés ici (déjà couverts par
  * RHDemo-CI sur master après merge) — objectif : validation rapide (~10 min).
  *
+ * La validation appliquée à chaque PR dépend des fichiers modifiés (Maven+OWASP,
+ * Kubernetes dry-run, ou Trivy scan ciblé) — algorithme complet et raisons
+ * détaillées dans docs/RENOVATE_AUTOMERGE_CI.md, section "Aiguillage de la
+ * validation selon les fichiers modifiés".
+ *
  * 📖 Documentation : docs/RENOVATE_AUTOMERGE_CI.md
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -43,7 +48,7 @@ pipeline {
         FORGEJO_API     = 'https://codeberg.org/api/v1'
         REPO            = 'leuwen-lc/rhdemo'
         BASE_BRANCH     = 'evolutions-post-1.1.9'
-        RENOVATE_IMAGE  = 'renovate/renovate:43.249.5'
+        RENOVATE_IMAGE  = 'renovate/renovate:43.288.0'
     }
 
     stages {
@@ -70,7 +75,7 @@ pipeline {
                     // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
                     // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
                     // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
-                    // Token dédié (pas forgejo-api-token) : l'initialisation de Renovate a besoin
+                    // Token dédié (pas ci-bot-forgejo-token) : l'initialisation de Renovate a besoin
                     // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
@@ -107,7 +112,11 @@ RENOVATE_SCAN_EOF
 
         stage('📋 Lister les PRs Renovate') {
             steps {
-                withCredentials([string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN')]) {
+                // ci-bot-forgejo-token : compte Codeberg dédié "rhdemo-ci-bot" (collaborateur
+                // write-only sur le repo), distinct du compte personnel et du bot Renovate
+                // (renovate-forgejo-token) — merges/comments/sync attribués à cette identité,
+                // pas à un compte humain. Voir docs/RENOVATE_AUTOMERGE_CI.md section 1.
+                withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                     script {
                         def httpCode = sh(
                             script: """
@@ -123,12 +132,20 @@ RENOVATE_SCAN_EOF
                         // jq (pas de python3 dans l'image agent) — filtre sur head.ref (nom de
                         // branche brut, pas head.label qui est préfixé "owner:branche" et casserait
                         // le split ci-dessous). Séparateur "|" : le sha ne peut pas en contenir.
+                        // select(.head.repo.full_name == $repo) : rejette explicitement les PRs
+                        // dont la branche source vit dans un fork. Sans ce filtre, seul un accident
+                        // d'implémentation protégeait le pipeline (le "git fetch origin" ci-dessous
+                        // échoue de toute façon sur une branche qui n'existe pas dans le dépôt
+                        // principal) — un accident n'est pas un contrôle de sécurité voulu, donc on
+                        // le rend explicite : seules les branches poussées directement dans
+                        // leuwen-lc/rhdemo (donc par quelqu'un ayant déjà l'accès Write) sont éligibles.
                         env.RENOVATE_PRS = sh(
                             script: """
-                                jq -r --arg base "${BASE_BRANCH}" '
+                                jq -r --arg base "${BASE_BRANCH}" --arg repo "${REPO}" '
                                     [ .[]
                                       | select((.head.ref // "") | test("renovate"; "i"))
                                       | select(.base.ref == \$base)
+                                      | select(.head.repo.full_name == \$repo)
                                       | "\\(.number)|\\(.head.ref)|\\(.head.sha)"
                                     ] | join(" ")
                                 ' /tmp/renovate-prs-${BUILD_NUMBER}.json
@@ -151,118 +168,398 @@ RENOVATE_SCAN_EOF
         stage('🔀 Valider et merger chaque PR') {
             when { expression { env.RENOVATE_PRS?.trim() } }
             steps {
-                withCredentials([
-                    string(credentialsId: 'forgejo-api-token', variable: 'FORGEJO_TOKEN'),
-                    string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
-                    usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
-                ]) {
-                    script {
-                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
-                        def failures = []
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    def failures = []
 
-                        env.RENOVATE_PRS.split(' ').each { prEntry ->
-                            def parts    = prEntry.split('\\|')
-                            def prNumber = parts[0]
-                            def branchRef = parts[1]
+                    // Le dry-run Kubernetes (composants d'infra stagingkub, cf. plus bas)
+                    // a besoin de résoudre "rhdemo-control-plane" : cet agent éphémère
+                    // n'est attaché qu'à rhdemo-jenkins-network par défaut (cf. jenkins-casc.yaml),
+                    // pas au réseau Docker "kind" du cluster KinD — sans cette connexion,
+                    // kubectl échoue en "server misbehaving" (résolution DNS), comme le fait
+                    // déjà Jenkinsfile-CD/Jenkinsfile-Stagingkub-Upgrade-Deploy. Déconnexion
+                    // symétrique dans le bloc post { always {} } de ce pipeline.
+                    env.JENKINS_CONTAINER = sh(script: 'hostname', returnStdout: true).trim()
+                    lib.dockerNetworkConnect(env.JENKINS_CONTAINER, 'kind')
 
-                            echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
+                    env.RENOVATE_PRS.split(' ').each { prEntry ->
+                        def parts    = prEntry.split('\\|')
+                        def prNumber = parts[0]
+                        def branchRef = parts[1]
 
-                            sh "git fetch origin '${branchRef}'"
-                            sh 'git checkout FETCH_HEAD'
-                            // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
-                            // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
-                            // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
-                            def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-                            sh "git fetch origin ${BASE_BRANCH}"
+                        echo "=== Traitement PR #${prNumber} (${branchRef}) ==="
 
-                            // Une branche Renovate non rebasée depuis longtemps peut hériter
-                            // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
-                            // entre-temps) et faire échouer la CI pour une raison sans rapport
-                            // avec son propre changement. On la met à jour par un merge classique
-                            // avant de lancer les tests.
-                            //
-                            // Un merge --squash a été essayé puis abandonné : il ne crée pas de
-                            // commit de fusion (un seul parent), donc git perd la trace de ce qui a
-                            // déjà été synchronisé. Chaque sync suivante recalcule alors un
-                            // merge-base bien plus ancien que le dernier sync réussi, ce qui
-                            // provoque de faux conflits dès qu'un fichier est retouché côté base
-                            // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
-                            // Un merge classique préserve la filiation : chaque sync est incrémentale.
-                            def upToDate = sh(
-                                script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                        sh "git fetch origin '${branchRef}'"
+                        sh 'git checkout FETCH_HEAD'
+                        // Capturé avant le fetch suivant : FETCH_HEAD est un pointeur unique,
+                        // écrasé par tout nouveau "git fetch" (donc par celui de BASE_BRANCH
+                        // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
+                        def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                        sh "git fetch origin ${BASE_BRANCH}"
+
+                        // Une branche Renovate non rebasée depuis longtemps peut hériter
+                        // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
+                        // entre-temps) et faire échouer la CI pour une raison sans rapport
+                        // avec son propre changement. On la met à jour par un merge classique
+                        // avant de lancer les tests.
+                        //
+                        // Un merge --squash a été essayé puis abandonné : il ne crée pas de
+                        // commit de fusion (un seul parent), donc git perd la trace de ce qui a
+                        // déjà été synchronisé. Chaque sync suivante recalcule alors un
+                        // merge-base bien plus ancien que le dernier sync réussi, ce qui
+                        // provoque de faux conflits dès qu'un fichier est retouché côté base
+                        // entre deux cycles (observé en pratique sur Jenkinsfile-Renovate lui-même).
+                        // Un merge classique préserve la filiation : chaque sync est incrémentale.
+                        def upToDate = sh(
+                            script: "git merge-base --is-ancestor origin/${BASE_BRANCH} HEAD",
+                            returnStatus: true
+                        ) == 0
+
+                        def syncFailed = false
+                        if (!upToDate) {
+                            echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
+                            def syncStatus = sh(
+                                script: """
+                                    set -e
+                                    git config user.email "ci-bot@leuwen-lc.fr"
+                                    git config user.name "RHDemo CI Bot"
+                                    git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
+                                """,
                                 returnStatus: true
-                            ) == 0
+                            )
 
-                            def syncFailed = false
-                            if (!upToDate) {
-                                echo "Branche en retard sur ${BASE_BRANCH} — synchronisation (merge)"
-                                def syncStatus = sh(
-                                    script: """
-                                        set -e
-                                        git config user.email "jenkins-renovate@leuwen-lc.fr"
-                                        git config user.name "Jenkins Renovate Bot"
-                                        git merge origin/${BASE_BRANCH} -m "chore: synchronisation avec ${BASE_BRANCH} (merge automatique CI Renovate)"
-                                    """,
-                                    returnStatus: true
-                                )
+                            if (syncStatus != 0) {
+                                echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
 
-                                if (syncStatus != 0) {
-                                    echo "Conflit lors de la synchronisation avec ${BASE_BRANCH} pour PR #${prNumber}"
-                                    sh 'git merge --abort 2>/dev/null || true'
-                                    sh "git reset --hard ${prTipSha}"
-                                    sh 'git clean -fd'
-                                    syncFailed = true
-                                } else {
-                                    def pushStatus = sh(
+                                // Un conflit peut simplement signifier que cette PR est dépassée :
+                                // une autre PR Renovate pour la MÊME dépendance a déjà mergé une
+                                // version plus récente sur la base pendant que celle-ci attendait
+                                // (cas vécu : PR kube-prometheus-stack minor en conflit après le
+                                // merge de la PR major correspondante). Détection, fichier par
+                                // fichier en conflit : comparer la valeur "VAR=\"X.Y.Z\"" (format
+                                // utilisé par tous les scripts scripts/components/*.sh trackés par
+                                // Renovate) entre la base actuelle et cette PR — si la base est déjà
+                                // à une version égale ou supérieure sur TOUS les fichiers en conflit,
+                                // la PR ne peut plus rien apporter : fermeture automatique plutôt
+                                // qu'un échec nécessitant une intervention humaine. Si un seul
+                                // fichier ne matche pas ce format (valeur vide d'un côté ou de
+                                // l'autre), on ne prend aucun risque : traitement en échec classique.
+                                def conflictedFiles = sh(
+                                    script: 'git diff --name-only --diff-filter=U',
+                                    returnStdout: true
+                                ).trim()
+
+                                def superseded = conflictedFiles && conflictedFiles.split('\n').every { f ->
+                                    def baseValue = sh(
+                                        script: "git show origin/${BASE_BRANCH}:'${f}' 2>/dev/null | grep -oE '\"[0-9]+(\\.[0-9]+)+' | tr -d '\"' | head -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    def prValue = sh(
+                                        script: "git show ${prTipSha}:'${f}' 2>/dev/null | grep -oE '\"[0-9]+(\\.[0-9]+)+' | tr -d '\"' | head -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    if (!baseValue || !prValue) return false
+                                    def newest = sh(
+                                        script: "printf '%s\\n%s\\n' '${baseValue}' '${prValue}' | sort -V | tail -1",
+                                        returnStdout: true
+                                    ).trim()
+                                    return newest == baseValue
+                                }
+
+                                sh 'git merge --abort 2>/dev/null || true'
+                                sh "git reset --hard ${prTipSha}"
+                                sh 'git clean -fd'
+
+                                if (superseded) {
+                                    echo "PR #${prNumber} dépassée (dépendance déjà à une version égale ou supérieure sur ${BASE_BRANCH}) — fermeture automatique"
+                                    withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                        lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                            "PR fermée automatiquement : la dépendance est déjà à une version égale ou plus récente sur ${BASE_BRANCH} (probablement supersédée par une autre PR déjà mergée). Build : ${env.BUILD_URL}")
+                                        sh """
+                                            set +x
+                                            curl -s -o /dev/null -w "%{http_code}" -X PATCH \\
+                                              -H "Authorization: token \${FORGEJO_TOKEN}" \\
+                                              -H "Content-Type: application/json" \\
+                                              -d '{"state":"closed"}' \\
+                                              "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}"
+                                        """
+                                    }
+                                    return
+                                }
+
+                                syncFailed = true
+                            } else {
+                                // FORGEJO_TOKEN scopé au seul push de synchronisation, pas au reste de
+                                // l'itération : voir la note de sécurité sur le bloc de build ci-dessous.
+                                def pushStatus = withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                    sh(
                                         script: """
                                             set +x
                                             git push "https://\${FORGEJO_TOKEN}@codeberg.org/${REPO}.git" "HEAD:refs/heads/${branchRef}"
                                         """,
                                         returnStatus: true
                                     )
-                                    if (pushStatus != 0) {
-                                        echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
-                                        syncFailed = true
-                                    }
+                                }
+                                if (pushStatus != 0) {
+                                    echo "Push de synchronisation échoué pour PR #${prNumber} (droits du token ?)"
+                                    syncFailed = true
                                 }
                             }
+                        }
 
-                            if (syncFailed) {
-                                failures << prNumber
+                        if (syncFailed) {
+                            failures << prNumber
+                            withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                                 lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                     "Conflit lors de la synchronisation automatique avec ${BASE_BRANCH} — rebase manuel nécessaire.")
-                                return
                             }
+                            return
+                        }
 
-                            def ciStatus = sh(
-                                script: '''
-                                    cd rhDemo
-                                    set -e
-                                    ./mvnw clean compile -DskipTests
-                                    ./mvnw verify
-                                    ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
-                                ''',
-                                returnStatus: true
-                            )
+                        // Aiguillage de la validation selon les fichiers modifiés — algorithme
+                        // complet et raisons documentées dans docs/RENOVATE_AUTOMERGE_CI.md,
+                        // section "Aiguillage de la validation selon les fichiers modifiés".
+                        // Un seul listing Forgejo, un seul job qui merge (pas de second job séparé).
+                        def changedFiles = sh(
+                            script: 'git diff --name-only origin/' + BASE_BRANCH + '...HEAD',
+                            returnStdout: true
+                        ).trim()
+                        echo "Fichiers modifiés par PR #${prNumber} :\n${changedFiles}"
 
+                        def isInfraComponentPr = changedFiles.split('\n').any {
+                            it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/ ||
+                            it == 'rhDemo/infra/stagingkub/kind-config.yaml'
+                        }
+                        // Images Docker épinglées par digest (repo:tag@sha256:digest) suivies par
+                        // customManager Renovate — cf. RENOVATE_AUTOMERGE_CI.md. Uniquement si la PR
+                        // ne touche QUE ces fichiers (sinon fallback Maven, cf. chemin par défaut).
+                        def pinnedImageFiles = ['rhDemo/Jenkinsfile-CI', 'rhDemo/infra/stagingkub/helm/rhdemo/values.yaml']
+                        def isPinnedImagePr = !isInfraComponentPr &&
+                            changedFiles.split('\n').every { it in pinnedImageFiles }
+
+                        // OWASP Dependency-Check n'a de sens que si la PR touche un manifeste de
+                        // dépendances (Maven et/ou npm, ce dernier étant compilé par le même
+                        // "mvnw verify" via frontend-maven-plugin). Sans ça, l'arbre de dépendances
+                        // scanné est strictement identique à celui déjà en place sur BASE_BRANCH :
+                        // toute CVE remontée est donc préexistante et sans rapport avec cette PR
+                        // (ex: build #45, bump du tag Docker de Renovate lui-même dans ce
+                        // Jenkinsfile — aucune dépendance Maven/npm concernée). Bloquer serait à la
+                        // fois inutile (rien de nouveau à scanner) et injuste (la PR ne peut rien
+                        // faire pour corriger une CVE qui n'est pas la sienne — c'est le rôle de
+                        // fixcve/fixcve-auto sur RHDemo-CI, pas de ce garde-fou de merge).
+                        def dependencyManifestFiles = ['rhDemo/pom.xml', 'rhDemo/frontend/package.json', 'rhDemo/frontend/package-lock.json']
+                        def touchesDependencyManifest = changedFiles.split('\n').any { it in dependencyManifestFiles }
+                        def isOutOfMavenScopePr = !isInfraComponentPr && !isPinnedImagePr && !touchesDependencyManifest
+
+                        if (isInfraComponentPr) {
+                            echo "→ PR #${prNumber} : chemin retenu = Kubernetes dry-run (composant d'infra stagingkub détecté dans les fichiers modifiés)"
+                        } else if (isPinnedImagePr) {
+                            def matchedFiles = pinnedImageFiles.findAll { f -> changedFiles.split('\n').contains(f) }
+                            echo "→ PR #${prNumber} : chemin retenu = Trivy scan ciblé (image(s) Docker épinglée(s) détectée(s) dans : ${matchedFiles.join(', ')})"
+                        } else if (isOutOfMavenScopePr) {
+                            echo "→ PR #${prNumber} : chemin retenu = validation directe, hors périmètre OWASP (aucun manifeste de dépendances Maven/npm modifié)"
+                        } else {
+                            def matchedFiles = dependencyManifestFiles.findAll { f -> changedFiles.split('\n').contains(f) }
+                            echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (manifeste de dépendances modifié : ${matchedFiles.join(', ')})"
+                        }
+
+                        def ciStatus
+                        if (isInfraComponentPr) {
+                            def componentFile = changedFiles.split('\n').find {
+                                it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/
+                            }
+                            env.RENOVATE_TARGET_COMPONENT = componentFile ?
+                                (componentFile =~ /install-or-upgrade-(.+)\.sh/)[0][1] : ''
+
+                            // Le même kubeconfig RBAC que l'étape post-merge est utilisé ici : un
+                            // --dry-run=server exige les mêmes autorisations qu'une exécution réelle
+                            // (Kubernetes vérifie l'autorisation avant d'évaluer le drapeau dry-run) —
+                            // la garantie de sécurité vient de l'absence de persistance, pas d'un
+                            // credential moins privilégié. FORGEJO_TOKEN reste volontairement absent
+                            // de ce bloc : le script exécuté vient d'une PR non revue (même
+                            // raisonnement supply-chain que pour le bloc Maven ci-dessous).
+                            ciStatus = withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
+                                sh(
+                                    script: '''
+                                        set -e
+                                        mkdir -p $HOME/.kube
+                                        cp "$KUBECONFIG_FILE" $HOME/.kube/config
+                                        chmod 600 $HOME/.kube/config
+                                        # "kubectl cluster-info" interroge en interne les Services de
+                                        # kube-system (list, label kubernetes.io/cluster-service=true)
+                                        # pour afficher les adresses KubeDNS/etc. — jenkins-infra-upgrader
+                                        # n'a délibérément pas ce droit (cf. rbac/README.md). Utiliser
+                                        # "config current-context" à la place (purement local, lit le
+                                        # kubeconfig, aucun appel API) : même vérification de sanité que
+                                        # Jenkinsfile-Stagingkub-Upgrade-Deploy, sans ce faux-positif RBAC.
+                                        kubectl config current-context > /dev/null
+
+                                        SCRIPT="''' + componentFile + '''"
+                                        chmod +x "$SCRIPT"
+                                        HELM_DRY_RUN=true "$SCRIPT"
+                                    ''',
+                                    returnStatus: true
+                                )
+                            }
+                        } else if (isPinnedImagePr) {
+                            // Extraction de l'image ajoutée par le diff (motif repo:tag@sha256:digest),
+                            // peu importe quelle variable Jenkinsfile-CI / clé values.yaml a changé —
+                            // voir docs/RENOVATE_AUTOMERGE_CI.md.
+                            def changedImages = sh(
+                                script: """
+                                    git diff origin/${BASE_BRANCH}...HEAD -- ${pinnedImageFiles.join(' ')} \
+                                      | grep -E '^\\+' | grep -v '^\\+\\+\\+' \
+                                      | grep -oE '"[a-zA-Z0-9./_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]+"' \
+                                      | tr -d '"' | sort -u
+                                """,
+                                returnStdout: true
+                            ).trim()
+
+                            if (!changedImages) {
+                                echo "ERREUR: aucune image reconnue (repo:tag@sha256:digest) dans le diff de PR #${prNumber} — validation refusée plutôt que de retomber silencieusement sur Maven"
+                                ciStatus = 1
+                            } else {
+                                echo "Image(s) à scanner : ${changedImages.replaceAll('\n', ', ')}"
+
+                                sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
+                                sh '''
+                                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
+                                    mkdir -p "${TRIVY_CACHE_DIR}"
+                                    export TRIVY_CACHE_DIR
+                                    trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                                '''
+
+                                changedImages.split('\n').each { image ->
+                                    def reportName = (image =~ /([^\/:]+):[^:]+$/)[0][1]
+                                    echo "→ Scan Trivy : ${image} (rapport ${reportName})"
+                                    lib.generateTrivyReport(image, reportName)
+                                }
+
+                                ciStatus = lib.aggregateTrivyResults() ? 0 : 1
+                            }
+                        } else if (isOutOfMavenScopePr) {
+                            // Aucun manifeste de dépendances touché : rien à construire ni à scanner,
+                            // la PR est validée directement (cf. commentaire de l'aiguillage ci-dessus).
+                            ciStatus = 0
+                        } else {
+                            // FORGEJO_TOKEN (accès Write sur le dépôt) est volontairement absent de ce
+                            // bloc : c'est ici que tourne du code non revu (le contenu de la mise à jour
+                            // de dépendance proposée par la PR, via les plugins Maven exécutés par
+                            // "mvnw verify"/OWASP). Si ce token était en variable d'environnement à ce
+                            // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
+                            // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
+                            // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
+                            // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
+                            // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
+                            // sont exposés ici.
+                            ciStatus = withCredentials([
+                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                                usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                            ]) {
+                                sh(
+                                    script: '''
+                                        cd rhDemo
+                                        set -e
+                                        # -q : n'affiche que warnings/erreurs Maven (les résultats de tests
+                                        # restent exploitables via les rapports JUnit archivés par le step
+                                        # "junit" plus bas, indépendants de la verbosité console).
+                                        ./mvnw -q clean compile -DskipTests
+                                        ./mvnw -q verify
+                                        ./mvnw -q org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                    ''',
+                                    returnStatus: true
+                                )
+                            }
+                        }
+
+                        withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                             if (ciStatus == 0) {
                                 echo "CI OK pour PR #${prNumber} — merge en cours"
-                                def mergeHttpCode = sh(
-                                    script: """
-                                        set +x
-                                        curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
-                                          -H "Authorization: token \${FORGEJO_TOKEN}" \
-                                          -H "Content-Type: application/json" \
-                                          -d '{"Do":"merge","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
-                                          "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
-                                    """,
-                                    returnStdout: true
-                                ).trim()
+                                // Squash (pas "merge") : historique linéaire sur BASE_BRANCH — un seul
+                                // commit par PR Renovate au lieu du triplet commit original + commit de
+                                // synchronisation + commit de merge. Sans impact sur l'étape de
+                                // synchronisation ci-dessus (qui doit rester un merge classique) : chaque
+                                // branche Renovate est supprimée après ce merge, donc pas de synchro
+                                // future à préserver sur cette branche. Nécessite "Allow squash merging"
+                                // activé côté réglages du dépôt Codeberg (Settings > Repository).
+                                //
+                                // Retry avec attente fixe avant le premier appel : après le git push de
+                                // synchronisation juste au-dessus, Forgejo recalcule de façon asynchrone
+                                // le statut "mergeable" de la PR et refuse un appel /merge tant que ce
+                                // recalcul n'est pas terminé (HTTP 405 "Please try again later"). Sur le
+                                // chemin de validation directe (isOutOfMavenScopePr, ciStatus fixé sans
+                                // aucune étape intermédiaire), l'appel arrive en quelques centaines de ms
+                                // après le push, bien avant que Forgejo ait fini — échec systématique et
+                                // reproductible (build #56 et #57, PR #241 getsops-sops-3.x), à ne pas
+                                // confondre avec le faux négatif HTTP 504 déjà géré plus bas (build #39).
+                                // Les chemins avec une étape intermédiaire réelle (dry-run Kubernetes,
+                                // Maven+OWASP) laissent involontairement ce délai s'écouler, d'où
+                                // l'absence historique du problème sur ces PR-là. Sans risque de double
+                                // merge : un appel sur une PR déjà mergée échoue simplement à son tour, et
+                                // la vérification GET post-boucle (déjà en place) rattrape ce cas.
+                                def mergeHttpCode = '000'
+                                def maxMergeAttempts = 4
+                                def mergeRetryDelaySeconds = 10
+                                for (int attempt = 1; attempt <= maxMergeAttempts; attempt++) {
+                                    mergeHttpCode = sh(
+                                        script: """
+                                            set +x
+                                            curl -s -o /tmp/forgejo-merge-response-${prNumber}.json -w "%{http_code}" -X POST \
+                                              -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                              -H "Content-Type: application/json" \
+                                              -d '{"Do":"squash","merge_message_field":"Automerge Renovate PR #${prNumber} - CI Jenkins OK","delete_branch_after_merge":true}' \
+                                              "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}/merge"
+                                        """,
+                                        returnStdout: true
+                                    ).trim()
+                                    if (mergeHttpCode ==~ /2\d\d/) {
+                                        break
+                                    }
+                                    if (attempt < maxMergeAttempts) {
+                                        echo "WARN: merge API a répondu HTTP ${mergeHttpCode} pour PR #${prNumber} (tentative ${attempt}/${maxMergeAttempts}) — nouvel essai dans ${mergeRetryDelaySeconds}s"
+                                        sleep(time: mergeRetryDelaySeconds, unit: 'SECONDS')
+                                    }
+                                }
                                 def mergeStatus = (mergeHttpCode ==~ /2\d\d/) ? 0 : 1
+
+                                // Un code non-2xx (ex: HTTP 504) ne prouve pas que le merge a échoué
+                                // côté Forgejo : l'opération squash-merge peut très bien avoir abouti
+                                // après que la réponse ait expiré derrière le reverse proxy (faux négatif
+                                // observé en pratique sur le build #39 — PR #215 mergée avec succès,
+                                // "Do":"squash" appliqué, malgré un 504 reçu par Jenkins, ce qui avait
+                                // fait échouer le build ET empêché le déclenchement de
+                                // RHDemo-Stagingkub-Upgrade-Deploy alors que le code était déjà mergé).
+                                // On revérifie donc l'état réel de la PR via un GET avant de conclure.
                                 if (mergeStatus != 0) {
-                                    echo "WARN: merge API échoué pour PR #${prNumber} (HTTP ${mergeHttpCode})"
+                                    echo "WARN: merge API a répondu HTTP ${mergeHttpCode} pour PR #${prNumber} — vérification de l'état réel de la PR"
                                     sh "cat /tmp/forgejo-merge-response-${prNumber}.json 2>/dev/null || true"
                                     sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
+
+                                    // En try/catch : si ce GET échoue à son tour (nouveau problème
+                                    // gateway), on ne doit pas planter tout le stage — on retombe
+                                    // simplement sur le comportement d'origine (échec signalé).
+                                    def actuallyMerged = false
+                                    try {
+                                        actuallyMerged = sh(
+                                            script: """
+                                                set +x
+                                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" \
+                                                  "${FORGEJO_API}/repos/${REPO}/pulls/${prNumber}" \
+                                                  | jq -r '.merged'
+                                            """,
+                                            returnStdout: true
+                                        ).trim() == 'true'
+                                    } catch (Exception e) {
+                                        echo "WARN: vérification de l'état de PR #${prNumber} impossible : ${e.message}"
+                                    }
+
+                                    if (actuallyMerged) {
+                                        echo "✅ PR #${prNumber} en fait bien mergée malgré la réponse HTTP ${mergeHttpCode} (timeout gateway probable) — poursuite comme un merge réussi"
+                                        mergeStatus = 0
+                                    }
+                                }
+
+                                if (mergeStatus != 0) {
                                     failures << prNumber
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                         "CI Jenkins OK mais merge échoué (HTTP ${mergeHttpCode} — conflit possible ou droits insuffisants). Intervention manuelle requise. Build : ${env.BUILD_URL}")
@@ -270,6 +567,25 @@ RENOVATE_SCAN_EOF
                                     sh "rm -f /tmp/forgejo-merge-response-${prNumber}.json"
                                     lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                         "CI Jenkins validée — PR mergée automatiquement. Build : ${env.BUILD_URL}")
+
+                                    // Merge réussi d'une PR d'infra : déclenche l'application réelle sur
+                                    // stagingkub (post-merge, jamais avant — cf. commentaire dry-run
+                                    // ci-dessus). N'échoue pas la boucle Renovate si ce déclenchement rate :
+                                    // la PR est déjà mergée, un échec de déploiement est de la responsabilité
+                                    // du job RHDemo-Stagingkub-Upgrade-Deploy (qui fait son propre rollback
+                                    // --rollback-on-failure), pas de celle de Jenkinsfile-Renovate.
+                                    if (isInfraComponentPr && env.RENOVATE_TARGET_COMPONENT) {
+                                        try {
+                                            build(
+                                                job: 'RHDemo-Stagingkub-Upgrade-Deploy',
+                                                parameters: [string(name: 'COMPONENT', value: env.RENOVATE_TARGET_COMPONENT)],
+                                                wait: false
+                                            )
+                                            echo "▶ RHDemo-Stagingkub-Upgrade-Deploy déclenché pour le composant '${env.RENOVATE_TARGET_COMPONENT}'"
+                                        } catch (Exception e) {
+                                            echo "WARN: déclenchement de RHDemo-Stagingkub-Upgrade-Deploy échoué : ${e.message}"
+                                        }
+                                    }
                                 }
                             } else {
                                 echo "CI KO pour PR #${prNumber} — PR conservée ouverte"
@@ -277,18 +593,20 @@ RENOVATE_SCAN_EOF
                                 lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
                                     "CI Jenkins échouée — voir build ${env.BUILD_URL}. Mise à jour à revoir manuellement.")
                             }
+                        }
 
+                        if (!isInfraComponentPr && !isPinnedImagePr && !isOutOfMavenScopePr) {
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/surefire-reports/*.xml'
                             junit allowEmptyResults: true, testResults: 'rhDemo/target/failsafe-reports/*.xml'
                         }
+                    }
 
-                        if (failures) {
-                            // FAILURE (pas unstable) : Jenkins n'inclut pas les builds UNSTABLE dans
-                            // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
-                            // passerait alors inaperçue sur le tableau de bord du job.
-                            currentBuild.result = 'FAILURE'
-                            echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
-                        }
+                    if (failures) {
+                        // FAILURE (pas unstable) : Jenkins n'inclut pas les builds UNSTABLE dans
+                        // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
+                        // passerait alors inaperçue sur le tableau de bord du job.
+                        currentBuild.result = 'FAILURE'
+                        echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
                     }
                 }
             }
@@ -297,6 +615,13 @@ RENOVATE_SCAN_EOF
 
     post {
         always {
+            script {
+                if (env.JENKINS_CONTAINER) {
+                    sh """
+                        docker network disconnect kind ${env.JENKINS_CONTAINER} 2>/dev/null && echo "✅ Agent déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter l'agent du réseau kind"
+                    """
+                }
+            }
             sh "git checkout ${env.BASE_BRANCH} || true"
             cleanWs()
         }

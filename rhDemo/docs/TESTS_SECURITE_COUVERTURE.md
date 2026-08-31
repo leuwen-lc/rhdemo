@@ -4,6 +4,9 @@
 
 Ce document décrit la stratégie de tests pour les composants Spring Security de l'application rhDemo, avec pour objectif d'atteindre **50% de couverture de code** sur le périmètre mesuré.
 
+> Voir aussi [TESTS_REFONTE.md](TESTS_REFONTE.md) (refonte du parc de tests backend)
+> et [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) (tests unitaires Vue.js).
+
 ## Composants testés
 
 ### 1. `GrantedAuthoritiesKeyCloakMapper` (Mapper des rôles)

@@ -1,0 +1,238 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Pipeline Stagingkub Upgrade Deploy - RHDemo
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Application RÉELLE (post-merge) d'une mise à jour en place d'un composant
+ * d'infrastructure stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-
+ * stack, Loki, Alloy, Grafana) — Option 3 de
+ * rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md.
+ *
+ * ARTICULATION AVEC Jenkinsfile-Renovate :
+ *   - La validation de la PR (avant merge) se fait dans la boucle étendue de
+ *     Jenkinsfile-Renovate via un `helm upgrade --dry-run=server` / `kubectl
+ *     apply --dry-run=server`, SANS jamais muter le cluster.
+ *   - Ce pipeline-ci n'est déclenché QU'APRÈS un merge réussi (build job
+ *     déclenché par Jenkinsfile-Renovate, ou détection SCM sur la base) et
+ *     exécute le vrai `install-or-upgrade-<composant>.sh` sur stagingkub.
+ *
+ * SÉCURITÉ :
+ *   - ServiceAccount dédié `jenkins-infra-upgrader` (credential Jenkins
+ *     `kubeconfig-stagingkub-infra-upgrader`), JAMAIS `kubeconfig-stagingkub`
+ *     (réservé à RHDemo-CD / jenkins-deployer).
+ *   - Agent éphémère standard (pas de docker.sock, pas de `kind` installé).
+ *   - Rollback automatique porté par `--rollback-on-failure` dans chaque script composant
+ *     (rhDemo/infra/stagingkub/scripts/components/).
+ *
+ * 📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+pipeline {
+    agent { label 'builder' }
+
+    options {
+        timeout(time: 20, unit: 'MINUTES')
+        timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        disableConcurrentBuilds()
+    }
+
+    parameters {
+        string(
+            name: 'COMPONENT',
+            defaultValue: '',
+            description: "Composant à mettre à jour : cilium, ngf, kube-prometheus-stack, loki, alloy ou grafana. Si vide, déduit automatiquement des fichiers modifiés par le dernier commit (scripts/components/*.sh)."
+        )
+    }
+
+    environment {
+        COMPONENTS_DIR = 'rhDemo/infra/stagingkub/scripts/components'
+        APP_URL = 'https://rhdemo-stagingkub.intra.leuwen-lc.fr'
+        KEYCLOAK_URL = 'https://keycloak-stagingkub.intra.leuwen-lc.fr'
+        // NodePort HTTPS fixe du Gateway partagé (patché par init-stagingkub.sh /
+        // install-or-upgrade-ngf.sh — voir kind-config.yaml, hostPort 443 -> containerPort 32616)
+        HTTPS_NODEPORT = '32616'
+        KIND_NODE_CONTAINER = 'rhdemo-control-plane'
+
+        // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials)
+        NOTIFICATION_EMAIL = 'lcpro@etik.com'
+    }
+
+    stages {
+
+        stage('🛠️ Checkout') {
+            steps {
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    lib.printSectionHeader("Pipeline Stagingkub Upgrade Deploy - RHDemo")
+                    echo "Build: #${env.BUILD_NUMBER}"
+                }
+                checkout scm
+            }
+        }
+
+        stage('🔎 Déterminer le composant à mettre à jour') {
+            steps {
+                script {
+                    if (params.COMPONENT?.trim()) {
+                        env.TARGET_COMPONENT = params.COMPONENT.trim()
+                        echo "▶ Composant fourni en paramètre : ${env.TARGET_COMPONENT}"
+                    } else {
+                        // Déduit du dernier commit (déclenchement post-merge Renovate) :
+                        // un seul fichier scripts/components/*.sh modifié par convention
+                        // (une PR Renovate = une dépendance = un composant)
+                        def changed = sh(
+                            script: "git diff --name-only HEAD~1 HEAD -- '${COMPONENTS_DIR}/install-or-upgrade-*.sh'",
+                            returnStdout: true
+                        ).trim()
+
+                        if (!changed) {
+                            error("Aucun script de composant modifié par le dernier commit, et COMPONENT non fourni — impossible de déterminer quoi mettre à jour.")
+                        }
+
+                        def firstFile = changed.split('\n')[0]
+                        env.TARGET_COMPONENT = (firstFile =~ /install-or-upgrade-(.+)\.sh/)[0][1]
+                        echo "▶ Composant déduit du dernier commit : ${env.TARGET_COMPONENT} (fichier: ${firstFile})"
+                    }
+
+                    env.TARGET_SCRIPT = "${COMPONENTS_DIR}/install-or-upgrade-${env.TARGET_COMPONENT}.sh"
+
+                    if (!fileExists(env.TARGET_SCRIPT)) {
+                        error("Script introuvable : ${env.TARGET_SCRIPT}")
+                    }
+                }
+            }
+        }
+
+        stage('☸️ Configure Kubernetes Access') {
+            steps {
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    echo "▶ Connexion de Jenkins au réseau kind..."
+                    env.JENKINS_CONTAINER = sh(script: 'hostname', returnStdout: true).trim()
+                    lib.dockerNetworkConnect(env.JENKINS_CONTAINER, 'kind')
+
+                    // Le nom d'hôte public (APP_URL/KEYCLOAK_URL) ne se résout pas
+                    // correctement depuis le conteneur Jenkins (résout en 127.0.0.1,
+                    // sans rapport avec le nom réel) — vérifié en conditions réelles.
+                    // On résout donc explicitement vers l'IP du nœud KinD sur le
+                    // réseau Docker 'kind' pour le healthcheck (cf. waitForHealthcheck resolve).
+                    env.KIND_NODE_IP = sh(
+                        script: "docker inspect ${env.KIND_NODE_CONTAINER} --format '{{.NetworkSettings.Networks.kind.IPAddress}}'",
+                        returnStdout: true
+                    ).trim()
+                    echo "▶ IP du nœud KinD (réseau kind) : ${env.KIND_NODE_IP}"
+                }
+
+                withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
+                    sh """
+                        mkdir -p \$HOME/.kube
+                        cp "\$KUBECONFIG_FILE" \$HOME/.kube/config
+                        chmod 600 \$HOME/.kube/config
+
+                        echo "▶ Vérification de l'accès au cluster (ServiceAccount jenkins-infra-upgrader)..."
+                        kubectl config current-context
+
+                        if ! kubectl auth can-i update daemonsets/cilium -n cilium-system > /dev/null 2>&1 \\
+                           && ! kubectl auth can-i create deployments -n nginx-gateway > /dev/null 2>&1 \\
+                           && ! kubectl auth can-i create deployments -n monitoring > /dev/null 2>&1 \\
+                           && ! kubectl auth can-i create deployments -n loki-stack > /dev/null 2>&1; then
+                            echo "❌ Impossible de confirmer l'accès RBAC jenkins-infra-upgrader"
+                            echo "   Vérifiez que ./init-stagingkub.sh a bien appliqué le RBAC (cf. rbac/README.md)"
+                            exit 1
+                        fi
+                        echo "✅ Accès RBAC jenkins-infra-upgrader confirmé"
+                    """
+                }
+            }
+        }
+
+        stage('☸️ Upgrade en place du composant') {
+            steps {
+                script {
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  MISE À JOUR EN PLACE : ${env.TARGET_COMPONENT}"
+                    echo "═══════════════════════════════════════════════════════"
+                }
+                sh "chmod +x ${env.TARGET_SCRIPT}"
+                sh "${env.TARGET_SCRIPT}"
+            }
+        }
+
+        stage('🏥 Vérification santé applicative') {
+            steps {
+                script {
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    echo "▶ Vérification que rhdemo-app et keycloak restent joignables..."
+                    echo "   (le Gateway partagé NGF est un point de passage commun à toute l'application)"
+
+                    def appHost = env.APP_URL.replaceFirst('^https://', '')
+                    def keycloakHost = env.KEYCLOAK_URL.replaceFirst('^https://', '')
+
+                    lib.waitForHealthcheck([
+                        url: "https://${appHost}:${env.HTTPS_NODEPORT}/actuator/health",
+                        resolve: "${appHost}:${env.HTTPS_NODEPORT}:${env.KIND_NODE_IP}",
+                        name: 'RHDemo App (via Gateway partagé)',
+                        timeout: 60,
+                        insecure: true
+                    ])
+
+                    lib.waitForHealthcheck([
+                        url: "https://${keycloakHost}:${env.HTTPS_NODEPORT}/realms/master",
+                        resolve: "${keycloakHost}:${env.HTTPS_NODEPORT}:${env.KIND_NODE_IP}",
+                        name: 'Keycloak (via Gateway partagé)',
+                        timeout: 60,
+                        insecure: true
+                    ])
+                }
+            }
+        }
+
+    } // fin stages
+
+    post {
+        always {
+            script {
+                sh """
+                    docker network disconnect kind ${env.JENKINS_CONTAINER} 2>/dev/null && echo "✅ Jenkins déconnecté du réseau kind" || echo "⚠️  Impossible de déconnecter Jenkins du réseau kind"
+                """
+                echo "═══════════════════════════════════════════════════════"
+                echo "Pipeline Stagingkub Upgrade Deploy terminé: ${currentBuild.currentResult}"
+                echo "Composant : ${env.TARGET_COMPONENT ?: 'N/A'}"
+                echo "═══════════════════════════════════════════════════════"
+            }
+        }
+        success {
+            script {
+                echo "✅ Mise à jour en place réussie pour ${env.TARGET_COMPONENT ?: 'N/A'}"
+
+                // Best-effort : une panne SMTP ne doit pas faire échouer un build par ailleurs réussi.
+                // emailext (plugin email-ext) et non le step "mail" basique : credential SMTP
+                // géré côté serveur (Extended E-mail Notification), voir jenkins-casc.yaml.
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "✅ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : succès (${env.TARGET_COMPONENT ?: 'N/A'})",
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a réussi.\n\nComposant mis à jour : ${env.TARGET_COMPONENT ?: 'N/A'}\nApplication : ${env.APP_URL}\n\nDétails : ${env.BUILD_URL}"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --rollback-on-failure dans le script composant."
+                echo "   Consultez les logs ci-dessus pour le détail de l'échec."
+
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : échec (${env.TARGET_COMPONENT ?: 'N/A'})",
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback automatique déclenché par --rollback-on-failure dans le script composant.\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+    }
+}

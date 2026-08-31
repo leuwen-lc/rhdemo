@@ -46,7 +46,8 @@ RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-c
 # INSTALLATION MAVEN
 # ═══════════════════════════════════════════════════════════════════
 
-ENV MAVEN_VERSION=3.9.12
+# renovate: datasource=github-releases depName=apache/maven
+ENV MAVEN_VERSION=3.9.16
 ENV MAVEN_HOME=/opt/maven
 
 RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
@@ -59,7 +60,8 @@ RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries
 # INSTALLATION SOPS (pour déchiffrement secrets)
 # ═══════════════════════════════════════════════════════════════════
 
-ENV SOPS_VERSION=3.11.0
+# renovate: datasource=github-releases depName=getsops/sops
+ENV SOPS_VERSION=3.13.3
 
 RUN wget -q https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /usr/local/bin/sops && \
     chmod +x /usr/local/bin/sops && \
@@ -96,7 +98,8 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 # INSTALLATION HELM (gestionnaire de packages Kubernetes)
 # ═══════════════════════════════════════════════════════════════
 
-ENV HELM_VERSION=3.20.0
+# renovate: datasource=github-releases depName=helm/helm
+ENV HELM_VERSION=4.2.4
 
 RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
     tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
@@ -119,7 +122,8 @@ RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
 # INSTALLATION COSIGN (signature d'images de conteneur)
 # ═══════════════════════════════════════════════════════════════
 
-ENV COSIGN_VERSION=3.0.4
+# renovate: datasource=github-releases depName=sigstore/cosign
+ENV COSIGN_VERSION=3.1.3
 
 RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64 -O /usr/local/bin/cosign && \
     chmod +x /usr/local/bin/cosign && \
@@ -131,7 +135,8 @@ RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSI
 # L'image de base fournit JDK 21 pour le runtime de l'agent.
 # JDK 25 est nécessaire pour compiler le projet (migration Java 25).
 
-ENV TEMURIN_25_VERSION=25.0.2+10
+# renovate: datasource=github-releases depName=adoptium/temurin25-binaries
+ENV TEMURIN_25_VERSION=25.0.4+7
 
 RUN wget -q "https://api.adoptium.net/v3/binary/version/jdk-${TEMURIN_25_VERSION}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -O /tmp/temurin-25.tar.gz && \
     mkdir -p /opt/java/temurin-25 && \

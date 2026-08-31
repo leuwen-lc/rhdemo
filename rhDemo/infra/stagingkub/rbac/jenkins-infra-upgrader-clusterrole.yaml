@@ -1,0 +1,436 @@
+# ClusterRole pour jenkins-infra-upgrader - ressources cluster-scoped
+# strictement nécessaires à la mise à jour en place des composants
+# d'infrastructure (Cilium, NGINX Gateway Fabric, kube-prometheus-stack,
+# Loki, Alloy, Grafana). Voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md
+# (étape 3) pour le détail du raisonnement.
+#
+# Principes appliqués partout dans ce fichier :
+#   - jamais de `create` sur les CustomResourceDefinition ni sur les
+#     ClusterRole/ClusterRoleBinding (empêche l'installation de CRDs ou de
+#     bindings arbitraires) ;
+#   - `update`/`patch` toujours restreints par `resourceNames` à la liste
+#     exacte des objets déjà connus, jamais un accès générique ;
+#   - `jenkins-infra-upgrader-cluster-role` (ce ClusterRole lui-même) et
+#     `jenkins-infra-upgrader-cluster-rolebinding` n'apparaissent dans
+#     AUCUNE liste `resourceNames` ci-dessous : ce ServiceAccount ne peut
+#     jamais modifier ses propres droits ;
+#   - toute nouvelle ressource nommée (nouveau type de CRD, nouveau
+#     ClusterRole) introduite par une future version d'un composant
+#     nécessite un ajout explicite et revu ici (échec propre sinon,
+#     jamais un accès silencieusement élargi).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: jenkins-infra-upgrader-cluster-role
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+rules:
+  # Namespaces : Helm --create-namespace / kubectl create namespace pour
+  # nginx-gateway, monitoring, loki-stack
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+
+  # Nodes : lecture seule, pour kubectl cluster-info / debug
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+
+  # CustomResourceDefinitions : lecture large (Helm doit pouvoir vérifier
+  # l'état des CRDs), écriture strictement restreinte par resourceNames à
+  # la liste exacte des CRDs Gateway API / NGF / kube-prometheus-stack.
+  # Cilium est volontairement absent de cette liste (bootstrappe ses
+  # propres CRDs lui-même, cf. jenkins-infra-upgrader-cilium-system-role.yaml).
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    resourceNames:
+      # Gateway API (channel standard, vendorées — cf. gateway-api-crds/)
+      - backendtlspolicies.gateway.networking.k8s.io
+      - gatewayclasses.gateway.networking.k8s.io
+      - gateways.gateway.networking.k8s.io
+      - grpcroutes.gateway.networking.k8s.io
+      - httproutes.gateway.networking.k8s.io
+      - listenersets.gateway.networking.k8s.io
+      - referencegrants.gateway.networking.k8s.io
+      - tlsroutes.gateway.networking.k8s.io
+      # NGINX Gateway Fabric (embarquées dans le chart, cf. `helm show crds`)
+      - authenticationfilters.gateway.nginx.org
+      - clientsettingspolicies.gateway.nginx.org
+      - nginxgateways.gateway.nginx.org
+      - nginxproxies.gateway.nginx.org
+      - observabilitypolicies.gateway.nginx.org
+      - proxysettingspolicies.gateway.nginx.org
+      - ratelimitpolicies.gateway.nginx.org
+      - snippetsfilters.gateway.nginx.org
+      - snippetspolicies.gateway.nginx.org
+      - upstreamsettingspolicies.gateway.nginx.org
+      - wafpolicies.gateway.nginx.org
+      # kube-prometheus-stack (Prometheus Operator)
+      - alertmanagerconfigs.monitoring.coreos.com
+      - alertmanagers.monitoring.coreos.com
+      - podmonitors.monitoring.coreos.com
+      - probes.monitoring.coreos.com
+      - prometheusagents.monitoring.coreos.com
+      - prometheuses.monitoring.coreos.com
+      - prometheusrules.monitoring.coreos.com
+      - scrapeconfigs.monitoring.coreos.com
+      - servicemonitors.monitoring.coreos.com
+      - thanosrulers.monitoring.coreos.com
+    verbs: ["update", "patch"]
+
+  # ValidatingAdmissionPolicy/Binding "safe-upgrades.gateway.networking.k8s.io" :
+  # embarquée par le bundle CRDs Gateway API standard channel vendoré (à
+  # partir de v1.5.0, cf. gateway-api-crds/v2.6.0/crds.yaml) au même titre
+  # que les CRDs elles-mêmes — mêmes principes (lecture large, écriture
+  # restreinte par resourceNames à l'objet exact déjà connu, jamais de
+  # `create`). Ce ne sont pas des objets RBAC (Role/ClusterRole), donc pas
+  # soumis au garde-fou `escalate` : un simple oubli de règle, comme pour les
+  # CRDs ci-dessus.
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    resourceNames:
+      - safe-upgrades.gateway.networking.k8s.io
+    verbs: ["update", "patch"]
+
+  # ClusterRoles : mêmes principes, restreint aux objets déjà créés par les
+  # releases gérées ici (noms vérifiés par `helm template`/`helm show crds`
+  # sur les charts réels du projet).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    resourceNames:
+      - cilium
+      - cilium-operator
+      - cilium-pre-flight
+      - ngf-nginx-gateway-fabric
+      - prometheus-kube-state-metrics
+      - prometheus-kube-prometheus-operator
+      - prometheus-kube-prometheus-prometheus
+      - alloy
+      - loki-clusterrole
+      - grafana-clusterrole
+    verbs: ["update", "patch"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterrolebindings"]
+    resourceNames:
+      - cilium
+      - cilium-operator
+      - cilium-pre-flight
+      - ngf-nginx-gateway-fabric
+      - prometheus-kube-state-metrics
+      - prometheus-kube-prometheus-operator
+      - prometheus-kube-prometheus-prometheus
+      - alloy
+      - loki-clusterrolebinding
+      - grafana-clusterrolebinding
+    verbs: ["update", "patch"]
+
+  # Miroir des règles portées par les ClusterRoles
+  # prometheus-kube-prometheus-operator / prometheus-kube-prometheus-prometheus
+  # (kube-prometheus-stack). Le `get/update/patch` nommé ci-dessus sur ces
+  # deux objets ne suffit PAS : le garde-fou RBAC natif de Kubernetes contre
+  # l'auto-élévation de privilèges (admission "non-escalating rule",
+  # indépendant du verbe `escalate`) exige que le compte qui patche un
+  # ClusterRole détienne DÉJÀ lui-même toutes les règles qu'il y écrit —
+  # y compris celles déjà présentes et inchangées d'une version à l'autre.
+  # Contrairement à l'hypothèse initiale documentée dans
+  # STAGINGKUB_REBUILD_PIPELINE.md (le garde-fou `escalate` protégerait ce
+  # cas comme pour Cilium), ce chemin n'avait jamais été exercé en
+  # conditions réelles — l'installation initiale s'était faite depuis
+  # l'hôte avec un kubeconfig admin. Ces deux ClusterRoles n'acceptant pas
+  # de restriction par `resourceNames` (ils s'appliquent cluster-wide, sans
+  # nom d'objet cible), aucune réduction de portée n'est possible ici :
+  # liste vérifiée exhaustivement sur le message d'erreur RBAC réel de
+  # l'échec d'upgrade kube-prometheus-stack 87.17.0 (union des deux
+  # ClusterRoles). Conséquence acceptée : accès `secrets`/`configmaps`
+  # cluster-wide pour `jenkins-infra-upgrader`.
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["endpoints", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["patch", "create"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["watch"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["services/finalizers"]
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["*"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "create", "list", "watch", "update", "delete"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["patch", "create"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources:
+      - alertmanagerconfigs
+      - alertmanagers
+      - alertmanagers/finalizers
+      - alertmanagers/status
+      - podmonitors
+      - podmonitors/status
+      - probes
+      - probes/status
+      - prometheusagents
+      - prometheusagents/finalizers
+      - prometheusagents/status
+      - prometheuses
+      - prometheuses/finalizers
+      - prometheuses/status
+      - prometheusrules
+      - prometheusrules/status
+      - scrapeconfigs
+      - scrapeconfigs/status
+      - servicemonitors
+      - servicemonitors/status
+      - thanosrulers
+      - thanosrulers/finalizers
+      - thanosrulers/status
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+
+  # Miroir des règles portées par le ClusterRole prometheus-kube-state-metrics
+  # (sous-chart kube-state-metrics de kube-prometheus-stack, kubeStateMetrics.
+  # enabled: true sans restriction de resources dans prometheus-values.yaml,
+  # donc jeu de règles complet upstream). Même raisonnement que le bloc
+  # ci-dessus pour operator/prometheus : le garde-fou RBAC non-escalation
+  # exige que jenkins-infra-upgrader détienne déjà TOUTES ces règles avant de
+  # patcher ce ClusterRole, y compris celles inchangées d'une version à
+  # l'autre. Liste vérifiée exhaustivement via
+  # `helm template ... kube-prometheus-stack --version 87.19.0` suite à
+  # l'échec d'upgrade 87.19.0 (kube-state-metrics avait ajouté de nouvelles
+  # ressources scrutées depuis la dernière vérification à 87.17.0).
+  - apiGroups: ["certificates.k8s.io"]
+    resources: ["certificatesigningrequests"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets", "deployments", "replicasets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - limitranges
+      - persistentvolumeclaims
+      - persistentvolumes
+      - replicationcontrollers
+      - resourcequotas
+    verbs: ["list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs: ["list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["volumeattachments"]
+    verbs: ["list", "watch"]
+
+  # Miroir des règles portées par les ClusterRoles cilium / cilium-operator
+  # (chart Cilium 1.20.0). Même raisonnement que les blocs miroir
+  # kube-prometheus-stack ci-dessus : le garde-fou RBAC non-escalation exige
+  # que jenkins-infra-upgrader détienne déjà toutes ces règles avant de
+  # patcher ces deux ClusterRoles. Liste vérifiée exhaustivement sur le
+  # message d'erreur RBAC réel de l'échec RHDemo-Renovate #56 (2026-08-07,
+  # bump 1.19.6 → 1.20.0), croisée avec
+  # templates/cilium-operator/clusterrole.yaml du chart 1.20.0.
+  #
+  # Exception documentée au principe "jamais de `create` sur
+  # CustomResourceDefinition" énoncé en tête de ce fichier : le
+  # ClusterRole cilium-operator embarque, sans condition de valeur Helm,
+  # un `create` non restreint sur customresourcedefinitions (l'opérateur
+  # crée lui-même ses CRD manquantes au démarrage — vérifié dans le chart,
+  # aucune option ne désactive ce comportement). C'est le seul verbe non
+  # restreignable par `resourceNames` ajouté ici (par nature : le nom d'un
+  # objet n'existe pas encore à sa création) ; tout le reste ci-dessous
+  # reste nommé. Accepté au même titre que le bloc configmaps/secrets
+  # `verbs: ["*"]` cluster-wide plus haut : assouplissement ponctuel et
+  # justifié, jamais un raccourci de confort. Corrige au passage
+  # l'hypothèse antérieure de rbac/README.md ("jenkins-infra-upgrader n'a
+  # aucun droit CRD sur cilium.io") — à mettre à jour en conséquence.
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/status"]
+    verbs: ["patch"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services/status"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    resourceNames:
+      - ciliumbgpadvertisements.cilium.io
+      - ciliumbgpclusterconfigs.cilium.io
+      - ciliumbgpnodeconfigoverrides.cilium.io
+      - ciliumbgpnodeconfigs.cilium.io
+      - ciliumbgppeerconfigs.cilium.io
+      - ciliumcidrgroups.cilium.io
+      - ciliumclusterwideenvoyconfigs.cilium.io
+      - ciliumclusterwidenetworkpolicies.cilium.io
+      - ciliumdatapathplugins.cilium.io
+      - ciliumegressgatewaypolicies.cilium.io
+      - ciliumendpoints.cilium.io
+      - ciliumendpointslices.cilium.io
+      - ciliumenvoyconfigs.cilium.io
+      - ciliumgatewayclassconfigs.cilium.io
+      - ciliumidentities.cilium.io
+      - ciliuml2announcementpolicies.cilium.io
+      - ciliumloadbalancerippools.cilium.io
+      - ciliumlocalredirectpolicies.cilium.io
+      - ciliumnetworkpolicies.cilium.io
+      - ciliumnodeconfigs.cilium.io
+      - ciliumnodes.cilium.io
+      - ciliumpodippools.cilium.io
+    verbs: ["update"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions/status"]
+    resourceNames:
+      - ciliumbgpadvertisements.cilium.io
+      - ciliumbgpclusterconfigs.cilium.io
+      - ciliumbgpnodeconfigoverrides.cilium.io
+      - ciliumbgpnodeconfigs.cilium.io
+      - ciliumbgppeerconfigs.cilium.io
+    verbs: ["update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpadvertisements", "ciliumbgpclusterconfigs", "ciliumbgpnodeconfigoverrides", "ciliumbgpnodeconfigs", "ciliumbgppeerconfigs", "ciliumcidrgroups", "ciliumenvoyconfigs"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpclusterconfigs/status", "ciliumbgppeerconfigs/status"]
+    verbs: ["update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgpnodeconfigs/status", "ciliumendpoints/status", "ciliuml2announcementpolicies/status", "ciliumloadbalancerippools/status"]
+    verbs: ["patch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumbgppeeringpolicies", "ciliumdatapathplugins", "ciliumloadbalancerippools"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwideenvoyconfigs", "ciliumegressgatewaypolicies", "ciliuml2announcementpolicies", "ciliumlocalredirectpolicies", "ciliumnodeconfigs"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwidenetworkpolicies", "ciliumnetworkpolicies"]
+    verbs: ["create", "deletecollection", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumclusterwidenetworkpolicies/status", "ciliumnetworkpolicies/status"]
+    verbs: ["patch", "update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpoints"]
+    verbs: ["create", "delete", "get", "list", "patch", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumendpointslices"]
+    verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumidentities"]
+    verbs: ["create", "delete", "list", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnodes"]
+    verbs: ["create", "delete", "get", "list", "update", "watch"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumnodes/status"]
+    verbs: ["get", "update"]
+  - apiGroups: ["cilium.io"]
+    resources: ["ciliumpodippools"]
+    verbs: ["create", "get", "list", "watch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create", "get", "update"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get"]
+
+  # Miroir des règles portées par le ClusterRole "alloy" (chart grafana/alloy,
+  # RBAC de découverte de service pour le scraping — voir install-or-upgrade-alloy.sh).
+  # Même raisonnement que les blocs miroir ci-dessus : le garde-fou RBAC
+  # non-escalation exige que jenkins-infra-upgrader détienne déjà toutes ces
+  # règles avant de patcher ce ClusterRole. Contrairement aux mirrors
+  # précédents, la couverture Kubernetes est sémantique (pas de comparaison
+  # littérale de PolicyRule) : seules les combinaisons apiGroup/resource/verbe
+  # réellement absentes de ce fichier sont ajoutées ci-dessous, le reste
+  # (configmaps/secrets, nodes, nodes/metrics, apps replicasets list/watch,
+  # monitoring.coreos.com/*, nonResourceURLs /metrics, networking.k8s.io
+  # ingresses, "" endpoints/services/pods/namespaces) est déjà couvert par des
+  # blocs existants. Liste vérifiée exhaustivement via `helm template
+  # grafana/alloy --version 1.11.1` suite à l'échec d'upgrade 1.11.0 → 1.11.1
+  # (RHDemo-Renovate, 2026-08-14).
+  - apiGroups: [""]
+    resources: ["endpointslices", "ingresses", "nodes/pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps", "extensions"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpoints", "ingresses", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["monitoring.grafana.com"]
+    resources: ["podlogs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["endpoints", "endpointslices", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-infra-upgrader-cluster-rolebinding
+  labels:
+    app.kubernetes.io/name: jenkins-infra-upgrader
+    app.kubernetes.io/component: ci-cd-infra-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-infra-upgrader
+    namespace: rhdemo-stagingkub
+roleRef:
+  kind: ClusterRole
+  name: jenkins-infra-upgrader-cluster-role
+  apiGroup: rbac.authorization.k8s.io

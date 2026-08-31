@@ -5,7 +5,7 @@
 # ConfigMap pour la configuration PostgreSQL personnalisée
 # ═══════════════════════════════════════════════════════════════
 # Configure les logs de requêtes lentes pour l'observabilité.
-# Les logs sont collectés par Promtail et visualisables dans Grafana/Loki.
+# Les logs sont collectés par Alloy et visualisables dans Grafana/Loki.
 #
 # Paramètres clés:
 #   - log_min_duration_statement: Seuil en ms pour logger une requête
@@ -59,7 +59,7 @@ data:
     # Niveau de log minimum
     log_min_messages = {{ (index .Values "postgresql-rhdemo").logging.minLevel }}
 
-    # Logger vers stderr (capturé par Kubernetes/Promtail)
+    # Logger vers stderr (capturé par Kubernetes/Alloy)
     log_destination = 'stderr'
     logging_collector = off
 {{- end }}

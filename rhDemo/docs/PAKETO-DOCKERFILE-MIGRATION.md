@@ -2,6 +2,16 @@
 
 Date : 2025-12-11
 
+> **Document historique.** Décrit la bascule initiale (image de base Eclipse
+> Temurin **21**). Depuis, l'image de base a suivi la montée Java du projet et
+> est aujourd'hui **Eclipse Temurin 25** (`maven:3.9-eclipse-temurin-25-noble`
+> pour le build, `eclipse-temurin:25-jre-*` pour le runtime — voir `rhDemo/Dockerfile`
+> pour l'état courant). Le pipeline CI construit l'image via `docker build` sur ce
+> Dockerfile ; la configuration `spring-boot:build-image` (Paketo) reste présente
+> dans `pom.xml` comme voie alternative, épinglée sur `BP_JVM_VERSION=25`.
+> Toutes les mentions de « 21 » ci-dessous sont à lire au sens de « la version
+> Java d'alors ».
+
 ## 🎯 Objectif
 
 Remplacer la construction d'image Docker via Paketo Buildpacks par un Dockerfile classique basé sur Eclipse Temurin 21, afin d'éviter les problèmes réseau et obtenir plus de contrôle sur le processus de build.

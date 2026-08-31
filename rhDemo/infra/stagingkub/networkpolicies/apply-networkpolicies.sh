@@ -5,7 +5,7 @@
 # Ce script applique les Network Policies pour les namespaces qui ne sont pas
 # gérés par le chart Helm rhdemo:
 #   - monitoring (Prometheus, AlertManager, etc.)
-#   - loki-stack (Loki, Promtail, Grafana)
+#   - loki-stack (Loki, Alloy, Grafana)
 #   - nginx-gateway (NGINX Gateway Fabric)
 #
 # Usage:

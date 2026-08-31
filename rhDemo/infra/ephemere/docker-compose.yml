@@ -51,7 +51,7 @@ services:
   # Keycloak - Serveur d'authentification
   # ═══════════════════════════════════════════════════════════════
   keycloak:
-    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.6.3@sha256:29b2ce19cc0b4815d4c3f043fdae70d9df3089b3f917d0f39eafce4428298ac5}
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0}
     container_name: keycloak-ephemere
     restart: unless-stopped
     command:
@@ -104,7 +104,7 @@ services:
     container_name: rhdemo-ephemere-app
     restart: unless-stopped
     environment:
-      # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
+      # Spring Boot (relaxed binding des variables d'environnement)
       SPRING_PROFILES_ACTIVE: ephemere
       SERVER_PORT: 9000
 
@@ -123,9 +123,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when_authorized
 
-      # JVM Options (Paketo)
-      BPL_JVM_THREAD_COUNT: 50
-      BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
+      # Options JVM (l'image applique déjà UseContainerSupport via JAVA_OPTS)
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
     depends_on:
       rhdemo-db:
@@ -148,7 +146,7 @@ services:
   # Nginx - Reverse Proxy avec HTTPS
   # ═══════════════════════════════════════════════════════════════
   nginx:
-    image: ${NGINX_IMAGE:-nginx:1.31.2-alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa}
+    image: ${NGINX_IMAGE:-nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752}
     container_name: rhdemo-ephemere-nginx
     restart: unless-stopped
     ports:

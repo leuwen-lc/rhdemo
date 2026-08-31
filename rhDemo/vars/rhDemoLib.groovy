@@ -41,6 +41,11 @@ def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
  *   - initialWait: Temps d'attente initial avant de commencer les checks (défaut: 0)
  *   - acceptedCodes: Liste des codes HTTP acceptés (défaut: [200])
  *   - insecure: Ignorer les erreurs SSL pour HTTPS (défaut: false)
+ *   - resolve: Optionnel, "host:port:ip" (curl --resolve) — nécessaire quand le nom
+ *     d'hôte public ne se résout pas correctement depuis le conteneur Jenkins
+ *     (ex: résolution en 127.0.0.1 depuis un agent Docker, sans rapport avec le
+ *     nom d'hôte réel). Permet de forcer la connexion vers l'IP du nœud KinD
+ *     tout en gardant le Host/SNI corrects pour le Gateway.
  */
 def waitForHealthcheck(Map config) {
     def timeout = config.timeout ?: 60
@@ -48,6 +53,7 @@ def waitForHealthcheck(Map config) {
     def initialWait = config.initialWait ?: 0
     def acceptedCodes = config.acceptedCodes ?: [200]
     def insecure = config.insecure ? '-k' : ''
+    def resolve = config.resolve ? "--resolve ${config.resolve}" : ''
     def codesPattern = acceptedCodes.join('|')
 
     if (initialWait > 0) {
@@ -61,7 +67,7 @@ def waitForHealthcheck(Map config) {
         timeout=${timeout}
         while [ \$timeout -gt 0 ]; do
             # Test depuis Jenkins (connecté au réseau Docker si nécessaire)
-            HTTP_CODE=\$(curl ${insecure} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
+            HTTP_CODE=\$(curl ${insecure} ${resolve} -sf -o /dev/null -w "%{http_code}" "${config.url}" 2>/dev/null || echo "000")
 
             if echo "\${HTTP_CODE}" | grep -qE "^(${codesPattern})\$"; then
                 echo "✅ ${name} ready (HTTP \${HTTP_CODE})"
@@ -399,16 +405,29 @@ def withSecretsLoaded(String secretsPath, String command) {
  */
 def postForgejoComment(String forgejoApi, String repo, String issueNumber, String message) {
     withEnv(["FORGEJO_COMMENT_BODY=${message}"]) {
-        sh """
-            set +x
-            PAYLOAD=\$(jq -n --arg body "\${FORGEJO_COMMENT_BODY}" '{body: \$body}')
-            curl -sf -X POST \\
-              -H "Authorization: token \${FORGEJO_TOKEN}" \\
-              -H "Content-Type: application/json" \\
-              -d "\${PAYLOAD}" \\
-              "${forgejoApi}/repos/${repo}/issues/${issueNumber}/comments" >/dev/null \\
-              || echo "⚠️  Commentaire Forgejo non posté sur #${issueNumber}"
-        """
+        // Capture code HTTP + corps de réponse (même principe que le merge dans
+        // Jenkinsfile-Renovate) : un "curl -sf ... || echo échec" ne dit jamais
+        // pourquoi, ce qui a déjà coûté un diagnostic à l'aveugle en pratique.
+        def httpCode = sh(
+            script: """
+                set +x
+                PAYLOAD=\$(jq -n --arg body "\${FORGEJO_COMMENT_BODY}" '{body: \$body}')
+                curl -s -o /tmp/forgejo-comment-response-${issueNumber}.json -w "%{http_code}" -X POST \\
+                  -H "Authorization: token \${FORGEJO_TOKEN}" \\
+                  -H "Content-Type: application/json" \\
+                  -d "\${PAYLOAD}" \\
+                  "${forgejoApi}/repos/${repo}/issues/${issueNumber}/comments"
+            """,
+            returnStdout: true
+        ).trim()
+
+        if (httpCode ==~ /2\d\d/) {
+            sh "rm -f /tmp/forgejo-comment-response-${issueNumber}.json"
+        } else {
+            echo "⚠️  Commentaire Forgejo non posté sur #${issueNumber} (HTTP ${httpCode})"
+            sh "cat /tmp/forgejo-comment-response-${issueNumber}.json 2>/dev/null || true"
+            sh "rm -f /tmp/forgejo-comment-response-${issueNumber}.json"
+        }
     }
 }
 

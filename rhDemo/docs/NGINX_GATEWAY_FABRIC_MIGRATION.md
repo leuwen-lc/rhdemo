@@ -2,8 +2,17 @@
 
 **Statut** : ✅ Migration implémentée
 **Environnement** : stagingkub (Kubernetes/KinD)
-**Version** : **2.6.0** (correctif CVE-2026-31789)
+**Version au moment de la migration** : 2.6.0 (correctif CVE-2026-31789). Version
+courante suivie par Renovate — voir `NGF_IMAGE` dans `Jenkinsfile-CI` et
+`global.images.ngf` dans les values Helm.
 **Architecture** : **Shared Gateway** (namespace `nginx-gateway`)
+
+> **Mise à jour 08/2026 (migration Helm 4 / K8s 1.36)** : le paramétrage des
+> NodePorts est passé de `nginx.service.ports[].nodePort` (clé disparue du
+> schéma du chart 2.6.x) à `nginx.service.nodePorts[] = {port, listenerPort}` ;
+> l'extraction des CRDs pour un chart OCI a dû être adaptée à Helm 4 (lignes
+> `Pulled:`/`Digest:` désormais sur stdout). Détails dans
+> [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md) §4.
 
 ---
 

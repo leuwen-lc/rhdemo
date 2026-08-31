@@ -27,7 +27,7 @@ jenkins-controller (0 exécuteurs)
 - Docker CLI, docker-compose
 - SOPS 3.11.0, yq, jq
 - Trivy (scanner Trivy)
-- kubectl, Helm 3.20.0, Cosign 3.0.4
+- kubectl, Helm 4.2.4, Cosign 3.0.4
 - Firefox ESR + Xvfb (tests Selenium headless)
 - Node.js / npm
 

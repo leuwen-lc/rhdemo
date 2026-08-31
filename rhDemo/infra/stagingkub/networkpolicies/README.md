@@ -7,7 +7,7 @@ Ce dossier contient les Network Policies pour les namespaces qui ne sont pas gé
 | Fichier | Namespace | Composants protégés |
 |---------|-----------|---------------------|
 | `monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, Prometheus Operator, Node Exporter, Kube State Metrics |
-| `loki-stack-networkpolicies.yaml` | loki-stack | Loki, Promtail, Grafana |
+| `loki-stack-networkpolicies.yaml` | loki-stack | Loki, Alloy, Grafana |
 | `nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric |
 
 ## Stratégie
@@ -74,7 +74,7 @@ kubectl get networkpolicies -A | grep -E '(monitoring|loki-stack|nginx-gateway)'
 │  │  (Helm chart)       │  │                 │  │                         │ │
 │  │  - rhdemo-app       │  │  - Grafana ◄────┼──┼─ Prometheus             │ │
 │  │  - keycloak         │  │  - Loki ◄───────┼──┤                         │ │
-│  │  - postgresql x2    │  │  - Promtail     │  │  - AlertManager         │ │
+│  │  - postgresql x2    │  │  - Alloy        │  │  - AlertManager         │ │
 │  └─────────────────────┘  └─────────────────┘  │  - Node Exporter        │ │
 │                                                 │  - Kube State Metrics   │ │
 │                                                 └─────────────────────────┘ │
@@ -98,7 +98,7 @@ kubectl get networkpolicies -A | grep -E '(monitoring|loki-stack|nginx-gateway)'
 
 | Source | Destination | Port | Description |
 |--------|-------------|------|-------------|
-| Promtail | Loki | 3100 | Push logs |
+| Alloy | Loki | 3100 | Push logs |
 | Grafana | Loki | 3100 | Requêtes LogQL |
 | Grafana | monitoring/Prometheus | 9090 | Requêtes PromQL |
 | nginx-gateway | Grafana | 80 | Trafic utilisateur |
@@ -149,8 +149,8 @@ Pour diagnostiquer les problèmes de Network Policy avec Cilium :
 
 ```bash
 # Voir les paquets bloqués par Cilium
-kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
-    xargs -I {} kubectl -n kube-system exec {} -- cilium monitor --type drop
+kubectl get pods -n cilium-system -l k8s-app=cilium -o name | head -1 | \
+    xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
 ```
 
 ## Dépannage
@@ -160,7 +160,7 @@ kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
 Vérifiez que le CNI (Cilium) supporte les Network Policies :
 
 ```bash
-kubectl get pods -n kube-system -l k8s-app=cilium
+kubectl get pods -n cilium-system -l k8s-app=cilium
 ```
 
 ### Pod en CrashLoopBackOff avec "context deadline exceeded"
@@ -176,8 +176,8 @@ C'est probablement un problème d'accès à l'API Server. Vérifiez :
 2. Les drops Cilium :
 
    ```bash
-   kubectl get pods -n kube-system -l k8s-app=cilium -o name | head -1 | \
-       xargs -I {} kubectl -n kube-system exec {} -- cilium monitor --type drop
+   kubectl get pods -n cilium-system -l k8s-app=cilium -o name | head -1 | \
+       xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
    ```
 
 ### Grafana ne peut pas accéder à Prometheus

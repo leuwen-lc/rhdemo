@@ -54,7 +54,7 @@ spec:
           containerPort: {{ .Values.rhdemo.managementPort }}
           protocol: TCP
         env:
-        # Spring Boot - utiliser underscore pour Paketo
+        # Spring Boot (relaxed binding des variables d'environnement)
         - name: SPRING_PROFILES_ACTIVE
           value: {{ .Values.rhdemo.springProfile }}
         - name: SERVER_PORT
@@ -95,11 +95,8 @@ spec:
         - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB_CLIENT
           value: "{{ .Values.rhdemo.logging.level.org_springframework_web_client }}"
 
-        # JVM Options (Paketo)
-        - name: BPL_JVM_THREAD_COUNT
-          value: "{{ .Values.rhdemo.jvm.threadCount }}"
-        - name: BPL_SPRING_CLOUD_BINDINGS_DISABLED
-          value: "true"
+        # Options JVM (l'image applique déjà UseContainerSupport via JAVA_OPTS ;
+        # JAVA_TOOL_OPTIONS permet de piloter heap et GC depuis le chart)
         - name: JAVA_TOOL_OPTIONS
           value: "-XX:MaxRAMPercentage={{ .Values.rhdemo.jvm.maxRamPercentage }} -XX:+Use{{ .Values.rhdemo.jvm.gcType }}"
 

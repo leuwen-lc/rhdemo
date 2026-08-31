@@ -34,7 +34,7 @@
       "enabled": false
     },
     {
-      "description": "kindest/node (version Kubernetes du cluster stagingkub) : toute montée passe OBLIGATOIREMENT par une reconstruction complète du cluster + validation Cilium (cf. docs/MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md). Jamais d'automerge, même patch/minor — approbation manuelle via le Dependency Dashboard.",
+      "description": "kindest/node (version Kubernetes du cluster stagingkub) : toute montée passe OBLIGATOIREMENT par une reconstruction complète du cluster + validation Cilium (cf. docs/MIGRATION_HELM4_KUB1.36.md). Jamais d'automerge, même patch/minor — approbation manuelle via le Dependency Dashboard.",
       "matchPackageNames": ["kindest/node"],
       "dependencyDashboardApproval": true,
       "automerge": false

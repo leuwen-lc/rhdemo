@@ -104,7 +104,7 @@ services:
     container_name: rhdemo-ephemere-app
     restart: unless-stopped
     environment:
-      # Spring Boot - IMPORTANT: utiliser underscore pour Paketo
+      # Spring Boot (relaxed binding des variables d'environnement)
       SPRING_PROFILES_ACTIVE: ephemere
       SERVER_PORT: 9000
 
@@ -123,9 +123,7 @@ services:
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,info,metrics,prometheus
       MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS: when_authorized
 
-      # JVM Options (Paketo)
-      BPL_JVM_THREAD_COUNT: 50
-      BPL_SPRING_CLOUD_BINDINGS_DISABLED: "true"
+      # Options JVM (l'image applique déjà UseContainerSupport via JAVA_OPTS)
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
     depends_on:
       rhdemo-db:

@@ -166,8 +166,7 @@ rhdemo:                           # Config Application RHDemo
   replicaCount: 1
   springProfile: ephemere
   serverPort: 9000
-  jvm:                            # Config JVM
-    threadCount: 50
+  jvm:                            # Config JVM (via JAVA_TOOL_OPTIONS)
     maxRamPercentage: 75.0
     gcType: G1GC
 
@@ -619,9 +618,7 @@ spec:
               name: rhdemo-db-secret
               key: password
 
-        # JVM Options (Paketo Buildpacks)
-        - name: BPL_JVM_THREAD_COUNT
-          value: "50"
+        # Options JVM
         - name: JAVA_TOOL_OPTIONS
           value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
 

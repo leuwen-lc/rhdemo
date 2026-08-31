@@ -1,26 +1,33 @@
 # Plan de Migration Spring Boot 4 / Spring Security 7
 
-Ce document détaille le plan de migration de l'application RHDemo depuis Spring Boot 3.5.x vers Spring Boot 4.x.
+> **Migration terminée (livrée en 1.1.5).** Ce document est conservé comme
+> compte rendu de la démarche et référence des points de vigilance. L'état
+> courant des versions se lit dans `pom.xml` et le `README.md` racine, pas
+> ici : depuis, le socle a continué d'évoluer (Spring Boot **4.1.1**, Keycloak
+> **26.7.x**, PostgreSQL **18.x** partout) au fil des PR Renovate.
 
-## Versions concernées
+Ce document détaille la migration de l'application RHDemo depuis Spring Boot
+3.5.x vers Spring Boot 4.x.
 
-| Composant        | Version avant migration | Version cible | Version actuelle |
-|------------------|------------------------|---------------|------------------|
-| Spring Boot      | 3.5.8                  | 4.0.x         | **4.0.2** ✅     |
-| Spring Security  | 6.5.x                 | 7.0.x         | **7.0.x** ✅     |
-| Spring Framework | 6.2.x                 | 7.0.x         | **7.0.x** ✅     |
-| Java             | 21                     | 25 (LTS)      | **25** ✅        |
-| Jackson          | 2.x                   | 3.x           | **3.x** ✅       |
-| JaCoCo           | 0.8.12                 | 0.8.14        | **0.8.14** ✅    |
-| Mockito          | 5.17.0                 | 5.21.0        | **5.21.0** ✅    |
-| Keycloak         | 26.4.2                 | 26.5.0        | En attente       |
-| PostgreSQL       | 16.x                  | 18.1          | En attente       |
+## Versions concernées (au moment de la migration)
 
-## Prérequis
+| Composant        | Version avant migration | Version cible | Résultat |
+|------------------|------------------------|---------------|----------|
+| Spring Boot      | 3.5.8                  | 4.0.x         | ✅ 4.0.2 (puis 4.1.x en continu) |
+| Spring Security  | 6.5.x                 | 7.0.x         | ✅ 7.0.x  |
+| Spring Framework | 6.2.x                 | 7.0.x         | ✅ 7.0.x  |
+| Java             | 21                     | 25 (LTS)      | ✅ 25     |
+| Jackson          | 2.x                   | 3.x           | ✅ 3.x    |
+| JaCoCo           | 0.8.12                 | 0.8.14        | ✅ 0.8.14 |
+| Mockito          | 5.17.0                 | 5.21.0        | ✅ 5.21.0 |
+| Keycloak         | 26.4.2                 | 26.5.0        | ✅ (26.7.x aujourd'hui) |
+| PostgreSQL       | 16.x                  | 18.1          | ✅ (18.x aujourd'hui)   |
 
-1. **Spring Boot 3.5.x** : La migration recommande de passer par 3.5.x d'abord (fait ✓)
-2. **Java 21** : Compatible, migration vers Java 25 planifiée
-3. **Tests passants** : S'assurer que tous les tests passent avant migration
+## Prérequis (rappel de la démarche)
+
+1. **Spring Boot 3.5.x** : passer par 3.5.x d'abord (fait ✓)
+2. **Java 21 → 25** : réalisé dans la foulée
+3. **Tests passants** : s'assurer que tous les tests passent avant migration
 
 ## Calendrier de support
 

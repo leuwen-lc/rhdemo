@@ -7,7 +7,8 @@ Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.
 - [Vue d'ensemble](#vue-densemble)
 - [Jenkinsfile-CI : Intégration Continue](#jenkinsfile-ci--intégration-continue)
 - [Jenkinsfile-CD : Déploiement Continu](#jenkinsfile-cd--déploiement-continu)
-- [Jenkinsfile (Déprécié)](#jenkinsfile-déprécié)
+- [Jenkinsfile-Renovate : mises à jour de dépendances](#jenkinsfile-renovate--mises-à-jour-de-dépendances)
+- [Jenkinsfile-Stagingkub-Upgrade-Deploy : montées d'infra en place](#jenkinsfile-stagingkub-upgrade-deploy--montées-dinfra-en-place)
 - [Workflow recommandé](#workflow-recommandé)
 - [Configuration Jenkins](#configuration-jenkins)
 
@@ -15,7 +16,20 @@ Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.
 
 ## 🎯 Vue d'ensemble
 
-Le projet RHDemo utilise **deux pipelines Jenkins distincts** pour séparer les responsabilités CI et CD :
+Le projet RHDemo utilise **quatre pipelines Jenkins distincts** :
+
+| Pipeline | Rôle | Déclenchement | Doc dédiée |
+|---|---|---|---|
+| **RHDemo-CI** (`Jenkinsfile-CI`) | Build, tests, scans qualité/sécurité, déploiement ephemere, tests Selenium/ZAP, publication image | SCM sur les branches d'évolution | ce document |
+| **RHDemo-CD** (`Jenkinsfile-CD`) | Déploiement Helm de l'image validée sur stagingkub (K8s) | Manuel | ce document |
+| **RHDemo-Renovate** (`Jenkinsfile-Renovate`) | Scan Renovate, ouverture des PR, build/test/OWASP puis **merge automatique** des PR patch/minor qui passent la CI | Cron | [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) |
+| **RHDemo-Stagingkub-Upgrade-Deploy** (`Jenkinsfile-Stagingkub-Upgrade-Deploy`) | Application réelle (post-merge) des montées de version en place des composants d'infra stagingkub | Après merge d'une PR Renovate d'infra | [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) |
+
+Toutes les fins de build CI et CD, ainsi que l'upgrade d'infra, envoient une
+**notification email** (email-ext). L'ancien `Jenkinsfile` monolithique (CI+CD
+mélangés) a été **supprimé**.
+
+Enchaînement CI → CD :
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -239,7 +253,7 @@ SKIP_HEALTH_CHECK=true
    cd rhDemo/infra/jenkins-docker
    docker-compose up -d registry
    ```
-   **Important** : Le nom `kind-registry` est obligatoire pour la résolution DNS dans KinD. Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md).
+   **Important** : Le nom `kind-registry` est obligatoire pour la résolution DNS dans KinD. Voir [REGISTRY.md](REGISTRY.md).
 
 2. **Cluster KinD initialisé** :
    ```bash
@@ -261,27 +275,49 @@ Après un déploiement réussi :
 
 ---
 
-## ⚠️ Jenkinsfile (Déprécié)
+## 🔁 Jenkinsfile-Renovate : mises à jour de dépendances
 
-**Fichier**: [`Jenkinsfile`](../Jenkinsfile)
+**Fichier**: [`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate) — **doc de référence** : [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)
 
-### Statut
+### Objectif
 
-Ce fichier est **déprécié** et **ne doit plus être utilisé**.
+Faire tourner Renovate depuis Jenkins (le scan a été rapatrié de Codeberg
+Actions), ouvrir les PR de montée de version, puis **merger automatiquement**
+celles qui passent la CI — patch/minor uniquement.
 
-Il est conservé pour compatibilité temporaire mais **sera supprimé dans une version future**.
+### Étapes
 
-### Pourquoi déprécié ?
+1. Scan Renovate (image officielle `renovate/renovate` en conteneur frère via docker-socket-proxy, commits signés GPG, compte bot Codeberg dédié).
+2. Liste des PR Renovate ouvertes via l'API Forgejo ; rebase de celles en retard sur leur base.
+3. Pour chaque PR patch/minor : build + tests + OWASP Dependency-Check (Maven **et** npm frontend).
+4. **Merge automatique en squash** via l'API Forgejo si la CI est verte ; commentaire d'échec sinon (PR laissée ouverte). Fermeture automatique des PR supersédées.
+5. Les PR **major** restent bloquées derrière `dependencyDashboardApproval` (approbation manuelle via le Dependency Dashboard).
 
-1. **Trop complexe** : Mélange CI et CD dans un seul fichier (~2000 lignes)
-2. **Difficult à maintenir** : Logique imbriquée avec conditions multiples
-3. **Stages fictifs** : Contenait des simulations de production inutiles
-4. **Manque de séparation des responsabilités** : CI et CD doivent être séparés
+> Pourquoi un merge piloté côté Jenkins plutôt que l'automerge natif de
+> Renovate ? Jenkins n'est pas exposé sur Internet : Forgejo ne peut pas
+> déclencher de webhook entrant et les statuts CI ne remontent jamais vers
+> Forgejo. Voir [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md).
 
-### Migration
+---
 
-- **Remplacer** par **Jenkinsfile-CI** pour la construction et les tests
-- **Remplacer** par **Jenkinsfile-CD** pour le déploiement Kubernetes
+## 🧱 Jenkinsfile-Stagingkub-Upgrade-Deploy : montées d'infra en place
+
+**Fichier**: [`Jenkinsfile-Stagingkub-Upgrade-Deploy`](../Jenkinsfile-Stagingkub-Upgrade-Deploy) — **doc de référence** : [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)
+
+### Objectif
+
+Appliquer réellement, **après merge** d'une PR Renovate d'infra, la montée de
+version en place d'un composant du cluster stagingkub (Cilium, NGINX Gateway
+Fabric, kube-prometheus-stack, Loki, Grafana Alloy, Grafana) via les scripts
+idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.sh`
+(rollback automatique `--rollback-on-failure`, Helm 4).
+
+### Points clés
+
+- La **validation avant merge** est faite dans la boucle étendue de `Jenkinsfile-Renovate` par un `helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`, **sans jamais muter le cluster**.
+- ServiceAccount Kubernetes **dédié** `jenkins-infra-upgrader` (RBAC de moindre privilège, credential `kubeconfig-stagingkub-infra-upgrader`), distinct de `jenkins-deployer` utilisé par RHDemo-CD.
+- Agent éphémère standard (pas de `docker.sock`, pas de `kind`).
+- `kindest/node` (version Kubernetes) reste **hors périmètre** : toute montée K8s passe par une reconstruction complète du cluster (cf. [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md)).
 
 ---
 
@@ -485,89 +521,48 @@ Le fichier [infra/jenkins-docker/jenkins-casc.yaml](../infra/jenkins-docker/jenk
 - ✅ Déploiement reproductible
 - ✅ Pas de configuration manuelle
 
-Les jobs créés automatiquement :
-- `RHDemo-CI` : Pipeline d'Intégration Continue
-- `RHDemo-CD` : Pipeline de Déploiement Continu
-- `rhdemo-pipeline-deprecated` : Ancien pipeline (désactivé)
+Les jobs créés automatiquement : `RHDemo-CI`, `RHDemo-CD`, `RHDemo-Renovate`,
+`RHDemo-Stagingkub-Upgrade-Deploy`. Le dépôt est hébergé sur **Forgejo/Codeberg**
+(pas GitHub/GitLab) ; se référer à `jenkins-casc.yaml` pour l'URL et les branches
+exactes.
 
-#### Option B : Configuration manuelle
+### 2. Credentials requis (aperçu — voir `jenkins-casc.yaml` pour la liste à jour)
 
-Si vous n'utilisez pas JCasC, créez manuellement :
-
-**Pipeline CI**
-
-```groovy
-// Nom : RHDemo-CI
-// Type : Pipeline
-// Pipeline script from SCM :
-//   - Repository : https://github.com/votre-repo/rhDemo.git
-//   - Branch : */evol-kub
-//   - Script Path : rhDemo/Jenkinsfile-CI
-```
-
-**Pipeline CD**
-
-```groovy
-// Nom : RHDemo-CD
-// Type : Pipeline
-// Pipeline script from SCM :
-//   - Repository : https://github.com/votre-repo/rhDemo.git
-//   - Branch : */evol-kub
-//   - Script Path : rhDemo/Jenkinsfile-CD
-// Build with Parameters : ✅ Activé
-```
-
-### 2. Credentials requis
-
-| ID Credential | Type | Description |
-|---------------|------|-------------|
-| `sops-age-key` | Secret file | Clé AGE pour déchiffrer les secrets SOPS |
+| ID Credential | Type | Usage |
+|---------------|------|-------|
+| `sops-age-key` | Secret file | Déchiffrement des secrets SOPS |
+| `kubeconfig-stagingkub` | Secret file | RHDemo-CD (`jenkins-deployer`) |
+| `kubeconfig-stagingkub-infra-upgrader` | Secret file | RHDemo-Stagingkub-Upgrade-Deploy (`jenkins-infra-upgrader`) |
+| Token API Forgejo + clé GPG | — | RHDemo-Renovate (rebase/merge/commentaires, commits signés) |
 
 ### 3. Outils globaux
 
-| Outil | Nom | Version |
-|-------|-----|---------|
-| JDK | `JDK21` | OpenJDK 21 |
-| Maven | `Maven3` | Maven 3.9+ |
+| Outil | Version |
+|-------|---------|
+| JDK | **25** (Temurin) |
+| Maven | via `mvnw` (wrapper) |
+| Helm (agent) | **4.2.x** (`HELM_VERSION` dans `Dockerfile.agent`) |
 
-### 4. Plugins requis
+### 4. Déclenchement
 
-- Pipeline
-- Git
-- Docker Pipeline
-- SonarQube Scanner (optionnel)
-- HTML Publisher
-- JUnit
-
-### 5. Webhooks (optionnel)
-
-Pour déclencher automatiquement le pipeline CI :
-
-```bash
-# GitHub Webhook
-URL : https://your-jenkins.com/github-webhook/
-Events : Push events
-
-# GitLab Webhook
-URL : https://your-jenkins.com/project/RHDemo-CI
-Trigger : Push events
-```
+Jenkins **n'est pas exposé sur Internet** : pas de webhook entrant depuis
+Forgejo. RHDemo-CI se déclenche par **polling SCM** sur les branches
+d'évolution ; RHDemo-Renovate par **cron**. Les statuts CI ne remontent pas
+vers Forgejo (`prCreation: immediate`), d'où le merge des PR piloté côté
+Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 
 ---
 
 ## 📊 Comparaison des pipelines
 
-| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile (déprécié) |
-|---------|----------------|----------------|------------------------|
-| **Objectif** | Build + Tests + Publish | Deploy Kubernetes | Tout (CI + CD + Prod fictif) |
-| **Durée moyenne** | 20-30 min | 5-10 min | 30-40 min |
-| **Environnements** | Staging Docker Compose | Kubernetes stagingkub | Les deux + prod fictif |
-| **Tests** | Unitaires, Selenium, ZAP | Health checks | Unitaires, Selenium, ZAP |
-| **Artifacts** | JAR + Image Docker + Rapports | - | JAR + Image Docker + Rapports |
-| **Déclenchement** | Automatique (push) | Manuel | Automatique ou manuel |
-| **Paramètres** | 4 | 3 | 8+ |
-| **Lignes de code** | ~950 | ~600 | ~2000 |
-| **Maintenance** | ✅ Facile | ✅ Facile | ❌ Difficile |
+| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy |
+|---------|----------------|----------------|----------------------|---------------------------------------|
+| **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra |
+| **Durée indicative** | ~2 h max | ~30 min max | ~10-15 min | quelques min/composant |
+| **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) |
+| **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade |
+| **Déclenchement** | SCM (branches d'évolution) | Manuel | Cron | Post-merge PR infra |
+| **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` |
 
 ---
 
@@ -669,19 +664,25 @@ docker network connect kind kind-registry --alias kind-registry
 kubectl delete pod <pod-name> -n rhdemo-stagingkub
 ```
 
-Voir [REGISTRY_SETUP.md](REGISTRY_SETUP.md) et [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) pour plus de détails.
+Voir [REGISTRY.md](REGISTRY.md) et [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) pour plus de détails.
 
 ---
 
 ## 📚 Documentation complémentaire
 
-- [REGISTRY_SETUP.md](REGISTRY_SETUP.md) - Configuration complète du registry Docker local
+- [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) - Pipeline Renovate et merge automatique
+- [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) - Montées d'infra en place / reconstruction de cluster
+- [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) - Pourquoi Jenkins plutôt que Forgejo/Woodpecker
+- [JENKINS_AGENTS_EPHEMERES.md](JENKINS_AGENTS_EPHEMERES.md) - Agents Jenkins éphémères
+- [REGISTRY.md](REGISTRY.md) - Configuration du registry Docker local
 - [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) - Analyse des problèmes réseau Jenkins/KinD
 - [DATABASE.md](DATABASE.md) - Gestion de la base de données
 - [POSTGRESQL_BACKUP_CRONJOBS.md](POSTGRESQL_BACKUP_CRONJOBS.md) - Backups automatiques PostgreSQL
-- [JENKINS_SETUP.md](../infra/jenkins-docker/README.md) - Configuration Jenkins complète
+- [../infra/jenkins-docker/README.md](../infra/jenkins-docker/README.md) - Configuration Jenkins complète
 
 ---
 
-**Dernière mise à jour** : 2026-01-15
-**Auteur** : Documentation mise à jour pour refléter la standardisation du registry `kind-registry`
+**Dernière mise à jour** : 2026-08-31 — ajout des pipelines Renovate et
+Stagingkub-Upgrade-Deploy, suppression du `Jenkinsfile` monolithique, JDK 25,
+Helm 4, notifications email, hébergement Forgejo/Codeberg. Le détail par phase
+ci-dessus reflète l'esprit des pipelines ; les fichiers `Jenkinsfile-*` font foi.

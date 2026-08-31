@@ -2,16 +2,24 @@
 
 ## Vue d'ensemble
 
-Un stage de scan de sécurité Trivy a été ajouté au pipeline Jenkins pour détecter les vulnérabilités dans toutes les images Docker utilisées en ephemere.
+Un stage de scan de sécurité Trivy (`Jenkinsfile-CI`) détecte les vulnérabilités
+dans les images Docker du stack. Les scans tournent **en parallèle**, avec un
+cache Trivy partagé (bases `vuln` + `java`) pré-alimenté en début de stage.
 
 ## Images scannées
 
-Le stage scanne automatiquement les 4 images Docker du stack ephemere :
+Le stage scanne automatiquement **5 images** (les 4 images tierces pré-épinglées
+par tag + digest via les variables `*_IMAGE` du `Jenkinsfile-CI`, mises à jour
+par Renovate, plus l'image applicative fraîchement construite) :
 
-1. **postgres:16-alpine** - Base de données (rhdemo-db et keycloak-db)
-2. **quay.io/keycloak/keycloak:26.4.2** - Serveur d'authentification
-3. **nginx:1.27.3-alpine3.21** - Reverse proxy HTTPS (Alpine 3.21 avec correctif libxml2)
-4. **rhdemo-api:build-${BUILD_NUMBER}** - Application (image Paketo)
+1. **postgres** — `POSTGRES_IMAGE` (base de données rhdemo-db et keycloak-db)
+2. **keycloak** — `KEYCLOAK_IMAGE` (serveur d'authentification)
+3. **nginx** — `NGINX_IMAGE` (reverse proxy HTTPS de l'environnement ephemere)
+4. **nginx-gateway-fabric** — `NGF_IMAGE` (Gateway API de stagingkub)
+5. **rhdemo-app** — `RHDEMO_IMAGE` (application, construite par `docker build` sur `rhDemo/Dockerfile`, base Eclipse Temurin 25)
+
+> Les valeurs exactes (versions + digests) vivent dans `Jenkinsfile-CI` ; ne pas
+> les recopier ici, elles bougent à chaque PR Renovate.
 
 ## Critères de succès/échec
 
@@ -94,56 +102,41 @@ Le stage affiche automatiquement un rapport consolidé :
 postgres             : CRITICAL=  0, HIGH=  5, MEDIUM= 12
 keycloak             : CRITICAL=  0, HIGH=  8, MEDIUM= 23
 nginx                : CRITICAL=  0, HIGH=  2, MEDIUM=  7
+nginx-gateway-fabric : CRITICAL=  0, HIGH=  1, MEDIUM=  4
 rhdemo-app           : CRITICAL=  0, HIGH=  3, MEDIUM= 15
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL                : CRITICAL=  0, HIGH= 18, MEDIUM= 57
+TOTAL                : CRITICAL=  0, HIGH= 19, MEDIUM= 61
 ```
 
 ## Corriger les vulnérabilités
 
-### Images tierces (postgres, keycloak, nginx)
+### Images tierces (postgres, keycloak, nginx, nginx-gateway-fabric)
 
-Mettre à jour vers des versions patchées dans `infra/ephemere/docker-compose.yml` :
+Elles sont pré-épinglées `tag@sha256:digest` dans les variables `*_IMAGE` de
+`Jenkinsfile-CI` (et dans `global.images.*` des values Helm de stagingkub).
+Renovate ouvre les PR de montée ; en remédiation manuelle, voir la skill
+`/fixcve`. Le même tag+digest est réutilisé par `infra/ephemere/docker-compose.yml`
+via ces variables d'environnement.
 
-```yaml
-services:
-  rhdemo-db:
-    image: postgres:16.2-alpine  # Version patchée
-  
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.5.0  # Version patchée
-  
-  nginx:
-    image: nginx:1.27.1-alpine  # Version patchée
-```
+### Image applicative (rhdemo-app)
 
-### Image applicative (rhdemo-api)
+L'image est construite par `docker build` sur `rhDemo/Dockerfile` (base Eclipse
+Temurin 25). Les vulnérabilités proviennent des dépendances Java ou de la couche
+de base :
 
-Les vulnérabilités dans l'image Paketo proviennent des dépendances Java ou des couches système :
-
-**Dépendances Java** : Mettre à jour dans `pom.xml`
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
-    <version>3.5.8</version>  <!-- Version patchée -->
-</dependency>
-```
-
-**Couches système (buildpacks)** : Rebuilder l'image avec une version récente de Paketo
-
-```bash
-pack build rhdemo-api:latest --builder paketobuildpacks/builder-jammy-base:latest
-```
+- **Dépendances Java** : montée de version dans `pom.xml` (souvent via une PR
+  Renovate ou `/fixcve`) — cf. [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md).
+- **Couche de base** : bump de l'étiquette `eclipse-temurin` dans `rhDemo/Dockerfile`.
 
 ## Intégration dans le pipeline
 
-Le stage Trivy s'exécute :
+Le stage Trivy (`Jenkinsfile-CI`) :
 
-1. **Après** le déploiement et la vérification de santé du stack
-2. **Avant** les tests Selenium
-3. **Position dans le pipeline** : Ligne 1068 du Jenkinsfile
-4. **Condition d'exécution** : `params.DEPLOY_ENV != 'none'`
+1. s'exécute **après** le build de l'image applicative et le déploiement du stack ephemere, **avant** les tests Selenium ;
+2. pré-alimente le cache Trivy (`vuln` + `java`), puis lance les 5 scans en `parallel` (`failFast: false`) ;
+3. agrège les résultats (`aggregateTrivyResults`) et **échoue le build** dès une vulnérabilité `CRITICAL` ;
+4. archive `trivy-reports/**` et publie un rapport HTML agrégé ;
+5. est suivi d'un stage **SBOM CycloneDX** sur l'image applicative.
 
 ## Désactiver temporairement le scan
 
@@ -174,6 +167,7 @@ fi
 ## Changelog
 
 - **2025-11-27** : Ajout initial du stage Trivy au pipeline Jenkins
+- **2026-08** : 5e image scannée (nginx-gateway-fabric) ; images tierces pré-épinglées `tag@sha256:digest` et suivies par Renovate ; image applicative construite via `docker build` (Dockerfile Temurin 25) et non plus Paketo ; ajout du cache Trivy partagé et du stage SBOM CycloneDX
 
 ## Historique des vulnérabilités détectées
 

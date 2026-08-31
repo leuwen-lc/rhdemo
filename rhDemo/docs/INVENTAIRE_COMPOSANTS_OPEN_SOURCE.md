@@ -14,7 +14,7 @@
 |**Services CI/CD et qualité**|Docker Socket Proxy, SonarQube Community, Docker Distribution Registry, OWASP ZAP, Renovate, Sonar Maven Plugin|**6**|30–50|
 |**Sécurité / supply chain**|OWASP Dependency-Check, Trivy, SOPS, Cosign, OpenSSL, yq / jq|**6**|35–60|
 |**Conteneurs, Kubernetes et réseau**|Docker Engine, Docker Compose, KinD, Kubernetes, kubectl, Helm, Cilium, NGINX Gateway Fabric, Nginx|**9**|40–70|
-|**Observabilité**|Prometheus, Grafana, Loki, Promtail, Postgres Exporter|**5**|70–120|
+|**Observabilité**|Prometheus, Grafana, Loki, Grafana Alloy, Postgres Exporter|**5**|70–120|
 
 |Total|Calcul|Nombre|
 |-|-|-:|

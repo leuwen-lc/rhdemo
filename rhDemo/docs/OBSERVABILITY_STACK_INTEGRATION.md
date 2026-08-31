@@ -1,10 +1,20 @@
 # INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
-**Date:** 22 janvier 2026
-**Version:** 3.1 (Stack Complète: Prometheus + Loki + Métriques Spring Boot Actuator)
+**Version:** 4 (Prometheus + Loki + Grafana Alloy + métriques Spring Boot Actuator)
 **Environnement:** stagingkub (Kubernetes KinD)
 
-**⚠️ Sécurité:** Consultez [/infra/stagingkub/SECURITY.md](../infra/stagingkub/SECURITY.md) pour les bonnes pratiques de configuration sécurisée.
+> **⚠️ Versions.** Ce document décrit l'architecture et le mode opératoire. Les
+> **numéros de version** des charts (kube-prometheus-stack, Loki, Alloy, Grafana,
+> Cilium) évoluent au fil des PR Renovate — la source de vérité est
+> `infra/stagingkub/scripts/components/install-or-upgrade-*.sh` (variables
+> `*_VERSION`, marqueurs `# renovate:`), pas les exemples ci-dessous.
+>
+> **Points à jour non repris partout dans le corps :**
+> - **Helm 4** (agent Jenkins) — les `helm upgrade --install` d'exemple restent valides ; le flag rollback est `--rollback-on-failure` (ex-`--atomic`). Cf. [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md).
+> - **Loki** : chart `grafana/loki` servi par le **fork communautaire** `https://grafana-community.github.io/helm-charts` (le dépôt `grafana/helm-charts` est passé AGPLv3 en chart 7.0.0). Chart ~v18, Loki 3.6.x.
+> - **Grafana Alloy** remplace Promtail (EOL 02/03/2026) — cf. [ALLOY_MIGRATION.md](ALLOY_MIGRATION.md).
+> - **Cilium** vit dans un namespace dédié `cilium-system`.
+> - Le plugin Grafana `grafana-piechart-panel` a été retiré (déprécié).
 
 ---
 
@@ -347,24 +357,26 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 # Repository Prometheus Community
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
-# Repository Grafana
+# Repository Grafana — Alloy et Grafana depuis le dépôt Grafana Labs,
+# mais LOKI depuis le fork communautaire (dépôt d'origine passé AGPLv3)
 helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add grafana-community https://grafana-community.github.io/helm-charts
 
 # Mettre à jour
 helm repo update
 
 # Vérifier charts disponibles
 helm search repo prometheus-community/kube-prometheus-stack
-helm search repo grafana/loki
+helm search repo grafana-community/loki
 helm search repo grafana/alloy
 helm search repo grafana/grafana
 ```
 
-**Output attendu:**
+**Ordres de grandeur (les versions exactes sont dans les scripts `install-or-upgrade-*.sh`):**
 ```
 NAME                                            CHART VERSION   APP VERSION     DESCRIPTION
-prometheus-community/kube-prometheus-stack      65.x.x          v0.77.x         Prometheus Operator + Prometheus + ...
-grafana/loki                                    6.x.x           3.x.x           Loki: like Prometheus, but for logs
+prometheus-community/kube-prometheus-stack      88.x.x          v0.93.x         Prometheus Operator + Prometheus + ...
+grafana-community/loki                          18.x.x          3.6.x           Loki: like Prometheus, but for logs
 grafana/alloy                                   1.x.x           v1.x.x          Grafana Alloy
 grafana/grafana                                 8.x.x           11.x.x          The open observability platform
 ```
@@ -464,7 +476,7 @@ kubeEtcd:
 
 ```yaml
 # Configuration Loki moderne (chart grafana/loki)
-# Chart: grafana/loki v6.x
+# Chart: grafana-community/loki (~v18, Loki app 3.6.x)
 deploymentMode: SingleBinary
 
 loki:
@@ -668,8 +680,8 @@ helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
 kubectl get pods -n monitoring
 helm list -n monitoring
 
-# 2. Installer Loki (mode SingleBinary)
-helm upgrade --install loki grafana/loki \
+# 2. Installer Loki (mode SingleBinary) — chart du fork communautaire
+helm upgrade --install loki grafana-community/loki \
   -n loki-stack \
   -f /home/leno-vo/git/repository/rhDemo/infra/stagingkub/helm/observability/loki-modern-values.yaml \
   --wait --timeout 3m
@@ -696,11 +708,11 @@ helm list -n loki-stack
 ```
 # Namespace monitoring
 NAME            NAMESPACE       REVISION        STATUS          CHART                              APP VERSION
-prometheus      monitoring      1               deployed        kube-prometheus-stack-65.x.x       v0.77.x
+prometheus      monitoring      1               deployed        kube-prometheus-stack-88.x.x       v0.93.x
 
 # Namespace loki-stack
 NAME            NAMESPACE       REVISION        STATUS          CHART                   APP VERSION
-loki            loki-stack      1               deployed        loki-6.x.x              3.x.x
+loki            loki-stack      1               deployed        loki-18.x.x            3.6.x
 alloy           loki-stack      1               deployed        alloy-1.x.x             v1.x.x
 grafana         loki-stack      1               deployed        grafana-8.x.x           11.x.x
 ```
@@ -1935,7 +1947,7 @@ kubectl delete namespace monitoring
 
 **Helm Charts:**
 - Prometheus Stack: https://github.com/prometheus-community/helm-charts
-- Loki: https://github.com/grafana/helm-charts/tree/main/charts/loki
+- Loki (chart, fork communautaire) : https://github.com/grafana-community/helm-charts/tree/main/charts/loki
 - Alloy: https://github.com/grafana/alloy/tree/main/operations/helm/charts/alloy
 - Grafana: https://github.com/grafana/helm-charts/tree/main/charts/grafana
 

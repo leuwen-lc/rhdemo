@@ -1,5 +1,11 @@
 # Refonte des tests rhDemo
 
+> Porte sur les tests **backend** (Surefire/Failsafe, JaCoCo). Depuis, un socle
+> de tests **unitaires frontend** (Vitest) a été introduit pour sécuriser les
+> montées Renovate côté Vue.js — voir [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md).
+> Le périmètre OWASP Dependency-Check couvre désormais aussi les dépendances npm
+> ([OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md)).
+
 ## 0. Contexte et objectifs
 
 ### Objectifs

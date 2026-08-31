@@ -146,8 +146,34 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 ### Version 1.1.10 (en cours)
 
 Infrastructure :
-- Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh` de stagingkub, `--dry-run=client` explicité dans `test-deploy-helm.sh` ; point de vigilance server-side apply par défaut à l'installation neuve (voir rhDemo/docs/MIGRATION_HELM_4.md)
-- Montée stagingkub Kubernetes 1.35 → 1.36.4 (`kindest/node`, KinD CLI 0.33+), débloquée par Cilium 1.20 (matrice officielle K8s 1.33→1.36 ; 1.37 écarté) ; appliquée lors de la reconstruction de cluster de la migration Helm 4 (voir rhDemo/docs/MIGRATION_KUB1.36_HELM4_EN_ATTENTE.md)
+- Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) et montée stagingkub Kubernetes 1.35 → 1.36.4 (`kindest/node`, KinD CLI 0.33+) livrées ensemble lors d'une reconstruction de cluster : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh`, `--dry-run=client` explicité dans `test-deploy-helm.sh`, point de vigilance server-side apply par défaut à l'installation neuve ; K8s 1.36 débloqué par Cilium 1.20 (matrice officielle K8s 1.33→1.36 ; 1.37 écarté) (voir rhDemo/docs/MIGRATION_HELM4_KUB1.36.md)
+- Nouveau pipeline `Jenkinsfile-Stagingkub-Upgrade-Deploy` : application réelle (post-merge) des montées de version en place des composants d'infra stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana) via des scripts idempotents `scripts/components/install-or-upgrade-<composant>.sh` avec rollback automatique ; la validation avant merge reste un `helm/kubectl --dry-run=server` sans mutation du cluster dans la boucle étendue de `Jenkinsfile-Renovate` (voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md)
+- ServiceAccount Kubernetes dédié `jenkins-infra-upgrader` (RBAC moindre privilège, credential distinct de `jenkins-deployer`) pour ces upgrades d'infra
+- Cilium déplacé dans un namespace `cilium-system` dédié, stockage des releases Helm isolé
+- Montées kube-prometheus-stack 87 → 88.5.4 (Prometheus Operator v0.93.1), Loki chart → v18, Cilium 1.19.5 → 1.20.1, NGINX Gateway Fabric 2.6.x (NodePorts via `nginx.service.nodePorts`, extraction CRDs compatible Helm 4)
+- Routage de `/actuator/health` via le Gateway vers le port management de rhdemo-app (network policy egress `nginx-gateway` ajustée)
+
+Observabilité :
+- Migration Promtail → Grafana Alloy (Promtail EOL 02/03/2026), chart `grafana/alloy` (Alloy v1.18.0), licence Apache-2.0 (voir rhDemo/docs/ALLOY_MIGRATION.md)
+- Bascule de Loki vers le fork communautaire OSS (chart v7 puis v18) pour éviter la licence AGPLv3
+- Retrait du plugin Grafana déprécié `grafana-piechart-panel` ; autorisation du sidecar Grafana à joindre l'API server
+
+CI/CD :
+- Notifications email (email-ext) sur les pipelines RHDemo-CI, RHDemo-CD et RHDemo-Stagingkub-Upgrade-Deploy (succès/échec)
+- PR Renovate mergées en squash pour un historique linéaire ; fermeture automatique des PR supersédées (supersession)
+- Durcissement du pipeline Renovate contre une PR malveillante ; scope élargi aux images pré-épinglées (tag+digest) de stagingkub et `Jenkinsfile-CI`, `customManagers` pour les versions d'outils non détectées nativement, alertes de vulnérabilité OSV activées
+- Comptes Codeberg bot dédiés pour le merge des PR Renovate et pour fixcve-auto
+- Migration de la base SonarQube vers PostgreSQL 18
+- Build frontend via `npm ci` (au lieu de `npm install`), version Node épinglée pour `frontend-maven-plugin` ; étude de tests unitaires frontend pour sécuriser les montées Renovate (voir rhDemo/docs/TESTS_FRONTEND_UNITAIRES.md)
+
+Sécurité :
+- Refonte de fixcve-auto en 3 phases à privilèges disjoints : détection déterministe (script Python `fixcve-detect.py`, remplace le skill), lookup sans credential exposé au contenu Internet, apply isolé sur un clone git dédié ; périmètre étendu aux dépendances npm du frontend, revalidation des CVE OS (Alpine/Debian/Ubuntu) via OSV.dev, suppression temporaire documentée autorisée pour CVSS < 9 sans correctif disponible (voir rhDemo/docs/FIXCVE_AUTO.md)
+- OWASP Dependency-Check étendu aux dépendances npm du frontend (non déclenché sur les PR Renovate hors périmètre Maven/npm)
+- CVE corrigées au fil de l'eau : CVE-2026-18963 (image Keycloak), CVE-2026-22184 (zlib dans nginx:alpine), CVE-2026-66299 (tomcat-embed-core), CVE-2026-69152 (brace-expansion), lot DOMPurify/swagger-ui via SpringDoc 3.1.0, nanoid 3.3.18 → 6.0.1 via overrides npm (CVE-2026-67214) (cf rhDemo/docs/SECURITY_ADVISORIES.md)
+
+Versions :
+- Spring Boot 4.1.0 → 4.1.1, SpringDoc OpenAPI 3.0.3 → 3.1.0, Tomcat embarqué 11.0.24 → 11.0.25, frontend-maven-plugin 2.0.1 → 2.0.2
+- Diverses mises à jour Renovate : Vue 3.5.41, vue-router 5.2.0, Element Plus 2.14.5, Axios 1.19.0, Selenium 4.47.0, JUnit 6.1.3, Keycloak admin client 26.0.12, PostgreSQL 18.4, nginx 1.31.3, Temurin 25.0.4+7, SonarQube 26.8.0
 
 ### Version 1.1.9
 

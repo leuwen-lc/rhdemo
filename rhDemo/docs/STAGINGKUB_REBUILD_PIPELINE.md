@@ -43,7 +43,7 @@ Pour unifier les deux :
    - `install-or-upgrade-kube-prometheus-stack.sh` (extrait d'`install-observability.sh` ; applique les CRDs avec `kubectl apply --server-side` avant le `helm upgrade`, voir étape 3 — un `kubectl apply` client-side échoue sur ces CRDs volumineuses)
    - `install-or-upgrade-loki.sh`, `install-or-upgrade-alloy.sh`, `install-or-upgrade-grafana.sh` (extraits quasi tels quels d'`install-observability.sh`, déjà en `helm upgrade --install`)
 2. `init-stagingkub.sh` et `install-observability.sh` appellent ces scripts au lieu d'inliner les commandes Helm — leur comportement observable ne change pas (un cluster neuf obtient toujours les mêmes composants dans le même ordre).
-3. Chaque script de composant passe d'un `helm upgrade --install ... --wait` à `helm upgrade --install ... --rollback-on-failure --wait --timeout` : `--rollback-on-failure` (nom Helm 4 de l'ex-`--atomic`, cf. [`MIGRATION_HELM_4.md`](MIGRATION_HELM_4.md)) déclenche un rollback automatique si l'upgrade échoue, indispensable dès qu'un upgrade peut être lancé sans supervision humaine immédiate (aujourd'hui ce n'est pas la norme sur ces installs).
+3. Chaque script de composant passe d'un `helm upgrade --install ... --wait` à `helm upgrade --install ... --rollback-on-failure --wait --timeout` : `--rollback-on-failure` (nom Helm 4 de l'ex-`--atomic`, cf. [`MIGRATION_HELM4_KUB1.36.md`](MIGRATION_HELM4_KUB1.36.md)) déclenche un rollback automatique si l'upgrade échoue, indispensable dès qu'un upgrade peut être lancé sans supervision humaine immédiate (aujourd'hui ce n'est pas la norme sur ces installs).
 
 ## Étape 2 — Rendre les versions traçables par Renovate
 

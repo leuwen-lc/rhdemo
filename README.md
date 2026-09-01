@@ -52,11 +52,11 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - Vérification de signature Cosign
 - TLS : activer TLS sur les endpoints publics sur l'environnement ephemere et stagingkub (vérifier le fonctionnement en mode proxifié/sécurisé).
   --> Certificats autosignés ou Let's Encrypt sur stagingkub (généré via DNS01 uniquement si administrateur DNS du domaine leuwen-lc.fr).
-- Semi-automatisation de la gestion de versions : utilisation de renovate qui scanne et pousse des PR pour des mises à jour. Délai de 7 jours après publication (Cooldown) : permet de révéler éventuellement une attaque.
+- Semi-automatisation de la gestion de versions : utilisation de renovate qui scanne et pousse des PR pour des mises à jour. Délai de 7 jours après publication (Cooldown) : permet de révéler éventuellement une version compromise.
 - Logging / monitoring de base fourni et déployé sur stagingkub avec Prometheus/Loki/Grafana :
   - logs : app/keycloak/pg,
   - métriques : système/pg/spring
-- Compte de service et Role RBAC pour limiter les droits de Jenkins sur stagingkub.
+- Comptes de service et 2 Roles RBAC (un applicatif, un infra) pour limiter les droits de Jenkins sur stagingkub.
 - Network policies restricitves pour préfigurer la prod et valider que l'applicatif est compatible sur l'environnement KinD.
   --> ajout du CNI Cilium sur l'environnement KinD pour appliquer ces policies.
 
@@ -73,12 +73,14 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - pattern Backend For Front-end (BFF) :
     - Le front‑end ne récupère pas directement le token auprès du serveur d'auth ; c'est le back‑end qui s'en charge.
     - Le back‑end renvoie un cookie de session (approche stateful) ; la protection CSRF est activée, un gestionnaire de session centralisé (type REDIS) pourra être ajouté pour assurer la scalabilité (TODO)
-  - Le Back-end fait à la fois BFF et traite directement les différents appels d'API. On pourrait imaginer une évolution avec une délégation du traitement des API à d'autres Back-end partagés au niveau SI en se basant sur l'access token JWT signé de keycloak.
+  - Le Back-end fait à la fois BFF et traite directement les différents appels d'API. Evolution possible avec une délégation du traitement des API à d'autres Back-end partagés au niveau SI en se basant sur l'access token JWT signé de keycloak ou autre dispositif.
 - Front‑end : Vue.js approche composants + Element Plus (design system) — privilégier les composants HTML/CSS standards pour accélérer le développement et améliorer la qualité de l'IHM.
 - Tests d'interface : projet séparé pour les tests Selenium (scénarios de bout en bout). Selenium offre la possibilité d'écrire et bien structurer les tests en Java, ce qui ést cohérent avec le choix du langage backend.
 - Deux chaines CI/CD séparées :
   - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
   - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
+- Chaine Jenkins Renovate Automerge pour mise à jour des versions, et Stagingkub Update Deploy pour application de maj sur l'infra staging
+- Chaine Fixcve-auto faisaint appel à l'IA Claude Code pour remédiation automatique des pipelines CI échoués sur les phases Owasp-DC ou Trivy (Cron évolutif Jenkins).
 
 ## Tests
 
@@ -143,7 +145,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Changelog
 
-### Version 1.1.10 (en cours)
+### Version 1.1.10
 
 Infrastructure :
 - Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) et montée stagingkub Kubernetes 1.35 → 1.36.4 (`kindest/node`, KinD CLI 0.33+) livrées ensemble lors d'une reconstruction de cluster : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh`, `--dry-run=client` explicité dans `test-deploy-helm.sh`, point de vigilance server-side apply par défaut à l'installation neuve ; K8s 1.36 débloqué par Cilium 1.20 (matrice officielle K8s 1.33→1.36 ; 1.37 écarté) (voir rhDemo/docs/MIGRATION_HELM4_KUB1.36.md)

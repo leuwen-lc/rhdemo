@@ -273,7 +273,7 @@
                     </goals>
                     <configuration>
                         <!-- renovate: datasource=node-version depName=node -->
-                        <nodeVersion>v24.19.0</nodeVersion>
+                        <nodeVersion>v24.20.0</nodeVersion>
                         <!-- renovate: datasource=npm depName=npm -->
                         <npmVersion>12.0.2</npmVersion>
                     </configuration>

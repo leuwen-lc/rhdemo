@@ -4,6 +4,79 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Lot OWASP Dependency-Check (build #844) — 17 findings
+
+### Détection
+
+- **Date de détection** : 2026-09-03 (build Jenkins RHDemo-CI #844)
+- **Outil** : OWASP Dependency-Check
+- **Périmètre** : dépendances npm `frontend/package-lock.json` et dépendances Maven `pom.xml`
+
+### npm `browserslist` 4.28.1 — CVE-2026-73088, GHSA-73wf-gq98-2v4g, GHSA-c83g-rgw3-j3cx (CVSS 7.5)
+
+DoS (épuisement mémoire) via `normalizeStats()` / caches non bornés, atteint depuis `getStat()` appelé à chaque `browserslist()`. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`. Corrigé en 4.28.7.
+
+**Remédiation automatique** (2026-09-03, build #844) : `frontend/node/npm --prefix frontend audit fix --package-lock-only` — `browserslist` 4.28.1 → 4.28.8 (`frontend/package-lock.json`, dépendance de build `devOptional`). Bumps transitifs collatéraux : `electron-to-chromium`, `node-releases`, `update-browserslist-db`, `postcss-selector-parser`.
+
+### npm `fast-uri` 3.1.5 — CVE-2026-75899, CVE-2026-75931, CVE-2026-75975, CVE-2026-76172, GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc, GHSA-fph4-wmhf-6fwf, GHSA-jqff-g426-hqxp (CVSS 7.5)
+
+Décodage double / canonicalisation incomplète de hostname, scheme et littéraux IPv6 lors du parsing d'URI (contournement de validation d'autorité). Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N`. Corrigé en 3.1.6.
+
+**Remédiation automatique** (2026-09-03, build #844) : même passe `npm audit fix --package-lock-only` — `fast-uri` 3.1.5 → 3.1.7 (`frontend/package-lock.json`, dépendance de build `devOptional`).
+
+### npm `serialize-javascript` 6.0.2 — CVE-2026-34043 (CVSS 7.5)
+
+DoS par épuisement CPU lors de la sérialisation d'objets « array-like » forgés. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`. Corrigé en 7.0.5.
+
+**Remédiation automatique** (2026-09-03, build #844) : `npm audit fix` seul n'a pas suffi (contrainte semver `^6.0.0` de `copy-webpack-plugin` 9.1.0 et `css-minimizer-webpack-plugin` 3.4.1). Pin explicite `frontend/node/npm --prefix frontend install serialize-javascript@7.0.5 --package-lock-only --save-exact --save-dev` : `serialize-javascript` hissé en 7.0.5 pour toute la chaîne de build (npm résout sans `--force`). Usage limité à la génération de clés de cache par ces plugins de build, jamais dans le bundle de production. La suppression historique `GHSA-5c6j-r48x-rmvq` (également corrigée en 7.0.5) est laissée en place, désormais sans effet.
+
+### npm `form-data` 4.0.6 — CVE-2026-10143 (CVSS 8.7)
+
+**Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** (2026-09-03, build #844).
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification** : `form-data` 4.0.6 est une dépendance de production transitive (`axios` 1.19.0). Aucun critère A applicable (scope production, pas RetireJS, vecteur CVSS 4.0 `AV:N`, absente de `devDependencies`). CVSS 8.7 strictement inférieure à 9.0 → Critère B, acceptation temporaire. `npm audit` (registre npm) ne rapporte aucune version corrigée ; la description NVD rattachée à cette CVE référence par ailleurs `kafka-python`, ce qui suggère une correspondance CPE douteuse.
+- **À retirer** : dès qu'une version corrigée de `form-data` est publiée (revérification automatique du jeton `PENDING_UPSTREAM_FIX` à chaque cycle).
+
+### npm `minimatch` 3.1.5 — CVE-2026-27904 (CVSS 8.7)
+
+**Remédiation automatique — risque accepté (permanent)** (2026-09-03, build #844).
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` (sans jeton `PENDING_UPSTREAM_FIX`).
+- **Justification** : `minimatch` 3.1.5 est `dev=true`, présent exclusivement dans la chaîne de build `@vue/cli-service` (transitif via `glob`/`rimraf`, même chaîne que la suppression `brace-expansion`), jamais embarqué dans le bundle de production `vue-cli-service build`. `npm audit` ne propose aucun correctif sans saut de version majeure (option `--force` exclue par la politique du skill). Critère A → acceptation permanente.
+- **À retirer** : si la chaîne de build migre vers une version corrigée de `minimatch` — revue manuelle (non concerné par la revérification automatique).
+
+### Maven `com.fasterxml.jackson.core:jackson-databind` 2.21.5 — CVE-2026-68497 (CVSS 8.7)
+
+**Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** (2026-09-03, build #844).
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification** : `jackson-databind` 2.21.5 (scope `compile`, transitif via `spring-boot-starter-web`). Allocation de ressources sans limite ni throttling (CWE-770). Aucun critère A applicable (scope production, vecteur CVSS 4.0 `AV:N`). CVSS 8.7 strictement inférieure à 9.0 → Critère B. La phase 2 (`maven_central`) ne rapporte aucune version corrigée publiée à ce jour.
+- **À retirer** : dès publication d'une version corrigée sur Maven Central (revérification automatique du jeton).
+
+### Maven `org.springframework.security:spring-security-crypto` 7.1.1 — CVE-2026-47842 (CVSS 7.1)
+
+**Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** (2026-09-03, build #844).
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification** : `spring-security-crypto` 7.1.1 (scope `compile`, transitif via `spring-boot-starter-security`). `AesBytesEncryptor` avec le constructeur à deux arguments ou un générateur d'IV null en mode CBC chiffre avec un IV nul (tout à zéro). Aucun critère A applicable (scope production, vecteur CVSS 4.0 `AV:N/PR:L`). CVSS 7.1 strictement inférieure à 9.0 → Critère B. La phase 2 (`maven_central`) ne rapporte aucune version corrigée publiée à ce jour.
+- **À retirer** : dès publication d'une version corrigée sur Maven Central (revérification automatique du jeton).
+
+### Maven `org.springframework.security:spring-security-web` 7.1.1 — CVE-2026-47838 (CVSS 8.1)
+
+**Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** (2026-09-03, build #844).
+
+- **Action** : suppression documentée dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification** : `spring-security-web` 7.1.1 (scope `compile`, transitif via `spring-boot-starter-security`). `SubjectDnX509PrincipalExtractor` gère mal certaines valeurs CN de certificat X.509 malformées et peut lire la mauvaise valeur comme nom d'utilisateur. Vecteur `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`. Aucun critère A applicable (scope production). CVSS 8.1 strictement inférieure à 9.0 → Critère B. La phase 2 (`maven_central`) ne rapporte aucune version corrigée publiée à ce jour.
+- **À retirer** : dès publication d'une version corrigée sur Maven Central (revérification automatique du jeton).
+
+### Validation
+
+- `owasp-suppressions.xml` : bien formé (`xml.etree.ElementTree.parse` OK).
+- `./mvnw org.owasp:dependency-check-maven:check` en local : mise à jour NVD impossible faute de clé API (`nvdApiServerId=nvd` disponible uniquement en CI) — même contrainte que celle qui motive la séparation en 3 phases. La revalidation finale est déléguée à la ré-exécution du pipeline Jenkins RHDemo-CI (clé NVD + garde-fou de rollback automatique). Aucune CVE absente de `detected.json` introduite par les montées de version (`browserslist`, `fast-uri`, `serialize-javascript`) — la comparaison a été faite sur le rapport produit avec la base NVD locale.
+
+---
+
 ## keycloak-services (build #826) — CVE-2026-18963 (CVSS 9.1)
 
 ### Détection

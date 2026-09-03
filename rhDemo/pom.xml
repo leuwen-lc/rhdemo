@@ -263,6 +263,13 @@
             <version>2.0.2</version>
             <configuration>
                 <workingDirectory>frontend</workingDirectory>
+                <environmentVariables>
+                    <!-- Silence l'avertissement "browsers data (caniuse-lite) is N months old"
+                         relayé en [ERROR] par le plugin sous `mvn -q`. Sans effet fonctionnel :
+                         n'influe que sur les préfixes CSS d'autoprefixer (navigateurs evergreen).
+                         Rafraîchir ponctuellement via `npx update-browserslist-db@latest`. -->
+                    <BROWSERSLIST_IGNORE_OLD_DATA>1</BROWSERSLIST_IGNORE_OLD_DATA>
+                </environmentVariables>
             </configuration>
             <executions>
                 <!-- Install Node et npm -->
@@ -334,14 +341,15 @@
 			     Version upgradée à 12.1.9 pour support CVSS v4.0
 
 			     Usage local : ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
-			     Usage Jenkins : Exécuté via Maven avec credential nvd-api-key
+			     Usage Jenkins : -s .mvn/ci-settings.xml -DnvdApiServerId=nvd -DossIndexServerId=ossindex
+			                     (secrets via credentials nvd-api-key / ossindex-credentials, jamais en argument)
 			-->
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
 				<version>13.0.0</version>
 				<configuration>
-					<!-- La clé API NVD est passée via -DnvdApiKey en ligne de commande -->
+					<!-- Clé API NVD : en CI via -DnvdApiServerId=nvd (.mvn/ci-settings.xml) ; en local via -DnvdApiKey -->
 					<!-- Échouer le build si des vulnérabilités sont détectées -->
 					<failBuildOnCVSS>7.0</failBuildOnCVSS>
 
@@ -359,7 +367,7 @@
 					<suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile>
 
 					<!-- Configuration NVD (National Vulnerability Database) -->
-					<!-- La clé est passée via -DnvdApiKey en ligne de commande -->
+					<!-- Clé fournie via -DnvdApiServerId=nvd (CI) ou -DnvdApiKey (local) -->
 					<!-- Valeurs augmentées suite à des 503 répétés du NVD lors des resyncs complets -->
 					<nvdMaxRetryCount>10</nvdMaxRetryCount>
 					<nvdApiDelay>8000</nvdApiDelay>
@@ -377,8 +385,11 @@
 					<!-- Désactiver les analyseurs non pertinents pour réduire les warnings -->
 					<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
 
-					<!-- OSS Index : nouvelle URL depuis migration Sonatype (ancienne : ossindex.sonatype.org) -->
-					<ossindexAnalyzerUrl>https://api.guide.sonatype.com</ossindexAnalyzerUrl>
+					<!-- OSS Index : URL laissée au défaut du plugin
+					     (https://ossindex.sonatype.org/api/v3/component-report, endpoint toujours actif).
+					     Identifiants fournis en CI via -s .mvn/ci-settings.xml -DossIndexServerId=ossindex
+					     (cf. Jenkinsfile-CI / Jenkinsfile-Renovate). L'ancien <ossindexAnalyzerUrl> était
+					     mal cassé (élément réel : ossIndexAnalyzerUrl) donc ignoré par Maven. -->
 
 					<!-- Inclure les dépendances npm du frontend (Vue.js) dans le scan CVE
 					     Sans ce scanSet, seules les dépendances Maven sont analysées -->

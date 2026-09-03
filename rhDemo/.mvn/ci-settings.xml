@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+
+  <!--
+    settings.xml dédié à l'étape OWASP Dependency-Check en CI.
+
+    Passé explicitement via `-s .mvn/ci-settings.xml` dans Jenkinsfile-CI (stage OWASP)
+    et Jenkinsfile-Renovate (chemin Maven+OWASP). Un `./mvnw` local normal l'ignore.
+
+    But : ne JAMAIS mettre de secret sur la ligne de commande (visible dans `ps` sur
+    l'agent, et le debug Maven peut exposer -DnvdApiKey — cf. GHSA-qqhq-8r2c-c3f5).
+    Les secrets ne sont pas non plus stockés ici : ils sont interpolés à l'exécution
+    depuis les credentials Jenkins via variables d'environnement.
+
+      server "nvd"      -> password = clé API NVD           (credential `nvd-api-key`,        $NVD_API_KEY)
+                           référencé par -DnvdApiServerId=nvd ; le plugin utilise le
+                           <password> comme clé API (pas de <username>).
+      server "ossindex" -> username/password = compte OSS Index (credential `ossindex-credentials`,
+                           $OSSINDEX_USER / $OSSINDEX_PASSWORD) ; référencé par -DossIndexServerId=ossindex.
+
+    Hors CI (variables non définies), les serveurs restent déclarés mais vides :
+    NVD passe en accès sans clé (fortement rate-limité), OSS Index en accès anonyme.
+  -->
+  <servers>
+    <server>
+      <id>nvd</id>
+      <password>${env.NVD_API_KEY}</password>
+    </server>
+    <server>
+      <id>ossindex</id>
+      <username>${env.OSSINDEX_USER}</username>
+      <password>${env.OSSINDEX_PASSWORD}</password>
+    </server>
+  </servers>
+
+</settings>

@@ -548,7 +548,13 @@ YMLEOF
                             string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
                             usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
                         ]) {
-                            sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}'
+                            // Secrets NVD + OSS Index lus depuis .mvn/ci-settings.xml (server ids "nvd" et
+                            // "ossindex", alimentés par $NVD_API_KEY / $OSSINDEX_USER / $OSSINDEX_PASSWORD),
+                            // jamais sur la ligne de commande (visible dans `ps` ; le debug Maven peut
+                            // exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). NB OSS Index : les propriétés
+                            // sont ossIndexUsername/ossIndexPassword (I majuscule, sans "Analyzer") ;
+                            // l'ancien -DossindexAnalyzer* était ignoré -> "disabled due to missing credentials".
+                            sh './mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex'
                         }
                     }
                 }

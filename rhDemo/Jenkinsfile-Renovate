@@ -465,7 +465,13 @@ RENOVATE_SCAN_EOF
                                         # "junit" plus bas, indépendants de la verbosité console).
                                         ./mvnw -q clean compile -DskipTests
                                         ./mvnw -q verify
-                                        ./mvnw -q org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                        # Secrets NVD + OSS Index via .mvn/ci-settings.xml (server ids "nvd" et
+                                        # "ossindex" <- $NVD_API_KEY / $OSSINDEX_USER / $OSSINDEX_PASSWORD),
+                                        # jamais en ligne de commande (visible dans `ps` ; le debug Maven peut
+                                        # exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). OSS Index : propriétés
+                                        # ossIndexUsername/ossIndexPassword (I majuscule) ; l'ancien
+                                        # -DossindexAnalyzer* était ignoré.
+                                        ./mvnw -q -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex
                                     ''',
                                     returnStatus: true
                                 )

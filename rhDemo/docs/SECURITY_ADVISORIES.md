@@ -4,6 +4,37 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Lot OWASP Dependency-Check (build #846) — 18 findings
+
+### Détection
+
+- **Date de détection** : 2026-09-03 (build Jenkins RHDemo-CI #846)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `browserslist@4.28.1`, `fast-uri@3.1.5`, `serialize-javascript@6.0.2` (npm, `frontend/package-lock.json`) ; `form-data@4.0.6`, `minimatch@3.1.5` (npm, `frontend/package-lock.json`) ; `com.fasterxml.jackson.core:jackson-databind@2.21.5`, `org.springframework.security:spring-security-crypto@7.1.1`, `org.springframework.security:spring-security-web@7.1.1` (maven, transitives compile via `spring-boot-starter-*`).
+
+### Remédiation automatique (2026-09-03, build #846) — montée de version
+
+- **`browserslist` 4.28.1 → 4.28.7** (`frontend/package-lock.json`, épinglé en `devDependencies` de `frontend/package.json`) : corrige `CVE-2026-73088`, `GHSA-73wf-gq98-2v4g`, `GHSA-c83g-rgw3-j3cx` (DoS `normalizeStats()` / cache non borné, CVSS 7.5). Dépendance de build uniquement (`devOptional`).
+- **`fast-uri` 3.1.5 → 3.1.7** (`frontend/package-lock.json`, résolu transitivement, `target` phase 2 = 3.1.6) : corrige `CVE-2026-75899`, `CVE-2026-75931`, `CVE-2026-75975`, `CVE-2026-76172`, `GHSA-5jgf-p345-68v8`, `GHSA-f65p-4m7j-42xc`, `GHSA-fph4-wmhf-6fwf`, `GHSA-jqff-g426-hqxp` (double décodage de hostname / validation IPv6 / décodage legacy du scheme, CVSS 7.5). Dépendance de build uniquement (`devOptional`).
+- **`serialize-javascript` 6.0.2 → 7.0.5** (`frontend/package-lock.json`, épinglé en `devDependencies` de `frontend/package.json`) : corrige `CVE-2026-34043` (DoS par épuisement CPU, CVSS 7.5). Dépendance de build uniquement (`dev`), jamais dans le bundle de production.
+
+### Remédiation automatique — risque accepté (permanent) (2026-09-03, build #846)
+
+- **`CVE-2026-27904` — `minimatch@3.1.5`** (ReDoS via extglob `*()` imbriqués, CVSS 8.7) : suppression documentée dans `owasp-suppressions.xml`. Aucun correctif compatible sans saut majeur 3.x → 10.x (`fixAvailable=false`, option `--force` exclue par la politique du skill). **Critère A** : `minimatch` est présent exclusivement en `devDependency` (`dev=true`, instance unique dans `frontend/package-lock.json`), atteint uniquement via la chaîne de build `@vue/cli-service` (glob/rimraf), jamais embarqué dans le bundle de production `vue-cli-service build`. Pas de jeton `PENDING_UPSTREAM_FIX` — à revoir manuellement si `@vue/cli-service` migre vers un `minimatch` corrigé.
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-03, build #846)
+
+Suppressions documentées dans `owasp-suppressions.xml` avec le jeton `[PENDING_UPSTREAM_FIX]` (revérifiées à chaque cycle par la phase 2). Aucun correctif disponible (`fix_status=no_fix_available`, phase 2 build #846), aucun critère A objectif vérifié, CVSS strictement < 9.0 dans tous les cas.
+
+- **`CVE-2026-10143` — `form-data@4.0.6`** (CVSS 8.7, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`) : dépendance transitive de production (via `axios`). Source phase 2 : `npm_audit`.
+- **`CVE-2026-68497` — `jackson-databind@2.21.5`** (Allocation of Resources Without Limits or Throttling, CVSS 8.7, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`) : transitive compile via `spring-boot-starter-web` / `spring-boot-starter-data-jpa`. Portée regex de la suppression élargie au groupId `com.fasterxml.jackson.core` (jars frères publiés ensemble). Source phase 2 : `maven_central`.
+- **`CVE-2026-47842` — `spring-security-crypto@7.1.1`** (AesBytesEncryptor avec IV null + CBC ⇒ IV tout-à-zéro, CVSS 7.1, `CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N`) : transitive compile via `spring-boot-starter-security`. Source phase 2 : `maven_central`.
+- **`CVE-2026-47838` — `spring-security-web@7.1.1`** (SubjectDnX509PrincipalExtractor : mauvaise gestion de CN X.509 malformés ⇒ mauvais username, CVSS 8.1, `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`) : transitive compile via `spring-boot-starter-security`. Source phase 2 : `maven_central`.
+
+> Validation locale `./mvnw org.owasp:dependency-check-maven:check` non concluante dans l'environnement de la phase 3 (mise à jour NVD impossible : `NvdApiException: Invalid API Key`). Le fichier `owasp-suppressions.xml` est valide (parse XML OK, règles chargées par Dependency-Check). La validation effective a lieu sur Jenkins.
+
+---
+
 ## keycloak-services (build #826) — CVE-2026-18963 (CVSS 9.1)
 
 ### Détection

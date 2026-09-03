@@ -123,4 +123,34 @@
         <cve>CVE-2023-44270</cve>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-27904 : minimatch 3.1.5 (ReDoS via extglob *() imbriqués, CVSS 8.7). Aucun correctif compatible sans saut majeur 3.x -> 10.x (fixAvailable=false rapporté par npm audit --package-lock-only, option force exclue par la politique du skill fixcve-auto). Critère A permanent : minimatch est présent exclusivement en devDependency (dev=true dans frontend/package-lock.json, instance unique), atteint uniquement via la chaîne de build @vue/cli-service (glob/rimraf) pour la résolution de patterns de fichiers, jamais embarqué dans le bundle de production vue-cli-service build.</notes>
+        <packageUrl regex="true">^pkg:npm/minimatch@.*$</packageUrl>
+        <cve>CVE-2026-27904</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-10143 : form-data 4.0.6 (CVSS 8.7, CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H). Aucun correctif disponible (fix_status=no_fix_available, source npm_audit, phase 2 build #846). form-data est une dépendance transitive de production (via axios). Aucun critère A objectif vérifié (dépendance de production et non devDependency, vecteur AV:N sans AV:L/AV:P), CVSS strictement &lt; 9.0 : risque accepté temporaire dans l'attente d'un correctif upstream, revérifié à chaque cycle via le jeton PENDING_UPSTREAM_FIX.</notes>
+        <packageUrl regex="true">^pkg:npm/form-data@.*$</packageUrl>
+        <cve>CVE-2026-10143</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-68497 : jackson-databind 2.21.5 (Allocation of Resources Without Limits or Throttling, CVSS 8.7, CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H). Aucun correctif disponible (fix_status=no_fix_available, source maven_central, phase 2 build #846). Dépendance transitive de scope compile (spring-boot-starter-web / spring-boot-starter-data-jpa). Aucun critère A objectif vérifié (scope compile et non test/provided, vecteur AV:N), CVSS strictement &lt; 9.0 : risque accepté temporaire dans l'attente d'un correctif upstream. Portée regex élargie au groupId com.fasterxml.jackson.core (jars frères publiés ensemble : jackson-core, jackson-annotations).</notes>
+        <packageUrl regex="true">^pkg:maven/com\.fasterxml\.jackson\.core/[^@]+@.*$</packageUrl>
+        <cve>CVE-2026-68497</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47842 : spring-security-crypto 7.1.1 (AesBytesEncryptor avec constructeur à deux arguments ou générateur d'IV null + mode CBC => IV tout-à-zéro, CVSS 7.1, CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N). Aucun correctif disponible (fix_status=no_fix_available, source maven_central, phase 2 build #846). Dépendance transitive de scope compile (spring-boot-starter-security). Aucun critère A objectif vérifié (scope compile et non test/provided, vecteur AV:N), CVSS strictement &lt; 9.0 : risque accepté temporaire dans l'attente d'un correctif upstream.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/spring-security-crypto@.*$</packageUrl>
+        <cve>CVE-2026-47842</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47838 : spring-security-web 7.1.1 (SubjectDnX509PrincipalExtractor : mauvaise gestion de valeurs CN de certificat X.509 malformées menant à la lecture d'un mauvais username, CVSS 8.1, CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N). Aucun correctif disponible (fix_status=no_fix_available, source maven_central, phase 2 build #846). Dépendance transitive de scope compile (spring-boot-starter-security). Aucun critère A objectif vérifié (scope compile et non test/provided, vecteur AV:N), CVSS strictement &lt; 9.0 : risque accepté temporaire dans l'attente d'un correctif upstream.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/spring-security-web@.*$</packageUrl>
+        <cve>CVE-2026-47838</cve>
+    </suppress>
+
 </suppressions>

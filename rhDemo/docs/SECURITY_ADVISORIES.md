@@ -4,6 +4,39 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## build #849 (OWASP Dependency-Check) — 11 findings npm/maven
+
+### Détection
+
+- **Date de détection** : 2026-09-03 (build Jenkins RHDemo-CI #849, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `browserslist` 4.28.1, `fast-uri` 3.1.5 (npm) ; `form-data` 4.0.6, `minimatch` 3.1.5, `serialize-javascript` 6.0.2 (npm) ; `com.fasterxml.jackson.core:jackson-databind` 2.21.5 et `tools.jackson.core:jackson-databind` 3.x, `org.springframework.security:spring-security-crypto` 7.1.1, `org.springframework.security:spring-security-web` 7.1.1 (maven)
+
+### Remédiation automatique (2026-09-03, build #849)
+
+- **Action** : `frontend/node/npm --prefix frontend audit fix --package-lock-only` — montée de version effective (vérifiée via `npm audit`, paquets disparus de l'arbre résolu) :
+  - `browserslist` 4.28.1 → 4.28.8 (≥ 4.28.7) — corrige `CVE-2026-73088`, `GHSA-73wf-gq98-2v4g`, `GHSA-c83g-rgw3-j3cx` (DoS, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`, CVSS 7.5).
+  - `fast-uri` 3.1.5 → 3.1.7 (≥ 3.1.6) — corrige `CVE-2026-75899`, `CVE-2026-75931`, `CVE-2026-75975`, `CVE-2026-76172`, `GHSA-5jgf-p345-68v8`, `GHSA-f65p-4m7j-42xc`, `GHSA-fph4-wmhf-6fwf`, `GHSA-jqff-g426-hqxp` (mauvaise canonicalisation d'URI, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N`, CVSS 7.5).
+  - Montées collatérales sans rapport avec une CVE listée : `electron-to-chromium`, `node-releases`, `update-browserslist-db`, `postcss-selector-parser` (chaîne de build).
+
+### Remédiation automatique — risque accepté (permanent) (2026-09-03, build #849)
+
+- **CVE-2026-27904** — `minimatch` 3.1.5 (ReDoS via extglob `*()` imbriqués, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Suppression `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Justification** : `minimatch` 3.1.5 n'est atteint que via la chaîne de build `@vue/cli-service` (devDependency) → `glob`/`rimraf`, marqué `dev=true` dans `frontend/package-lock.json`, absent de `dependencies` de `frontend/package.json`. `npm audit` rapporte « No fix available » en `package-lock-only` ; la branche 10.x exigerait l'option `--force`, exclue par la politique `fixcve-auto`. Jamais embarqué dans le bundle de production `vue-cli-service build`. **Critère A** (package npm exclusivement dans la chaîne `devDependencies`).
+- **CVE-2026-34043** — `serialize-javascript` 6.0.2 (DoS par épuisement CPU sur objets array-like forgés, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`, CVSS 7.5). Suppression `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Justification** : atteint exclusivement via `copy-webpack-plugin` et `css-minimizer-webpack-plugin` (dépendances de `@vue/cli-service`, devDependency), marqué `dev=true` dans `frontend/package-lock.json`. `npm audit` rapporte « No fix available » en `package-lock-only` ; la montée vers 7.0.5+ exigerait un saut majeur des plugins webpack via `--force`, exclue par la politique `fixcve-auto`. Jamais embarqué dans le bundle de production `vue-cli-service build`. **Critère A** (package npm exclusivement dans la chaîne `devDependencies`). **Note** : les builds #844 et #846 avaient échoué et été rollés back en tentant un pin/`overrides` sans effet réel sur l'arbre résolu ; la suppression documentée est la remédiation correcte (phase 2 renvoie désormais `no_fix_available`).
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-03, build #849)
+
+Suppressions `owasp-suppressions.xml` **avec** jeton `[PENDING_UPSTREAM_FIX]` en tête de `<notes>` — revérifiées automatiquement par la phase 2 de `fixcve-auto` à chaque cycle suivant. **Critère B** : aucun critère A vérifié, CVSS strictement inférieure à 9.0.
+
+- **CVE-2026-10143** — `form-data` 4.0.6 (DoS, allocation de ressources sans limite, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Dépendance transitive de **production** via `axios` (donc Critère A « exclusivement devDependencies » non vérifié). Aucune version corrigée publiée sur npm. **Atténuation** : le bundle navigateur produit par `vue-cli-service build` utilise le `FormData` natif du navigateur ; l'adaptateur Node d'`axios`, seul consommateur du package `form-data`, n'y est pas inclus.
+- **CVE-2026-68497** — `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 **et** `tools.jackson.core` 3.x) — Allocation of Resources Without Limits or Throttling, CWE-770 (DoS, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Scope compile/runtime (transitif via `spring-boot-starter-web` / sérialisation JSON), pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central. Suppression scopée aux deux `groupId` de l'artefact `jackson-databind`.
+- **CVE-2026-47842** — `org.springframework.security:spring-security-crypto` 7.1.1 (`AesBytesEncryptor` avec le constructeur à deux arguments, ou un générateur d'IV `null`, et le mode CBC chiffre avec un IV nul tout-à-zéro ; `CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H`, CVSS 7.1). Scope runtime via `spring-boot-starter-security`, pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central.
+- **CVE-2026-47838** — `org.springframework.security:spring-security-web` 7.1.1 (`SubjectDnX509PrincipalExtractor` traite mal certaines valeurs CN de certificat X.509 malformées et peut lire un mauvais nom d'utilisateur ; `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`, CVSS 8.1). Scope runtime via `spring-boot-starter-security`, pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central.
+
+- **À retirer** : automatiquement, dès qu'une version corrigée sera détectée par la phase 2 (revérification du jeton `[PENDING_UPSTREAM_FIX]`) — montée de version réelle appliquée et note de clôture ajoutée ici.
+
+---
+
 ## keycloak-services (build #826) — CVE-2026-18963 (CVSS 9.1)
 
 ### Détection

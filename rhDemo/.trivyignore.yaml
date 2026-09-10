@@ -24,3 +24,18 @@ vulnerabilities:
   - id: CVE-2025-68121
     pkg-name: gosu
     statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution (setuid/setgid uniquement)"
+
+  # CVE-2026-75595 - Netty (io.netty:netty-handler) embarqué dans l'image Keycloak
+  # Affecte : io.netty.netty-handler-4.1.136.Final.jar dans quay.io/keycloak/keycloak:26.7.2
+  #           (opt/keycloak/lib/lib/main/), tiré transitivement par Quarkus 3.33.x
+  # Risque réel : NUL - la faille exige que Keycloak/Quarkus termine lui-même le TLS avec
+  #   un routage per-SNI clientAuth=REQUIRE comme seule barrière mTLS. Ici Keycloak tourne
+  #   en start-dev --http-enabled=true, TLS terminé par Nginx/NGF, listener HTTPS désactivé
+  #   en stagingkub (--https-port=-1), aucun mTLS/auth par certificat client.
+  #   Le handler vulnérable io.netty.handler.ssl.SslClientHelloHandler n'est jamais actif.
+  # À retirer quand : Keycloak publie une release basée sur Quarkus >= 3.39
+  #   (netty-handler >= 4.1.137.Final) - déjà le cas sur :nightly, pas sur une stable
+  #   (26.7.3 embarque toujours 4.1.136.Final).
+  - id: CVE-2026-75595
+    pkg-name: io.netty:netty-handler
+    statement: "[PENDING_UPSTREAM_FIX] netty-handler 4.1.136.Final embarqué dans keycloak:26.7.2 - Keycloak en start-dev/--http-enabled, TLS terminé par Nginx, pas de mTLS per-SNI : SslClientHelloHandler jamais actif. Correctif à venir via Quarkus >= 3.39"

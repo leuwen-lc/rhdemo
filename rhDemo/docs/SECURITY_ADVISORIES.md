@@ -4,6 +4,29 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## netty-handler (build #860) — CVE-2026-75595 (CVSS 9.1)
+
+### Détection
+
+- **Date de détection** : 2026-09-10 (build Jenkins RHDemo-CI #860)
+- **Outil** : Trivy (scan image `quay.io/keycloak/keycloak`)
+- **Sévérité** : CRITICAL (CVSS 4.0 : 9.1, vecteur `CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N`)
+- **Composant affecté** : `io.netty:netty-handler` 4.1.136.Final — jar embarqué dans l'image `quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0` (`KEYCLOAK_IMAGE` de `Jenkinsfile-CI`), chemin `opt/keycloak/lib/lib/main/io.netty.netty-handler-4.1.136.Final.jar`, tiré transitivement par Quarkus 3.33.x.
+
+### Description
+
+`io.netty.handler.ssl.SslClientHelloHandler#decode` vérifie le mauvais offset avant de lire l'en-tête de handshake TLS de 4 octets : un `ClientHello` dont l'en-tête de handshake est fragmenté sur plusieurs records provoque une `IndexOutOfBoundsException` et l'appel `select(ctx, null)`, ce qui sélectionne le `SslContext` par défaut au lieu du contexte spécifique au SNI. Dans les déploiements où un `clientAuth=REQUIRE` par SNI est l'unique barrière mTLS, où le `SslContext` par défaut utilise `clientAuth=NONE`/`OPTIONAL`, et où aucune vérification de certificat n'a lieu au niveau applicatif, un attaquant distant non authentifié peut contourner l'exigence de TLS mutuel de la route protégée. Corrigé dans Netty 4.1.137.Final et 4.2.17.Final.
+
+### Remédiation — risque accepté (suppression Trivy documentée) (2026-09-10, build #860)
+
+- **Action** : suppression `CVE-2026-75595` ajoutée dans `rhDemo/.trivyignore.yaml`, ciblée sur `pkg-name: io.netty:netty-handler`, avec jeton `[PENDING_UPSTREAM_FIX]`.
+- **Fichier modifié** : `rhDemo/.trivyignore.yaml`.
+- **Justification (exploitabilité nulle)** : la faille n'est atteignable que si Keycloak/Quarkus termine lui-même le TLS avec un routage per-SNI `clientAuth=REQUIRE` comme seule barrière mTLS. Or dans tous les environnements RHDemo, Keycloak tourne en `start-dev --http-enabled=true`, le TLS est terminé par Nginx / NGF (`--proxy-headers=xforwarded`), le listener HTTPS est explicitement désactivé en stagingkub (`--https-port=-1`), et aucune authentification par certificat client (mTLS) n'est configurée. Le handler vulnérable `io.netty.handler.ssl.SslClientHelloHandler` n'est jamais instancié. La NetworkPolicy Zero Trust restreint par ailleurs l'entrée vers Keycloak au proxy d'ingress et à `rhdemo-app`.
+- **Aucune montée de version possible** : aucune image Keycloak stable ne corrige la CVE au 2026-09-10. La `26.7.3` (dernière stable, 2026-08-31) embarque toujours `netty-handler` 4.1.136.Final. Seule l'image `quay.io/keycloak/keycloak:nightly` (Quarkus 3.39.1) embarque `netty-handler` 4.1.137.Final.
+- **À retirer quand** : Keycloak publie une release stable basée sur Quarkus ≥ 3.39 (`netty-handler` ≥ 4.1.137.Final) — puis monter `KEYCLOAK_IMAGE` et retirer l'entrée de `.trivyignore.yaml`. Revérification automatique via l'étape 0 de fixcve-auto (jeton `[PENDING_UPSTREAM_FIX]`).
+
+---
+
 ## build #849 (OWASP Dependency-Check) — 11 findings npm/maven
 
 ### Détection

@@ -25,7 +25,7 @@ VALUES_DIR="${SCRIPT_DIR}/../../helm/observability"
 source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 
 # renovate: datasource=helm depName=kube-prometheus-stack registryUrl=https://prometheus-community.github.io/helm-charts
-KUBE_PROMETHEUS_STACK_VERSION="88.6.3"  # App: Prometheus Operator v0.93.1
+KUBE_PROMETHEUS_STACK_VERSION="88.6.5"  # App: Prometheus Operator v0.93.1
 
 MONITORING_NS="monitoring"
 

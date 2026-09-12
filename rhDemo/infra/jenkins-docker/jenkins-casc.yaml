@@ -501,8 +501,10 @@ jobs:
 
         triggers {
           // Scan Renovate désormais inclus dans ce job (plus de dépendance à Codeberg
-          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate
-          cron('H 3 * * *')
+          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate.
+          // Décalé de 3h à 6h : Codeberg est régulièrement indisponible vers 3h du matin,
+          // ce qui fait échouer le pipeline (checkout/API Forgejo) avant même de commencer.
+          cron('H 6 * * *')
         }
       }
 

@@ -61,8 +61,12 @@ pipeline {
         KEYCLOAK_URL = 'https://keycloak-stagingkub.intra.leuwen-lc.fr'
 
         // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
-        // (unclassified.mailer, credential smtp-infomaniak-credentials)
-        NOTIFICATION_EMAIL = 'lcpro@etik.com'
+        // (unclassified.mailer, credential smtp-infomaniak-credentials). Adresse sourcée
+        // depuis un credential Jenkins dédié (Secret text "notification-email") plutôt
+        // qu'en clair dans ce fichier : dépôt public, une adresse mail personnelle en clair
+        // dans le code (sans bénéfice, contrairement à security.txt) alimente le harvesting
+        // de spam. Credential à créer manuellement, cf. jenkins-casc.yaml section CREDENTIALS.
+        NOTIFICATION_EMAIL = credentials('notification-email')
     }
 
     parameters {

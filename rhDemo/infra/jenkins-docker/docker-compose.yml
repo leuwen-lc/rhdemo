@@ -79,6 +79,13 @@ services:
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:?Définir JENKINS_ADMIN_PASSWORD dans .env avant de démarrer}
       - JENKINS_CLAUDE_PASSWORD=${JENKINS_CLAUDE_PASSWORD:?Définir JENKINS_CLAUDE_PASSWORD dans .env avant de démarrer}
 
+      # Adresse mail des notifications CI (unclassified.location.adminAddress dans
+      # jenkins-casc.yaml) — doit correspondre au compte SMTP authentifié
+      # (credential smtp-infomaniak-credentials) et au credential Jenkins
+      # notification-email (Secret text, créés manuellement), cf. jenkins-casc.yaml
+      # section CREDENTIALS pour le détail.
+      - JENKINS_NOTIFICATION_EMAIL=${JENKINS_NOTIFICATION_EMAIL:?Définir JENKINS_NOTIFICATION_EMAIL dans .env avant de démarrer}
+
       # Timezone
       - TZ=${TZ:-Europe/Paris}
 

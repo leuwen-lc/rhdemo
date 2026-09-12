@@ -49,6 +49,20 @@ pipeline {
         REPO            = 'leuwen-lc/rhdemo'
         BASE_BRANCH     = 'evolutions-post-1.1.10'
         RENOVATE_IMAGE  = 'renovate/renovate:43.288.0'
+
+        // Notification email d'échec uniquement — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials), même
+        // mécanisme que Jenkinsfile-CI. Pas de mail de succès ici : un succès
+        // avec merge déclenche RHDemo-CI sur la base, qui envoie son propre
+        // mail ; un succès sans PR à merger est le cas normal (rien à
+        // signaler). Un échec, lui, ne déclenche rien en aval — sans ce mail,
+        // il serait indiscernable d'un "Renovate n'a rien eu à faire". Adresse
+        // sourcée depuis un credential Jenkins dédié (Secret text
+        // "notification-email") plutôt qu'en clair : dépôt public, une adresse
+        // mail personnelle en clair dans le code (sans bénéfice, contrairement
+        // à security.txt) alimente le harvesting de spam. Credential à créer
+        // manuellement, cf. jenkins-casc.yaml section CREDENTIALS.
+        NOTIFICATION_EMAIL = credentials('notification-email')
     }
 
     stages {
@@ -613,6 +627,9 @@ RENOVATE_SCAN_EOF
                         // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
                         // passerait alors inaperçue sur le tableau de bord du job.
                         currentBuild.result = 'FAILURE'
+                        // Repris dans le mail d'échec (post { failure {} }) : la variable locale
+                        // "failures" ne survit pas au-delà de ce bloc script.
+                        env.FAILED_PRS = failures.join(', ')
                         echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
                     }
                 }
@@ -631,6 +648,25 @@ RENOVATE_SCAN_EOF
             }
             sh "git checkout ${env.BASE_BRANCH} || true"
             cleanWs()
+        }
+        failure {
+            script {
+                // Seul cas notifié par mail (cf. commentaire NOTIFICATION_EMAIL) : couvre aussi
+                // bien une exception du pipeline (scan Renovate, listing des PRs...) qu'un
+                // currentBuild.result = 'FAILURE' explicite pour une ou plusieurs PR en échec
+                // (env.FAILED_PRS, absent dans le premier cas).
+                echo "❌ Pipeline Renovate échoué !"
+                def prDetail = env.FAILED_PRS ? "\n\nPR(s) en échec : ${env.FAILED_PRS}" : ''
+                // Best-effort, comme dans Jenkinsfile-CI : une panne SMTP ne doit pas masquer
+                // l'échec réel du pipeline (déjà visible dans le résultat du build).
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-Renovate #${env.BUILD_NUMBER} : échec",
+                             body: "Le pipeline RHDemo-Renovate #${env.BUILD_NUMBER} a échoué.${prDetail}\n\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
         }
     }
 }

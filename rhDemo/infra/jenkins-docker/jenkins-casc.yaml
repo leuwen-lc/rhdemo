@@ -211,7 +211,10 @@ tool:
 # 9. smtp-infomaniak-credentials
 #    - Type: Username with password
 #    - ID: smtp-infomaniak-credentials
-#    - Username: lcpro@etik.com
+#    - Username: adresse mail Infomaniak dédiée aux notifications CI (même valeur que
+#      JENKINS_NOTIFICATION_EMAIL dans .env, cf. unclassified.location.adminAddress plus
+#      bas, et que le credential notification-email #10 ci-dessous) — pas de valeur en
+#      clair ici : dépôt public, cf. #10 pour le rationale complet.
 #    - Password: mot de passe IMAP/SMTP de l'adresse mail Infomaniak — géré et mis à jour
 #      manuellement par l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
 #    - Usage: notification email de succès/échec de RHDemo-CI (step emailext, plugin email-ext)
@@ -224,6 +227,19 @@ tool:
 #      une configuration entièrement manuelle via Manage Jenkins > System > Extended E-mail
 #      Notification (host mail.infomaniak.com:465 SSL, credential ci-dessus) — JCasC ne gérant
 #      pas ce bloc, il ne l'écrase pas non plus au redémarrage.
+#
+# 10. notification-email (Secret text)
+#    - Type: Secret text
+#    - ID: notification-email
+#    - Secret: la même adresse mail que smtp-infomaniak-credentials (Username ci-dessus) et
+#      que JENKINS_NOTIFICATION_EMAIL (.env, cf. adminAddress plus bas) — les trois doivent
+#      rester synchronisés manuellement, Infomaniak rejette l'envoi si le "From" (adminAddress,
+#      faute de "from:" explicite dans les emailext) ne correspond pas au compte SMTP authentifié.
+#    - Usage: destinataire ("to:") des emailext de Jenkinsfile-CI/CD/Renovate/Stagingkub-Upgrade-Deploy
+#      (variable NOTIFICATION_EMAIL). Pourquoi un credential plutôt qu'un littéral dans ces
+#      fichiers : dépôt public, une adresse mail personnelle en clair dans le code n'a aucun
+#      bénéfice (contrairement à security.txt, exposition volontaire pour un contact sécurité)
+#      et alimente le harvesting de spam.
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -244,15 +260,18 @@ unclassified:
 
   # Configuration Location
   # adminAddress doit correspondre au compte SMTP authentifié (smtp-infomaniak-credentials,
-  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Stagingkub-Upgrade-Deploy) n'a pas de
-  # "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
+  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Renovate/Stagingkub-Upgrade-Deploy) n'a pas
+  # de "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
   # avec le compte authentifié fait rejeter l'envoi par Infomaniak (observé en pratique :
   # un override manuel via l'UI avait corrigé cette valeur, mais un redémarrage Jenkins a
   # réappliqué ce fichier JCasC et donc écrasé silencieusement l'override, cassant les
   # notifications email de tous les pipelines pendant plusieurs jours sans erreur visible).
+  # Valeur interpolée depuis JENKINS_NOTIFICATION_EMAIL (.env, gitignored) plutôt qu'en clair
+  # ici : dépôt public, cf. credential #10 (notification-email) ci-dessus pour le rationale —
+  # les deux doivent être maintenus à la même adresse manuellement.
   location:
     url: "http://jenkins:8080/"
-    adminAddress: "lcpro@etik.com"
+    adminAddress: "${JENKINS_NOTIFICATION_EMAIL}"
 
 # ═══════════════════════════════════════════════════════════════════
 # JOBS - Pipelines RHDemo

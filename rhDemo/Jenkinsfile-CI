@@ -554,6 +554,9 @@ YMLEOF
                             // exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). NB OSS Index : les propriétés
                             // sont ossIndexUsername/ossIndexPassword (I majuscule, sans "Analyzer") ;
                             // l'ancien -DossindexAnalyzer* était ignoré -> "disabled due to missing credentials".
+                            // Cache OSS Index remonté à 7 jours (ossIndexAnalyzerCacheValidForHours dans
+                            // pom.xml) suite au 402 Payment Required du 11/09/2026 (quota Sonatype Guide
+                            // épuisé) : cf. docs/OWASP_DEPENDENCY_CHECK.md#oss-index pour le calcul.
                             sh './mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex'
                         }
                     }

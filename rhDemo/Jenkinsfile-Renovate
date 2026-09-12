@@ -470,7 +470,8 @@ RENOVATE_SCAN_EOF
                                         # jamais en ligne de commande (visible dans `ps` ; le debug Maven peut
                                         # exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). OSS Index : propriétés
                                         # ossIndexUsername/ossIndexPassword (I majuscule) ; l'ancien
-                                        # -DossindexAnalyzer* était ignoré.
+                                        # -DossindexAnalyzer* était ignoré. Cache remonté à 7 jours suite au
+                                        # 402 du 11/09/2026, cf. docs/OWASP_DEPENDENCY_CHECK.md#oss-index.
                                         ./mvnw -q -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex
                                     ''',
                                     returnStatus: true

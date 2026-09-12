@@ -59,6 +59,24 @@ Ce que ce projet a en place contre ce type précis d'attaque :
 
 Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une protection réelle il faudrait qu'il soit bloquant, ce qui introduirait un 3ᵉ type d'échec de build non reconnu par l'automatisation de remédiation (`fixcve-auto` ne classe les échecs Jenkins qu'en `trivy` ou `owasp` — voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md)), sans bénéfice suffisant pour justifier cette extension aujourd'hui. `npm audit` reste disponible en local : lancer `cd rhDemo/frontend && npm audit` (ou `npm audit --omit=dev` pour se limiter à ce qui est réellement livré dans le bundle, en excluant les dépendances de build/test) de temps en temps — par exemple avant une release, ou en cas de doute suite à une actualité sécurité comme celle-ci.
 
+### OSS Index
+
+**Contexte** : Sonatype a migré OSS Index vers **Sonatype Guide** (28/04/2026), qui remplace l'ancien accès gratuit illimité par un quota de **crédits mensuels** (500 sur le compte gratuit utilisé ici, confirmé via la page usage du compte), même authentifié via `ossindex-credentials`. **1 crédit = 10 requêtes de rapport de composant.** Une fois le quota épuisé, l'API renvoie `402 Payment Required` et l'analyseur se désactive en échouant le build (`failOnError=true`) — constaté en CI le 11/09/2026, quota consommé (4999 requêtes ≈ 500 crédits) en seulement 9 jours au cache par défaut de 24h.
+
+**Le cache est un diff par composant**, pas une purge globale : chaque dépendance (`packageUrl`) a son propre fichier de cache sur disque, expirant sur son propre horodatage (`ossIndexAnalyzerCacheValidForHours`). Un composant en cache valide ne consomme aucun crédit ; seuls les composants absents ou expirés sont re-demandés à l'API. En régime stable, le débit de crédits est environ inversement proportionnel à la durée du cache :
+
+| `ossIndexAnalyzerCacheValidForHours` | Débit mesuré/estimé | Autonomie d'un quota de 500 crédits | Besoin mensuel |
+|---|---|---|---|
+| 24 (défaut) | 55,5 crédits/j (mesuré) | 9 jours | ~1665/mois |
+| **168 (7 jours, retenu)** | **~7,9 crédits/j** | **~63 jours** | **~238/mois** |
+| 720 (30 jours) | ~1,9 crédit/j | ~270 jours | ~56/mois |
+
+**Décision retenue** : `ossIndexAnalyzerCacheValidForHours=168` (7 jours) dans [pom.xml](../pom.xml), qui ramène le besoin mensuel (~238 crédits) confortablement sous le quota (500), avec une marge pour les nouvelles versions de dépendances introduites par Renovate (chaque nouveau `packageUrl` reste un cache-miss garanti, quel que soit le cache) et les pics ponctuels (`dependency-check:purge`, nouvel agent Jenkins sans cache persistant). En complément, `ossIndexWarnOnlyOnRemoteErrors=true` dégrade un futur dépassement de quota en simple warning au lieu de faire échouer le build.
+
+**Couverture** : le NVD CVE Analyzer (clé API dédiée) reste actif pour les CVE Maven par CPE, et Node Audit Analyzer + RetireJS pour le npm — ces analyseurs avaient d'ailleurs correctement détecté `qs`, `serialize-javascript`, `DOMPurify` (swagger-ui) et `webpack-dev-server` sur le build du 11/09/2026 malgré la panne OSS Index, qui reste néanmoins utile pour son matching par PURL sur des artefacts Maven mal couverts par CPE.
+
+**À surveiller** : vérifier sur la page usage du compte Sonatype Guide si le quota se recharge mensuellement ou s'il s'agit d'un pool fixe non renouvelé — le calcul ci-dessus suppose un renouvellement mensuel.
+
 ### [pom.xml:309-345](../pom.xml#L309-L345)
 
 ```xml

@@ -385,11 +385,15 @@
 					<!-- Désactiver les analyseurs non pertinents pour réduire les warnings -->
 					<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
 
-					<!-- OSS Index : URL laissée au défaut du plugin
-					     (https://ossindex.sonatype.org/api/v3/component-report, endpoint toujours actif).
-					     Identifiants fournis en CI via -s .mvn/ci-settings.xml -DossIndexServerId=ossindex
-					     (cf. Jenkinsfile-CI / Jenkinsfile-Renovate). L'ancien <ossindexAnalyzerUrl> était
-					     mal cassé (élément réel : ossIndexAnalyzerUrl) donc ignoré par Maven. -->
+					<!-- OSS Index : Sonatype a migré vers "Sonatype Guide" (28/04/2026), quota de
+					     crédits mensuel même authentifié (402 Payment Required le 11/09/2026, quota de
+					     500 crédits épuisé en 9 jours au cache par défaut de 24h). Cache remonté à 7
+					     jours pour tenir dans le quota mensuel avec marge (~238 crédits/mois estimés
+					     sur 500 alloués), et échec réseau/quota dégradé en warning pour ne pas casser
+					     le build si le quota est quand même dépassé un mois chargé (pics Renovate).
+					     Détail et calcul : docs/OWASP_DEPENDENCY_CHECK.md#oss-index. -->
+					<ossIndexAnalyzerCacheValidForHours>168</ossIndexAnalyzerCacheValidForHours>
+					<ossIndexWarnOnlyOnRemoteErrors>true</ossIndexWarnOnlyOnRemoteErrors>
 
 					<!-- Inclure les dépendances npm du frontend (Vue.js) dans le scan CVE
 					     Sans ce scanSet, seules les dépendances Maven sont analysées -->

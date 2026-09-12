@@ -22,6 +22,11 @@
 
     Hors CI (variables non définies), les serveurs restent déclarés mais vides :
     NVD passe en accès sans clé (fortement rate-limité), OSS Index en accès anonyme.
+
+    OSS Index : cache remonté à 7 jours (ossIndexAnalyzerCacheValidForHours dans pom.xml) et
+    erreurs distantes dégradées en warning (ossIndexWarnOnlyOnRemoteErrors) suite au 402
+    Payment Required du 11/09/2026 (quota Sonatype Guide épuisé). Calcul et détail :
+    docs/OWASP_DEPENDENCY_CHECK.md#oss-index.
   -->
   <servers>
     <server>

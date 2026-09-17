@@ -18,23 +18,7 @@
 
 
     <!--
-        GHSA-5m6q-g25r-mvwx — node-forge (DoS bnModInverse, aucun correctif publié)
-        L'avis indique explicitement "Affected versions: All versions (including latest)" :
-        aucune version corrigée n'existe à ce jour sur npm (montée de version 1.3.3 -> 1.4.0
-        appliquée par npm audit fix pour les 3 autres avis node-forge, sans effet sur celui-ci).
-        node-forge n'est atteint que via la chaîne de build
-        @vue/cli-service (devDependency) -> @vue/cli-shared-utils -> @achrinza/node-ipc -> node-forge :
-        jamais embarqué dans le bundle de production `vue-cli-service build`.
-    -->
-    <suppress>
-        <notes>GHSA-5m6q-g25r-mvwx : aucun correctif node-forge disponible (avis officiel : toutes versions affectées) — package uniquement présent dans la chaîne de build (devDependency @vue/cli-service), jamais dans le bundle de production.</notes>
-        <packageUrl regex="true">^pkg:npm/node-forge@.*$</packageUrl>
-        <vulnerabilityName>GHSA-5m6q-g25r-mvwx</vulnerabilityName>
-    </suppress>
-
-
-    <!--
-        GHSA-5c6j-r48x-rmvq — serialize-javascript (RCE, aucun correctif compatible)
+        GHSA-5c6j-r48x-rmvq / GHSA-qj8w-gfj5-8c6v — serialize-javascript (RCE + DoS CPU, aucun correctif compatible)
         npm audit fix (package-lock-only) ne peut pas mettre à jour serialize-javascript :
         copy-webpack-plugin et css-minimizer-webpack-plugin (dépendances de @vue/cli-service)
         n'acceptent pas de version corrigée sans saut majeur (option force, exclue par la politique du skill).
@@ -45,6 +29,28 @@
         <notes>GHSA-5c6j-r48x-rmvq : pas de correctif compatible sans passage en force (copy-webpack-plugin/css-minimizer-webpack-plugin, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
         <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
         <vulnerabilityName>GHSA-5c6j-r48x-rmvq</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-qj8w-gfj5-8c6v : même dépendance transitive que GHSA-5c6j-r48x-rmvq ci-dessus (copy-webpack-plugin/css-minimizer-webpack-plugin, dépendances de build @vue/cli-service) — même justification, pas de correctif compatible sans passage en force (npm audit : "No fix available").</notes>
+        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
+        <vulnerabilityName>GHSA-qj8w-gfj5-8c6v</vulnerabilityName>
+    </suppress>
+
+
+    <!--
+        webpack-dev-server (CVE-2025-30360, CVE-2025-30359, GHSA-9jgg-88mc-972h, GHSA-4v9v-hfq4-rm2v,
+        GHSA-79cf-xcqc-c78w, GHSA-m28w-2pqf-7qgj, GHSA-mx8g-39q3-5c79, GHSA-f5vj-f2hx-8m93)
+        Toutes les vulnérabilités concernent le serveur de développement (vol de code source via site
+        malveillant, interception WebSocket HMR, CSRF sur les endpoints internes, DoS via en-tête
+        Host/Origin malformé). npm audit confirme "No fix available" (plage affectée <=5.2.6, dernière
+        branche majeure incluse). webpack-dev-server n'est démarré que par `npm run serve` (poste de
+        développeur local, écoute localhost) : le pipeline CI/CD et l'image Docker de production
+        n'exécutent que `npm run build` (vue-cli-service build), qui ne charge jamais ce serveur.
+    -->
+    <suppress>
+        <notes>webpack-dev-server (8 avis, cf. commentaire ci-dessus) : vulnérabilités du serveur de développement uniquement, jamais démarré en CI/CD ni en image Docker (seul `npm run build` y est exécuté) — pas de correctif compatible sans passage en force (npm audit : "No fix available").</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
     </suppress>
 
 
@@ -60,48 +66,6 @@
         <notes>GHSA-w5hq-g745-h8pq : pas de correctif compatible sans passage en force (sockjs/webpack-dev-server, dépendances de build @vue/cli-service) — jamais dans le bundle de production.</notes>
         <packageUrl regex="true">^pkg:npm/uuid@.*$</packageUrl>
         <vulnerabilityName>GHSA-w5hq-g745-h8pq</vulnerabilityName>
-    </suppress>
-
-
-    <!--
-        CVE-2026-42154 — micrometer-registry-prometheus et prometheus-metrics-core (faux positif)
-        CVE-2026-42154 (CVSS 7.5 HIGH) : DoS par épuisement mémoire dans le endpoint /api/v1/read
-        du SERVEUR Prometheus (binaire Go) — ne valide pas la taille déclarée dans les requêtes
-        snappy-compressées avant d'allouer de la mémoire.
-        FAUX POSITIF : les bibliothèques Java micrometer-registry-prometheus et prometheus-metrics-core
-        sont des CLIENTS qui exportent des métriques VERS Prometheus. Elles n'implémentent pas
-        l'endpoint /api/v1/read du serveur. OWASP Dependency-Check les associe incorrectement
-        car elles partagent le mot "prometheus" dans leur nom de package.
-        Fix officiel : serveur Prometheus 3.5.3 et 3.11.3 (sans rapport avec ces libs Java).
-    -->
-    <suppress>
-        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas le client Java micrometer-registry-prometheus.</notes>
-        <packageUrl regex="true">^pkg:maven/io\.micrometer/micrometer-registry-prometheus@.*$</packageUrl>
-        <cve>CVE-2026-42154</cve>
-    </suppress>
-
-    <suppress>
-        <notes>CVE-2026-42154 : faux positif — CVE concerne le serveur Prometheus Go (endpoint /api/v1/read), pas les clients Java prometheus-metrics-* (core, model, config, exposition-formats, etc.).</notes>
-        <packageUrl regex="true">^pkg:maven/io\.prometheus/prometheus-metrics-[^@]+@.*$</packageUrl>
-        <cve>CVE-2026-42154</cve>
-    </suppress>
-
-
-    <!--
-        GHSA-mh99-v99m-4gvg (CVE-2026-14257) — brace-expansion (DoS OOM, aucun correctif compatible)
-        brace-expansion <=5.0.7 permet un crash mémoire (uncatchable OOM) via expand() sur une entrée
-        contenant de nombreux groupes d'accolades chaînés. Corrigé en 5.0.8, mais atteint ici en 1.1.17
-        via minimatch:3.1.5 (frontend/package-lock.json?minimatch:3.1.5/brace-expansion:^1.1.7), lui-même
-        dépendance transitive de la chaîne de build @vue/cli-service (glob/rimraf). npm audit fix
-        (package-lock-only) ne peut pas mettre à jour brace-expansion sans saut majeur 1.x -> 5.x
-        (option force, exclue par la politique du skill) : fixAvailable=false.
-        brace-expansion n'est utilisé que par ces outils de build (résolution de patterns de fichiers),
-        jamais embarqué dans le bundle de production vue-cli-service build.
-    -->
-    <suppress>
-        <notes>GHSA-mh99-v99m-4gvg (CVE-2026-14257) : pas de correctif compatible sans passage en force (minimatch:3.1.5, dépendance de build @vue/cli-service) — jamais dans le bundle de production.</notes>
-        <packageUrl regex="true">^pkg:npm/brace-expansion@.*$</packageUrl>
-        <vulnerabilityName>GHSA-mh99-v99m-4gvg</vulnerabilityName>
     </suppress>
 
 
@@ -121,44 +85,6 @@
         <notes>CVE-2023-44270 : postcss 7.0.39, même dépendance transitive que CVE-2026-45623 ci-dessus (via @vue/component-compiler-utils:3.3.0, devDependency de @vue/cli-service, jamais dans le bundle de production) — même justification, pas de correctif compatible sans passage en force.</notes>
         <packageUrl regex="true">^pkg:npm/postcss@7\.0\.39$</packageUrl>
         <cve>CVE-2023-44270</cve>
-    </suppress>
-
-    <!-- build #849 (OWASP Dependency-Check) : CVE sans correctif upstream disponible (phase 2 : no_fix_available). -->
-
-    <suppress>
-        <notes>CVE-2026-27904 : minimatch 3.1.5 (ReDoS via extglob *() imbriqués, CVSS 8.7). Aucun correctif compatible : minimatch 3.1.5 est atteint exclusivement via la chaîne de build @vue/cli-service (devDependency) puis glob/rimraf, marqué dev=true dans frontend/package-lock.json, absent de dependencies de frontend/package.json. npm audit rapporte "No fix available" en package-lock-only ; la branche 10.x exigerait l'option force, exclue par la politique fixcve-auto. minimatch n'est utilisé que par ces outils de build (résolution de patterns de fichiers), jamais embarqué dans le bundle de production vue-cli-service build. Critère A (package npm exclusivement dans la chaîne devDependencies) donc acceptation permanente du risque, sans jeton de revérification.</notes>
-        <packageUrl regex="true">^pkg:npm/minimatch@.*$</packageUrl>
-        <cve>CVE-2026-27904</cve>
-    </suppress>
-
-    <suppress>
-        <notes>CVE-2026-34043 : serialize-javascript 6.0.2 (DoS par épuisement CPU sur objets array-like forgés, CVSS 7.5). Aucun correctif compatible : atteint exclusivement via copy-webpack-plugin et css-minimizer-webpack-plugin (dépendances de @vue/cli-service, devDependency), marqué dev=true dans frontend/package-lock.json. npm audit rapporte "No fix available" en package-lock-only ; la montée vers 7.0.5+ exigerait un saut majeur des plugins webpack via l'option force, exclue par la politique fixcve-auto. serialize-javascript n'est atteint que par ces plugins de build, jamais embarqué dans le bundle de production vue-cli-service build. Critère A (package npm exclusivement dans la chaîne devDependencies) donc acceptation permanente du risque. Rappel : les builds #844 et #846 ont échoué en tentant un pin/overrides sans effet réel sur l'arbre résolu ; la suppression documentée est la remédiation correcte.</notes>
-        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
-        <cve>CVE-2026-34043</cve>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-10143 : form-data 4.0.6 (DoS, allocation de ressources sans limite ; CVSS 8.7). Critère B : aucun critère A vérifié (dépendance transitive de production via axios, pas uniquement devDependencies ; vecteur AV:N ; CVSS 8.7 strictement inférieure à 9.0). Aucune version corrigée publiée sur npm (npm audit : "No fix available"). Atténuation : le bundle navigateur produit par vue-cli-service build utilise le FormData natif du navigateur, l'adaptateur Node d'axios (seul consommateur du package form-data) n'y est pas inclus. Suppression temporaire, revérifiée automatiquement à chaque cycle via le jeton PENDING_UPSTREAM_FIX.</notes>
-        <packageUrl regex="true">^pkg:npm/form-data@.*$</packageUrl>
-        <cve>CVE-2026-10143</cve>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-68497 : jackson-databind (com.fasterxml.jackson.core 2.21.5 ET tools.jackson.core 3.x) — Allocation of Resources Without Limits or Throttling, CWE-770 (DoS ; CVSS 8.7). Critère B : scope compile/runtime (transitif via spring-boot-starter-web / sérialisation JSON), pas test/provided ; vecteur AV:N ; CVSS 8.7 strictement inférieure à 9.0. Aucune version corrigée publiée sur Maven Central (phase 2 : no_fix_available). Suppression temporaire, revérifiée automatiquement à chaque cycle via le jeton PENDING_UPSTREAM_FIX.</notes>
-        <packageUrl regex="true">^pkg:maven/(com\.fasterxml\.jackson\.core|tools\.jackson\.core)/jackson-databind@.*$</packageUrl>
-        <cve>CVE-2026-68497</cve>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47842 : spring-security-crypto 7.1.1 — AesBytesEncryptor avec le constructeur à deux arguments (ou un générateur d'IV null) et le mode CBC chiffre avec un IV nul (tout à zéro) ; CVSS 7.1. Critère B : scope runtime via spring-boot-starter-security, pas test/provided ; vecteur AV:N/PR:L ; CVSS 7.1 strictement inférieure à 9.0. Aucune version corrigée publiée sur Maven Central (phase 2 : no_fix_available). Suppression temporaire, revérifiée automatiquement à chaque cycle via le jeton PENDING_UPSTREAM_FIX.</notes>
-        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/spring-security-crypto@.*$</packageUrl>
-        <cve>CVE-2026-47842</cve>
-    </suppress>
-
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47838 : spring-security-web 7.1.1 — SubjectDnX509PrincipalExtractor traite mal certaines valeurs CN de certificat X.509 malformées et peut lire un mauvais nom d'utilisateur ; CVSS 8.1. Critère B : scope runtime via spring-boot-starter-security, pas test/provided ; vecteur AV:N/AC:L/PR:L ; CVSS 8.1 strictement inférieure à 9.0. Aucune version corrigée publiée sur Maven Central (phase 2 : no_fix_available). Suppression temporaire, revérifiée automatiquement à chaque cycle via le jeton PENDING_UPSTREAM_FIX.</notes>
-        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/spring-security-web@.*$</packageUrl>
-        <cve>CVE-2026-47838</cve>
     </suppress>
 
 </suppressions>

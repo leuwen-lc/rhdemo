@@ -463,12 +463,9 @@ RENOVATE_SCAN_EOF
                             // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
                             // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
                             // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
-                            // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
-                            // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
-                            // sont exposés ici.
+                            // ne bloque pas une exfiltration réseau. Seul NVD_API_KEY est exposé ici.
                             ciStatus = withCredentials([
-                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
-                                usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
                             ]) {
                                 sh(
                                     script: '''
@@ -479,18 +476,34 @@ RENOVATE_SCAN_EOF
                                         # "junit" plus bas, indépendants de la verbosité console).
                                         ./mvnw -q clean compile -DskipTests
                                         ./mvnw -q verify
-                                        # Secrets NVD + OSS Index via .mvn/ci-settings.xml (server ids "nvd" et
-                                        # "ossindex" <- $NVD_API_KEY / $OSSINDEX_USER / $OSSINDEX_PASSWORD),
+                                        # Secret NVD via .mvn/ci-settings.xml (server id "nvd" <- $NVD_API_KEY),
                                         # jamais en ligne de commande (visible dans `ps` ; le debug Maven peut
-                                        # exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). OSS Index : propriétés
-                                        # ossIndexUsername/ossIndexPassword (I majuscule) ; l'ancien
-                                        # -DossindexAnalyzer* était ignoré. Cache remonté à 7 jours suite au
-                                        # 402 du 11/09/2026, cf. docs/OWASP_DEPENDENCY_CHECK.md#oss-index.
-                                        ./mvnw -q -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex
+                                        # exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5).
+                                        # OSS Index désactivé ici volontairement (-DossIndexAnalyzerEnabled=false) :
+                                        # son quota mensuel Sonatype Guide (500 crédits) est partagé avec RHDemo-CI,
+                                        # qui scanne un arbre de dépendances quasi identique. Le faire tourner sur
+                                        # les deux pipelines double la consommation et rend le résultat non
+                                        # déterministe selon lequel des deux épuise le quota en premier (incident
+                                        # constaté : build RHDemo-Renovate #104 vs RHDemo-CI #871, quota épuisé
+                                        # entre les deux runs à ~4 min d'écart, CVE GHSA-w27v-7q3p-w38r sur svgo
+                                        # vue par l'un et pas par l'autre). RHDemo-CI reste seul responsable de la
+                                        # détection des CVE couvertes uniquement par OSS Index (GHSA sans CPE NVD).
+                                        # Voir docs/OWASP_DEPENDENCY_CHECK.md#oss-index.
+                                        ./mvnw -q -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexAnalyzerEnabled=false
                                     ''',
                                     returnStatus: true
                                 )
                             }
+
+                            // Rapport archivé pour diagnostic (build #104 n'avait laissé qu'une ligne de
+                            // console tronquée par le -q ci-dessus, sans rapport exploitable après coup).
+                            // Renommage par numéro de PR : plusieurs PR passent par ce chemin dans la même
+                            // exécution et écraseraient sinon le rapport de la précédente. allowEmptyArchive :
+                            // le rapport peut manquer si mvnw a échoué avant le goal dependency-check (ex:
+                            // échec de compilation/tests).
+                            sh "cp rhDemo/target/dependency-check-report.html rhDemo/target/dependency-check-report-pr${prNumber}.html || true"
+                            sh "cp rhDemo/target/dependency-check-report.json rhDemo/target/dependency-check-report-pr${prNumber}.json || true"
+                            archiveArtifacts artifacts: "rhDemo/target/dependency-check-report-pr${prNumber}.*", allowEmptyArchive: true
                         }
 
                         withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {

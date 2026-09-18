@@ -51,6 +51,14 @@
     <suppress>
         <notes>webpack-dev-server (8 avis, cf. commentaire ci-dessus) : vulnérabilités du serveur de développement uniquement, jamais démarré en CI/CD ni en image Docker (seul `npm run build` y est exécuté) — pas de correctif compatible sans passage en force (npm audit : "No fix available").</notes>
         <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
+        <cve>CVE-2025-30360</cve>
+        <cve>CVE-2025-30359</cve>
+        <vulnerabilityName>GHSA-9jgg-88mc-972h</vulnerabilityName>
+        <vulnerabilityName>GHSA-4v9v-hfq4-rm2v</vulnerabilityName>
+        <vulnerabilityName>GHSA-79cf-xcqc-c78w</vulnerabilityName>
+        <vulnerabilityName>GHSA-m28w-2pqf-7qgj</vulnerabilityName>
+        <vulnerabilityName>GHSA-mx8g-39q3-5c79</vulnerabilityName>
+        <vulnerabilityName>GHSA-f5vj-f2hx-8m93</vulnerabilityName>
     </suppress>
 
 

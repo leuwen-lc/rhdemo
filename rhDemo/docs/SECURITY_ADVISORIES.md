@@ -4,6 +4,31 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Keycloak (builds #890 à #895) — CVE-2026-8763 (bcprov) et CVE-2026-84939 (freemarker), CVSS 9.1
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (stage Trivy, atteint pour la première fois au build #890 une fois OWASP redevenu propre ; bloqué par `fixcve-auto` au build #895 : `blocked_needs_human`, CVSS ≥ 9.0 sans correctif)
+- **Outil** : Trivy (scan de l'image `quay.io/keycloak/keycloak:26.7.2`, `KEYCLOAK_IMAGE` de `Jenkinsfile-CI`)
+- **Composants affectés** (jars embarqués, non remédiables par un changement du projet) :
+  - `org.bouncycastle:bcprov-jdk18on` 1.84 (corrigé en 1.85) — présent à deux emplacements de l'image, d'où un doublon dans le rapport Trivy (corrigé côté `fixcve-detect.py`, commit 12e855a)
+  - `org.freemarker:freemarker` 2.3.32 (corrigé en 2.3.35)
+
+### Pourquoi aucun correctif automatique n'est possible
+
+Les versions corrigées (`1.85`, `2.3.35`) sont des versions de bibliothèques, pas des tags d'image : `fixcve-auto` ne peut pas en déduire un bump de `KEYCLOAK_IMAGE`. Vérification manuelle dans les POM publiés (2026-09-28) : les versions Keycloak 26.7.2, 26.7.3 et 26.7.4 (dernière stable) embarquent toutes `bcprov` 1.84 (BOM Quarkus 3.33.3.x) et `freemarker` 2.3.32. Un bump vers 26.7.3 ou 26.7.4 ne corrige donc ni l'une ni l'autre. Cette conclusion vient des POM et non d'un scan des images.
+
+### Remédiation — risque accepté (suppression Trivy documentée) (2026-09-28, décision manuelle)
+
+- **Action** : suppressions `CVE-2026-8763` (`org.bouncycastle:bcprov-jdk18on`) et `CVE-2026-84939` (`org.freemarker:freemarker`) ajoutées dans `rhDemo/.trivyignore.yaml`, avec jeton `[PENDING_UPSTREAM_FIX]`.
+- **CVE-2026-8763 (bcprov)** — contournement des contraintes de noms X.509 (point final dans un `rfc822Name` ou une URI) lors de la validation d'un chemin de certification portant une extension `NameConstraints`. Vecteur `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N`. **Justification (exploitabilité nulle)** : aucune validation de chemin de certification n'est sollicitée — clients Keycloak en `client-secret` (`ClientService`), aucun flux X.509 / truststore / mTLS / fournisseur d'identité configuré dans `rhDemoInitKeycloak`, LDAP désactivé (`allowLdap: false`), listener HTTPS de Keycloak désactivé en stagingkub (`--https-port=-1`), TLS terminé par Nginx/NGF.
+- **CVE-2026-84939 (freemarker)** — traversée de chemin lors du chargement d'un gabarit, si un attaquant peut fournir un identifiant de locale malformé et que la recherche localisée est active (par défaut) ; les fichiers lisibles restent bornés par le `TemplateLoader`. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`. **Justification (mesurée)** : l'internationalisation est désactivée sur le realm RHDemo (aucun réglage de locales dans `RealmService`, aucun thème personnalisé). Test du 2026-09-28 sur le Keycloak de stagingkub (26.7.2) : la page de connexion est identique, aux 8 lignes de jetons de session près, avec `ui_locales`, `kc_locale`, `Accept-Language` et cookie `KEYCLOAK_LOCALE` valides (`fr`) ou malformés (`../../x`, `../../../../etc/passwd`, `en_US_../../x`), sans erreur : la locale de la requête n'atteint pas FreeMarker.
+- **Limites de cette justification (non vérifié)** : le chemin de génération des mails (aucun SMTP configuré dans le realm, sortie SMTP interdite par la NetworkPolicy `allowSmtp: false` — mais le rendu du gabarit reste théoriquement possible) ; les environnements dev et ephemere (même image et même code d'initialisation, non testés) ; le mécanisme interne de Keycloak (conclusion tirée du comportement observé, pas de la lecture du code).
+- **À retirer quand** : Keycloak publie une release stable embarquant `bcprov` ≥ 1.85 et `freemarker` ≥ 2.3.35 — puis monter `KEYCLOAK_IMAGE` et retirer les entrées de `.trivyignore.yaml`.
+- **À réexaminer immédiatement si** : l'internationalisation est activée sur le realm, un SMTP est configuré, ou un flux X.509 / mTLS / fournisseur d'identité externe est ajouté (les deux justifications cesseraient d'être valables).
+
+---
+
 ## build #892 (OWASP Dependency-Check) — montées Hibernate/Jackson, 2 CVE spring-security acceptées temporairement
 
 ### Détection

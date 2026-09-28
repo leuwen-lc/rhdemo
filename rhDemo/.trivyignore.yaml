@@ -39,3 +39,44 @@ vulnerabilities:
   - id: CVE-2026-75595
     pkg-name: io.netty:netty-handler
     statement: "[PENDING_UPSTREAM_FIX] netty-handler 4.1.136.Final embarqué dans keycloak:26.7.2 - Keycloak en start-dev/--http-enabled, TLS terminé par Nginx, pas de mTLS per-SNI : SslClientHelloHandler jamais actif. Correctif à venir via Quarkus >= 3.39"
+
+  # CVE-2026-8763 - Bouncy Castle (org.bouncycastle:bcprov-jdk18on) embarqué dans l'image Keycloak
+  # Affecte : bcprov-jdk18on-1.84.jar dans quay.io/keycloak/keycloak:26.7.2, présent à deux
+  #           emplacements (opt/keycloak/lib/lib/main/ et opt/keycloak/bin/client/lib/) — Trivy
+  #           le signale deux fois, version imposée par le BOM Quarkus 3.33.x (CVSS 9.1)
+  # Faille : contournement des contraintes de noms X.509 (point final dans un rfc822Name ou
+  #   une URI) lors de la validation d'un chemin de certification qui porte une extension
+  #   NameConstraints. Ne concerne donc que la validation de certificats X.509.
+  # Risque réel : NUL dans ce projet — aucune validation de chemin de certification n'est
+  #   sollicitée : les clients Keycloak s'authentifient par client-secret (ClientService), aucun
+  #   flux d'authentification X.509 / truststore / mTLS / fournisseur d'identité n'est configuré
+  #   (rhDemoInitKeycloak), LDAP désactivé (allowLdap: false), listener HTTPS de Keycloak
+  #   désactivé en stagingkub (--https-port=-1), TLS terminé par Nginx/NGF.
+  # À retirer quand : Keycloak publie une release stable dont le BOM Quarkus fixe
+  #   bcprov >= 1.85 (vérifié le 2026-09-28 dans les POM : 26.7.2, 26.7.3 et 26.7.4 embarquent
+  #   toutes 1.84). À réexaminer aussi si un flux X.509, un IdP externe ou du mTLS est ajouté.
+  - id: CVE-2026-8763
+    pkg-name: org.bouncycastle:bcprov-jdk18on
+    statement: "[PENDING_UPSTREAM_FIX] bcprov-jdk18on 1.84 embarqué dans keycloak:26.7.2 (BOM Quarkus) - la faille (contournement des contraintes de noms X.509) n'est atteinte que par une validation de chemin de certification : aucun flux X.509/mTLS/IdP configuré, clients en client-secret, LDAP désactivé. Correctif à venir via une release Keycloak embarquant bcprov >= 1.85"
+
+  # CVE-2026-84939 - Apache FreeMarker (org.freemarker:freemarker) embarqué dans l'image Keycloak
+  # Affecte : freemarker-2.3.32.jar dans quay.io/keycloak/keycloak:26.7.2
+  #           (opt/keycloak/lib/lib/main/), propriété freemarker.version du POM Keycloak (CVSS 9.1)
+  # Faille : traversée de chemin lors du chargement d'un gabarit, si un attaquant peut fournir
+  #   un identifiant de locale malformé à FreeMarker et que la recherche localisée est active
+  #   (par défaut). Les fichiers lisibles restent bornés par le TemplateLoader configuré.
+  # Risque réel : NUL sur la surface testée — l'internationalisation est désactivée sur le realm
+  #   RHDemo (aucun réglage supportedLocales, rhDemoInitKeycloak/RealmService) : mesuré le
+  #   2026-09-28 sur le Keycloak de stagingkub (26.7.2), la page de connexion est strictement
+  #   identique (mêmes 8 lignes de jetons de session près) avec ui_locales / kc_locale /
+  #   Accept-Language / cookie KEYCLOAK_LOCALE valides (fr) ou malformés (../../x,
+  #   ../../etc/passwd), sans erreur : la locale de la requête n'atteint pas FreeMarker.
+  #   Non vérifié : le chemin de génération des mails (aucun SMTP configuré dans le realm et
+  #   sortie SMTP interdite par la NetworkPolicy, allowSmtp: false), et les environnements
+  #   dev/ephemere (même image et même code d'initialisation, non testés).
+  # À retirer quand : Keycloak publie une release stable avec freemarker >= 2.3.35 (vérifié le
+  #   2026-09-28 : 26.7.2, 26.7.3 et 26.7.4 embarquent toutes 2.3.32). À réexaminer aussitôt si
+  #   l'internationalisation est activée sur le realm, ou si un SMTP est configuré.
+  - id: CVE-2026-84939
+    pkg-name: org.freemarker:freemarker
+    statement: "[PENDING_UPSTREAM_FIX] freemarker 2.3.32 embarqué dans keycloak:26.7.2 - la faille exige une locale malformée fournie par l'attaquant : internationalisation désactivée sur le realm, locale de la requête ignorée (mesuré sur stagingkub le 2026-09-28). À réexaminer si l'internationalisation ou un SMTP est activé. Correctif à venir via une release Keycloak embarquant freemarker >= 2.3.35"

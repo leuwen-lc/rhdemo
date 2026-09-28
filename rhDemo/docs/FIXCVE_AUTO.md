@@ -461,5 +461,6 @@ Coût principal : toucher `Jenkinsfile-CI` (pipeline critique déjà volumineux)
 - [`.claude/skills/fixcve-auto-lookup/SKILL.md`](../../.claude/skills/fixcve-auto-lookup/SKILL.md) — phase 2/3, recherche de correctif
 - [`.claude/skills/fixcve-auto-apply/SKILL.md`](../../.claude/skills/fixcve-auto-apply/SKILL.md) — phase 3/3, application/commit/push
 - [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — validateur de schéma déterministe entre les phases
+- [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md) — plan d'évolutions (simplification, harmonisation, durcissement) à reprendre
 - [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) — historique des CVE traitées (manuel et automatique)
 - [SOPS_SETUP.md](SOPS_SETUP.md) — installation SOPS/AGE

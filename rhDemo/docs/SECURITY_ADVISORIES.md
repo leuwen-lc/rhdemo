@@ -4,6 +4,37 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## build #892 (OWASP Dependency-Check) — montées Hibernate/Jackson, 2 CVE spring-security acceptées temporairement
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (build Jenkins RHDemo-CI #892, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `org.hibernate.orm:hibernate-core` 7.4.5.Final, `jackson-core` / `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5), `spring-security-crypto` 7.1.1, `spring-security-web` 7.1.1 (maven)
+- **Contexte** : mêmes findings que le build #889. Le correctif du build #889 (commit 2e3ccc3) avait été annulé par le rollback du build #890 à cause d'un échec Trivy sans rapport (3 CRITICAL sur les images Docker, aucun finding OWASP dans le build de validation). Il est réappliqué à l'identique.
+
+### Remédiation automatique (2026-09-28, build #892)
+
+Montées de version via les propriétés du BOM Spring Boot dans `pom.xml`. Versions effectivement résolues vérifiées dans le rapport OWASP local (`hibernate-core-7.4.11.Final`, `jackson-core/databind-2.21.7`, `jackson-core/databind-3.1.7`).
+
+- **CVE-2026-77874** — `hibernate-core` 7.4.5.Final -> 7.4.11.Final (`hibernate.version`, CVSS 8.6).
+- **CVE-2026-68498, CVE-2026-89407, CVE-2026-89425** — `jackson-core` `com.fasterxml.jackson.core` 2.21.5 -> 2.21.7 (`jackson-2-bom.version`) et `tools.jackson.core` 3.1.5 -> 3.1.7 (`jackson-bom.version`).
+- **CVE-2026-68497, CVE-2026-83557** — `jackson-databind`, mêmes montées 2.21.7 / 3.1.7.
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-28, build #892)
+
+Suppression avec jeton `[PENDING_UPSTREAM_FIX]`, revérifiée par la phase 2 à chaque cycle. **Critère B** : Critère A non vérifié (scope runtime via `spring-boot-starter-security`, vecteur `AV:N`), CVSS strictement inférieur à 9.0, aucune version corrigée sur Maven Central. Suppression scopée au groupId `org.springframework.security`.
+
+- **CVE-2026-47842** — `spring-security-crypto` 7.1.1 (IV nul tout-à-zéro avec `AesBytesEncryptor` en mode CBC, CVSS 7.1).
+- **CVE-2026-47838** — `spring-security-web` 7.1.1 (`SubjectDnX509PrincipalExtractor`, CN X.509 malformé, CVSS 8.1).
+- **À retirer** : automatiquement dès qu'une version corrigée est détectée par la phase 2.
+
+### Validation locale
+
+`owasp-suppressions.xml` : parsing XML validé. `./mvnw org.owasp:dependency-check-maven:check` n'a **pas** pu s'exécuter complètement (clé API NVD absente de l'environnement : `Invalid API Key, length of 0`) ; l'absence des CVE n'est donc pas confirmée localement, seules les versions résolues le sont. La validation complète est reportée au prochain scan Jenkins.
+
+---
+
 ## build #884 (OWASP Dependency-Check) — 7 findings npm supprimés, 5 groupes Maven bloqués
 
 ### Détection

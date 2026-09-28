@@ -35,12 +35,6 @@
 		<tomcat.version>11.0.25</tomcat.version>
 		<!-- Fix CVE-2026-54291 : downgrade SCRAM channel binding sur pgjdbc -->
 		<postgresql.version>42.7.13</postgresql.version>
-		<!-- Fix CVE-2026-77874 : hibernate-core 7.4.5.Final -> 7.4.11.Final -->
-		<hibernate.version>7.4.11.Final</hibernate.version>
-		<!-- Fix CVE-2026-68498, CVE-2026-89407, CVE-2026-89425, CVE-2026-68497, CVE-2026-83557 : jackson 2.x (com.fasterxml.jackson.core) 2.21.5 -> 2.21.7 -->
-		<jackson-2-bom.version>2.21.7</jackson-2-bom.version>
-		<!-- Fix CVE-2026-68498, CVE-2026-89407, CVE-2026-89425, CVE-2026-68497, CVE-2026-83557 : jackson 3.x (tools.jackson.core) 3.1.5 -> 3.1.7 -->
-		<jackson-bom.version>3.1.7</jackson-bom.version>
 	</properties>
 
 	<dependencies>

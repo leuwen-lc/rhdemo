@@ -137,4 +137,16 @@
         <cve>CVE-2026-93749</cve>
     </suppress>
 
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47842 : spring-security-crypto 7.1.1 (AesBytesEncryptor avec constructeur à deux arguments ou générateur d'IV null en mode CBC : IV nul tout-à-zéro, CVSS 7.1 &lt; 9.0). Critère A non vérifié (scope runtime via spring-boot-starter-security, vecteur AV:N/PR:L, pas RetireJS). Critère B : suppression temporaire, aucune version corrigée sur Maven Central (source_checked=maven_central) ; revérifié à chaque cycle jusqu'à la sortie d'une version corrigée. Suppression scopée au groupId org.springframework.security.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/.*$</packageUrl>
+        <cve>CVE-2026-47842</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-47838 : spring-security-web 7.1.1 (SubjectDnX509PrincipalExtractor : CN X.509 malformé, lecture d'un mauvais username, CVSS 8.1 &lt; 9.0). Critère A non vérifié (scope runtime via spring-boot-starter-security, vecteur AV:N/AC:L/PR:L, pas RetireJS). Critère B : suppression temporaire, aucune version corrigée sur Maven Central (source_checked=maven_central) ; revérifié à chaque cycle jusqu'à la sortie d'une version corrigée. Suppression scopée au groupId org.springframework.security.</notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/.*$</packageUrl>
+        <cve>CVE-2026-47838</cve>
+    </suppress>
+
 </suppressions>

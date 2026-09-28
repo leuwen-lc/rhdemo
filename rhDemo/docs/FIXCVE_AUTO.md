@@ -23,7 +23,9 @@ crontab (toutes les 15 min)
          │
          └─ Phase B (pending_validation) : vérifie le build CI suivant
                ├─ SUCCESS  → marque résolu
-               └─ FAILURE  → git revert automatique + halte après 2 rollbacks consécutifs
+               ├─ FAILURE mais CVE traitées disparues et aucune nouvelle → validation
+               │     partielle (correctif conservé, findings restants = bloqués)
+               └─ FAILURE sinon → git revert automatique + halte après 2 rollbacks consécutifs
 ```
 
 Le polling lui-même ne fait **aucun appel LLM** — Claude Code n'est invoqué que
@@ -50,7 +52,8 @@ n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 | Phase | Implémentation | Détient | Ne détient pas | Touche du contenu externe non fiable |
 | --- | --- | --- | --- | --- |
 | 1. Détection | [`rhDemo/scripts/fixcve-detect.py`](../scripts/fixcve-detect.py) — **script déterministe, aucun LLM** | Accès Jenkins (lecture, via curl direct — jamais `claude -p`, donc jamais soumis au moteur de permissions) | git, npm/Maven/Docker, aucun credential | Oui (rapports Trivy/OWASP) — **sans conséquence : pas de LLM, donc aucune cible pour une injection de prompt** |
-| 2. Recherche de correctif | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), OSV.dev (`fixcve-osv-lookup.sh`), tags de registre (`fixcve-registry-tags-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
+| 2. Recherche de correctif (Maven, Docker) | `.claude/skills/fixcve-auto-lookup/SKILL.md` (Claude) | Accès Maven Central (`fixcve-maven-lookup.sh`), OSV.dev (`fixcve-osv-lookup.sh`), tags de registre (`fixcve-registry-tags-lookup.sh`), `npm audit --json`, `docker manifest inspect` | Jenkins, git, Edit | Oui — **seule phase à la fois exposée à un LLM et sans aucun secret** |
+| 2b. Recherche de correctif npm | [`rhDemo/scripts/fixcve-npm-lookup.py`](../scripts/fixcve-npm-lookup.py) — **script déterministe, aucun LLM**, exécuté par `fixcve-auto-poll.sh` juste après la phase 2 | `npm audit --json` (lecture seule) et `--dry-run` de `audit fix`, lecture de `package-lock.json` | Jenkins, git, Edit | Réponse du registre npm lue par du code, jamais par un LLM |
 | 3. Application | `.claude/skills/fixcve-auto-apply/SKILL.md` (Claude) | git add/commit/push, Edit des fichiers de remédiation | Jenkins, Maven Central/npm/Docker en direct (digest déjà résolu en phase 2) | Non — ne lit que les fichiers structurés déjà validés |
 
 ### Pourquoi la phase 1 est un script plutôt qu'un skill Claude
@@ -60,6 +63,10 @@ n'ayant accès qu'à ce qui est strictement nécessaire à son rôle :
 - Sans LLM, il n'y a aucune cible pour une injection de prompt — la question de la fiabilité du contenu Trivy/OWASP devient sans objet.
 - Les schémas d'extraction (JSON Trivy, HTML OWASP DC) sont construits et vérifiés contre de vrais rapports du projet — voir les commentaires de [`fixcve-detect.py`](../scripts/fixcve-detect.py) pour le détail des cas réels couverts (identifiants GHSA en plus des CVE, `CVSS` multi-sources, `FixedVersion` multi-valeurs conservées en entier dans `fixed_versions`, avisories ne portant qu'un score CVSS v4...).
 - Même si la phase 2 (seule exposée à l'injection) était compromise, elle ne peut produire qu'un fichier erroné — ni exfiltrer un secret, ni pousser de code, faute d'accès git.
+
+### Pourquoi la recherche npm (2b) est un script plutôt qu'une étape du skill
+
+Même logique que la phase 1 : la règle `fixAvailable` de `npm audit` est mécanique, et laissée au LLM elle n'était pas reproductible — au build #878 `proxy-addr` recevait `no_fix_available`, au #882 `lookup_failed`. Surtout, six paquets npm restaient en `lookup_failed` parce qu'ils sont **absents** de `npm audit` (avis OWASP/NVD trop récents pour la base GHSA que npm interroge) : ce n'est pas un échec transitoire mais l'absence de correctif automatisable (`npm audit fix` ne corrige que ce qu'il connaît), désormais classée `no_fix_available`. `lookup_failed` ne subsiste que si `npm audit` lui-même est inutilisable. Le script calcule aussi `npm_dev_only` (champ optionnel de `lookup.json`, voir [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py)) : `true` si toutes les copies du paquet dans `frontend/package-lock.json` sont `"dev": true` — la preuve objective du Critère A « devDependency », qui n'est plus déclarée « au jugé » par la phase 3. Il écrase toute entrée npm que la phase 2 aurait écrite. Limite : le cas `fixAvailable: true` (version cible lue dans `npm audit fix --dry-run --json`) n'a pu être testé que sur des données synthétiques — aucune CVE npm corrigeable n'existait au moment de l'écriture ; s'il ne résout pas la version, il renvoie `lookup_failed` (prudent).
 
 ### Wrappers réseau dédiés (pas de `curl` générique) — phase 2 uniquement
 
@@ -92,10 +99,13 @@ devenu inutile depuis son remplacement par ce script déterministe.
 | --- | --- |
 | **Working tree propre requis** | Si des modifications locales non committées existent, le script ne touche à rien (évite d'interférer avec un travail en cours). |
 | **Branche à jour requise** | Si la branche locale est en retard/divergente par rapport à `origin`, le script s'arrête (pas de merge/rebase automatique). |
-| **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau, `git revert` immédiat + push. |
+| **Rollback automatique** | Si le build Jenkins déclenché par un correctif automatique échoue à nouveau **et** que la validation par non-régression (ligne suivante) ne le sauve pas, `git revert` immédiat + push. |
+| **Validation par non-régression (correctif partiel)** | Un build de validation resté rouge n'entraîne plus automatiquement un rollback. `evaluate_partial_validation()` (dans `fixcve-auto-poll.sh`) relit son rapport avec `fixcve-detect.py` et le compare aux findings du cycle d'origine (`pending.original_findings`) : correctif **conservé** (événement `validation_partial`, `consecutive_rollbacks` remis à 0, blocage mémorisé 48h) si le stage d'origine a encore des findings, qu'**aucun n'est nouveau** et qu'**au moins un a disparu** ; rollback dans tous les autres cas, y compris au moindre doute (Jenkins injoignable, rapport absent ou invalide). La raison est journalisée (`partial_check`). Supprime la cause du « tout ou rien » : un finding bloqué ne fait plus renoncer la phase 3 aux autres correctifs, ni annuler un correctif valide. Incidents : builds #718/#734 (rollback d'un correctif correct à cause d'autres CVE) puis #878/#882 (19 findings traitables laissés en l'état à cause d'un seul). |
+| **Journal d'audit committé par le script, pas par le LLM** | La phase 3 écrit son événement dans `fixcve-audit.jsonl` mais le commit dépendait de son bon vouloir : au build #878 elle a committé, au #882 elle s'est arrêtée juste avant, laissant le clone sale et bloquant tous les cycles suivants (9h sans traitement). `commit_leftover_audit()` committe et pousse désormais le journal resté modifié — après la phase 3 (`APPLIED` comme `NO_ACTION`) **et** au début de chaque cycle (reprise d'un cycle interrompu). En `NO_ACTION`/sans résultat, `discard_unapplied_changes()` annule aussi les modifications de remédiation laissées en vain (ex. `package-lock.json`). |
+| **Alerte « arbre non propre »** | Seuls les fichiers **autres que le journal d'audit** bloquent un cycle. Compteur `dirty_tree_cycles` dans `state.json` ; à partir de `DIRTY_TREE_ALERT_CYCLES` (8, soit 2h) cycles consécutifs, une ligne `ALERTE` est écrite dans `poll.log`. (Pas de canal de notification actif à ce jour : c'est un point d'accroche pour un futur mail/ntfy.) |
 | **Halte après rollbacks répétés** | `MAX_CONSECUTIVE_ROLLBACKS` (2) — voir « Machine à états ». |
 | **Halte après échecs pré-push répétés (symétrique)** | `MAX_CONSECUTIVE_PREPUSH_FAILURES` (2), champ `consecutive_prepush_failures`, `reason:"max_consecutive_prepush_failures"` + `failing_stage` dans `automation_halted` — voir « Machine à états » (lane CVE bloquée). |
-| **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque cycle par `/fixcve-auto-lookup` (phase 2), remplacée par le vrai correctif dès qu'il sort. **CVSS ≥ 9.0 sans correctif** : seule exception restant hors périmètre — blocage documenté, `FIXCVE_AUTO_RESULT: NO_ACTION`, intervention manuelle requise. |
+| **Critères objectifs pour toute suppression/acceptation de risque** | **Critère A (permanent)** : scope `test`/`provided`, OU RetireJS sur une lib JS non utilisée dans `frontend/src`, OU vecteur d'attaque `AV:L`/`AV:P` (accès physique/local), OU devDependency npm. **Critère B (temporaire)** : aucun correctif disponible et CVSS < 9.0 — suppression marquée `[PENDING_UPSTREAM_FIX]`, revérifiée à chaque cycle par `/fixcve-auto-lookup` (phase 2), remplacée par le vrai correctif dès qu'il sort. **Le Critère A prime sur le CVSS, y compris ≥ 9.0** : il repose sur une inexposition objective, pas sur la gravité théorique (build #878/#882 : `proxy-addr`, CVSS 9.3 mais `dev=true`, bloquait 19 autres findings traitables parce que le seuil de 9.0 était lu comme s'appliquant aussi au critère A). Pour un finding npm, la preuve est `npm_dev_only: true` calculé par script (voir « Pourquoi la recherche npm (2b) est un script »). **Findings bloqués** = CVSS ≥ 9.0 sans correctif **et** sans Critère A, ou `lookup_failed` avec CVSS ≥ 7.0 : ni corrigés ni supprimés, journalisés `blocked_needs_human` — mais **sans bloquer le reste du cycle** (les autres findings sont appliqués et poussés ; résultat `APPLIED` si au moins une remédiation est poussée, `NO_ACTION cve_bloquante_sans_upgrade_disponible` seulement si tous sont bloqués). |
 | **Revérification des exclusions temporaires (Critère B)** | À chaque cycle atteignant la phase 2, `/fixcve-auto-lookup` (étape 1 de son `SKILL.md`) scanne `owasp-suppressions.xml`/`.trivyignore.yaml` pour le jeton `[PENDING_UPSTREAM_FIX]` et revérifie Maven Central/npm pour chacune ; si un correctif est sorti, l'entrée est ajoutée à `pending_reverified` dans `lookup.json` et `/fixcve-auto-apply` (phase 3) applique le vrai correctif et retire l'exclusion. Ce mécanisme ne se déclenche que si le pipeline est réinvoqué (un build vert sur une CVE désormais supprimée ne relance plus le pipeline tant qu'aucune autre CVE ne fait échouer le build) — jugé suffisant vu la fréquence d'activation réelle sur ce projet (surface OWASP Dependency-Check large). |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl`, versionné, une ligne JSON par événement (détection, échec de phase, application, validation, rollback, halte). N'inclut **pas** les causes hors périmètre (ni Trivy ni OWASP) — voir ligne suivante. |
 | **Hors périmètre jamais tracé en git** | Une cause hors périmètre (ex. Selenium flaky) n'a aucune valeur sécurité : journalisée uniquement dans `poll.log` (local, non versionné), jamais committée/poussée. Supprime structurellement le risque de boucle qu'un ancien garde-fou dédié (dédoublonnage par SHA + seuil de halte) corrigeait a posteriori — incident ayant motivé cet ancien garde-fou : builds #772/#774, #796/#797. Sans push, pas de nouveau build Jenkins, donc pas de boucle possible. |
@@ -122,7 +132,7 @@ flowchart TD
     HALT["halted"]
 
     IDLE -- APPLIED --> PEND
-    PEND -- "resolved / rollback" --> IDLE
+    PEND -- "resolved / validation partielle / rollback" --> IDLE
     IDLE -- "seuil atteint" --> HALT
     HALT -- "reset manuel" --> IDLE
     PEND -- "rollback, seuil" --> HALT
@@ -446,6 +456,7 @@ Coût principal : toucher `Jenkinsfile-CI` (pipeline critique déjà volumineux)
 - [`.claude/skills/fixcve/SKILL.md`](../../.claude/skills/fixcve/SKILL.md) — version interactive avec validation humaine
 - [`fixcve-install.sh`](../scripts/fixcve-install.sh) — script d'installation idempotent (voir « Prérequis d'installation »)
 - [`fixcve-detect.py`](../scripts/fixcve-detect.py) — phase 1/3, détection (script déterministe, aucun LLM)
+- [`fixcve-npm-lookup.py`](../scripts/fixcve-npm-lookup.py) — recherche de correctif npm (script déterministe, aucun LLM), complète la phase 2/3
 - [`.claude/skills/fixcve-auto-lookup/SKILL.md`](../../.claude/skills/fixcve-auto-lookup/SKILL.md) — phase 2/3, recherche de correctif
 - [`.claude/skills/fixcve-auto-apply/SKILL.md`](../../.claude/skills/fixcve-auto-apply/SKILL.md) — phase 3/3, application/commit/push
 - [`fixcve-validate-json.py`](../scripts/fixcve-validate-json.py) — validateur de schéma déterministe entre les phases

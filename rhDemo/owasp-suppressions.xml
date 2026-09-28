@@ -95,4 +95,46 @@
         <cve>CVE-2023-44270</cve>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-93687 : braces 3.0.3 (dépassement de pile via motifs d'accolades imbriqués, CVSS 8.7). Critère A vérifié : npm_dev_only=true (lookup.json, toutes les copies marquées dev=true dans frontend/package-lock.json) — chaîne de build uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/braces@.*$</packageUrl>
+        <cve>CVE-2026-93687</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-87776 : compression 1.8.1 (CVSS 7.5, middleware Express). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — utilisé uniquement par le serveur de développement (webpack-dev-server), jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/compression@.*$</packageUrl>
+        <cve>CVE-2026-87776</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-27904 : minimatch 3.1.5 (ReDoS via extglobs imbriqués, CVSS 8.7). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — chaîne de build/outillage uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/minimatch@.*$</packageUrl>
+        <cve>CVE-2026-27904</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-90711 : proxy-addr 2.0.7 (contournement de sous-réseau de confiance, CVSS 9.3). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — dépendance d'Express, atteinte uniquement via le serveur de développement de la chaîne de build @vue/cli-service, jamais dans le bundle de production. Le Critère A prime sur le score CVSS. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/proxy-addr@.*$</packageUrl>
+        <cve>CVE-2026-90711</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-34043 : serialize-javascript 6.0.2 (DoS par épuisement CPU, CVSS 7.5). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — même dépendance transitive de build que GHSA-5c6j-r48x-rmvq ci-dessus (copy-webpack-plugin/css-minimizer-webpack-plugin, @vue/cli-service), jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/serialize-javascript@.*$</packageUrl>
+        <cve>CVE-2026-34043</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-93690 : uri-js 4.4.1 (boucle infinie dans removeDotSegments, CVSS 8.7). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — chaîne de build uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/uri-js@.*$</packageUrl>
+        <cve>CVE-2026-93690</cve>
+    </suppress>
+
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-93749 : source-map-js 1.2.1 (offset de section non validé dans les source maps indexées, DoS, CVSS 8.7 &lt; 9.0). Critère A non vérifié (npm_dev_only=false, vecteur AV:N). Critère B : suppression temporaire, npm audit ne propose aucun correctif ; revérifié à chaque cycle jusqu'à la sortie d'une version corrigée.</notes>
+        <packageUrl regex="true">^pkg:npm/source-map-js@.*$</packageUrl>
+        <cve>CVE-2026-93749</cve>
+    </suppress>
+
 </suppressions>

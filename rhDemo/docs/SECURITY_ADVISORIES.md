@@ -4,6 +4,48 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## build #884 (OWASP Dependency-Check) — 7 findings npm supprimés, 5 groupes Maven bloqués
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (build Jenkins RHDemo-CI #884, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `braces` 3.0.3, `compression` 1.8.1, `minimatch` 3.1.5, `proxy-addr` 2.0.7, `serialize-javascript` 6.0.2, `source-map-js` 1.2.1, `uri-js` 4.4.1 (npm) ; `hibernate-core` 7.4.5.Final, `jackson-core` / `jackson-databind` (2.21.5 et 3.1.5), `spring-security-crypto` 7.1.1, `spring-security-web` 7.1.1 (maven)
+
+### Remédiation automatique — risque accepté (permanent) (2026-09-28, build #884)
+
+Suppressions `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Critère A** : `npm_dev_only: true` (lookup.json, toutes les copies marquées `dev=true` dans `frontend/package-lock.json`) — paquets atteints uniquement par la chaîne de build `@vue/cli-service`, jamais dans le bundle de production. `npm audit` : « No fix available ». Le Critère A prime sur le score CVSS.
+
+- **CVE-2026-93687** — `braces` 3.0.3 (dépassement de pile via motifs d'accolades imbriqués, CVSS 8.7).
+- **CVE-2026-87776** — `compression` 1.8.1 (CVSS 7.5, DoS sur abandon de connexion).
+- **CVE-2026-27904** — `minimatch` 3.1.5 (ReDoS extglob, CVSS 8.7). Complète la suppression du build #849 (nouvelle instance du package dev-only).
+- **CVE-2026-90711** — `proxy-addr` 2.0.7 (contournement de sous-réseau de confiance, CVSS **9.3**). Supprimable malgré le CVSS ≥ 9.0 car Critère A vérifié ; ce finding avait bloqué à lui seul le traitement des autres CVE aux builds #878/#882.
+- **CVE-2026-34043** — `serialize-javascript` 6.0.2 (DoS CPU, CVSS 7.5). Même justification que le build #849.
+- **CVE-2026-93690** — `uri-js` 4.4.1 (boucle infinie dans `removeDotSegments`, CVSS 8.7).
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-28, build #884)
+
+Suppression avec jeton `[PENDING_UPSTREAM_FIX]`, revérifiée par la phase 2 à chaque cycle. **Critère B** : Critère A non vérifié, CVSS strictement inférieur à 9.0.
+
+- **CVE-2026-93749** — `source-map-js` 1.2.1 (offset de section non validé dans les source maps indexées, DoS, CVSS 8.7). `npm_dev_only: false`, aucun correctif publié.
+- **À retirer** : automatiquement dès qu'une version corrigée est détectée par la phase 2.
+
+### Findings bloqués — intervention humaine requise (2026-09-28, build #884)
+
+Aucune suppression ni montée de version : `fix_status: lookup_failed` (Maven Central) avec CVSS ≥ 7.0 — un échec de recherche n'est jamais masqué par une suppression. Ces findings resteront en échec au build suivant.
+
+- `org.hibernate.orm:hibernate-core` 7.4.5.Final — CVE-2026-77874 (CVSS 8.6).
+- `jackson-core` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5) — CVE-2026-68498 (8.7), CVE-2026-89407 (7.5), CVE-2026-89425 (7.5).
+- `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5) — CVE-2026-68497 (8.7), CVE-2026-83557 (8.7).
+- `org.springframework.security:spring-security-crypto` 7.1.1 — CVE-2026-47842 (7.1).
+- `org.springframework.security:spring-security-web` 7.1.1 — CVE-2026-47838 (8.1).
+
+### Validation locale
+
+`owasp-suppressions.xml` : parsing XML validé. `./mvnw org.owasp:dependency-check-maven:check` n'a **pas** pu s'exécuter complètement (clé API NVD absente de l'environnement : `Invalid API Key, length of 0`) ; la validation complète est donc reportée au prochain scan Jenkins.
+
+---
+
 ## netty-handler (build #860) — CVE-2026-75595 (CVSS 9.1)
 
 ### Détection

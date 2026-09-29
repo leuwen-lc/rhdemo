@@ -422,7 +422,7 @@ RENOVATE_SCAN_EOF
                             def changedImages = sh(
                                 script: """
                                     git diff origin/${BASE_BRANCH}...HEAD -- ${pinnedImageFiles.join(' ')} \
-                                      | grep -E '^\\+' | grep -v '^\\+\\+\\+' \
+                                      | grep -E '^\\+' | grep -vE '^\\+\\+\\+' \
                                       | grep -oE '"[a-zA-Z0-9./_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]+"' \
                                       | tr -d '"' | sort -u
                                 """,

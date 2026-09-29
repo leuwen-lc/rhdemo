@@ -15,7 +15,7 @@ global:
     # renovate: datasource=docker depName=quay.io/keycloak/keycloak
     keycloak: "quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0"
     # renovate: datasource=docker depName=busybox
-    busybox: "busybox:1.38@sha256:1cfa4e2b09e127b9c4ed43578d3f3c18e7d44ea47b9ea98475c0cbe9086525f8"
+    busybox: "busybox:1.38@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4"
     # renovate: datasource=docker depName=quay.io/prometheuscommunity/postgres-exporter
     postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e"
   imagePullPolicy: IfNotPresent

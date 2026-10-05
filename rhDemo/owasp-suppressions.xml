@@ -149,4 +149,10 @@
         <cve>CVE-2026-47838</cve>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-102422 : shell-quote (CVSS 9.2, injection via token comment de quote()). Critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json (npm_dev_only=true), atteintes uniquement via la chaîne de build @vue/cli-service, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/shell-quote@.*$</packageUrl>
+        <cve>CVE-2026-102422</cve>
+    </suppress>
+
 </suppressions>

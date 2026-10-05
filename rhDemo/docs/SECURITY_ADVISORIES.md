@@ -4,6 +4,15 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## shell-quote (build #907) — CVE-2026-102422, CVSS 9.2
+
+- **Date** : 2026-10-05 — **Outil** : OWASP Dependency-Check (npm, `shell-quote` 1.10.0)
+- **Remédiation automatique — risque accepté (permanent)** : suppression ajoutée dans `rhDemo/owasp-suppressions.xml`, sans jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification (Critère A)** : toutes les copies installées sont marquées `dev=true` dans `frontend/package-lock.json` (`npm_dev_only: true`), atteintes uniquement via la chaîne de build `@vue/cli-service`, jamais dans le bundle de production. `npm audit` ne propose aucun correctif.
+- **Limite** : la validation locale `dependency-check` n'a pas pu mettre à jour la base NVD (clé API absente) ; la suppression n'a donc pas été confirmée par un scan local.
+
+---
+
 ## Keycloak (builds #890 à #895) — CVE-2026-8763 (bcprov) et CVE-2026-84939 (freemarker), CVSS 9.1
 
 ### Détection

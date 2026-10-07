@@ -92,7 +92,7 @@ pipeline {
                     // Token dédié (pas ci-bot-forgejo-token) : l'initialisation de Renovate a besoin
                     // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
-                    // Script d'import GPG identique à l'ancien .forgejo/workflows/renovate.yml.
+                    // Script d'import GPG repris de l'ancien workflow Forgejo Actions (supprimé).
                     // GNUPGHOME="${HOME}/.gnupg" (pas un chemin custom type /tmp/gnupg) : Renovate
                     // sandboxe l'environnement des sous-processus git qu'il lance pour committer
                     // et ne propage pas forcément un GNUPGHOME custom, retombant alors sur son

@@ -317,8 +317,9 @@ chercheront par défaut.
 
 ### Devenir de `.forgejo/workflows/renovate.yml`
 
-Le cron a été retiré (`on: workflow_dispatch` uniquement) — le workflow reste dans le dépôt
-comme secours manuel si Jenkins devient indisponible, plutôt que d'être supprimé.
+Le workflow a été supprimé du dépôt (il ne servait plus que de secours manuel). Il reste
+récupérable dans l'historique Git si Jenkins devient durablement indisponible. Effet de bord :
+le manager Renovate `github-actions` ne détecte plus aucune dépendance.
 
 ---
 

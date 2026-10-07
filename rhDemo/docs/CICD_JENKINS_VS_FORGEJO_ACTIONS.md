@@ -57,9 +57,9 @@ indépendance des grandes plateformes » du projet.
 
 ### 2.2 Forgejo Actions actuel
 
-Une seule action existe (`.forgejo/workflows/renovate.yml`, 20 lignes) : exécute Renovate sur un
-runner Docker hébergé chez Codeberg, déclenchée la nuit via cron. C'est un cas idéal pour Forgejo
-Actions : *stateless*, sans accès au réseau local, sans secret métier.
+Aucune action n'existe plus : l'ancien `.forgejo/workflows/renovate.yml` (Renovate sur un runner
+Docker hébergé chez Codeberg, déclenché la nuit via cron) a été supprimé, le scan tournant désormais
+dans Jenkins. C'était un cas idéal pour Forgejo Actions : *stateless*, sans accès au réseau local, sans secret métier.
 
 ### 2.3 Pourquoi le pipeline actuel est conçu pour Jenkins
 
@@ -929,4 +929,3 @@ lignes supplémentaires, restant **bien en deçà** de l'équivalent Groovy).
 - Comparaison Woodpecker vs Drone : <https://woodpecker-ci.org/docs/migrations#drone>
 - SonarCloud Quality Gate API : <https://sonarcloud.io/web_api/api/qualitygates>
 - Pipeline actuel : [Jenkinsfile-CI](../Jenkinsfile-CI), [Jenkinsfile-CD](../Jenkinsfile-CD)
-- Action Renovate existante : [.forgejo/workflows/renovate.yml](../../.forgejo/workflows/renovate.yml)

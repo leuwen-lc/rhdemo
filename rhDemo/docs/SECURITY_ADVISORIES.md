@@ -4,6 +4,16 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## node-forge, webpack-dev-middleware, source-map-js (build #914) — CVSS 7.5 / 7.4 / 8.7
+
+- **Date** : 2026-10-09 — **Outil** : OWASP Dependency-Check (npm)
+- **Remédiation automatique — risque accepté (permanent)** : suppressions ajoutées dans `rhDemo/owasp-suppressions.xml`, sans jeton `[PENDING_UPSTREAM_FIX]`, pour `node-forge` 1.4.0 (GHSA-86w9-cpqp-85rv / GHSA-ppp5-5v6c-4jwp, CVSS 7.5) et `webpack-dev-middleware` 5.3.4 (GHSA-g84c-rxfj-3j2c / GHSA-wr3j-pwj9-hqq6, CVE-2026-76844, CVSS 7.4).
+- **Justification (Critère A)** : `npm_dev_only: true` (toutes les copies `dev=true` dans `frontend/package-lock.json`), chaîne de build `@vue/cli-service` uniquement, jamais dans le bundle de production. `npm audit` ne propose aucun correctif.
+- **Remédiation automatique** : `source-map-js` monté en 1.2.2 (clôture de l'exclusion temporaire CVE-2026-93749, `[PENDING_UPSTREAM_FIX]` retirée de `owasp-suppressions.xml`, correctif désormais publié).
+- **Non traité (bloqué)** : `brace-expansion` 1.1.18 (GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, CVSS 7.5) — `lookup_failed` avec CVSS ≥ 7.0, aucune suppression appliquée ; revue humaine requise.
+
+---
+
 ## shell-quote (build #907) — CVE-2026-102422, CVSS 9.2
 
 - **Date** : 2026-10-05 — **Outil** : OWASP Dependency-Check (npm, `shell-quote` 1.10.0)

@@ -135,10 +135,18 @@
     </suppress>
 
     <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-93749 : source-map-js 1.2.1 (offset de section non validé dans les source maps indexées, DoS, CVSS 8.7 &lt; 9.0). Critère A non vérifié (npm_dev_only=false, vecteur AV:N). Critère B : suppression temporaire, npm audit ne propose aucun correctif ; revérifié à chaque cycle jusqu'à la sortie d'une version corrigée.</notes>
-        <packageUrl regex="true">^pkg:npm/source-map-js@.*$</packageUrl>
-        <cve>CVE-2026-93749</cve>
-        <vulnerabilityName>GHSA-68fv-2mgg-jv7q</vulnerabilityName>
+        <notes>GHSA-86w9-cpqp-85rv : node-forge 1.4.0 (RSA PKCS#1 v1.5, éléments non validés dans DigestAlgorithm, CVSS 7.5). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — chaîne de build uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/node-forge@.*$</packageUrl>
+        <vulnerabilityName>GHSA-86w9-cpqp-85rv</vulnerabilityName>
+        <vulnerabilityName>GHSA-ppp5-5v6c-4jwp</vulnerabilityName>
+    </suppress>
+
+    <suppress>
+        <notes>GHSA-g84c-rxfj-3j2c (CVE-2026-76844) : webpack-dev-middleware 5.3.4 (CVSS 7.4). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — serveur de développement uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
+        <packageUrl regex="true">^pkg:npm/webpack-dev-middleware@.*$</packageUrl>
+        <cve>CVE-2026-76844</cve>
+        <vulnerabilityName>GHSA-g84c-rxfj-3j2c</vulnerabilityName>
+        <vulnerabilityName>GHSA-wr3j-pwj9-hqq6</vulnerabilityName>
     </suppress>
 
     <suppress>

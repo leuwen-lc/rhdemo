@@ -99,12 +99,14 @@
         <notes>CVE-2026-93687 : braces 3.0.3 (dépassement de pile via motifs d'accolades imbriqués, CVSS 8.7). Critère A vérifié : npm_dev_only=true (lookup.json, toutes les copies marquées dev=true dans frontend/package-lock.json) — chaîne de build uniquement, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
         <packageUrl regex="true">^pkg:npm/braces@.*$</packageUrl>
         <cve>CVE-2026-93687</cve>
+        <vulnerabilityName>GHSA-vfj7-8cjw-p6xm</vulnerabilityName>
     </suppress>
 
     <suppress>
         <notes>CVE-2026-87776 : compression 1.8.1 (CVSS 7.5, middleware Express). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — utilisé uniquement par le serveur de développement (webpack-dev-server), jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
         <packageUrl regex="true">^pkg:npm/compression@.*$</packageUrl>
         <cve>CVE-2026-87776</cve>
+        <vulnerabilityName>GHSA-vc2v-76pw-4v95</vulnerabilityName>
     </suppress>
 
     <suppress>
@@ -117,6 +119,7 @@
         <notes>CVE-2026-90711 : proxy-addr 2.0.7 (contournement de sous-réseau de confiance, CVSS 9.3). Critère A vérifié : npm_dev_only=true (lookup.json, dev=true dans frontend/package-lock.json) — dépendance d'Express, atteinte uniquement via le serveur de développement de la chaîne de build @vue/cli-service, jamais dans le bundle de production. Le Critère A prime sur le score CVSS. npm audit : aucun correctif disponible.</notes>
         <packageUrl regex="true">^pkg:npm/proxy-addr@.*$</packageUrl>
         <cve>CVE-2026-90711</cve>
+        <vulnerabilityName>GHSA-jqcg-44mw-7w3h</vulnerabilityName>
     </suppress>
 
     <suppress>
@@ -135,6 +138,7 @@
         <notes>[PENDING_UPSTREAM_FIX] CVE-2026-93749 : source-map-js 1.2.1 (offset de section non validé dans les source maps indexées, DoS, CVSS 8.7 &lt; 9.0). Critère A non vérifié (npm_dev_only=false, vecteur AV:N). Critère B : suppression temporaire, npm audit ne propose aucun correctif ; revérifié à chaque cycle jusqu'à la sortie d'une version corrigée.</notes>
         <packageUrl regex="true">^pkg:npm/source-map-js@.*$</packageUrl>
         <cve>CVE-2026-93749</cve>
+        <vulnerabilityName>GHSA-68fv-2mgg-jv7q</vulnerabilityName>
     </suppress>
 
     <suppress>
@@ -153,6 +157,7 @@
         <notes>CVE-2026-102422 : shell-quote (CVSS 9.2, injection via token comment de quote()). Critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json (npm_dev_only=true), atteintes uniquement via la chaîne de build @vue/cli-service, jamais dans le bundle de production. npm audit : aucun correctif disponible.</notes>
         <packageUrl regex="true">^pkg:npm/shell-quote@.*$</packageUrl>
         <cve>CVE-2026-102422</cve>
+        <vulnerabilityName>GHSA-pqg4-j6r4-53mv</vulnerabilityName>
     </suppress>
 
 </suppressions>

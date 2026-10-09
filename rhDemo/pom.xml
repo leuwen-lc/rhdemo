@@ -401,6 +401,13 @@
 					<ossIndexAnalyzerCacheValidForHours>168</ossIndexAnalyzerCacheValidForHours>
 					<ossIndexWarnOnlyOnRemoteErrors>true</ossIndexWarnOnlyOnRemoteErrors>
 
+					<!-- Node Audit : cache local désactivé. Sa clé dépend du contenu du package-lock.json :
+					     un lockfile inchangé (RHDemo-CI) réutiliserait des réponses antérieures à la
+					     publication d'un avis, alors qu'une PR Renovate (lockfile modifié) interroge
+					     le registre npm à neuf — d'où un blocage Renovate non reproductible en CI.
+					     Pas de quota associé (API npm), contrairement à OSS Index. -->
+					<nodeAuditAnalyzerUseCache>false</nodeAuditAnalyzerUseCache>
+
 					<!-- Inclure les dépendances npm du frontend (Vue.js) dans le scan CVE
 					     Sans ce scanSet, seules les dépendances Maven sont analysées -->
 					<scanSet>

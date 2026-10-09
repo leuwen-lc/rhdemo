@@ -53,7 +53,7 @@ Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-R
 
 **Règle de parité CI / Renovate** : OSS Index est le *seul* écart autorisé entre les deux appels du plugin (argument `-DossIndexAnalyzerEnabled=false` propre à `Jenkinsfile-Renovate`). Toute autre option (seuil, suppressions, cache Node Audit…) vit dans le `pom.xml`, commune aux deux pipelines, pour qu'un blocage Renovate soit reproductible en CI. Le cache local de Node Audit est désactivé (`nodeAuditAnalyzerUseCache=false`) : sa clé dépend du `package-lock.json`, un lockfile inchangé en CI réutilisait des réponses antérieures à la publication d'un avis (constaté build Renovate #123 vs CI #912 : `node-forge`, `webpack-dev-middleware`, `brace-expansion`).
 
-**Suppressions npm : double inscription CVE + GHSA** : OSS Index (CI) nomme une faille par son CVE, Node Audit (Renovate) par son GHSA. Chaque `<suppress>` npm doit donc porter `<cve>` ET `<vulnerabilityName>GHSA-…</vulnerabilityName>` (géré par `fixcve-auto`, champ `advisory_aliases` de `detected.json`).
+**Suppressions npm : double inscription CVE + GHSA** : OSS Index (CI) nomme une faille par son CVE, Node Audit (Renovate) par son GHSA. Chaque `<suppress>` npm doit donc porter `<cve>` ET `<vulnerabilityName>GHSA-…</vulnerabilityName>` (générée par `fixcve-auto` à partir des alias de l'avis OSV, voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md) « Suppressions »).
 
 ### Limites face aux attaques de type supply-chain (paquets malveillants)
 

@@ -6,15 +6,18 @@ Plan détaillé issu de la revue complète du 2026-09-28, complété par la revu
 
 ---
 
-## 1. État au 2026-10-09
+## 1. État au 2026-10-09 (après la refonte)
 
 | Élément | État |
 | --- | --- |
-| Proposition **A** (environnement épuré, plafonds de durée et de coût des phases LLM) | **Faite et committée** (f048027) : `fixcve-auto-poll.sh` (fonction `run_llm_phase`), `tests/fixcve-run-llm-phase.test.sh`. |
-| Lookup npm : repli sur l'avis OSV (amorce de L) | **Fait** (b0d9924) : `fixcve-npm-lookup.py`, `tests/fixcve-npm-lookup.test.py` (13 cas hors réseau), validé en réel sur brace-expansion (build #914). |
-| Double inscription CVE + GHSA des suppressions npm (amorce de M) | **Fait** (f614982) : champ `advisory_aliases` de `detected.json`, consigne dans `fixcve-auto-apply`. |
-| Propositions B à I, J à M | À faire (sections 4, 5 et 10). |
-| Modifications de skills faites pendant la revue | **Locales uniquement** (`.claude/` est dans `.gitignore`) : recherche npm hors du skill de lookup, wrapper Maven à 3 arguments, garde des jars embarqués dans une image. Voir la proposition C. |
+| **A** (environnement épuré, plafonds des phases LLM) | Fait (f048027), puis **sans objet** : la procédure n'invoque plus de LLM. |
+| **B** (commit/push par le script) | **Fait** : application, commit (correctif puis journal) et push par `fixcve-auto-poll.sh` ; le message de commit est construit par `fixcve-apply.py`. |
+| **C** (épinglage de confiance, skills versionnés) | **Fait** : `trusted.sha256` + `fixcve-install.sh --trust` ; skill interactif versionné dans `rhDemo/scripts/fixcve-skills/`. Les skills `fixcve-auto-lookup`/`-apply` ne sont plus utilisés (suppression locale manuelle). |
+| **D** (décisions et recherches déterministes) | **Fait** : `fixcve-resolve.py` (Maven, npm, images, revérification des suppressions temporaires), `fixcve-classify.py` (table de décision). D4 sans objet (aucun LLM ne lit plus de texte externe). |
+| **E** (tests issus des incidents) | **Fait** : `tests/run-all.sh` (hors réseau), fixtures réelles, registre [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md), bac à sable du poller `tests/poll-sandbox.sh`. Exécution en CI : non décidée (section 8). |
+| **K** (indicateur), **L** (avis OSV commun, vérification locale), **M** (normalisation CVE/GHSA) | **Faits** (`fixcve-stats.py`, `fixcve_lib/osv.py`, `verify.py`, alias OSV). Preuve par scan Trivy locale : non faite (Trivy absent de l'hôte), preuve par le build CI. |
+| **J** (publication par branche de validation) | **Reporté** (décision du 2026-10-09 : modification de `jenkins-casc.yaml`). |
+| **F**, **G**, **H**, **I** | F, G, H à faire ; G partiellement (blocage transitoire borné, fonction d'échec d'étape commune) ; I fait avec C (skill `/fixcve` sur les mêmes scripts). |
 
 ## 2. Invariants à conserver
 
@@ -135,7 +138,7 @@ Phase 2 sans aucun credential ; phase 3 sans les credentials Jenkins ; `timeout`
 
 ## 6. Ordre suggéré
 
-> **Remplacé par la section 10.5** (revue du 2026-10-09) ; conservé pour l'historique des dépendances.
+> **Remplacé par la section 10.5**, elle-même réalisée le 2026-10-09 sauf J (voir section 1) (revue du 2026-10-09) ; conservé pour l'historique des dépendances.
 
 1. **A** : committer et pousser (petit, déjà testé).
 2. **E + F** : filet de sécurité et outil de reprise avant de refondre.

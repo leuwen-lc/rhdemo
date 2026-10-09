@@ -1,17 +1,19 @@
 # fixcve-auto — plan d'évolutions
 
-Plan détaillé issu de la revue complète du 2026-09-28, à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
+Plan détaillé issu de la revue complète du 2026-09-28, complété par la revue du 2026-10-09 (section 10, qui ajuste l'ordre de la section 6), à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
 
 **Principe directeur** : simplifier et harmoniser **sans perdre** ce que la mise au point incrémentale a construit (chaque garde-fou existe à cause d'un incident réel) ni le modèle de sécurité contre l'injection de prompt. Chaque étape est donc livrée avec un test qui rejoue l'incident d'origine.
 
 ---
 
-## 1. État au 2026-09-28
+## 1. État au 2026-10-09
 
 | Élément | État |
 | --- | --- |
-| Proposition **A** (environnement épuré, plafonds de durée et de coût des phases LLM) | **Faite et testée, non committée** : `fixcve-auto-poll.sh` (fonction `run_llm_phase`), `tests/fixcve-run-llm-phase.test.sh`, ligne de garde-fou dans `FIXCVE_AUTO.md`. Active dès maintenant car le cron lance le script depuis la copie de travail principale. |
-| Propositions B à I | À faire (sections 4 et 5). |
+| Proposition **A** (environnement épuré, plafonds de durée et de coût des phases LLM) | **Faite et committée** (f048027) : `fixcve-auto-poll.sh` (fonction `run_llm_phase`), `tests/fixcve-run-llm-phase.test.sh`. |
+| Lookup npm : repli sur l'avis OSV (amorce de L) | **Fait** (b0d9924) : `fixcve-npm-lookup.py`, `tests/fixcve-npm-lookup.test.py` (13 cas hors réseau), validé en réel sur brace-expansion (build #914). |
+| Double inscription CVE + GHSA des suppressions npm (amorce de M) | **Fait** (f614982) : champ `advisory_aliases` de `detected.json`, consigne dans `fixcve-auto-apply`. |
+| Propositions B à I, J à M | À faire (sections 4, 5 et 10). |
 | Modifications de skills faites pendant la revue | **Locales uniquement** (`.claude/` est dans `.gitignore`) : recherche npm hors du skill de lookup, wrapper Maven à 3 arguments, garde des jars embarqués dans une image. Voir la proposition C. |
 
 ## 2. Invariants à conserver
@@ -50,7 +52,7 @@ Résiduels de sécurité connus et **assumés pour l'instant** (déjà document�
 
 Ordre suggéré en section 6. Effort : S (< 2 h), M (une demi-journée), L (plusieurs sessions).
 
-### A. Environnement épuré et plafonds des phases LLM — FAIT (à committer)
+### A. Environnement épuré et plafonds des phases LLM — FAIT (f048027)
 
 Phase 2 sans aucun credential ; phase 3 sans les credentials Jenkins ; `timeout` et `--max-budget-usd` sur les deux. `--max-turns` volontairement écarté (accepté par la CLI mais absent de son aide, donc non garanti). Reste à committer et pousser.
 
@@ -123,7 +125,7 @@ Phase 2 sans aucun credential ; phase 3 sans les credentials Jenkins ; `timeout`
 
 ## 5. Petites dettes repérées
 
-- Le `fixAvailable: true` du lookup npm n'a jamais été exercé sur un cas réel.
+- ~~Le `fixAvailable: true` du lookup npm n'a jamais été exercé sur un cas réel.~~ Exercé au build #914 : dry-run muet, d'où le repli OSV (b0d9924).
 - `fixcve-auto-lookup` : le wrapper Docker et le wrapper OSV n'ont pas de garde de cohérence comparable à celui de Maven ; harmoniser leurs codes de sortie et leur sortie JSON.
 - Le pin de `pending_reverified` des jars embarqués dans une image repose sur une **consigne** du skill (testée une fois) : la rendre déterministe en faisant rejeter par le validateur tout `pending_reverified` dont le paquet correspond à une entrée `.trivyignore.yaml` « embarqué dans ».
 - Vérifier si `Bash(python3:*)` peut être restreint à des scripts précis une fois D en place.
@@ -132,6 +134,8 @@ Phase 2 sans aucun credential ; phase 3 sans les credentials Jenkins ; `timeout`
 ---
 
 ## 6. Ordre suggéré
+
+> **Remplacé par la section 10.5** (revue du 2026-10-09) ; conservé pour l'historique des dépendances.
 
 1. **A** : committer et pousser (petit, déjà testé).
 2. **E + F** : filet de sécurité et outil de reprise avant de refondre.
@@ -155,6 +159,10 @@ Dépendances : E avant B, G et D ; C avant de versionner les skills ; D1 après 
 | #718, #734 | rollback d'un bon correctif à cause d'autres CVE | `validation_partial` |
 | #735 à #744, #799 à #802 | boucles de journal | anti-boucles : aucun push au deuxième passage |
 | Tokens visibles du modèle | environnement hérité | test de A (faux et vrai `claude`) |
+| #913 (1er passage) | phase 3 : `cd …; git …` composé, `npm --prefix ../frontend`, chemin absolu → 3 refus, abandon | disparaît avec B (plus de Bash git/npm pour le modèle) ; d'ici là, consigne de répertoire dans le skill |
+| #913 (2e passage) | phase 2 LLM : `previous_note` recopiée hors ASCII → schéma invalide | disparaît avec L (phase 2 sans LLM) |
+| #914 | npm `fixAvailable: true`, dry-run muet → `lookup_failed` | `tests/fixcve-npm-lookup.test.py` (fait) |
+| Renovate #123 / CI #912 | même faille nommée CVE (OSS Index) ou GHSA (Node Audit) ; cache Node Audit en CI | normalisation des identifiants (M) ; parité des scanners (L) |
 
 ## 8. Exécution des tests
 
@@ -169,3 +177,91 @@ Décision **reportée** : pour l'instant les tests se lancent à la main.
 - État du bot : `~/.config/rhdemo-fixcve/state.json` ; toute édition à la main se fait sous le verrou `~/.config/rhdemo-fixcve/poll.lock` (`flock`). Reprise, pause et remise en arrière sont décrites dans [FIXCVE_AUTO.md](FIXCVE_AUTO.md) ; l'outil F les automatisera.
 - Journal des cycles : `poll.log` (local) et `docs/fixcve-audit.md` (versionné).
 - Pour rejouer une phase sans rien pousser, il faut aujourd'hui copier le fichier de cycle archivé dans `.fixcve-cycle/` du clone, sous le verrou, puis lancer `claude -p` avec le fichier de permissions de la phase : F remplacera cette procédure manuelle.
+
+---
+
+## 10. Revue du 2026-10-09 — fiabilité
+
+**Objectif** : qu'un cycle n'échoue plus qu'en face d'une CVE **sans correctif, CVSS ≥ 9 et sans critère A**. Tout autre échec est un défaut de la procédure.
+
+### 10.1 Diagnostic (journal juillet → 9 octobre, 70 builds)
+
+Classement par cycle, approximatif (croisement de `fixcve-audit.jsonl` et des messages de commits revert) :
+
+| Classe | Cycles | Exemples |
+| --- | --- | --- |
+| **Échec conforme à l'objectif** | **2** | #860 (netty 9,8), #895 (bouncycastle, freemarker 9,1 dans l'image Keycloak) |
+| Correctif existant non trouvé (lookup) | ~7 | #812-#823 (tag Keycloak), #884/#886 (Maven `rows=5`), #914 (npm dry-run) |
+| Décision de politique mal prise par le LLM | ~13 | #735-#745 (« tout ou rien » à cause de tomcat 7,5, relevant du critère B), #878/#882 (critère A mal lu) |
+| Mauvais correctif poussé → rollback | 12 rollbacks, 4 haltes | lot incomplet (#734, #748-#753), mauvaise version cible (#819/#821), pin npm sans effet (#845/#847), stage suivant (#890) |
+| Exécution LLM ou environnement | ~6 | `npm` hors PATH (#715), workspace non approuvé (#806), schéma (#894, #913), refus Bash (#913) |
+
+**Lecture** : environ deux tiers des échecs viennent de jugements laissés au LLM sur des questions à réponse exacte (version, critère, application partielle) ; le reste, de recherches incomplètes et d'une validation locale non équivalente au CI. Chaque correction passée a pris la forme d'une consigne de plus dans les skills (340 à 390 lignes, en grande partie des récits d'incident), source des ambiguïtés actuelles.
+
+### 10.2 Règle de partage script / LLM
+
+**Tout ce qui est vérifiable ou relève de la politique est dans un script ; le LLM ne fait que ce qui n'a pas de forme fixe, et ne décide jamais seul.**
+
+| Aujourd'hui (LLM) | Cible |
+| --- | --- |
+| Phase 2 : recherche Maven, Docker, revérification `[PENDING_UPSTREAM_FIX]` | Script (D2, D3, L) ; la phase 2 LLM disparaît, et avec elle la seule surface où un LLM lit du contenu externe |
+| Phase 3 : choix upgrade / critère A / critère B / blocage | Script `fixcve-classify.py` (D1), table de décision testée |
+| Phase 3 : rédaction des `<suppress>` et `.trivyignore.yaml` | Générateur à partir d'un modèle (double inscription CVE + GHSA, portée `groupId` pour un CPE générique) |
+| Phase 3 : montées de version npm, Maven, image | Script : `npm update` puis `npm install`, propriété BOM connue ou `dependencyManagement`, source unique pour les images |
+| Phase 3 : commit et push | Script (B) |
+| — | **LLM restant** : (a) rédaction de la justification dans `SECURITY_ADVISORIES.md`, non bloquante ; (b) **résolveur** pour les seuls findings classés `needs_reasoning` (parent verrouillant une plage, artefact Maven hors BOM) : il produit une proposition JSON validée par schéma, que le script applique ou rejette, sans droit git |
+
+Un cas hors règles devient une proposition, puis une règle et un test : la couverture déterministe croît avec les incidents au lieu des skills.
+
+### 10.3 Découpage cible des étapes
+
+| # | Étape | Mise en œuvre | Échec compté ? |
+| --- | --- | --- | --- |
+| 0 | Préconditions : arbre propre, workspace approuvé, `frontend/node/npm`, clé NVD, docker | script | non (`infra`) |
+| 1 | Détection + **normalisation des identifiants** (alias OSV CVE ↔ GHSA, une clé par faille) | script (M) | si schéma invalide |
+| 2 | Résolution : avis OSV (plage corrigée par branche) ∩ registre (versions publiées) | script (L) | non si transitoire (retentatives bornées) |
+| 3 | Classification : `upgrade`, `suppress_A`, `suppress_B`, `blocked_ge9`, `needs_reasoning`, `transient` | script (D1) | `blocked_ge9` = échec conforme |
+| 4 | Résolveur LLM, uniquement `needs_reasoning` | LLM sans droit git | oui si rejeté |
+| 5 | Application | script (B) | oui |
+| 6 | **Vérification locale avec les vrais scanners** : `npm audit` + `npm ls`, Dependency-Check avec clé NVD, Trivy sur l'image candidate | script, porte bloquante | oui |
+| 7 | **Publication sur branche** `fixcve/<build>` + build CI paramétré, fast-forward si vert ou partiel sans régression | script (J) | oui |
+| 8 | Documentation (modèle, enrichissement LLM facultatif) | script + LLM | non |
+
+### 10.4 Nouvelles propositions
+
+#### J. Publication par branche de validation — effort M
+
+- **But** : plus aucun revert sur la branche principale ; la halte « 2 rollbacks » devient sans objet.
+- **Principe** : le script pousse `fixcve/<build>`, déclenche `RHDemo-CI` paramétré sur cette branche (API Jenkins, credential déjà détenu par le poller), puis fast-forward de la branche principale sur verdict `success`, `partial` ou `next_stage` (logique actuelle de `evaluate_partial_validation()`).
+- **À vérifier** : paramétrage de branche de `RHDemo-CI` ; effet sur l'environnement ephemere partagé ; nettoyage des branches.
+- **Test** : verdicts rejoués sur les fixtures #718, #734, #890.
+
+#### K. Indicateur de taux d'échec — effort S
+
+- Champ `outcome_code` énuméré dans le journal : `blocked_no_fix_ge9`, `lookup_gap`, `policy`, `bad_fix`, `infra`, `tooling`. Les raisons libres (jusqu'à 2 000 caractères) ne sont pas agrégeables.
+- `fixcve-stats.py` : taux d'échec hors `blocked_no_fix_ge9`, par mois. Se combine avec H (journal simplifié).
+
+#### L. Recherche unifiée par l'avis OSV et preuve par scan — effort M à L
+
+- **Source commune** : l'avis OSV donne la version corrigée par branche pour npm et Maven (GHSA) ; le registre confirme seulement la publication. `npm audit` et `maven-metadata.xml` deviennent des contrôles croisés. Amorcé pour npm (b0d9924).
+- **Preuve plutôt que déduction** : un candidat n'est retenu qu'après un scan du résultat montrant la disparition de la CVE (indispensable pour les images, où version de module et tag divergent : #819/#821/#823).
+- **`transient` distinct de `no_fix`** : `lookup_failed` n'aboutit plus jamais à `blocked_needs_human` ; retentatives bornées (fenêtre de G), puis alerte.
+- **Test périodique contre les vraies API** (canari) : détecte les changements de format (`npm view` renvoyant une liste au lieu d'une chaîne, constaté le 2026-10-09 ; `rows=5` de l'ancienne API Maven).
+- **Parité des scanners** CI / Renovate / local : configuration unique dans le `pom.xml` (fait le 2026-10-09 : cache Node Audit coupé, OSS Index seul écart), clé NVD disponible pour la vérification locale (#849, #884, #892 ont poussé sans validation complète).
+
+#### M. Normalisation des identifiants — effort S
+
+- Dès la détection, résoudre les alias (OSV) pour qu'une faille ait une seule clé quel que soit l'analyseur (OSS Index → CVE, Node Audit → GHSA). Remplace à terme la double inscription manuelle (amorcée par `advisory_aliases`) : les générateurs de suppression écrivent toutes les formes connues.
+
+### 10.5 Ordre révisé (remplace la section 6)
+
+1. **E** (fixtures et tests) avec **K** (indicateur) : le filet et la mesure avant de refondre.
+2. **D2, D3 et L** : suppression de la phase 2 LLM.
+3. **D1** (classifieur), **M** et générateurs de suppression.
+4. **B étendu** (application et commit par script) avec la vérification locale complète (clé NVD, Trivy).
+5. **J** (publication par branche).
+6. **C** (versionner les skills avec épinglage ; aujourd'hui leurs évolutions n'ont aucun historique), puis réduire les skills à des consignes courtes, les récits rejoignant le registre d'incidents de E.
+7. **G**, **H**, **I**.
+
+Après 1 à 4, la plupart des classes de 10.1 doivent disparaître par construction ; resteraient les vrais `blocked_no_fix_ge9`, les `needs_reasoning` mal résolus et les pannes d'infrastructure. Le gain sera chiffré en rejouant les fixtures avec K.
+

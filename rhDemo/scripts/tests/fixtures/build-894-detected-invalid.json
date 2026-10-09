@@ -1,0 +1,51 @@
+{
+  "jenkins_build": 894,
+  "stage": "trivy",
+  "findings": [
+    {
+      "finding_id": "CVE-2026-8763",
+      "source": "trivy",
+      "ecosystem": "maven",
+      "image": "keycloak",
+      "package_name": "org.bouncycastle:bcprov-jdk18on",
+      "installed_version": "1.84",
+      "cvss": 9.1,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+      "fixed_version_hint": "1.85",
+      "fixed_versions": [
+        "1.85"
+      ],
+      "title": "org.bouncycastle/bcprov-jdk15on: org.bouncycastle/bcpkix-jdk15on: Bouncy Castle for Java: Name Constraints bypass via trailing dot in rfc822Name and URI"
+    },
+    {
+      "finding_id": "CVE-2026-8763",
+      "source": "trivy",
+      "ecosystem": "maven",
+      "image": "keycloak",
+      "package_name": "org.bouncycastle:bcprov-jdk18on",
+      "installed_version": "1.84",
+      "cvss": 9.1,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+      "fixed_version_hint": "1.85",
+      "fixed_versions": [
+        "1.85"
+      ],
+      "title": "org.bouncycastle/bcprov-jdk15on: org.bouncycastle/bcpkix-jdk15on: Bouncy Castle for Java: Name Constraints bypass via trailing dot in rfc822Name and URI"
+    },
+    {
+      "finding_id": "CVE-2026-84939",
+      "source": "trivy",
+      "ecosystem": "maven",
+      "image": "keycloak",
+      "package_name": "org.freemarker:freemarker",
+      "installed_version": "2.3.32",
+      "cvss": 9.1,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+      "fixed_version_hint": "2.3.35",
+      "fixed_versions": [
+        "2.3.35"
+      ],
+      "title": "org.apache.freemarker/freemarker: Apache FreeMarker: Path traversal via malformed locale identifier"
+    }
+  ]
+}

@@ -56,7 +56,10 @@ jenkins:
             retentionStrategy:
               idleMinutes: 5
             instanceCapStr: "2"
-            removeVolumes: false
+            # true : supprime à la destruction de l'agent les 2 volumes anonymes créés par
+            # les VOLUME de jenkins/inbound-agent (/home/jenkins/agent, /home/jenkins/.jenkins).
+            # Les volumes nommés (cache Maven, Trivy, Selenium) ne sont jamais supprimés par docker rm -v.
+            removeVolumes: true
             pullStrategy: PULL_NEVER
 
   # ────────────────────────────────────────────────────────────────

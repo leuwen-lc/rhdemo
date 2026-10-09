@@ -65,7 +65,8 @@ echo "🗑️  Suppression de ${ZOMBIE_COUNT} container(s)..."
 while IFS= read -r container_id; do
   [[ -z "${container_id}" ]] && continue
   CONTAINER_NAME=$(docker inspect --format '{{.Name}}' "${container_id}" | sed 's|^/||')
-  if docker rm -f "${container_id}" > /dev/null 2>&1; then
+  # -v : supprime aussi les volumes anonymes de l'agent (les volumes nommés de cache sont conservés)
+  if docker rm -f -v "${container_id}" > /dev/null 2>&1; then
     echo "  ✓ Supprimé : ${CONTAINER_NAME} (${container_id})"
   else
     echo "  ✗ Échec suppression : ${CONTAINER_NAME} (${container_id})" >&2

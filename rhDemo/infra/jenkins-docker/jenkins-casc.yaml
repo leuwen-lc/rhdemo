@@ -364,6 +364,8 @@ jobs:
             scmpoll_spec('H/5 * * * *')
             ignorePostCommitHooks(false)
           }
+          // Build quotidien à 5h30 (en plus du polling SCM)
+          cron('30 5 * * *')
         }
       }
 

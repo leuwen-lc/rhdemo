@@ -168,4 +168,10 @@
         <vulnerabilityName>GHSA-pqg4-j6r4-53mv</vulnerabilityName>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-112366 : picomatch 2.3.2 (CVSS 8.7). Critère A (A:npm_dev_only) : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production. Aucun correctif publié dans la branche installée. Remédiation automatique build #933.</notes>
+        <packageUrl regex="true">^pkg:npm/picomatch@.*$</packageUrl>
+        <cve>CVE-2026-112366</cve>
+    </suppress>
+
 </suppressions>

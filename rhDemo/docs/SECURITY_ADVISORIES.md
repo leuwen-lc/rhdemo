@@ -4,6 +4,18 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## follow-redirects, launch-editor, org.hibernate.validator:hibernate-validator, picomatch (build #936)
+
+- **Date** : 2026-10-21 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `follow-redirects` 1.16.0 → 1.16.1 (CVE-2026-111755, CVE-2026-111756, GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8, CVSS 10.0)
+  - `launch-editor` 2.14.1 → 2.14.2 (CVE-2026-112942, GHSA-587h-7wmj-h5pm, CVSS 10.0)
+  - `org.hibernate.validator:hibernate-validator` 9.1.3.Final → 9.1.5.Final (CVE-2026-93879, CVSS 8.7)
+- **Remédiation automatique — risque accepté (permanent)** :
+  - `picomatch` 2.3.2 (CVE-2026-112366, CVSS 8.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+
+---
+
 ## node-forge, webpack-dev-middleware, source-map-js (build #914) — CVSS 7.5 / 7.4 / 8.7
 
 - **Date** : 2026-10-09 — **Outil** : OWASP Dependency-Check (npm)

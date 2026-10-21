@@ -464,6 +464,7 @@
 							<threads>2</threads>
 							<outputFormats>
 								<outputFormat>HTML</outputFormat>
+								<outputFormat>XML</outputFormat>
 							</outputFormats>
 							<timestampedReports>false</timestampedReports>
 							<failWhenNoMutations>false</failWhenNoMutations>

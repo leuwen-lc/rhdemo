@@ -98,6 +98,26 @@ class DetectTest(unittest.TestCase):
         f = self.detect._trivy_finding(vuln, "alpine", "nginx")
         self.assertEqual((f["ecosystem"], f["fixed_versions"]), ("docker", ["2.7.5-r0"]))
 
+    @staticmethod
+    def _owasp_html(severity, name="follow-redirects", ver="1.16.0", ghsa="GHSA-8r9p-f939-6h3c"):
+        return (
+            f'<h3 class="subsectionheader "><a name="l1"></a>{name}:{ver}</h3>'
+            f'<p><b><a target="_blank" href="https://github.com/advisories/{ghsa}">{ghsa} (NPM)</a></b>'
+            f'<button data-pkgurl="pkg:npm/{name}@{ver}">suppress</button></p>'
+            f'<p><pre>desc</pre> CWE-185<br/> Unscored: <ul><li>Severity: {severity}</li></ul> <br/>References:'
+        )
+
+    def test_934_finding_node_audit_sans_cvss_bloquant(self):
+        """GHSA 'Unscored high' (follow-redirects, build #934) : bloquant pour dependency-check, donc détecté."""
+        self.detect.fetch = lambda path: self._owasp_html("high")
+        found = self.detect.detect_owasp(934)
+        self.assertEqual([(f["finding_id"], f["package_name"], f["cvss"], f["cvss_vector"]) for f in found],
+                         [("GHSA-8r9p-f939-6h3c", "follow-redirects", 10.0, None)])
+
+    def test_finding_node_audit_sans_cvss_faible_ignore(self):
+        self.detect.fetch = lambda path: self._owasp_html("moderate")
+        self.assertEqual(self.detect.detect_owasp(934), [])
+
 
 if __name__ == "__main__":
     unittest.main()

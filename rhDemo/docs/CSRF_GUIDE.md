@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/SecurityConfig.java
+  - rhDemo/frontend/src/services/api.js
+---
+
 # 🔒 Guide CSRF - Application RHDemo (Spring Boot + Vue.js)
 
 ## 📋 Table des matières

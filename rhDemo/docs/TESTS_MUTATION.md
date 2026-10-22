@@ -1,3 +1,10 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/pom.xml
+---
+
 # Tests de mutation (PIT)
 
 ## Principe

@@ -1,3 +1,10 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Dockerfile
+---
+
 # Migration de Paketo Buildpacks vers Dockerfile classique
 
 Date : 2025-12-11

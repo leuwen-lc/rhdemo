@@ -1,3 +1,12 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-ngf.sh
+  - rhDemo/infra/stagingkub/shared-gateway.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/httproute.yaml
+---
+
 # NGINX Gateway Fabric — Configuration stagingkub
 
 **Statut** : ✅ Migration implémentée

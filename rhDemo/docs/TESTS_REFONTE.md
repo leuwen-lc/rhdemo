@@ -1,3 +1,12 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/test/java/
+  - rhDemo/pom.xml
+  - rhDemo/sonar-project.properties
+---
+
 # Refonte des tests rhDemo
 
 > Porte sur les tests **backend** (Surefire/Failsafe, JaCoCo). Depuis, un socle

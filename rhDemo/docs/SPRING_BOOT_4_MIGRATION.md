@@ -1,3 +1,10 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/pom.xml
+---
+
 # Plan de Migration Spring Boot 4 / Spring Security 7
 
 > **Migration terminée (livrée en 1.1.5).** Ce document est conservé comme

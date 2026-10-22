@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/shared-gateway.yaml
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # Certificats TLS pour l'environnement stagingkub
 
 Ce document décrit les deux options de gestion des certificats TLS pour l'environnement Kubernetes stagingkub :

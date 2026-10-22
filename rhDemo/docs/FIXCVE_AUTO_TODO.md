@@ -1,4 +1,24 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/scripts/
+  - rhDemo/scripts/tests/
+---
+
 # fixcve-auto — plan d'évolutions
+
+> **Bilan au 2026-10-22 : plan essentiellement appliqué, conservé pour l'historique.** Les éléments A, B, C, D, E (hors exécution en CI), I, K, L et M sont réalisés (voir la section 1 et [FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+>
+> **Non appliqué** (aucun n'est abandonné formellement ; vérifié dans le code le 2026-10-22) :
+>
+> | Élément | Constat |
+> | --- | --- |
+> | **F** (`fixcve-ctl`) | Absent de `rhDemo/scripts/` ; les éditions de `state.json` restent manuelles. |
+> | **G** (harmonisation du script de polling) | Non faite : `fixcve-auto-poll.sh` fait toujours près de 1 000 lignes, sans fonction `audit_event` commune. |
+> | **H** (journal simplifié) | Non faite : `fixcve-audit.jsonl` contient 18 types d'événements. |
+> | **J** (publication par branche de validation) | Reporté le 2026-10-09 (modification de `jenkins-casc.yaml`). |
+> | Exécution des tests en CI (section 8) | Décision non prise. |
 
 Plan détaillé issu de la revue complète du 2026-09-28, complété par la revue du 2026-10-09 (section 10, qui ajuste l'ordre de la section 6), à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
 

@@ -1,3 +1,10 @@
+---
+statut: journal
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/scripts/tests/
+---
+
 # fixcve-auto — registre des incidents
 
 Chaque garde-fou de [FIXCVE_AUTO.md](FIXCVE_AUTO.md) vient d'un incident réel. Ce registre relie l'incident, sa cause, la protection actuelle et le test qui le rejoue (`rhDemo/scripts/tests/`, lancer `run-all.sh`). Les récits détaillés antérieurs à la refonte du 2026-10-09 sont dans l'historique git de `FIXCVE_AUTO.md` et des scripts.

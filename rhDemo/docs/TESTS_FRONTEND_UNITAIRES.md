@@ -1,3 +1,11 @@
+---
+statut: proposition
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/frontend/package.json
+  - rhDemo/frontend/src/
+---
+
 # Étude — Tests unitaires frontend pour sécuriser les montées de version Renovate
 
 ## 1. Contexte et problème

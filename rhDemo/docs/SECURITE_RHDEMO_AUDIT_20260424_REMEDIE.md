@@ -1,3 +1,9 @@
+---
+statut: journal
+verifie_le: 2026-10-22
+sources: []
+---
+
 # Revue de sécurité — RHDemo — 2026-04-24
 
 ## Périmètre et modèle de menace

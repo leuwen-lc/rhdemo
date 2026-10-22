@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+  - rhDemo/infra/ephemere/docker-compose.yml
+  - rhDemo/Jenkinsfile-CI
+  - renovate.json
+---
+
 # Gestion des versions d'images Docker
 
 ## Vue d'ensemble

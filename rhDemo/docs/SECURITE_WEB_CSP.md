@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/SecurityConfig.java
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/CspPolicyBuilder.java
+  - rhDemo/infra/ephemere/nginx/conf.d/rhdemo.conf
+---
+
 # 🔒 Sécurité Web - Content Security Policy (CSP) et Corrections ZAP
 
 ## 📋 Vue d'ensemble

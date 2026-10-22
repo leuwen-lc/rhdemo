@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-default-deny.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-rhdemo-app.yaml
+  - rhDemo/infra/stagingkub/networkpolicies/
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # Étude des flux réseau et Network Policies - Stagingkub
 
 Ce document décrit tous les flux réseau légitimes dans l'environnement stagingkub et les NetworkPolicies implémentées pour les sécuriser.

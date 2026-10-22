@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/test/java/fr/leuwen/rhdemoAPI/config/TestSecurityConfig.java
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/SecurityConfig.java
+---
+
 # Tests d'Intégration Sans Dépendance Keycloak
 
 ## Problème

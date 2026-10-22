@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/Dockerfile.agent
+---
+
 # Agents Jenkins Éphémères — Étude d'Impact et Plan de Migration
 
 ## Contexte et objectif

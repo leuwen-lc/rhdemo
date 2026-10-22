@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/rbac/
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+---
+
 # Configuration RBAC pour Jenkins - Stagingkub
 
 Ce dossier contient la configuration RBAC (Role-Based Access Control) pour permettre à Jenkins de déployer sur le namespace `rhdemo-stagingkub` avec des permissions limitées.

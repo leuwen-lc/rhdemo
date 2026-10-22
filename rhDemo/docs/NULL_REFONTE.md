@@ -1,3 +1,10 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/
+---
+
 # Refonte de la gestion des null — Java 25
 
 **Date :** 2026-05-19  

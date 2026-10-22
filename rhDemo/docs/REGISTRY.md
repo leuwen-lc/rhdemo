@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/Jenkinsfile-CD
+---
+
 # 📦 Registry Docker Local - Guide complet
 
 Ce document explique le fonctionnement du registry Docker local utilisé par stagingkub.

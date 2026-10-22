@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/.trivyignore.yaml
+---
+
 # Scan Sécurité Images Docker avec Trivy
 
 ## Vue d'ensemble

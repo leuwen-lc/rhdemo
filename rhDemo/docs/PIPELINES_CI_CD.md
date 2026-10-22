@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/Jenkinsfile-CD
+  - rhDemo/Jenkinsfile-Renovate
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+---
+
 # 🔄 Pipelines CI/CD - RHDemo
 
 Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.

@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/scripts/release.sh
+  - rhDemo/pom.xml
+---
+
 # Procédure standard : PR `evolutions-post-1.1.7` -> `master`, release `1.1.8-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte (modifier les versions par remplacement global):

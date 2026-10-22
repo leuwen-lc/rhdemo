@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/pom.xml
+  - rhDemo/frontend/package.json
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+---
+
 # Inventaire des composants open source
 
 > \*\*Convention retenue :\*\* un composant est un projet open source choisi explicitement dans la configuration du dépôt. Les \*\*24 plugins Jenkins directs\*\* sont comptés séparément, car ce sont des extensions installées explicitement. Les dépendances transitives restent des estimations et ne doivent pas être additionnées ligne à ligne, car elles se recouvrent.

@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Jenkinsfile-Renovate
+  - renovate.json
+---
+
 # Intégration automatique des mises à jour Renovate après validation CI Jenkins
 
 ## Contexte et solution retenue

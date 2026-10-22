@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/pom.xml
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/owasp-suppressions.xml
+---
+
 # OWASP Dependency-Check - Analyse des vulnérabilités
 
 Guide de configuration et d'utilisation de l'analyse de sécurité des dépendances avec OWASP Dependency-Check.

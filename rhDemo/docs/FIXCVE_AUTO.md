@@ -1,3 +1,14 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve-classify.py
+  - rhDemo/scripts/fixcve-detect.py
+  - rhDemo/scripts/fixcve-apply.py
+  - rhDemo/scripts/fixcve_lib/
+---
+
 # Remédiation CVE automatisée (fixcve-auto)
 
 Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. La procédure est **entièrement déterministe** (aucun LLM) depuis la refonte du 2026-10-09 (voir [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md), section 10). Le skill interactif `/fixcve` réutilise les mêmes scripts avec validation humaine.

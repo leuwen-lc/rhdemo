@@ -1,3 +1,9 @@
+---
+statut: journal
+verifie_le: 2026-10-22
+sources: []
+---
+
 # 🔐 Rapport d'Audit de Sécurité — RHDemo
 
 Rapport généré par Claude Code avec les instructions trouvées sur ce projet

@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/secrets/secrets-rhdemo.yml
+  - rhDemo/secrets/secrets-ephemere.yml
+  - rhDemo/secrets/secrets-stagingkub.yml
+---
+
 # Installation et configuration de SOPS/AGE
 
 Guide complet pour installer et configurer SOPS (Secrets OPerationS) avec AGE pour chiffrer/déchiffrer les secrets du projet rhDemo.

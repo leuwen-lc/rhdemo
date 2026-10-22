@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/observability/
+  - rhDemo/infra/stagingkub/scripts/install-observability.sh
+  - rhDemo/infra/stagingkub/scripts/components/
+---
+
 # INTÉGRATION OBSERVABILITY STACK - ENVIRONMENT STAGINGKUB
 
 **Version:** 4 (Prometheus + Loki + Grafana Alloy + métriques Spring Boot Actuator)

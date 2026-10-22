@@ -37,10 +37,10 @@
 		<postgresql.version>42.7.13</postgresql.version>
 		<!-- Fix CVE-2026-77874 : hibernate-core 7.4.5.Final -> 7.4.11.Final -->
 		<hibernate.version>7.4.11.Final</hibernate.version>
-		<!-- Fix CVE-2026-68498, CVE-2026-89407, CVE-2026-89425, CVE-2026-68497, CVE-2026-83557 : jackson 2.x (com.fasterxml.jackson.core) 2.21.5 -> 2.21.7 -->
-		<jackson-2-bom.version>2.21.7</jackson-2-bom.version>
-		<!-- Fix CVE-2026-68498, CVE-2026-89407, CVE-2026-89425, CVE-2026-68497, CVE-2026-83557 : jackson 3.x (tools.jackson.core) 3.1.5 -> 3.1.7 -->
-		<jackson-bom.version>3.1.7</jackson-bom.version>
+		<!-- Fix CVE-2026-110879 : jackson-databind 2.21.7 -> 2.21.8 -->
+		<jackson-2-bom.version>2.21.8</jackson-2-bom.version>
+		<!-- Fix CVE-2026-110879 : jackson-databind 3.1.7 -> 3.1.8 -->
+		<jackson-bom.version>3.1.8</jackson-bom.version>
 		<!-- Fix CVE-2026-93879 : hibernate-validator 9.1.3.Final -> 9.1.5.Final -->
 		<hibernate-validator.version>9.1.5.Final</hibernate-validator.version>
 	</properties>

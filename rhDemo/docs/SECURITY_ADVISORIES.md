@@ -4,6 +4,15 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## com.fasterxml.jackson.core:jackson-databind, tools.jackson.core:jackson-databind (build #942)
+
+- **Date** : 2026-10-22 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `com.fasterxml.jackson.core:jackson-databind` 2.21.7 → 2.21.8 (CVE-2026-110879, CVSS 9.2)
+  - `tools.jackson.core:jackson-databind` 3.1.7 → 3.1.8 (CVE-2026-110879, CVSS 9.2)
+
+---
+
 ## follow-redirects, launch-editor, org.hibernate.validator:hibernate-validator, picomatch (build #936)
 
 - **Date** : 2026-10-21 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

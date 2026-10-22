@@ -1,0 +1,36 @@
+---
+statut: journal
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/docs/index.md
+---
+
+# Journal de la documentation
+
+Journal chronologique en ajout seul : ingestions, contrôles (lint) et réorganisations de la documentation. Les entrées les plus récentes sont **en bas**. Chaque entrée commence par `## [date] opération | titre`, ce qui permet de les lister avec `grep "^## \[" rhDemo/docs/log.md`.
+
+Opérations : `ingest` (nouveau document ou mise à jour après un changement du code), `lint` (contrôle de cohérence), `restructure` (classement, renommage), `query` (réponse conservée comme page).
+
+---
+
+## [2026-10-22] lint | liens cassés vers des documents renommés
+
+Six liens de `CLAUDE.md` pointaient vers des fichiers inexistants (`NETWORK_SECURITY_POLICY`, `CERTIFICATS-WEB`, `TESTS_SECURITY_COVERAGE`, `REGISTRY_SETUP`, `LOKI_STACK_INTEGRATION`, `GRAFANA_DASHBOARD`). Les mêmes noms étaient cités dans `README.md`, `Jenkinsfile-CI`, `Jenkinsfile-CD`, `values.yaml`, `networkpolicy-keycloak.yaml` et le README des tests Spring Security : corrigés (commit `5046868`).
+
+Reste non traité : `OBSERVABILITY_STACK_INTEGRATION.md` renvoie trois fois vers `../infra/stagingkub/GRAFANA_DASHBOARD.md`, qui n'existe pas.
+
+## [2026-10-22] lint | dérive du README stagingkub
+
+`infra/stagingkub/README.md` corrigé : PostgreSQL 18.4 (au lieu de 16), Keycloak 26.7.2, Cilium 1.20.2, Helm 4.x, `ProxySettingsPolicy` et `RateLimitPolicy` (au lieu de `SnippetsFilter`), étapes réelles de `Jenkinsfile-CD`. `values.yaml` : références NGF 2.4.0 corrigées en 2.6.0 (commit `293dad4`).
+
+## [2026-10-22] restructure | statuts et sources
+
+Frontmatter (`statut`, `verifie_le`, `sources`) ajouté aux 43 documents de `rhDemo/docs/` (commit `7b90bed`) : 24 actifs, 13 historiques, 3 propositions, 3 journaux. Sans frontmatter : `fixcve-audit.md` (généré) et `SECURITY_ADVISORIES.md` (modifié par `fixcve-auto`).
+
+Reclassements décidés : `STAGINGKUB_REBUILD_PIPELINE` et `NGINX_GATEWAY_FABRIC_MIGRATION` en historique ; `FIXCVE_AUTO_TODO` en historique avec un bilan des éléments non appliqués (F, G, H, J, tests en CI) ; `FIXCVE_AUTO_INCIDENTS` en journal ; `ALLOY_MIGRATION` : statut corrigé, la migration est réalisée.
+
+Anomalie signalée, non corrigée : `TESTS_REFONTE.md` affirme qu'un socle Vitest a été introduit, mais `frontend/package.json` ne contient ni Vitest ni test unitaire.
+
+## [2026-10-22] ingest | création de l'index et du journal
+
+Création de [index.md](index.md) (catalogue des 45 documents de `rhDemo/docs/` et des README dispersés dans le dépôt, par catégorie) et de ce journal.

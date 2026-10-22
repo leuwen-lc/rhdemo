@@ -260,7 +260,7 @@ rhdemo:
     failureThreshold: 3
 
 # ═══════════════════════════════════════════════════════════════
-# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.4.0)
+# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.6.0)
 # ═══════════════════════════════════════════════════════════════
 # Utilise le shared-gateway créé par init-stagingkub.sh.
 # Les HTTPRoutes s'attachent au Gateway partagé via parentRefs cross-namespace.
@@ -351,7 +351,7 @@ gateway:
     busyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric 2.4.0 (référence)
+# NGINX Gateway Fabric 2.6.0 (référence)
 # ═══════════════════════════════════════════════════════════════
 # NGF est installé par init-stagingkub.sh dans le namespace nginx-gateway.
 # Cette section documente la configuration utilisée (non appliquée par Helm).

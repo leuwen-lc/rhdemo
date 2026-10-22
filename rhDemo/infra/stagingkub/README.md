@@ -26,10 +26,11 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 |-----------|---------|-------------|
 | **KinD** | 0.33+ | Cluster Kubernetes local (node image K8s 1.36.4) |
 | **Kubernetes** | 1.36.4 | `kindest/node` pinné par digest dans `kind-config.yaml` (1.37 exclu : hors matrice Cilium 1.20) |
-| **Cilium** | 1.20.1 | CNI avec kube-proxy replacement (eBPF) |
+| **Cilium** | 1.20.2 | CNI avec kube-proxy replacement (eBPF) |
 | **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
-| **PostgreSQL** | 16-alpine | Base de données |
-| **Keycloak** | 26.4.2 | IAM / OAuth2 |
+| **PostgreSQL** | 18.4-alpine | Base de données (pinnée par digest, gérée par Renovate) |
+| **Keycloak** | 26.7.2 | IAM / OAuth2 (pinné par digest, géré par Renovate) |
+| **Helm** | 4.x | Déploiement du chart et des composants d'infra (`--rollback-on-failure`) |
 
 ### Différences avec ephemere (Docker Compose)
 
@@ -60,7 +61,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    kubectl version --client
    ```
 
-3. **Helm** (version 3.12+)
+3. **Helm** (version 4.x — les scripts utilisent `--rollback-on-failure`)
    ```bash
    helm version
    ```
@@ -100,6 +101,19 @@ echo 'fs.inotify.max_user_watches=524288' | sudo tee -a /etc/sysctl.d/99-cilium.
 echo 'fs.inotify.max_user_instances=512' | sudo tee -a /etc/sysctl.d/99-cilium.conf
 sudo sysctl --system
 ```
+
+### Contrôle après redémarrage de la machine (changement d'IP du nœud)
+
+Si le conteneur du nœud KinD change d'IP sur le réseau docker `kind` après un redémarrage, Cilium conserve des `CiliumEndpoint` périmés : le DNS du cluster ne répond plus et les pods restent bloqués en `Init` (`nc: bad address`).
+
+[scripts/check-cluster-ip.sh](scripts/check-cluster-ip.sh) détecte cette situation (pods avec un `hostIP` périmé, DNS en échec) et redémarre Cilium puis CoreDNS. Sans effet si le cluster est sain.
+
+```bash
+./scripts/check-cluster-ip.sh          # corrige si nécessaire
+./scripts/check-cluster-ip.sh --check  # diagnostic seul (code retour 1 si anomalie)
+```
+
+À lancer après chaque redémarrage de la machine, ou avant un déploiement si le DNS est suspect.
 
 ### Configuration requise
 
@@ -149,7 +163,7 @@ sudo sysctl --system
 │  ┌────────────▼───────────┐ ┌──────────▼────────────────┐  │
 │  │ StatefulSet:           │ │ StatefulSet:              │  │
 │  │ postgresql-rhdemo      │ │ postgresql-keycloak       │  │
-│  │ • Image: postgres:16   │ │ • Image: postgres:16      │  │
+│  │ • Image: postgres:18   │ │ • Image: postgres:18      │  │
 │  │ • PVC: 2Gi             │ │ • PVC: 2Gi                │  │
 │  └────────────────────────┘ └───────────────────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
@@ -189,7 +203,9 @@ sudo sysctl --system
 - **Gateway API resources** :
   - `rhdemo-route` (HTTPRoute → shared-gateway)
   - `keycloak-route` (HTTPRoute → shared-gateway)
-  - `keycloak-proxy-buffers` (SnippetsFilter)
+  - `keycloak-proxy-buffers` (ProxySettingsPolicy : buffers proxy pour les gros cookies OAuth2)
+  - `rhdemo-rate-limit`, `keycloak-rate-limit` (RateLimitPolicy : limitation de débit par IP)
+- **2 ServiceMonitors** (rhdemo-app, postgresql-rhdemo, namespace `monitoring`) : créés seulement si la CRD Prometheus Operator est détectée (activés automatiquement par `Jenkinsfile-CD`)
 - **4 Secrets** :
   - `rhdemo-db-secret` (mot de passe PostgreSQL rhdemo)
   - `keycloak-db-secret` (mot de passe PostgreSQL keycloak)
@@ -259,30 +275,32 @@ kubectl get ns rhdemo-stagingkub
 4. Lancer le build
 
 Le pipeline exécutera automatiquement :
-- Récupération de l'image depuis le registry
+- Déchiffrement des secrets SOPS et configuration de l'accès Kubernetes (kubeconfig RBAC)
+- Vérification de l'image dans le registry et de sa signature (Cosign)
 - Mise à jour des secrets Kubernetes
-- Déploiement Helm
-- Attente de la disponibilité des services
+- Déploiement Helm (`imagePullPolicy=Always` pour les tags SNAPSHOT, ServiceMonitors activés si Prometheus Operator est présent)
+- Redémarrage forcé des pods, attente de disponibilité, health checks et état du déploiement
 
 ### Méthode 2 : Déploiement Helm direct
 
 ```bash
 # 1. Construire l'image Docker (depuis rhDemo/)
 ./mvnw clean package -DskipTests
-docker build -t rhdemo-api:1.1.4-SNAPSHOT .
+docker build -t rhdemo-api:1.1.11-SNAPSHOT .
 
 # 2. Tagger et pousser vers le registry local
-docker tag rhdemo-api:1.1.4-SNAPSHOT localhost:5000/rhdemo-api:1.1.4-SNAPSHOT
-docker push localhost:5000/rhdemo-api:1.1.4-SNAPSHOT
+docker tag rhdemo-api:1.1.11-SNAPSHOT localhost:5000/rhdemo-api:1.1.11-SNAPSHOT
+docker push localhost:5000/rhdemo-api:1.1.11-SNAPSHOT
 
 # 3. Déployer avec Helm
 cd infra/stagingkub
 helm upgrade --install rhdemo ./helm/rhdemo \
   --namespace rhdemo-stagingkub \
   --create-namespace \
-  --set rhdemo.image.tag=1.1.4-SNAPSHOT \
+  --set rhdemo.image.repository=localhost:5000/rhdemo-api \
+  --set rhdemo.image.tag=1.1.11-SNAPSHOT \
   --wait \
-  --timeout 10m
+  --timeout 15m
 ```
 
 ### Vérifier le déploiement
@@ -312,6 +330,7 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `helm/rhdemo/templates/` | Templates Kubernetes |
 | `helm/observability/*-values.yaml` | Values Helm pour kube-prometheus-stack, Loki, Alloy, Grafana |
 | `scripts/init-stagingkub.sh` | Script d'initialisation (reconstruction complète) |
+| `scripts/check-cluster-ip.sh` | Contrôle après redémarrage de la machine (IP du nœud changée → DNS cassé) |
 | `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
 | `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
 | `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) |
@@ -349,11 +368,17 @@ gateway:
           serviceName: keycloak
           servicePort: 8080
 
-  # Proxy buffers pour Keycloak (gros cookies OAuth2)
-  snippetsFilter:
+  # Proxy buffers pour Keycloak (gros cookies OAuth2) — ProxySettingsPolicy
+  proxySettings:
     enabled: true
-    proxyBufferSize: "128k"
+    bufferSize: "128k"
+
+  # Limitation de débit par IP (RateLimitPolicy) : rhdemo 60r/m, keycloak 30r/m
+  rateLimit:
+    enabled: true
 ```
+
+Le détail complet (headers de sécurité COOP/CORP/COEP/HSTS par route, règle `/actuator/health` vers le port management 9001, valeurs de rate limit) est dans [helm/rhdemo/values.yaml](helm/rhdemo/values.yaml), section `gateway`.
 
 ### Secrets
 
@@ -500,7 +525,7 @@ kubectl port-forward -n rhdemo-stagingkub svc/postgresql-rhdemo 5432:5432
 # Via Helm
 helm upgrade rhdemo ./helm/rhdemo \
   --namespace rhdemo-stagingkub \
-  --set rhdemo.image.tag=1.2.0-SNAPSHOT \
+  --set rhdemo.image.tag=1.1.12-SNAPSHOT \
   --wait
 ```
 
@@ -551,7 +576,7 @@ kubectl describe pod <pod-name> -n rhdemo-stagingkub
 kubectl get pods -n rhdemo-stagingkub -l app=postgresql-rhdemo
 
 # Tester la connexion depuis un pod
-kubectl run -it --rm debug --image=postgres:16-alpine --restart=Never -n rhdemo-stagingkub -- psql -h postgresql-rhdemo -U rhdemo -d rhdemo
+kubectl run -it --rm debug --image=postgres:18-alpine --restart=Never -n rhdemo-stagingkub -- psql -h postgresql-rhdemo -U rhdemo -d rhdemo
 
 # Vérifier les secrets
 kubectl get secret rhdemo-db-secret -n rhdemo-stagingkub -o yaml
@@ -599,6 +624,15 @@ kubectl get httproute rhdemo-route -n rhdemo-stagingkub -o jsonpath='{.status.pa
 # Si le NodePort est incorrect, le patcher
 kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
     -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":32616}]'
+```
+
+### Pods bloqués en `Init` / DNS du cluster en panne après redémarrage
+
+Symptôme : `nc: bad address 'postgresql-rhdemo'` dans les logs des initContainers `wait-for-db`/`wait-for-keycloak`, `helm upgrade --wait` qui expire, pod Keycloak en `Unknown`. Cause : le nœud KinD a changé d'IP sur le réseau docker `kind`, Cilium garde des `CiliumEndpoint` périmés (`could not take ownership of existing ciliumendpoint` dans les logs de l'agent).
+
+```bash
+./scripts/check-cluster-ip.sh --check   # diagnostic
+./scripts/check-cluster-ip.sh           # corrige : redémarre Cilium puis CoreDNS
 ```
 
 ### /etc/hosts non configuré
@@ -672,7 +706,7 @@ kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 - [ ] Limites inotify configurées pour Cilium
 - [ ] KinD installé et cluster créé
 - [ ] kubectl configuré avec contexte `kind-rhdemo`
-- [ ] Helm installé (version 3.12+)
+- [ ] Helm installé (version 4.x)
 - [ ] Cilium CNI opérationnel
 - [ ] NGINX Gateway Fabric déployé
 - [ ] GatewayClass `nginx` disponible

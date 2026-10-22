@@ -132,6 +132,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 
 ## Pour le LLM qui maintient ce wiki
 
+- **Contrôler la cohérence** : `python3 -I rhDemo/scripts/docs-lint.py` (lecture seule) ou le skill `/docs-lint` (source : `rhDemo/scripts/docs-skills/docs-lint/SKILL.md`). Rapport d'abord, corrections après accord, entrée `lint` dans [log.md](log.md).
 - **Ajouter un document** : poser le frontmatter (`statut`, `verifie_le`, `sources`), ajouter une ligne dans la bonne catégorie ci-dessus, journaliser dans [log.md](log.md).
 - **Changer le statut d'un document** : modifier son frontmatter **et** la colonne Statut de cet index, puis journaliser.
 - **Ne jamais réécrire** un document `historique` ou `journal` pour l'aligner sur l'état courant. Une divergence se signale, elle ne se corrige pas dans ces fichiers.

@@ -34,3 +34,14 @@ Anomalie signalée, non corrigée : `TESTS_REFONTE.md` affirme qu'un socle Vites
 ## [2026-10-22] ingest | création de l'index et du journal
 
 Création de [index.md](index.md) (catalogue des 45 documents de `rhDemo/docs/` et des README dispersés dans le dépôt, par catégorie) et de ce journal.
+
+## [2026-10-22] lint | premier passage de docs-lint
+
+Création du contrôle `rhDemo/scripts/docs-lint.py` (lecture seule, tests dans `scripts/tests/test_docs_lint.py`) et du skill `/docs-lint`. Premier passage : frontmatter, index et journal conformes ; liens et références à corriger, **non corrigés à ce stade** :
+
+- `OBSERVABILITY_STACK_INTEGRATION.md` : 3 liens vers `../infra/stagingkub/GRAFANA_DASHBOARD.md` (inexistant).
+- `OWASP_DEPENDENCY_CHECK.md` : liens vers `OWASP_JENKINS_PLUGIN.md`, `SECURITY_LEAST_PRIVILEGE.md`, `../renovate.json` (le fichier est à la racine du dépôt), `../Jenkinsfile` (devenu `Jenkinsfile-CI`).
+- `SOPS_SETUP.md` : liens vers `../Jenkinsfile`, `SECURITY_LEAST_PRIVILEGE.md`, `REFACTOR_SECRETS_NAMING.md`, `ENVIRONMENTS.md` (désormais `../infra/ENVIRONMENTS.md`).
+- `RENOVATE_AUTOMERGE_CI.md` : lien vers `../../.forgejo/workflows/README.md` (inexistant).
+- `PAKETO-DOCKERFILE-MIGRATION.md` (historique, laissé tel quel) : liens vers `../Jenkinsfile`, `CHANGELOG-JENKINS-STAGINGKUB.md`, `JENKINS-NETWORK-ANALYSIS.md` (qui se trouve dans `docs/`).
+

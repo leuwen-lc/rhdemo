@@ -51,3 +51,7 @@ Liens rétablis : `../Jenkinsfile` vers `../Jenkinsfile-CI` (`OWASP_DEPENDENCY_C
 
 Liens retirés faute d'équivalent : `GRAFANA_DASHBOARD.md` (3 renvois dans `OBSERVABILITY_STACK_INTEGRATION`), `OWASP_JENKINS_PLUGIN.md`, `SECURITY_LEAST_PRIVILEGE.md` (`OWASP_DEPENDENCY_CHECK`, `SOPS_SETUP`), `REFACTOR_SECRETS_NAMING.md`, `CHANGELOG-JENKINS-STAGINGKUB.md`. Dans `RENOVATE_AUTOMERGE_CI`, `.forgejo/workflows/README.md` est conservé comme simple mention « supprimé du dépôt ». Résultat de `docs-lint.py` : 0 erreur, 0 avertissement.
 
+## [2026-10-22] lint | reformulation de la mention de Vitest
+
+`TESTS_REFONTE.md` affirmait qu'un socle Vitest avait été introduit alors que `frontend/package.json` n'en contient pas : reformulé en « pourrait être ajouté, si cela s'avère pertinent », avec renvoi vers l'étude `TESTS_FRONTEND_UNITAIRES.md` (qui reste une proposition).
+

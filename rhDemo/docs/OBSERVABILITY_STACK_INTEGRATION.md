@@ -881,7 +881,6 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 ./deploy-grafana-dashboard.sh
 ```
 
-**Documentation complète:** Voir [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
 ---
 
@@ -1230,7 +1229,6 @@ cd /home/leno-vo/git/repository/rhDemo/infra/stagingkub/scripts
 ./deploy-grafana-dashboard.sh
 ```
 
-**Documentation complète:** [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md)
 
 ### 8.2 Dashboard rhDemo - Métriques Spring Boot Actuator (Pré-configuré)
 
@@ -1982,7 +1980,6 @@ kubectl delete namespace monitoring
 
 ### Documentation Projet rhDemo
 
-- [GRAFANA_DASHBOARD.md](../infra/stagingkub/GRAFANA_DASHBOARD.md) - Documentation dashboard rhDemo Logs
 - [POSTGRESQL_BACKUP_CRONJOBS.md](./POSTGRESQL_BACKUP_CRONJOBS.md) - Backups PostgreSQL automatiques
 
 

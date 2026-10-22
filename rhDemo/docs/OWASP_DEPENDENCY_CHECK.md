@@ -11,7 +11,7 @@ sources:
 
 Guide de configuration et d'utilisation de l'analyse de sécurité des dépendances avec OWASP Dependency-Check.
 
-> **⚠️ IMPORTANT** : Le pipeline Jenkins utilise le **plugin Jenkins OWASP Dependency-Check** au lieu du plugin Maven pour une meilleure compatibilité avec CVSS v4.0. Voir [OWASP_JENKINS_PLUGIN.md](OWASP_JENKINS_PLUGIN.md) pour la documentation complète du plugin Jenkins.
+> **⚠️ IMPORTANT** : Le pipeline Jenkins utilise le **plugin Jenkins OWASP Dependency-Check** au lieu du plugin Maven pour une meilleure compatibilité avec CVSS v4.0.
 
 ## Table des matières
 
@@ -70,8 +70,8 @@ Dependency-Check est un scanner **CVE/NVD** (complété par OSS Index) : il comp
 
 Ce que ce projet a en place contre ce type précis d'attaque :
 
-- **`minimumReleaseAge: 7 days`** ([renovate.json](../renovate.json)) : Renovate n'ouvre pas de PR sur une version publiée depuis moins de 7 jours — fenêtre pendant laquelle ce type d'attaque est généralement détecté et la version retirée de npm.
-- **`osvVulnerabilityAlerts: true`** ([renovate.json](../renovate.json)) : bypass du délai ci-dessus si une advisory de vulnérabilité (y compris malware, via la base OSV/GHSA) existe déjà sur une version que vous avez installée.
+- **`minimumReleaseAge: 7 days`** ([renovate.json](../../renovate.json)) : Renovate n'ouvre pas de PR sur une version publiée depuis moins de 7 jours — fenêtre pendant laquelle ce type d'attaque est généralement détecté et la version retirée de npm.
+- **`osvVulnerabilityAlerts: true`** ([renovate.json](../../renovate.json)) : bypass du délai ci-dessus si une advisory de vulnérabilité (y compris malware, via la base OSV/GHSA) existe déjà sur une version que vous avez installée.
 - **`npm ci`** (voir ci-dessus) : empêche toute résolution silencieuse vers une version non verrouillée dans le lockfile.
 
 Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une protection réelle il faudrait qu'il soit bloquant, ce qui introduirait un 3ᵉ type d'échec de build non reconnu par l'automatisation de remédiation (`fixcve-auto` ne classe les échecs Jenkins qu'en `trivy` ou `owasp` — voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md)), sans bénéfice suffisant pour justifier cette extension aujourd'hui. `npm audit` reste disponible en local : lancer `cd rhDemo/frontend && npm audit` (ou `npm audit --omit=dev` pour se limiter à ce qui est réellement livré dans le bundle, en excluant les dépendances de build/test) de temps en temps — par exemple avant une release, ou en cas de doute suite à une actualité sécurité comme celle-ci.
@@ -292,7 +292,7 @@ echo "owasp-suppressions.xml" >> .gitignore
 
 ### Jenkinsfile - Stage actuel
 
-**[Jenkinsfile:1121-1142](../Jenkinsfile#L1121-L1142)**
+**[Jenkinsfile-CI](../Jenkinsfile-CI)**
 
 ```groovy
 stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
@@ -479,5 +479,4 @@ Consulter le rapport HTML :
 
 ## Voir aussi
 
-- [SECURITY_LEAST_PRIVILEGE.md](SECURITY_LEAST_PRIVILEGE.md) - Principe du moindre privilège
-- [Jenkinsfile](../Jenkinsfile) - Pipeline CI/CD
+- [Jenkinsfile-CI](../Jenkinsfile-CI) - Pipeline CI

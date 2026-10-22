@@ -315,9 +315,8 @@ Avec le nouveau Dockerfile, l'utilisateur est `spring:spring` (UID 1000).
 ## 📖 Documentation associée
 
 - [Dockerfile](../Dockerfile) : Fichier de construction
-- [Jenkinsfile](../Jenkinsfile) : Pipeline modifié (lignes 665-695, 1238-1246)
-- [CHANGELOG-JENKINS-STAGINGKUB.md](infra/stagingkub/CHANGELOG-JENKINS-STAGINGKUB.md) : Historique complet des modifications Jenkins
-- [JENKINS-NETWORK-ANALYSIS.md](infra/stagingkub/JENKINS-NETWORK-ANALYSIS.md) : Analyse réseau Jenkins ↔ stagingkub
+- [Jenkinsfile-CI](../Jenkinsfile-CI) : Pipeline modifié (lignes 665-695, 1238-1246)
+- [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) : Analyse réseau Jenkins ↔ stagingkub
 
 ## 📝 Notes
 

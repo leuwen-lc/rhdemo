@@ -269,7 +269,7 @@ Codeberg Actions pour cette automatisation.
 Le pool de runners `codeberg-medium` est devenu indisponible de façon récurrente ("plus de
 container disponible"), un problème de **capacité** distinct du timeout `codeberg-small`
 (~5 min, "context deadline exceeded") déjà documenté dans
-[`.forgejo/workflows/README.md`](../../.forgejo/workflows/README.md) — ce dernier a un
+`.forgejo/workflows/README.md` (supprimé du dépôt) — ce dernier a un
 fallback (split en deux workflows `codeberg-small`) qui reste disponible en secours, mais ne
 règle pas un manque de capacité généralisé côté Codeberg Actions. Rapatrier vers Jenkins
 élimine complètement la dépendance à un système de CI externe pour cette automatisation,

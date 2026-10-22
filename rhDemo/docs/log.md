@@ -45,3 +45,9 @@ Création du contrôle `rhDemo/scripts/docs-lint.py` (lecture seule, tests dans 
 - `RENOVATE_AUTOMERGE_CI.md` : lien vers `../../.forgejo/workflows/README.md` (inexistant).
 - `PAKETO-DOCKERFILE-MIGRATION.md` (historique, laissé tel quel) : liens vers `../Jenkinsfile`, `CHANGELOG-JENKINS-STAGINGKUB.md`, `JENKINS-NETWORK-ANALYSIS.md` (qui se trouve dans `docs/`).
 
+## [2026-10-22] lint | correction des liens morts
+
+Liens rétablis : `../Jenkinsfile` vers `../Jenkinsfile-CI` (`OWASP_DEPENDENCY_CHECK`, `SOPS_SETUP`, `PAKETO-DOCKERFILE-MIGRATION`, l'ancre de numéros de ligne étant retirée car périmée), `../renovate.json` vers `../../renovate.json`, `ENVIRONMENTS.md` vers `../infra/ENVIRONMENTS.md`, `JENKINS-NETWORK-ANALYSIS.md` vers le dossier `docs/`.
+
+Liens retirés faute d'équivalent : `GRAFANA_DASHBOARD.md` (3 renvois dans `OBSERVABILITY_STACK_INTEGRATION`), `OWASP_JENKINS_PLUGIN.md`, `SECURITY_LEAST_PRIVILEGE.md` (`OWASP_DEPENDENCY_CHECK`, `SOPS_SETUP`), `REFACTOR_SECRETS_NAMING.md`, `CHANGELOG-JENKINS-STAGINGKUB.md`. Dans `RENOVATE_AUTOMERGE_CI`, `.forgejo/workflows/README.md` est conservé comme simple mention « supprimé du dépôt ». Résultat de `docs-lint.py` : 0 erreur, 0 avertissement.
+

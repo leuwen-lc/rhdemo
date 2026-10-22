@@ -375,7 +375,7 @@ nginx-gateway-fabric:
 #   2. Chaque flux légitime est explicitement autorisé
 #   3. L'accès Internet est bloqué (sauf DNS)
 #
-# Voir: docs/NETWORK_SECURITY_POLICY.md pour les détails des flux
+# Voir: docs/SECURITE_NETWORK_POLICY.md pour les détails des flux
 # ═══════════════════════════════════════════════════════════════
 networkPolicies:
   # Activer/désactiver toutes les NetworkPolicies

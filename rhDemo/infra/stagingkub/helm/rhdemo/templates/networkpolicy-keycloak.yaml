@@ -14,7 +14,7 @@
 #   - kube-dns:53 (résolution DNS)
 #
 # NOTE: L'accès SMTP/LDAP externe est désactivé par défaut.
-# Voir NETWORK_SECURITY_POLICY.md pour activer si nécessaire.
+# Voir docs/SECURITE_NETWORK_POLICY.md pour activer si nécessaire.
 # ═══════════════════════════════════════════════════════════════
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

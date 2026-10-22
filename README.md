@@ -332,7 +332,7 @@ Sécurité applicative
 
 ### Version 1.1.1
 
-- Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/LOKI_STACK_INTEGRATION.md
+- Ajout documenté de Promtail/Loki dans le cluster pour centraliser les logs et de Grafana pour visialiser voir rhDemo/docs/OBSERVABILITY_STACK_INTEGRATION.md
 
 - Ajout de possibilité de réglage niveaux de logs rhDemo via rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
 

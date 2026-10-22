@@ -1608,7 +1608,7 @@ YMLEOF
                         echo "   1. docker stop \$REGISTRY_NAME && docker rm \$REGISTRY_NAME"
                         echo "   2. cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                         echo ""
-                        echo "   Voir la documentation: rhDemo/docs/REGISTRY_SETUP.md"
+                        echo "   Voir la documentation: rhDemo/docs/REGISTRY.md"
                         exit 1
                     fi
 

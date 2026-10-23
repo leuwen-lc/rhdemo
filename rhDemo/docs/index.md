@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-23
 sources:
   - rhDemo/docs/
 ---
@@ -54,6 +54,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CSRF_GUIDE.md](CSRF_GUIDE.md) | actif | Protection CSRF (cookie, Spring Security, Vue.js) |
 | [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) | actif | Flux réseau légitimes et NetworkPolicies Zero Trust |
 | [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) | actif | RBAC du ServiceAccount Jenkins (moindre privilège) |
+| [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md) | actif | Compromission des CA intermédiaires eMudhra (CVE-2026-111943) : impact, mesure par image, plan d'action |
 | [SOPS_SETUP.md](SOPS_SETUP.md) | actif | Installation et usage de SOPS/AGE pour les secrets |
 | [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md) | actif | Certificats TLS stagingkub : auto-signés ou Let's Encrypt |
 | [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) | actif | Scan des dépendances Maven et npm, seuils de blocage |

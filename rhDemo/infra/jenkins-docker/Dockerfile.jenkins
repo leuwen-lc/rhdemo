@@ -34,6 +34,15 @@ COPY jenkins-casc.yaml /var/jenkins_home/casc_configs/jenkins.yaml
 ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
 
 # ═══════════════════════════════════════════════════════════════════
+# SÉCURITÉ : ca-certificates à jour (CVE-2026-111943, CA eMudhra compromises)
+# ═══════════════════════════════════════════════════════════════════
+# Version Debian 13 corrigée : 20250419+deb13u1. Voir docs/SECURITE_CA_EMUDHRA_PLAN.md
+USER root
+RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+USER jenkins
+
+# ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION FINALE
 # ═══════════════════════════════════════════════════════════════════
 

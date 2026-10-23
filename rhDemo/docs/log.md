@@ -55,3 +55,19 @@ Liens retirés faute d'équivalent : `GRAFANA_DASHBOARD.md` (3 renvois dans `OBS
 
 `TESTS_REFONTE.md` affirmait qu'un socle Vitest avait été introduit alors que `frontend/package.json` n'en contient pas : reformulé en « pourrait être ajouté, si cela s'avère pertinent », avec renvoi vers l'étude `TESTS_FRONTEND_UNITAIRES.md` (qui reste une proposition).
 
+
+## [2026-10-23] ingest | SECURITE_CA_EMUDHRA_PLAN
+
+Nouveau document de suivi de l'analyse d'impact CVE-2026-111943 (CA intermédiaires eMudhra) : contexte, évaluation de l'exposition, résultats de la phase 0 (mesure des trust stores de 10 images et de l'hôte) et plan d'action en 3 phases. Ajouté à `index.md` (section Sécurité).
+
+## [2026-10-23] ingest | correctif OpenJDK dans SECURITE_CA_EMUDHRA_PLAN
+
+Ajout de la section « Correctif OpenJDK / Temurin » : le correctif Java est le build 25.0.5.0.2 (blocked.certs), absent de 25.0.5+8 et pas encore publié en image Temurin. Plan ajusté (contournement par vérification de révocation, test de contrôle).
+
+## [2026-10-23] ingest | test de contrôle dans SECURITE_CA_EMUDHRA_PLAN
+
+Ajout de la section 3 ter : résultats du test de contrôle (hôtes we-have-a-problem.com) sur 7 JDK et sur les magasins système (agent, nœud KinD, Alpine, hôte), avec et sans vérification de révocation.
+
+## [2026-10-23] ingest | phase 1 dans SECURITE_CA_EMUDHRA_PLAN
+
+États de la phase 1 mis à jour (nœud KinD corrigé, agent et contrôleur reconstruits, digests épinglés) et ajout de la mesure d'impact de la vérification de révocation (non viable globalement).

@@ -47,7 +47,7 @@ services:
   # OWASP ZAP - Proxy de sécurité pour analyse automatique
   # ═══════════════════════════════════════════════════════════════
   owasp-zap:
-    image: ghcr.io/zaproxy/zaproxy:stable
+    image: ghcr.io/zaproxy/zaproxy:stable@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6
     container_name: rhdemo-jenkins-zap
     restart: "no"  # Service temporaire pour CI/CD uniquement
 

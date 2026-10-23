@@ -80,3 +80,13 @@ vulnerabilities:
   - id: CVE-2026-84939
     pkg-name: org.freemarker:freemarker
     statement: "[PENDING_UPSTREAM_FIX] freemarker 2.3.32 embarqué dans keycloak:26.7.2 - la faille exige une locale malformée fournie par l'attaquant : internationalisation désactivée sur le realm, locale de la requête ignorée (mesuré sur stagingkub le 2026-09-28). À réexaminer si l'internationalisation ou un SMTP est activé. Correctif à venir via une release Keycloak embarquant freemarker >= 2.3.35"
+
+  # CVE-2026-114406 - ca-certificates (image keycloak), fixcve-auto build #948
+  - id: CVE-2026-114406
+    pkg-name: ca-certificates
+    statement: "[PENDING_UPSTREAM_FIX] CVE-2026-114406 : ca-certificates 2025.2.80_v9.0.305-91.el9 (CVSS 6.8). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS < 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #948."
+
+  # CVE-2026-91403 - java-21-openjdk-headless (image keycloak), fixcve-auto build #948
+  - id: CVE-2026-91403
+    pkg-name: java-21-openjdk-headless
+    statement: "[PENDING_UPSTREAM_FIX] CVE-2026-91403 : java-21-openjdk-headless 1:21.0.12.1.1-1.2.el9 (CVSS 6.8). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS < 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #948."

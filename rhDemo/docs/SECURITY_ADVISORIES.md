@@ -4,6 +4,15 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## ca-certificates, java-21-openjdk-headless (build #948)
+
+- **Date** : 2026-10-23 — **Outil** : Trivy — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `ca-certificates` 2025.2.80_v9.0.305-91.el9 (CVE-2026-114406, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
+  - `java-21-openjdk-headless` 1:21.0.12.1.1-1.2.el9 (CVE-2026-91403, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+---
+
 ## com.fasterxml.jackson.core:jackson-databind, tools.jackson.core:jackson-databind (build #942)
 
 - **Date** : 2026-10-22 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

@@ -79,3 +79,7 @@ Ajout de la section 3 quinquies (CVE-2026-114406 et CVE-2026-91403 acceptées te
 ## [2026-10-23] lint | relecture de CERTIFICATS_WEB, REGISTRY, SECURITE_JENKINS_SERVICEACCOUNT_RBAC, TRIVY_SECURITY_SCAN
 
 Avertissements de `docs-lint.py` (sources modifiées : `init-stagingkub.sh`, `.trivyignore.yaml`). `CERTIFICATS_WEB` et `SECURITE_JENKINS_SERVICEACCOUNT_RBAC` relus, contenu inchangé, `verifie_le` mis à jour. `REGISTRY` corrigé : le registry est celui de Jenkins (`registry:3`, TLS autosigné) et le nœud KinD est configuré en HTTPS par `hosts.toml` (et non par un mirror HTTP) ; ajout de l'étape de mise à jour de `ca-certificates` du nœud. `TRIVY_SECURITY_SCAN` : ajout d'une section sur `.trivyignore.yaml` (CVE acceptées temporairement), absente jusque-là.
+
+## [2026-10-23] lint | durées des pipelines dans PIPELINES_CI_CD
+
+Les durées « ~2 h max » (CI) et « ~30 min max » (CD) étaient les `timeout` des Jenkinsfile, pas les durées normales : remplacées par ~8 min (CI) et ~2 min (CD) hors contention, avec les timeouts indiqués à part. Même correction dans `CLAUDE.md`. Valeurs fournies par le mainteneur, non mesurées.

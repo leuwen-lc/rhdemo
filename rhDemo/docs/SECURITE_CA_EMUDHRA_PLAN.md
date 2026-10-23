@@ -9,6 +9,7 @@ sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
   - rhDemo/infra/stagingkub/kind-config.yaml
   - rhDemo/Jenkinsfile-CI
+  - rhDemo/.trivyignore.yaml
 ---
 
 # Compromission des CA intermédiaires eMudhra (CVE-2026-111943) : analyse d'impact et plan d'action
@@ -107,6 +108,17 @@ Conclusions :
 
 JDK 25.0.4 de l'agent, 17 endpoints utilisés par la CI (Maven Central, npm, NVD, Adoptium, GitHub, ghcr.io, dl.k8s.io, Docker Hub, quay.io, Jenkins update center, OSS Index, Trivy, Helm). Défaut : 17 acceptés en 5 s. Avec `-Dcom.sun.net.ssl.checkRevocation=true -Dcom.sun.security.enableCRLDP=true` : 14 acceptés en 6 s, **3 rejetés** (`github.com`, `ghcr.io`, `api.github.com` : « Could not determine revocation status »). Le temps ajouté est faible, mais le mode est strict (pas de repli si le statut est indéterminable) et casserait les téléchargements GitHub de la CI. À ne pas généraliser ; privilégier l'ajout des hachages à `blocked.certs` dès que le JDK corrigé est disponible.
 
+## 3 quinquies. Détection et acceptations automatiques (fixcve-auto, build #948)
+
+Trivy a détecté l'incident sur l'image Keycloak (RHEL 9) et `fixcve-auto` a ajouté deux acceptations temporaires dans `.trivyignore.yaml` (journal : `SECURITY_ADVISORIES.md`, `fixcve-audit.md`), motif `[PENDING_UPSTREAM_FIX]` (critère B : aucun correctif publié dans la branche installée, CVSS 6.8 < 9.0) :
+
+| CVE | Paquet (image Keycloak) | Version installée |
+| --- | --- | --- |
+| CVE-2026-114406 | `ca-certificates` (RHEL, magasin système) | 2025.2.80_v9.0.305-91.el9 |
+| CVE-2026-91403 | `java-21-openjdk-headless` (JDK Red Hat) | 1:21.0.12.1.1-1.2.el9 |
+
+Ces acceptations sont revérifiées à chaque cycle ; elles ne sont **pas** une correction. À retirer dès que Red Hat publie les paquets corrigés (action 1.9). Elles montrent aussi que Trivy détecte l'incident via les avis des distributions : l'étape de contrôle de la phase 3 reste utile pour les JDK Temurin, dont le paquet n'est pas géré par le gestionnaire de paquets de l'image.
+
 ## 4. Plan d'action
 
 ### Phase 0 : mesure (faite, voir section 3)
@@ -123,6 +135,7 @@ JDK 25.0.4 de l'agent, 17 endpoints utilisés par la CI (Maven Central, npm, NVD
 | 1.6 | Épingler `docker-socket-proxy` et `zaproxy` par digest | Jenkins, ZAP | fait : `docker-socket-proxy` et `zaproxy` épinglés par digest ; ZAP `stable` n'est pas corrigé en amont (`~deb12u1`, les deux chaînes acceptées), point ouvert |
 | 1.7 | Contournement JVM : ajouter `-Dcom.sun.net.ssl.checkRevocation=true -Dcom.sun.security.enableCRLDP=true` aux JVM qui sortent vers Internet (agent, builder, contrôleur Jenkins) ; mesurer l'impact (latence, échecs si CRL injoignable) avant généralisation | Agent, builder, contrôleur | **non viable globalement** : mesuré, la révocation stricte rejette `github.com`, `ghcr.io` et `api.github.com` (statut indéterminable) ; à réserver à des JVM ciblées |
 | 1.8 | Test de contrôle (hôtes `we-have-a-problem.com`) dans chaque JDK avant/après, puis intégré en phase 3 | Tous JDK | fait une première fois (section 3 ter), à refaire après chaque rebuild |
+| 1.9 | Surveiller la publication des paquets Red Hat (`ca-certificates`, `java-21-openjdk`) et retirer les deux acceptations de `.trivyignore.yaml` (CVE-2026-114406, CVE-2026-91403) | Keycloak | en attente de correctif amont |
 
 ### Phase 2 : durcissement (à faire, non commencée)
 
@@ -146,7 +159,7 @@ Constat phase 0 → nœud KinD, agent et contrôleur Jenkins → app et builder 
 ## 5. Points ouverts
 
 - **Redémarrage du contrôleur Jenkins** à faire par `./start-jenkins.sh` pour prendre l'image reconstruite (l'agent est pris en compte dès le prochain agent éphémère).
-- **JDK vulnérables** : app, builder, contrôleur, agent, SonarQube, Keycloak (aucune image corrigée disponible).
+- **JDK vulnérables** : app, builder, contrôleur, agent, SonarQube, Keycloak (aucune image corrigée disponible). Pour Keycloak, la CVE est suivie par deux acceptations temporaires de `fixcve-auto` (section 3 quinquies).
 - **ZAP `stable`** : `ca-certificates` `~deb12u1`, deux chaînes acceptées ; envisager une image dérivée avec `ca-certificates` `~deb12u2` si l'amont tarde.
 - **Alpine (postgres)**, **app et builder (Ubuntu)** : magasin système à rafraîchir par Renovate/rebuild (`ca-certificates` Alpine `20261020-r0`, Ubuntu `20260816`).
 - **Modifications non vérifiées en pipeline** : les changements de `Dockerfile.agent`, `Dockerfile.jenkins` et `init-stagingkub.sh` ne sont testés qu'en local (build et test de contrôle), pas encore par une exécution CI complète.
@@ -160,3 +173,4 @@ Constat phase 0 → nœud KinD, agent et contrôleur Jenkins → app et builder 
 - 2026-10-23 : ajout de la section 3 bis : Temurin 25.0.5+8 ne contient pas le correctif (disponible en 25.0.5.0.2, via `blocked.certs`).
 - 2026-10-23 : ajout de la section 3 ter (test de contrôle sur les images locales).
 - 2026-10-23 : phase 1 exécutée ; section 3 quater (impact de la révocation : non viable globalement) ; points ouverts réécrits.
+- 2026-10-23 : section 3 quinquies (acceptations `fixcve-auto` build #948) et action 1.9.

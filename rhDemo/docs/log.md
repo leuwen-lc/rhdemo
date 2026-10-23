@@ -71,3 +71,7 @@ Ajout de la section 3 ter : résultats du test de contrôle (hôtes we-have-a-pr
 ## [2026-10-23] ingest | phase 1 dans SECURITE_CA_EMUDHRA_PLAN
 
 États de la phase 1 mis à jour (nœud KinD corrigé, agent et contrôleur reconstruits, digests épinglés) et ajout de la mesure d'impact de la vérification de révocation (non viable globalement).
+
+## [2026-10-23] ingest | acceptations fixcve-auto dans SECURITE_CA_EMUDHRA_PLAN
+
+Ajout de la section 3 quinquies (CVE-2026-114406 et CVE-2026-91403 acceptées temporairement par fixcve-auto sur l'image Keycloak) et de l'action 1.9 (suivi du correctif Red Hat).

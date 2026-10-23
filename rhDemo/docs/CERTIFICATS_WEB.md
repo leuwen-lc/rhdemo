@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-23
 sources:
   - rhDemo/infra/stagingkub/shared-gateway.yaml
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh

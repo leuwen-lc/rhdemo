@@ -1,9 +1,10 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-23
 sources:
   - rhDemo/Jenkinsfile-CI
   - rhDemo/.trivyignore.yaml
+  - rhDemo/vars/rhDemoLib.groovy
 ---
 
 # Scan Sécurité Images Docker avec Trivy
@@ -135,6 +136,13 @@ de base :
 - **Dépendances Java** : montée de version dans `pom.xml` (souvent via une PR
   Renovate ou `/fixcve`) — cf. [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md).
 - **Couche de base** : bump de l'étiquette `eclipse-temurin` dans `rhDemo/Dockerfile`.
+
+### CVE acceptées temporairement (`.trivyignore.yaml`)
+
+Quand aucun correctif n'est publié en amont, une vulnérabilité peut être exclue du scan par une entrée de `rhDemo/.trivyignore.yaml` (champs `id`, `pkg-name`, `statement`). Le fichier est passé à Trivy par `--ignorefile` dans `vars/rhDemoLib.groovy`.
+
+- Chaque entrée est justifiée dans [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) ; les acceptations sans correctif amont portent la mention `[PENDING_UPSTREAM_FIX]` et sont revérifiées à chaque cycle de `fixcve-auto` ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+- Une acceptation n'est pas une correction : elle doit être retirée dès que le paquet corrigé est publié. Exemple en cours : CVE-2026-114406 et CVE-2026-91403 sur l'image Keycloak, voir [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md).
 
 ## Intégration dans le pipeline
 

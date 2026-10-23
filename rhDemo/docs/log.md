@@ -75,3 +75,7 @@ Ajout de la section 3 ter : résultats du test de contrôle (hôtes we-have-a-pr
 ## [2026-10-23] ingest | acceptations fixcve-auto dans SECURITE_CA_EMUDHRA_PLAN
 
 Ajout de la section 3 quinquies (CVE-2026-114406 et CVE-2026-91403 acceptées temporairement par fixcve-auto sur l'image Keycloak) et de l'action 1.9 (suivi du correctif Red Hat).
+
+## [2026-10-23] lint | relecture de CERTIFICATS_WEB, REGISTRY, SECURITE_JENKINS_SERVICEACCOUNT_RBAC, TRIVY_SECURITY_SCAN
+
+Avertissements de `docs-lint.py` (sources modifiées : `init-stagingkub.sh`, `.trivyignore.yaml`). `CERTIFICATS_WEB` et `SECURITE_JENKINS_SERVICEACCOUNT_RBAC` relus, contenu inchangé, `verifie_le` mis à jour. `REGISTRY` corrigé : le registry est celui de Jenkins (`registry:3`, TLS autosigné) et le nœud KinD est configuré en HTTPS par `hosts.toml` (et non par un mirror HTTP) ; ajout de l'étape de mise à jour de `ca-certificates` du nœud. `TRIVY_SECURITY_SCAN` : ajout d'une section sur `.trivyignore.yaml` (CVE acceptées temporairement), absente jusque-là.

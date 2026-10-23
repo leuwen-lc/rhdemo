@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-23
 sources:
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
   - rhDemo/Jenkinsfile-CD
@@ -48,7 +48,7 @@ KinD (Kubernetes in Docker) tourne dans un container Docker. Les images Docker c
 │  ┌──────────────────────────────────────────┐            │
 │  │ Registry Container (kind-registry)       │            │
 │  │  • Port: 5000                            │            │
-│  │  • Image: registry:2                     │            │
+│  │  • Image: registry:3 (TLS autosigné)     │            │
 │  │  • Réseau: bridge + kind                 │            │
 │  │  • Stockage: /var/lib/registry           │            │
 │  └──────────────────────────────────────────┘            │
@@ -58,7 +58,7 @@ KinD (Kubernetes in Docker) tourne dans un container Docker. Les images Docker c
 │  │  ┌──────────────────────────────────────────────┐  │  │
 │  │  │ Node: rhdemo-control-plane                   │  │  │
 │  │  │  • containerd configuré pour utiliser:      │  │  │
-│  │  │    http://kind-registry:5000                │  │  │
+│  │  │    https://kind-registry:5000 (CA dédiée)   │  │  │
 │  │  │  • Kubernetes pull automatiquement          │  │  │
 │  │  │    depuis localhost:5000/rhdemo-api:VERSION │  │  │
 │  │  └──────────────────────────────────────────────┘  │  │
@@ -70,23 +70,14 @@ KinD (Kubernetes in Docker) tourne dans un container Docker. Les images Docker c
 
 ## 📋 Configuration détaillée
 
-### 1. Création du registry
+### 1. Origine du registry
 
-Le script `init-stagingkub.sh` crée le registry avec accès TLS via certificat autosigné:
+Le registry `kind-registry` est normalement démarré par Jenkins (`infra/jenkins-docker/docker-compose.yml`, image `registry:3`) avec un certificat TLS autosigné (`./init-registry-certs.sh`, certificat attendu par l'hôte dans `/etc/docker/certs.d/localhost:5000/ca.crt`).
 
-```bash
-docker run -d \
-  --name kind-registry \
-  --restart=always \
-  -p 5000:5000 \
-  registry:2
-```
-
-**Paramètres** :
-- `--name kind-registry` : Nom du container
-- `--restart=always` : Redémarre automatiquement au boot
-- `-p 5000:5000` : Expose le port 5000 sur localhost
-- `registry:2` : Image officielle Docker registry v2
+`init-stagingkub.sh` :
+- réutilise un registry actif sur le port 5000, sinon redémarre un conteneur arrêté sur ce port ;
+- à défaut, crée un conteneur `kind-registry` de repli (`registry:2`, **sans TLS**) : le contrôle HTTPS qui suit échoue alors. Démarrez donc Jenkins (`docker-compose up -d registry`) avant le script ;
+- vérifie ensuite l'accès en HTTPS avec le certificat de la CA.
 
 ### 2. Connexion au réseau KinD
 
@@ -96,23 +87,15 @@ docker network connect kind kind-registry
 
 Cela permet au cluster KinD d'accéder au registry via le nom `kind-registry`.
 
-### 3. Configuration de containerd dans KinD
+### 3. Configuration du nœud KinD (containerd et CA)
 
-Le cluster KinD est créé avec cette configuration :
+Le cluster KinD est créé sans mirror containerd (voir `kind-config.yaml`). `init-stagingkub.sh` configure ensuite le nœud `rhdemo-control-plane` :
 
-```yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: rhdemo
-containerdConfigPatches:
-- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
-    endpoint = ["http://kind-registry:5000"]
-```
+1. copie le certificat de la CA du registry dans `/usr/local/share/ca-certificates/kind-registry.crt` ;
+2. met à jour le paquet `ca-certificates` du nœud (correctif de l'incident des CA eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md)), puis lance `update-ca-certificates` ;
+3. écrit `/etc/containerd/certs.d/localhost:5000/hosts.toml` : serveur `https://kind-registry:5000` avec cette CA.
 
-**Explication** :
-- `registry.mirrors."localhost:5000"` : Quand Kubernetes demande une image de `localhost:5000/*`
-- `endpoint = ["http://kind-registry:5000"]` : containerd la télécharge depuis `http://kind-registry:5000`
+Quand Kubernetes demande une image `localhost:5000/*`, containerd la télécharge donc en HTTPS depuis `kind-registry:5000`.
 
 ---
 
@@ -238,8 +221,8 @@ docker stop kind-registry
 docker rm kind-registry
 docker volume rm registry-data  # Si utilisé
 
-# 3. Recréer le registry
-docker run -d --name kind-registry --restart=always -p 5000:5000 registry:2
+# 3. Recréer le registry (avec son certificat TLS, via Jenkins)
+cd rhDemo/infra/jenkins-docker && docker-compose up -d registry
 docker network connect kind kind-registry
 ```
 
@@ -273,7 +256,7 @@ docker network inspect kind | grep kind-registry
 docker network connect kind kind-registry
 
 # Vérifier depuis le node KinD
-docker exec rhdemo-control-plane curl http://kind-registry:5000/v2/
+docker exec rhdemo-control-plane curl --cacert /usr/local/share/ca-certificates/kind-registry.crt https://kind-registry:5000/v2/
 ```
 
 ### Problème : Image not found lors du pull Kubernetes
@@ -346,7 +329,7 @@ Si vous déployez en production, utilisez :
 ## ✅ Checklist
 
 - [ ] Registry kind-registry créé et démarré
-- [ ] Registry accessible sur http://localhost:5000
+- [ ] Registry accessible sur https://localhost:5000
 - [ ] Registry connecté au réseau kind
 - [ ] Cluster KinD configuré avec containerd patch
 - [ ] Test : Push d'une image vers localhost:5000

@@ -4,6 +4,14 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## body-parser (build #956)
+
+- **Date** : 2026-10-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `body-parser` 1.20.8 → 1.20.9 (CVE-2026-111181, GHSA-27r3-jxmh-p828, CVSS 7.5)
+
+---
+
 ## ca-certificates, java-21-openjdk-headless (build #948)
 
 - **Date** : 2026-10-23 — **Outil** : Trivy — **Source** : `fixcve-auto` (procédure déterministe)

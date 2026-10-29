@@ -43,8 +43,8 @@ _OSV_TOKEN_RE = re.compile(r"\[OSV:(ALPINE|DEBIAN|UBUNTU):([A-Za-z0-9.]+)\]")
 
 def package_regex(ecosystem, package_name):
     """Expression packageUrl pour un finding (npm : nom exact ; Maven : artefact, ou groupe entier)."""
-    if ecosystem == "npm":
-        return "^pkg:npm/" + re.escape(package_name).replace("\\-", "-") + "@.*$"
+    if ecosystem in ("npm", "javascript"):
+        return f"^pkg:{ecosystem}/" + re.escape(package_name).replace("\\-", "-") + "@.*$"
     group, _, artifact = package_name.partition(":")
     group_re = re.escape(group).replace("\\-", "-")
     if group in GROUP_WIDE or not artifact:
@@ -58,6 +58,9 @@ def parse_package_regex(regex):
     m = re.match(r"^\^?pkg:npm/(.+?)@", plain)
     if m:
         return "npm", m.group(1)
+    m = re.match(r"^\^?pkg:javascript/(.+?)@", plain)
+    if m:
+        return "javascript", m.group(1)
     m = re.match(r"^\^?pkg:maven/([^/]+)/(.+?)@", plain)
     if m:
         return "maven", f"{m.group(1)}:{m.group(2)}"

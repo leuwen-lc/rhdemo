@@ -46,6 +46,17 @@ class DecisionTableTest(unittest.TestCase):
         a = classify(f, {"fix_status": "no_fix_available", "maven_scopes": ["compile"]})
         self.assertEqual((a["action"], a["criterion"]), ("suppress_temporary", "B"))
 
+    def test_972_javascript_embarque_cvss_10_bloque(self):
+        """DOMPurify (RetireJS) sans correctif et CVSS 10 : bloqué (humain), jamais supprimé ni annulé."""
+        f = finding("CVE-2026-116804", "DOMPurify", "3.4.13", ecosystem="javascript", cvss=10.0)
+        a = classify(f, {"fix_status": "no_fix_available"})
+        self.assertEqual(a["action"], "blocked")
+
+    def test_javascript_embarque_cvss_faible_critere_b(self):
+        f = finding("CVE-2026-116803", "DOMPurify", "3.4.13", ecosystem="javascript", cvss=7.5)
+        a = classify(f, {"fix_status": "no_fix_available"})
+        self.assertEqual((a["action"], a["criterion"]), ("suppress_temporary", "B"))
+
     def test_scope_test_critere_a(self):
         f = finding("CVE-2026-10002", "com.h2database:h2", "2.4.240", ecosystem="maven", cvss=9.8)
         a = classify(f, {"fix_status": "no_fix_available", "maven_scopes": ["test"]})

@@ -181,4 +181,11 @@
         <vulnerabilityName>GHSA-cfqc-fj3v-j925</vulnerabilityName>
     </suppress>
 
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-116803 / CVE-2026-116804 (RetireJS, GHSA-mrv2-3pqr-j5jr) : DOMPurify 3.4.13 embarqué dans swagger-ui (springdoc-openapi). Correctif en DOMPurify 3.4.17 ; le dernier webjar swagger-ui publié (5.34.0) embarque 3.4.16, springdoc-openapi 3.2.0 n'y change rien. Failles dans les options IN_PLACE et SAFE_FOR_TEMPLATES ; Swagger UI est protégé par Spring Security et DOMPurify n'est jamais utilisé par frontend/src. A lever dès qu'un swagger-ui avec DOMPurify &gt;= 3.4.17 est publié.</notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@.*$</packageUrl>
+        <cve>CVE-2026-116803</cve>
+        <cve>CVE-2026-116804</cve>
+    </suppress>
+
 </suppressions>

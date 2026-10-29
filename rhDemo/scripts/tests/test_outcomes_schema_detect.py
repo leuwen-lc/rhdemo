@@ -118,6 +118,24 @@ class DetectTest(unittest.TestCase):
         self.detect.fetch = lambda path: self._owasp_html("moderate")
         self.assertEqual(self.detect.detect_owasp(934), [])
 
+    def test_972_finding_retirejs_javascript_detecte(self):
+        """DOMPurify embarqué dans swagger-ui (RetireJS, pkg:javascript/, build #972) : ni ignoré ni inclassable."""
+        html = (
+            '<h3 class="subsectionheader "><a name="l1"></a>swagger-ui-5.32.14.jar: swagger-ui-bundle.js</h3>'
+            '<p>pkg:javascript/DOMPurify@3.4.13</p>'
+            '<p><span class="underline"><b>CVE-2026-116804</b>&nbsp;(RETIREJS)</span>'
+            '<button data-pkgurl="pkg:javascript/DOMPurify@3.4.13">suppress</button></p>'
+            '<p><pre>desc</pre> Unscored: <ul><li>Severity: critical</li></ul> <br/>References:'
+        )
+        self.detect.fetch = lambda path: html
+        found = self.detect.detect_owasp(972)
+        self.assertEqual([(f["finding_id"], f["ecosystem"], f["package_name"], f["installed_version"], f["cvss"])
+                          for f in found],
+                         [("CVE-2026-116804", "javascript", "DOMPurify", "3.4.13", 10.0)])
+        schema = load_script("fixcve-validate-json.py")
+        doc = {"jenkins_build": 972, "stage": "owasp", "findings": found}
+        schema.validate_detect(doc)
+
 
 if __name__ == "__main__":
     unittest.main()

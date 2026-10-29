@@ -265,6 +265,8 @@ def reverify_pending(ctx, owasp_text, trivy_text):
     for block in parse_owasp(owasp_text or ""):
         if not block["pending"] or not block["ecosystem"]:
             continue
+        if block["ecosystem"] == "javascript":
+            continue  # lib JS embarquée dans un jar : aucun registre à interroger, décision humaine
         if block["ecosystem"] == "npm":
             installed = sorted({v for (v, _) in lock.get(block["package"], []) if version_key(v)}, key=version_key)
             targets = [(block["package"], installed[0])] if installed else []

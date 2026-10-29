@@ -40,6 +40,14 @@ class OwaspTest(unittest.TestCase):
         self.assertIn("Commentaire historique conservé tel quel.", text)
         self.assertIn("&amp; &lt;chevrons&gt;", text)
 
+    def test_javascript_embarque_suppression_et_lecture(self):
+        text, added = s.add_owasp(BASE, "javascript", "DOMPurify", ["CVE-2026-116803"], "[PENDING_UPSTREAM_FIX] x")
+        self.assertTrue(added)
+        ET.fromstring(text.encode())
+        self.assertIn("^pkg:javascript/DOMPurify@.*$", text)
+        self.assertEqual(s.parse_package_regex("^pkg:javascript/DOMPurify@.*$"), ("javascript", "DOMPurify"))
+        self.assertTrue(s.is_suppressed(text, "javascript", "DOMPurify", ["CVE-2026-116803"]))
+
     def test_forme_manquante_ajoutee_au_bloc_existant(self):
         """Renovate #123 : CVE inscrit, GHSA (Node Audit) manquant -> ajouté dans le même bloc."""
         text, added = s.add_owasp(BASE, "npm", "proxy-addr", ["CVE-2026-90711", "GHSA-jqcg-44mw-7w3h"], "x")

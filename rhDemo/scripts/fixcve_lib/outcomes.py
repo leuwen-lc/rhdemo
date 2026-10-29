@@ -32,7 +32,7 @@ def legacy_outcome(event):
         return "accepted_permanent"
     if kind == "risk_accepted_pending_upstream_fix":
         return "accepted_temporary"
-    if kind == "validation_failed_rollback":
+    if kind in ("validation_failed_rollback", "rollback_conflict"):
         return "bad_fix"
     if kind in ("detect_phase_failed", "lookup_phase_failed", "claude_invocation_no_result"):
         return "tooling"
@@ -59,7 +59,7 @@ def cycle_results(events):
     builds_month = {}
     for e in events:
         # Un rollback compte contre le cycle qui a poussé le correctif, pas contre le build de validation.
-        if e.get("event") == "validation_failed_rollback" and e.get("original_build"):
+        if e.get("event") in ("validation_failed_rollback", "rollback_conflict") and e.get("original_build"):
             build = e["original_build"]
         else:
             build = e.get("jenkins_build") or e.get("original_build")

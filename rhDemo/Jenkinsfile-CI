@@ -1688,7 +1688,10 @@ YMLEOF
                         # avec le certificat CA monté dans le conteneur Jenkins
                         echo "▶ Signature de l'image..."
                         SSL_CERT_FILE=/etc/ssl/certs/registry.crt \
+                        # --tlog-upload=false : pas d'envoi au journal public Rekor (pas d'Internet,
+                        # et cosign 3.x demande sinon une confirmation interactive qui fait échouer la CI)
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
+                            --tlog-upload=false \
                             "${DIGEST}"
 
                         echo "✅ Image signée avec succès"

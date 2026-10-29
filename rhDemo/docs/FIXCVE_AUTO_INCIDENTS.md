@@ -1,6 +1,6 @@
 ---
 statut: journal
-verifie_le: 2026-10-22
+verifie_le: 2026-10-29
 sources:
   - rhDemo/scripts/tests/
 ---
@@ -36,3 +36,4 @@ Chaque garde-fou de [FIXCVE_AUTO.md](FIXCVE_AUTO.md) vient d'un incident réel. 
 | Renovate #123 / CI #912 | Même faille nommée CVE (OSS Index) ou GHSA (Node Audit) ; cache Node Audit | Double inscription générée ; cache Node Audit coupé | `test_suppressions.test_forme_manquante_ajoutee_au_bloc_existant` |
 | Bac à sable 2026-10-09 | npm audit hors ligne : rapport vide pris pour « sans correctif » | « Sans correctif » exige un avis OSV lu | `test_resolve_npm.test_audit_vide_et_avis_injoignable_jamais_sans_correctif` |
 | Bac à sable 2026-10-09 | Journal dans le commit du correctif : un rollback l'aurait annulé | Deux commits | `poll-sandbox.sh` (`PHASE_B=FAILURE`) |
+| #967 (2026-10-29) | Rescan Dependency-Check local bloqué 52 min : cache NVD de l'hôte en retard de 20 jours, rattrapage page par page ; en cas d'échec ou de timeout, le rapport antérieur (9 octobre) aurait été relu comme frais | Base NVD amorcée depuis le volume Jenkins avant le scan ; rapport supprimé avant le scan | `test_apply_verify.OdcRunTest` |

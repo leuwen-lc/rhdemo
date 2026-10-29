@@ -1,10 +1,11 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-29
 sources:
   - rhDemo/pom.xml
   - rhDemo/Jenkinsfile-CI
   - rhDemo/owasp-suppressions.xml
+  - rhDemo/scripts/fixcve_lib/verify.py
 ---
 
 # OWASP Dependency-Check - Analyse des vulnérabilités
@@ -57,6 +58,8 @@ Le build frontend lui-même utilise `npm ci` (et non `npm install`) via `fronten
 ### Exécution dans les pipelines
 
 Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-Renovate` l'exécute aussi (`./mvnw org.owasp:dependency-check-maven:check`) pour toute PR Renovate qui touche un manifeste de dépendances (`pom.xml`, `frontend/package.json`, `frontend/package-lock.json`) — voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate). Les PR qui ne touchent aucun de ces fichiers (Jenkinsfile, Helm values, etc.) suivent un chemin de validation direct, hors périmètre OWASP.
+
+`fixcve-auto` relance aussi `dependency-check:check` en local (`-DfailBuildOnCVSS=11`, OSS Index désactivé) pour vérifier un correctif avant push, avec le cache de l'hôte (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
 
 **Différence CI / Renovate depuis l'incident #104/#871 (voir section OSS Index ci-dessous)** : `Jenkinsfile-Renovate` exécute le scan avec `-DossIndexAnalyzerEnabled=false` — seul `Jenkinsfile-CI` interroge OSS Index. Les deux pipelines restent donc couverts par NVD/CPE + Node Audit + RetireJS, mais seul CI peut détecter une CVE qui ne serait visible que via OSS Index. Le rapport du scan Renovate est archivé (`dependency-check-report-pr<N>.html/json`) par PR pour permettre un diagnostic après coup sans dépendre du log de build (tronqué par le `-q` de l'invocation Maven).
 
@@ -352,12 +355,22 @@ environment {
 | Première exécution (téléchargement NVD) | 5-10 minutes |
 | Exécutions suivantes (cache local) | 30-60 secondes |
 | Avec clé API NVD | 20-40 secondes |
+| Rattrapage après plusieurs semaines sans mise à jour (clé NVD, `nvdApiDelay` à 8000 ms) | plus de 50 minutes (mesuré le 2026-10-29 sur le cache de l'hôte, non terminé) |
+| Cache copié depuis Jenkins puis scan (fixcve) | ~20 secondes (mesuré le 2026-10-29) |
 
 ### Cache local
 
-Le cache NVD est stocké dans :
-- **Local** : `target/dependency-check-data/`
-- **Jenkins** : `/var/jenkins_home/.m2/repository/`
+Le `dataDirectory` du [pom.xml](../pom.xml) est `${user.home}/.m2/dependency-check-data` ; la base H2 `odc.mv.db` (≈ 260 Mo après compactage) et le cache OSS Index (`oss_cache/`) y vivent. Trois utilisateurs, trois caches :
+
+| Utilisateur | Emplacement | Mis à jour par |
+|-------------|-------------|----------------|
+| `RHDemo-CI` et `RHDemo-Renovate` (agents éphémères) | volume Docker `rhdemo-maven-repository`, monté sur `/home/jenkins/.m2` (`dependency-check-data/` à sa racine) | chaque scan, avec la clé NVD de la CI |
+| Poste du développeur (`./mvnw dependency-check:check`) | `~/.m2/dependency-check-data` | les scans locaux |
+| Vérification de [`fixcve-auto`](FIXCVE_AUTO.md) | `~/.m2/dependency-check-data` (même cache que le poste) | amorcé depuis le volume Jenkins avant chaque scan (voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md#cache-nvd-de-lhôte)) |
+
+Le répertoire `repository/org/owasp/dependency-check-data/` du volume Jenkins est l'ancien emplacement par défaut du plugin : il n'est plus lu.
+
+Un cache resté plusieurs semaines sans scan rattrape l'API NVD page par page, ce qui est long (voir le tableau ci-dessus) : copier la base d'un cache à jour plutôt que laisser le scan rattraper.
 
 ### Optimisations
 

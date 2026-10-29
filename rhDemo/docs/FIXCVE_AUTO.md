@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-10-29
 sources:
   - rhDemo/scripts/fixcve-auto-poll.sh
   - rhDemo/scripts/fixcve-classify.py
@@ -92,7 +92,7 @@ Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>`
 | **Clone git isolé** | `~/fixcve-worktrees/rhdemo` (`chmod 700`), jamais la copie de travail principale ; suit la branche active de celle-ci. |
 | **Working tree propre / branche à jour** | Arbre sale (hors journal) : aucune action ; alerte après 8 cycles (2 h). Retard sur origin : fast-forward. Divergence (push du bot rejeté car origin a avancé pendant le cycle, ex. merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`scripts/fixcve-git-sync.sh`) ; sinon ou en cas de conflit, aucune action. |
 | **Validation de schéma** | `fixcve-validate-json.py` entre chaque étape (`detect`, `lookup`, `plan`) : clés exactes, regex/enum, référence croisée, une action et une seule par finding, critère B interdit au-dessus de 9.0, version Trivy imposée pour une image. |
-| **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index désactivé pour préserver le quota) — aucun finding traité ne doit subsister, aucun nouveau sur un paquet monté. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
+| **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index désactivé pour préserver le quota) — aucun finding traité ne doit subsister, aucun nouveau sur un paquet monté. Avant le scan, la base NVD de l'hôte est amorcée depuis celle de Jenkins (voir [Cache NVD de l'hôte](#cache-nvd-de-lhôte)) et tout rapport antérieur est supprimé : un scan interrompu ne relit jamais un vieux rapport. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
 | **Deux commits** | Le correctif, puis le journal : un rollback (`git revert` du seul correctif) ne touche jamais au journal append-only. |
 | **Validation par SHA** | La phase B ne juge que le build dont le commit contient le correctif (`git merge-base --is-ancestor`), jamais un build intercalé (#749/#750). |
 | **Validation par non-régression** | Build rouge après correctif : conservé si les findings traités ont disparu sans nouveau finding (`validation_partial`), ou si le stage d'origine est propre et l'échec porte sur le scan suivant (`validation_stage_cleared`, #890) ; sinon rollback. Cause réelle du rollback journalisée (`failure_stage`, `failure_detail`, #819). |
@@ -182,7 +182,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
   3. Générer un token à scope écriture restreint à `rhdemo`.
   4. Si la branche est protégée, l'ajouter à la liste autorisée en push.
 - **Clé AGE personnelle** (`~/.config/sops/age/keys.txt`), voir [SOPS_SETUP.md](SOPS_SETUP.md).
-- **Clé API NVD** (optionnelle, recommandée) : rescan Dependency-Check local complet.
+- **Clé API NVD** (optionnelle, recommandée) : rescan Dependency-Check local complet. Sans clé, aucun scan local n'est lancé. La clé est la même que celle de la CI (credential Jenkins `nvd-api-key`) : le NVD limite le débit par clé, il n'y a pas de quota mensuel, et l'amorçage du cache évite que fixcve consomme des requêtes pour rattraper la base.
 
 ### 2. Script d'installation
 
@@ -215,7 +215,17 @@ Toute édition de `state.json` se fait sous le verrou : `flock ~/.config/rhdemo-
 - **Reprise après halte** : `jq '.status="idle" | .consecutive_rollbacks=0 | .consecutive_prepush_failures=0'`.
 - **Revérifier tout de suite un blocage** : `jq '.blocked_confirmed=null'` (inutile après un changement de code : le SHA source change).
 - **Rejouer un build** : `jq '.last_processed_build=<build - 1>'`.
+- **Cache NVD de l'hôte** : voir la section ci-dessous.
 - **Journaux** : `poll.log` (chaque passage cron, y compris hors périmètre et blocages transitoires) ; `rhDemo/docs/fixcve-audit.jsonl` (événements à valeur sécurité, versionné) et sa vue `fixcve-audit.md` ; archives de cycle dans `~/.config/rhdemo-fixcve/cycle/archive/`.
+
+### Cache NVD de l'hôte
+
+La vérification locale utilise `~/.m2/dependency-check-data/` (`dataDirectory` du `pom.xml`), distinct du cache de Jenkins (volume `rhdemo-maven-repository`, tenu à jour par chaque `RHDemo-CI`). Sans amorçage, un cache de l'hôte resté plusieurs semaines sans scan doit rattraper l'API NVD page par page, avec `nvdApiDelay` à 8 s : plus d'une heure (cycle du build #967 le 2026-10-29, interrompu après 52 min).
+
+- **Amorçage automatique** (`seed_odc_cache()` dans [`verify.py`](../scripts/fixcve_lib/verify.py)) : la base `odc.mv.db` du volume Jenkins est copiée vers l'hôte si elle est plus récente, via un conteneur jetable de l'image agent (aucune requête NVD). Il est ignoré, sans erreur, si un verrou `odc.update.lock` existe côté hôte ou côté Jenkins, si la base Jenkins a été modifiée il y a moins de 2 minutes ou pendant la copie, ou si Docker n'est pas utilisable. La ligne `info: odc amorcage_…` de la sortie de l'étape indique la raison. Un cycle sans amorçage garde le comportement lent d'origine.
+- **Après amorçage** : le scan ne télécharge que le delta depuis le dernier build CI ; le build #970 a été vérifié en 19 s.
+- **Interrompre un cycle bloqué** : arrêter les processus du cycle (Maven d'abord), puis restaurer le worktree (`git restore` des fichiers modifiés par l'étape d'application). Le verrou `poll.lock` est alors libre et le passage cron suivant démarre aussitôt un nouveau cycle sur le dernier build en échec.
+- **Réamorcer à la main** : supprimer `odc.update.lock` et remplacer `odc.mv.db` par la copie du volume Jenkins, quand aucun scan CI n'est en cours.
 
 ---
 

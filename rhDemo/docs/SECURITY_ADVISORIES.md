@@ -4,14 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## webpack-dev-server (build #970)
-
-- **Date** : 2026-10-29 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
-- **Remédiation automatique — risque accepté (permanent)** :
-  - `webpack-dev-server` 4.15.2 (CVE-2026-112085, GHSA-cfqc-fj3v-j925, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
-
----
-
 ## body-parser (build #956)
 
 - **Date** : 2026-10-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

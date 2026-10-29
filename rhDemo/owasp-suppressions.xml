@@ -174,11 +174,4 @@
         <cve>CVE-2026-112366</cve>
     </suppress>
 
-    <suppress>
-        <notes>CVE-2026-112085 / GHSA-cfqc-fj3v-j925 : webpack-dev-server 4.15.2 (CVSS 8.2). Critère A (A:npm_dev_only) : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production. Aucun correctif publié dans la branche installée. Remédiation automatique build #970.</notes>
-        <packageUrl regex="true">^pkg:npm/webpack-dev-server@.*$</packageUrl>
-        <cve>CVE-2026-112085</cve>
-        <vulnerabilityName>GHSA-cfqc-fj3v-j925</vulnerabilityName>
-    </suppress>
-
 </suppressions>

@@ -1687,10 +1687,14 @@ YMLEOF
                         # Cosign fait des appels HTTPS directs, utiliser kind-registry:5000
                         # avec le certificat CA monté dans le conteneur Jenkins
                         echo "▶ Signature de l'image..."
-                        SSL_CERT_FILE=/etc/ssl/certs/registry.crt \
-                        # --tlog-upload=false : pas d'envoi au journal public Rekor (pas d'Internet,
-                        # et cosign 3.x demande sinon une confirmation interactive qui fait échouer la CI)
+                        # --use-signing-config=false + --tlog-upload=false : pas d'envoi au journal public
+                        # Rekor (pas d'Internet). cosign 3.x utilise une signing-config par défaut, incompatible
+                        # avec --tlog-upload=false sans --use-signing-config=false.
+                        # SSL_CERT_FILE est exporté : un commentaire après un "\" en fin de ligne l'avait
+                        # transformé en simple variable shell, non transmise à cosign.
+                        export SSL_CERT_FILE=/etc/ssl/certs/registry.crt
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
+                            --use-signing-config=false \
                             --tlog-upload=false \
                             "${DIGEST}"
 

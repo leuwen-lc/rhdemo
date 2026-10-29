@@ -249,7 +249,7 @@ if [ -f Dockerfile.agent ]; then
     echo ""
     echo "📦 Outils de build installés dans l'agent:"
     docker run --rm rhdemo-jenkins-agent:latest sh -c "
-        echo \"  Java: \$(/opt/java/temurin-25/bin/java --version 2>&1 | head -1)\" &&
+        echo \"  Java: \$(/opt/java/openjdk/bin/java --version 2>&1 | head -1)\" &&
         echo \"  Maven: \$(mvn --version 2>&1 | head -1)\" &&
         (kubectl version --client --short 2>/dev/null || echo '  kubectl: non installé') &&
         (helm version --short 2>/dev/null || echo '  helm: non installé')

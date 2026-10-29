@@ -101,17 +101,6 @@
     },
     {
       "customType": "regex",
-      "description": "JDK Temurin 25 téléchargé depuis l'API Adoptium (rhDemo/infra/jenkins-docker/Dockerfile.agent) pour compiler le projet — distinct de l'image de base jdk21 du conteneur agent, qui elle est déjà couverte par le manager dockerfile natif. Tags GitHub adoptium/temurin25-binaries au format 'jdk-X.Y.Z+B'",
-      "managerFilePatterns": [
-        "rhDemo/infra/jenkins-docker/Dockerfile.agent"
-      ],
-      "matchStrings": [
-        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>\\S+)\\s*\\n\\s*ENV\\s+TEMURIN_25_VERSION=(?<currentValue>\\S+)"
-      ],
-      "extractVersionTemplate": "^jdk-(?<version>.*)$"
-    },
-    {
-      "customType": "regex",
       "description": "Image renovate/renovate (rhDemo/Jenkinsfile-Renovate) — le manager natif jenkins est désactivé globalement (packageRules ci-dessus) pour éviter les conflits avec les images épinglées par digest ; cette image en tag simple passait donc entre les mailles",
       "managerFilePatterns": [
         "rhDemo/Jenkinsfile-Renovate"

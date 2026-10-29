@@ -1,4 +1,4 @@
-FROM jenkins/inbound-agent:latest-jdk21@sha256:279d96503a15870975890957d1db460ca1e533d6f33a370815fd4577aeb994d0
+FROM jenkins/inbound-agent:latest-jdk25@sha256:5fda218c1c9f8fb553391dfe81151dc00620250d04efa0cf8793d46546fc07b0
 
 # Passer en root pour installer les dépendances
 USER root
@@ -139,22 +139,11 @@ RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSI
     cosign version
 
 # ═══════════════════════════════════════════════════════════════════
-# INSTALLATION JDK 25 (Eclipse Temurin - pour builds Maven)
+# JDK 25 (Eclipse Temurin - runtime de l'agent ET builds Maven)
 # ═══════════════════════════════════════════════════════════════════
-# L'image de base fournit JDK 21 pour le runtime de l'agent.
-# JDK 25 est nécessaire pour compiler le projet (migration Java 25).
-
-# renovate: datasource=github-releases depName=adoptium/temurin25-binaries
-ENV TEMURIN_25_VERSION=25.0.4+7
-
-RUN wget -q "https://api.adoptium.net/v3/binary/version/jdk-${TEMURIN_25_VERSION}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -O /tmp/temurin-25.tar.gz && \
-    mkdir -p /opt/java/temurin-25 && \
-    tar -xzf /tmp/temurin-25.tar.gz -C /opt/java/temurin-25 --strip-components=1 && \
-    rm /tmp/temurin-25.tar.gz && \
-    /opt/java/temurin-25/bin/java --version
-
-# JAVA_HOME pointe vers JDK 25 pour les builds Maven
-ENV JAVA_HOME=/opt/java/temurin-25
+# L'image de base jenkins/inbound-agent:*-jdk25 fournit Temurin 25 (JDK complet)
+# dans /opt/java/openjdk : pas d'installation supplémentaire.
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
 
 # ═══════════════════════════════════════════════════════════════════

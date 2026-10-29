@@ -106,11 +106,11 @@ sudo sysctl --system
 
 Si le conteneur du nœud KinD change d'IP sur le réseau docker `kind` après un redémarrage, Cilium conserve des `CiliumEndpoint` périmés : le DNS du cluster ne répond plus et les pods restent bloqués en `Init` (`nc: bad address`).
 
-[scripts/check-cluster-ip.sh](scripts/check-cluster-ip.sh) détecte cette situation (pods avec un `hostIP` périmé, DNS en échec) et redémarre Cilium puis CoreDNS. Sans effet si le cluster est sain.
+[scripts/repair-cluster-after-restart.sh](scripts/repair-cluster-after-restart.sh) détecte cette situation (pods avec un `hostIP` périmé, DNS en échec) et redémarre Cilium puis CoreDNS. Il traite aussi les autres suites d'un redémarrage : démarrage des conteneurs `rhdemo-control-plane`/`kind-registry` arrêtés, raccordement de `kind-registry` au réseau docker `kind` (sinon `ImagePullBackOff`, le nœud ne résolvant plus `kind-registry`) et recréation des pods en échec de pull. Sans effet si le cluster est sain.
 
 ```bash
-./scripts/check-cluster-ip.sh          # corrige si nécessaire
-./scripts/check-cluster-ip.sh --check  # diagnostic seul (code retour 1 si anomalie)
+./scripts/repair-cluster-after-restart.sh          # corrige si nécessaire
+./scripts/repair-cluster-after-restart.sh --check  # diagnostic seul (code retour 1 si anomalie)
 ```
 
 À lancer après chaque redémarrage de la machine, ou avant un déploiement si le DNS est suspect.
@@ -330,7 +330,7 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `helm/rhdemo/templates/` | Templates Kubernetes |
 | `helm/observability/*-values.yaml` | Values Helm pour kube-prometheus-stack, Loki, Alloy, Grafana |
 | `scripts/init-stagingkub.sh` | Script d'initialisation (reconstruction complète) |
-| `scripts/check-cluster-ip.sh` | Contrôle après redémarrage de la machine (IP du nœud changée → DNS cassé) |
+| `scripts/repair-cluster-after-restart.sh` | Réparation après redémarrage : IP du nœud changée (DNS cassé), registre hors du réseau `kind`, pods en ImagePullBackOff |
 | `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
 | `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
 | `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) |
@@ -631,8 +631,8 @@ kubectl patch svc shared-gateway-nginx -n nginx-gateway --type='json' \
 Symptôme : `nc: bad address 'postgresql-rhdemo'` dans les logs des initContainers `wait-for-db`/`wait-for-keycloak`, `helm upgrade --wait` qui expire, pod Keycloak en `Unknown`. Cause : le nœud KinD a changé d'IP sur le réseau docker `kind`, Cilium garde des `CiliumEndpoint` périmés (`could not take ownership of existing ciliumendpoint` dans les logs de l'agent).
 
 ```bash
-./scripts/check-cluster-ip.sh --check   # diagnostic
-./scripts/check-cluster-ip.sh           # corrige : redémarre Cilium puis CoreDNS
+./scripts/repair-cluster-after-restart.sh --check   # diagnostic
+./scripts/repair-cluster-after-restart.sh           # corrige : redémarre Cilium puis CoreDNS
 ```
 
 ### /etc/hosts non configuré

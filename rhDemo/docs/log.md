@@ -91,3 +91,7 @@ Mesure : Temurin 25.0.5+8 (agent Jenkins reconstruit sur `inbound-agent:latest-j
 ## [2026-10-29] ingest | cache NVD de l'hôte dans FIXCVE_AUTO et OWASP_DEPENDENCY_CHECK
 
 Le rescan Dependency-Check de fixcve-auto est resté bloqué 52 min (build #967) sur un cache NVD de l'hôte vieux de 20 jours. Ajout de la section « Cache NVD de l'hôte » à `FIXCVE_AUTO.md` (amorçage depuis le volume Jenkins, suppression du rapport périmé, interruption d'un cycle, réamorçage manuel) et d'une ligne à `FIXCVE_AUTO_INCIDENTS.md`. `OWASP_DEPENDENCY_CHECK.md` : section « Cache local » corrigée (emplacement réel `~/.m2/dependency-check-data` et volume `rhdemo-maven-repository`, les chemins `target/` et `/var/jenkins_home` étaient faux), durées de rattrapage mesurées, usage par fixcve. Les descriptions valent une fois la modification de `verify.py` approuvée (`fixcve-install.sh --trust`). `index.md` inchangé.
+
+## [2026-10-29] restructure | DECISIONS.md et allègement de CLAUDE.md
+
+Création de `DECISIONS.md` : les sections « Pourquoi… ? » de `CLAUDE.md` y sont déplacées, avec ajout de la décision sur le merge Renovate piloté par Jenkins. `CLAUDE.md` réécrit de 526 lignes à environ 110 : suppression des sections redondantes avec les docs (sécurité détaillée, pipelines, dépendances, composants Vue, liste de liens), ajout d'un tableau « si tu touches à X, lis Y », des commandes essentielles et d'une règle « une information volatile = un seul fichier source ». Corrige au passage la mention erronée « Dockerfile OpenJDK 21 ». `index.md` : ligne ajoutée.

@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-23
+verifie_le: 2026-10-29
 sources:
   - rhDemo/docs/
 ---
@@ -28,6 +28,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | --- | --- | --- |
 | [README.md](../../README.md) | actif | Présentation du projet, feuille de route et changelog |
 | [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) | actif | Comparaison des environnements dev, ephemere, stagingkub et Jenkins |
+| [DECISIONS.md](DECISIONS.md) | actif | Raisons des choix techniques structurants (BFF, Keycloak, SOPS, KinD, RBAC, NetworkPolicies) |
 | [infra/dev/README.md](../infra/dev/README.md) | actif | Développement local avec PostgreSQL et Keycloak via Docker Compose |
 | [infra/ephemere/README.md](../infra/ephemere/README.md) | actif | Environnement CI jetable en Docker Compose (Selenium, ZAP) |
 | [infra/stagingkub/README.md](../infra/stagingkub/README.md) | actif | Environnement Kubernetes KinD : installation, déploiement, dépannage |

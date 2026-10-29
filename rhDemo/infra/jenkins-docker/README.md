@@ -459,8 +459,10 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 6. Redémarrez Jenkins : `docker compose restart jenkins`
 
 **Services SonarQube :**
-- `sonarqube` : Serveur SonarQube Community Edition 10
+- `sonarqube` : Serveur SonarQube Community Edition (version : `docker-compose.yml`)
 - `sonarqube-db` : Base de données PostgreSQL 16 dédiée
+
+**Webhook vers Jenkins :** l'étape `waitForQualityGate` attend un appel de SonarQube vers `http://jenkins:8080/sonarqube-webhook/`. Depuis SonarQube 26.10, les webhooks vers une adresse privée sont refusés (`Invalid URL: … site-local …` dans `ce.log`) et la Quality Gate part en timeout alors que l'analyse a réussi. Le service définit donc `SONAR_VALIDATEWEBHOOKS=false` ; le webhook ne vise que le réseau Docker interne.
 
 **Volumes persistants :**
 - `rhdemo-sonarqube-data` : Données SonarQube

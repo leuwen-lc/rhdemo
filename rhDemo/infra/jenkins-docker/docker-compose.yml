@@ -124,7 +124,10 @@ services:
       - SONAR_JDBC_USERNAME=sonar
       - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
       - SONAR_WEB_PORT=9000
-    
+      # Autorise le webhook vers jenkins:8080 (IP privée du réseau Docker), bloqué par défaut
+      # depuis SonarQube 26.10 : sans cela waitForQualityGate n'est jamais notifié (timeout)
+      - SONAR_VALIDATEWEBHOOKS=false
+
       # Limiter Elasticsearch (Search)
       - SONAR_SEARCH_JAVAOPTS=-Xms512m -Xmx512m
       # Limiter le Web
@@ -140,7 +143,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/system/status || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

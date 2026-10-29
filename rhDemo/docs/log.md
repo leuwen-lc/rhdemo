@@ -103,3 +103,7 @@ Le rollback du build #972 venait d'un trou du détecteur : les findings RetireJS
 ## [2026-10-29] ingest | rollback fixcve-auto : suppressions préservées et revert en conflit abandonné
 
 Le build #975 a fait annuler à tort l'acceptation de risque du #974 (CVE DOMPurify nouvelle, sans lien), puis le `git revert` est entré en conflit avec un commit voisin et a laissé le clone isolé en revert inachevé : fixcve-auto est resté bloqué 9 cycles. Deux garde-fous : un correctif réduit à des suppressions/documentation n'est plus annulé pour une CVE nouvelle (verdict `next_stage`, le build est rejoué comme une nouvelle panne), et un revert en conflit est abandonné (`rollback_conflict`, correctif conservé, attente humaine). `FIXCVE_AUTO.md` et `FIXCVE_AUTO_INCIDENTS.md` mis à jour, `index.md` inchangé. À approuver avec `fixcve-install.sh --trust` (modification de `fixcve-auto-poll.sh`).
+
+## [2026-10-29] ingest | webhook SonarQube bloqué et healthcheck sans wget
+
+Timeout de l'étape Quality Gate (builds #978+) : SonarQube 26.10 refuse les webhooks vers une adresse privée (`jenkins:8080`), `waitForQualityGate` n'est jamais notifié. Ajout de `SONAR_VALIDATEWEBHOOKS=false` au service `sonarqube`. Healthcheck réécrit avec `curl` (l'image n'a plus `wget`, conteneur `unhealthy` en continu). `infra/jenkins-docker/README.md` : section SonarQube complétée. `index.md` inchangé.

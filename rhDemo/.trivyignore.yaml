@@ -90,3 +90,23 @@ vulnerabilities:
   - id: CVE-2026-91403
     pkg-name: java-21-openjdk-headless
     statement: "[PENDING_UPSTREAM_FIX] CVE-2026-91403 : java-21-openjdk-headless 1:21.0.12.1.1-1.2.el9 (CVSS 6.8). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS < 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #948."
+
+  # CVE-2026-111497 - Brotli (brotli-libs), image nginx de l'environnement éphémère
+  # Affecte : brotli-libs 1.2.0-r1 dans nginx:1.31.3-alpine (Alpine 3.24.1), CVSS 9.8 (NVD), CISA KEV
+  #   depuis le 2026-10-27. Correctif Alpine : brotli-libs 1.2.1-r0.
+  # Faille : écriture hors limites dans le décodeur Brotli (c/dec/decode.c), déclenchée par un flux
+  #   Brotli forgé que le logiciel décode. Exploitée sur Node.js, Bun, .NET, Envoy, Istio...
+  # Risque réel : très faible ici, mais le CVE est exploité ailleurs — acceptation à REVOIR le 2026-11-05.
+  #   Vérifié le 2026-10-29 sur nginx:1.31.3-alpine : le binaire nginx n'est pas lié à brotli (ldd) ;
+  #   brotli-libs n'est tiré que par freetype et libcurl ; infra/ephemere/nginx/ ne charge aucun module
+  #   (aucun load_module, ni image_filter / acme / js / xslt / geoip) ni directive brotli ; le
+  #   healthcheck utilise wget. Seul usage de l'image : proxy HTTPS du pipeline CI (compose éphémère).
+  #   Autres images du build #979 : Keycloak, NGF, PostgreSQL sans brotli ; rhdemo-api libbrotli1
+  #   1.1.0-2build2 en HIGH (non bloquant, base eclipse-temurin noble). Node du build : v24.22.1 (corrigé).
+  #   Non vérifié : images Jenkins, SonarQube, registre, ZAP, Selenium (hors scan Trivy).
+  #   Aucun tag nginx:1.31.x-alpine (1.31.3 à 1.31.8) ne corrige : tous restent en 1.2.0-r1.
+  # À retirer quand : une image nginx:alpine contient brotli-libs >= 1.2.1-r0, puis monter NGINX_IMAGE.
+  #   À réexaminer aussitôt si un module nginx ou une directive brotli est ajouté à l'environnement éphémère.
+  - id: CVE-2026-111497
+    pkg-name: brotli-libs
+    statement: "[PENDING_UPSTREAM_FIX] [OSV:ALPINE:v3.24] brotli-libs 1.2.0-r1 dans nginx:1.31.3-alpine - aucune image nginx:alpine ne corrige encore (1.31.3 a 1.31.8 en 1.2.0-r1). CVE exploite (CISA KEV 2026-10-27) mais nginx n'est pas lie a brotli, aucun module ni directive brotli dans infra/ephemere/nginx, brotli-libs tire uniquement par freetype/libcurl. A revoir le 2026-11-05"

@@ -4,6 +4,36 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Brotli (builds #978 et #979) — CVE-2026-111497, CVSS 9.8, exploité (CISA KEV)
+
+### Détection
+
+- **Date** : 2026-10-29 — **Outil** : Trivy (scan de l'image `nginx:1.31.3-alpine`, `NGINX_IMAGE` de `Jenkinsfile-CI`) — bloqué par `fixcve-auto` au build #978 (`findings_blocked`, CVSS ≥ 9,0 sans correctif)
+- **Composant** : `brotli-libs` 1.2.0-r1 (Alpine 3.24.1), corrigé en `1.2.1-r0` par Alpine
+- **Faille** : écriture hors limites dans le décodeur Brotli, déclenchée par un flux Brotli forgé que le logiciel décode. Score NVD `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H` = 9,8 (Red Hat 8,1 ; CVSS v4 Google/Bitnami 9,2)
+- **Exploitation connue** : ajouté au catalogue CISA KEV le 2026-10-27 (échéance fédérale 2026-11-10). Contextes cités : Node.js, Bun, .NET, Envoy, Istio, clients HTTP Python. L'attaque passe par un corps de requête `Content-Encoding: br` décodé par le serveur ou par une réponse décompressée par `fetch()`. Détail de l'exploitation non publié par CISA ; ni nginx, ni curl, ni freetype ne sont cités dans les avis consultés
+
+### Pourquoi aucun correctif automatique n'est possible
+
+`nginx:1.31.3-alpine` et les tags `1.31.4` à `1.31.8-alpine` embarquent tous `brotli-libs-1.2.0-r1` (vérifié le 2026-10-29 par `apk list -I` dans chaque image). Aucun tag d'image ne corrige encore la faille. L'image n'a pas de critère A : vecteur réseau, composant présent dans l'image.
+
+### Ce qui a été vérifié avant d'accepter (2026-10-29)
+
+- **Binaire nginx non lié à brotli** (`ldd /usr/sbin/nginx`). `brotli-libs` n'est tiré que par `freetype` et `libcurl` (`apk info -r`).
+- **Configuration de l'environnement éphémère** (`infra/ephemere/nginx/`) : aucun `load_module`, donc aucun des modules livrés avec l'image (`image_filter`, `acme`, `js`, `xslt`, `geoip`) n'est actif ; aucune directive brotli ni `js_*` ; healthcheck par `wget` ; seuls `nginx -t`, `nginx -s reload` et `netstat` sont lancés par `docker exec`.
+- **Périmètre d'usage** : l'image sert uniquement de proxy HTTPS du pipeline CI (Docker Compose éphémère). stagingkub utilise NGINX Gateway Fabric, image distincte, sans brotli dans le scan du build #979.
+- **Autres images du build #979** : Keycloak 26.7.2, NGINX Gateway Fabric 2.6.7 et PostgreSQL 18.4-alpine sans brotli ; `rhdemo-api` embarque `libbrotli1` 1.1.0-2build2 (Ubuntu 24.04), sévérité HIGH chez Ubuntu donc non bloquante, correctif `1.1.0-2ubuntu0.1` pris par une reconstruction de la base `eclipse-temurin` ; Spring Boot/Tomcat ne décode pas de Brotli.
+- **Node.js** : `pom.xml` épingle `v24.22.1`, version corrigée. La copie locale `rhDemo/frontend/node` est en `v24.21.0` (poste de développement, non exposée).
+- **Non vérifié** : images Jenkins, SonarQube, registre local, ZAP, Selenium/Chrome (hors scan Trivy) ; contenu exact du digest épinglé (vérification faite sur le tag `1.31.3-alpine`) ; fichiers de `infra/ephemere/nginx/html/` (page statique `429.html` seulement).
+
+### Remédiation — risque accepté, temporaire (2026-10-29, décision manuelle)
+
+- **Action** : suppression `CVE-2026-111497` (`brotli-libs`) ajoutée dans `rhDemo/.trivyignore.yaml`, avec jetons `[PENDING_UPSTREAM_FIX]` et `[OSV:ALPINE:v3.24]`.
+- **Revue au plus tard le 2026-11-05** (7 jours, le CVE étant exploité ailleurs) : contrôle manuel, aucune expiration automatique (`expired_at` n'est pas géré par le retrait automatique des suppressions).
+- **À retirer quand** : une image `nginx:alpine` contient `brotli-libs` ≥ 1.2.1-r0 (Alpine l'a déjà publié) ; monter alors `NGINX_IMAGE` et retirer l'entrée. À réexaminer aussitôt si un module nginx ou une directive brotli est ajouté à l'environnement éphémère.
+
+---
+
 ## webpack-dev-server (build #974)
 
 - **Date** : 2026-10-29 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

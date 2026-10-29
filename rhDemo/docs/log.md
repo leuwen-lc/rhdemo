@@ -83,3 +83,7 @@ Avertissements de `docs-lint.py` (sources modifiées : `init-stagingkub.sh`, `.t
 ## [2026-10-23] lint | durées des pipelines dans PIPELINES_CI_CD
 
 Les durées « ~2 h max » (CI) et « ~30 min max » (CD) étaient les `timeout` des Jenkinsfile, pas les durées normales : remplacées par ~8 min (CI) et ~2 min (CD) hors contention, avec les timeouts indiqués à part. Même correction dans `CLAUDE.md`. Valeurs fournies par le mainteneur, non mesurées.
+
+## [2026-10-29] lint | SECURITE_CA_EMUDHRA_PLAN : réécriture autour de l'état courant
+
+Mesure : Temurin 25.0.5+8 (agent Jenkins reconstruit sur `inbound-agent:latest-jdk25`, contrôleur sur `jenkins:2.580.2-lts-jdk25`) retire les racines emSign G3, C3 et C1 de `cacerts` et rejette la chaîne eMudhra, alors que `blocked.certs` reste à 39 lignes ; les images Ubuntu et Alpine de `eclipse-temurin` et `maven` (25.0.4.1) ne sont pas encore corrigées. Le document est réécrit en tableau d'état par composant, actions réalisées / restantes, durcissement, process : suppression de l'historique des actions palliatives (contournement par vérification de révocation CRL, mesures intermédiaires par phase, alternative `blocked.certs`). `verifie_le` mis à jour. `index.md` inchangé.

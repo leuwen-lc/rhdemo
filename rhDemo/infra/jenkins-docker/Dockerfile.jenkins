@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:2.580.2-lts-jdk25
+FROM jenkins/jenkins:2.580.2-lts-jdk25@sha256:415ab90d4e3b25148f7191bc04f455a20817d6c4c3b0a98f6c6b0da4877f7081
 
 # ═══════════════════════════════════════════════════════════════════
 # JENKINS CONTROLLER (master) - PILOTAGE UNIQUEMENT

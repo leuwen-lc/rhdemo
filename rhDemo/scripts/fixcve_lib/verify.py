@@ -6,7 +6,9 @@
   3. OWASP Dependency-Check (stage owasp, clé NVD disponible) : rescan du projet ; aucun finding
      traité ne doit subsister, aucun nouveau finding sur un paquet monté par ce cycle.
      OSS Index désactivé (quota partagé avec RHDemo-CI) ; clé NVD lue dans l'environnement par le
-     plugin (`nvdApiKeyEnvironmentVariable`), jamais en ligne de commande.
+     plugin (`nvdApiKeyEnvironmentVariable`), jamais en ligne de commande. Le cache NVD de l'hôte
+     est d'abord amorcé depuis celui de Jenkins (volume de RHDemo-CI) pour éviter un rattrapage
+     complet de l'API NVD, long et limité en débit. Un rapport antérieur au scan n'est jamais relu.
 
 -> {"ok", "failed_upgrades": [clés], "errors": [...], "incomplete": [...]}.
 Une montée en échec n'invalide que sa clé (le poller la fait basculer en « sans correctif » et
@@ -14,12 +16,22 @@ réapplique) ; une erreur de syntaxe ou une suppression sans effet invalide le c
 """
 import json
 import os
+import time
 import xml.etree.ElementTree as ET
 
 from . import npm as npm_mod
 from .common import load_json, run
 
 ODC_REPORT = "target/dependency-check-report.json"
+# Même emplacement que `dataDirectory` du pom.xml (${user.home}/.m2/dependency-check-data).
+ODC_DATA_DIR = os.path.expanduser("~/.m2/dependency-check-data")
+ODC_DB = "odc.mv.db"
+ODC_LOCK = "odc.update.lock"
+# Volume du cache Maven de Jenkins (mounts de jenkins-casc.yaml) : sa base NVD est tenue à jour par
+# RHDemo-CI avec sa propre clé ; l'image de l'agent sert uniquement de conteneur `stat`/`cp`.
+JENKINS_ODC_VOLUME = "rhdemo-maven-repository"
+SEED_IMAGE = "rhdemo-jenkins-agent:latest"
+SEED_QUIET_SECONDS = 120  # base Jenkins non modifiée depuis au moins 2 min : aucun scan CI en écriture
 CVSS_THRESHOLD = 7.0
 
 
@@ -117,10 +129,55 @@ def compare_odc(actions, detected, report):
     return failed, errors
 
 
+def _docker_volume_run(cmd, extra=()):
+    """Conteneur jetable de l'image agent, volume Jenkins monté en lecture seule sur /m."""
+    return run(["docker", "run", "--rm", "-v", f"{JENKINS_ODC_VOLUME}:/m:ro", *extra,
+                "--entrypoint", cmd[0], SEED_IMAGE, *cmd[1:]], timeout=300)
+
+
+def seed_odc_cache():
+    """Amorce la base NVD de l'hôte depuis celle de Jenkins si elle est plus récente.
+
+    Au mieux : tout échec laisse la base de l'hôte telle quelle (le scan rattrape alors via l'API
+    NVD, plus lentement). Aucune requête NVD. -> raison (texte) pour le journal."""
+    host_db = os.path.join(ODC_DATA_DIR, ODC_DB)
+    if os.path.exists(os.path.join(ODC_DATA_DIR, ODC_LOCK)):
+        return "amorcage_ignore : mise a jour NVD deja en cours sur l'hote"
+    code, out, err = _docker_volume_run(
+        ["sh", "-c", f"stat -c %Y /m/dependency-check-data/{ODC_DB}; "
+                     f"test -e /m/dependency-check-data/{ODC_LOCK} && echo LOCK; true"])
+    lines = out.split()
+    if code != 0 or not lines or not lines[0].isdigit():
+        return f"amorcage_ignore : volume Jenkins illisible ({err.strip()[-120:] or 'code ' + str(code)})"
+    if "LOCK" in lines:
+        return "amorcage_ignore : scan en cours dans Jenkins (verrou)"
+    jenkins_mtime = int(lines[0])
+    if time.time() - jenkins_mtime < SEED_QUIET_SECONDS:
+        return "amorcage_ignore : base Jenkins modifiee il y a moins de 2 min"
+    if os.path.exists(host_db) and os.path.getmtime(host_db) >= jenkins_mtime:
+        return "amorcage_inutile : base de l'hote au moins aussi recente"
+    seed = host_db + ".seed"
+    os.makedirs(ODC_DATA_DIR, exist_ok=True)
+    code, _, err = _docker_volume_run(
+        ["cp", f"/m/dependency-check-data/{ODC_DB}", f"/d/{ODC_DB}.seed"],
+        extra=["--user", f"{os.getuid()}:{os.getgid()}", "-v", f"{ODC_DATA_DIR}:/d"])
+    code2, out2, _ = _docker_volume_run(["stat", "-c", "%Y", f"/m/dependency-check-data/{ODC_DB}"])
+    if code != 0 or code2 != 0 or out2.strip() != str(jenkins_mtime):
+        if os.path.exists(seed):
+            os.remove(seed)
+        return f"amorcage_ignore : copie echouee ou base modifiee pendant la copie ({err.strip()[-120:]})"
+    os.replace(seed, host_db)
+    return "amorcage_ok : base NVD de Jenkins copiee"
+
+
 def run_odc():
     """Rescan Dependency-Check local -> rapport JSON, ou None si impossible (raison)."""
     if not os.environ.get("NVD_API_KEY"):
         return None, "cle_nvd_absente"
+    print(f"info: odc {seed_odc_cache()}")
+    # Un rapport resté d'un scan antérieur serait relu comme s'il était frais : on le supprime.
+    if os.path.exists(ODC_REPORT):
+        os.remove(ODC_REPORT)
     code, _, err = run(["./mvnw", "-q", "-B", "org.owasp:dependency-check-maven:check",
                         "-DnvdApiKeyEnvironmentVariable=NVD_API_KEY", "-DossIndexAnalyzerEnabled=false",
                         "-DfailBuildOnCVSS=11"], timeout=3600)

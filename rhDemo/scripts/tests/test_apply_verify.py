@@ -13,6 +13,7 @@ from fixcve_lib import edits, npm as npm_mod
 from fixcve_lib.apply import Applier
 from fixcve_lib.policy import classify
 from fixcve_lib.registry import Registry
+from fixcve_lib import verify as verify_mod
 from fixcve_lib.verify import compare_odc, verify
 
 POM = """<project>
@@ -223,6 +224,96 @@ class VerifyTest(Workdir):
         with unittest.mock.patch.dict(os.environ, {"NVD_API_KEY": ""}):
             res = verify({"actions": [], "changed_files": []}, {"findings": []}, "owasp")
         self.assertEqual((res["ok"], res["incomplete"]), (True, ["dependency_check_local:cle_nvd_absente"]))
+
+
+class OdcRunTest(unittest.TestCase):
+    """run_odc : rapport périmé jamais relu ; amorçage du cache NVD au mieux, sans réseau."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.cwd = os.getcwd()
+        os.chdir(self.tmp.name)
+        self.addCleanup(os.chdir, self.cwd)
+        os.makedirs("target")
+        self.data = os.path.join(self.tmp.name, "odc-data")
+        os.makedirs(self.data)
+        patcher = unittest.mock.patch.object(verify_mod, "ODC_DATA_DIR", self.data)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_rapport_perime_supprime_avant_le_scan(self):
+        with open(verify_mod.ODC_REPORT, "w") as fh:
+            json.dump({"dependencies": []}, fh)
+        with unittest.mock.patch.dict(os.environ, {"NVD_API_KEY": "x"}), \
+                unittest.mock.patch.object(verify_mod, "seed_odc_cache", return_value="test"), \
+                unittest.mock.patch.object(verify_mod, "run", return_value=(124, "", "timeout")):
+            report, why = verify_mod.run_odc()
+        self.assertIsNone(report)
+        self.assertIn("rapport_odc_absent", why)
+
+    def test_amorcage_ignore_si_verrou_hote(self):
+        open(os.path.join(self.data, verify_mod.ODC_LOCK), "w").close()
+        with unittest.mock.patch.object(verify_mod, "run") as fake:
+            self.assertIn("deja en cours", verify_mod.seed_odc_cache())
+        fake.assert_not_called()
+
+    def test_amorcage_ignore_si_volume_illisible(self):
+        with unittest.mock.patch.object(verify_mod, "run", return_value=(125, "", "docker absent")):
+            self.assertIn("volume Jenkins illisible", verify_mod.seed_odc_cache())
+
+    def test_amorcage_ignore_si_verrou_jenkins_ou_base_recente(self):
+        old = str(int(verify_mod.time.time()) - 3600)
+        with unittest.mock.patch.object(verify_mod, "run", return_value=(0, old + "\nLOCK\n", "")):
+            self.assertIn("verrou", verify_mod.seed_odc_cache())
+        recent = str(int(verify_mod.time.time()) - 10)
+        with unittest.mock.patch.object(verify_mod, "run", return_value=(0, recent + "\n", "")):
+            self.assertIn("moins de 2 min", verify_mod.seed_odc_cache())
+
+    def test_amorcage_inutile_si_hote_plus_recent(self):
+        db = os.path.join(self.data, verify_mod.ODC_DB)
+        with open(db, "w"):
+            pass
+        old = str(int(verify_mod.time.time()) - 3600)
+        os.utime(db, (verify_mod.time.time(), verify_mod.time.time()))
+        with unittest.mock.patch.object(verify_mod, "run", return_value=(0, old + "\n", "")):
+            self.assertIn("amorcage_inutile", verify_mod.seed_odc_cache())
+
+    def test_amorcage_copie_et_remplace_la_base(self):
+        db = os.path.join(self.data, verify_mod.ODC_DB)
+        with open(db, "w") as fh:
+            fh.write("ancienne")
+        os.utime(db, (1, 1))
+        mtime = str(int(verify_mod.time.time()) - 3600)
+
+        def fake_run(cmd, **kw):
+            if "cp" in cmd:
+                with open(db + ".seed", "w") as fh:
+                    fh.write("jenkins")
+                return 0, "", ""
+            return 0, mtime + "\n", ""
+        with unittest.mock.patch.object(verify_mod, "run", side_effect=fake_run):
+            self.assertIn("amorcage_ok", verify_mod.seed_odc_cache())
+        with open(db) as fh:
+            self.assertEqual(fh.read(), "jenkins")
+        self.assertFalse(os.path.exists(db + ".seed"))
+
+    def test_amorcage_abandonne_si_base_modifiee_pendant_la_copie(self):
+        db = os.path.join(self.data, verify_mod.ODC_DB)
+        with open(db, "w"):
+            pass
+        os.utime(db, (1, 1))
+        t0 = int(verify_mod.time.time()) - 3600
+        answers = iter([(0, f"{t0}\n", ""), (0, "", ""), (0, f"{t0 + 5}\n", "")])
+
+        def fake_run(cmd, **kw):
+            res = next(answers)
+            if "cp" in cmd:
+                open(db + ".seed", "w").close()
+            return res
+        with unittest.mock.patch.object(verify_mod, "run", side_effect=fake_run):
+            self.assertIn("modifiee pendant la copie", verify_mod.seed_odc_cache())
+        self.assertFalse(os.path.exists(db + ".seed"))
 
 
 if __name__ == "__main__":

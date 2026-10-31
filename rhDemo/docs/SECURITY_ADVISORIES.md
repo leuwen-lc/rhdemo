@@ -4,6 +4,15 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## joi, node-forge (build #989)
+
+- **Date** : 2026-10-31 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `joi` 17.13.8 → 17.13.9 (CVE-2026-118772, GHSA-4528-x5fx-h6hg, CVSS 7.5)
+  - `node-forge` 1.4.0 → 1.4.2 (CVE-2026-118779, CVE-2026-118782, CVE-2026-119187, CVE-2026-119188, CVE-2026-119190, GHSA-5x38-2vff-x55p, GHSA-7wch-p9px-956x, GHSA-8hrf-8g6f-7xwp, GHSA-hqq3-7jhf-c5jx, GHSA-jc66-7q78-782g, CVSS 7.5)
+
+---
+
 ## Brotli (builds #978 et #979) — CVE-2026-111497, CVSS 9.8, exploité (CISA KEV)
 
 ### Détection

@@ -364,8 +364,8 @@ jobs:
             scmpoll_spec('H/5 * * * *')
             ignorePostCommitHooks(false)
           }
-          // Build quotidien à 5h30 (en plus du polling SCM)
-          cron('30 5 * * *')
+          // Build quotidien à 5h00 (en plus du polling SCM)
+          cron('0 5 * * *')
         }
       }
 
@@ -509,7 +509,7 @@ jobs:
           // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate.
           // Décalé de 3h à 6h : Codeberg est régulièrement indisponible vers 3h du matin,
           // ce qui fait échouer le pipeline (checkout/API Forgejo) avant même de commencer.
-          cron('H 6 * * *')
+          cron('0 6 * * *')
         }
       }
 

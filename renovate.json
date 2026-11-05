@@ -26,6 +26,12 @@
       "automerge": false
     },
     {
+      "description": "Images Docker : aucun registre ne fournit de date de publication exploitable (Docker Hub refuse la pagination anonyme au-dela de 1 000 tags, Quay et ghcr n'en donnent pas), donc minimumReleaseAge les bloquerait indefiniment. Le delai est applique par Jenkinsfile-Renovate (quarantaine comptee depuis la premiere observation, meme duree que le minimumReleaseAge global ci-dessus) ; le trailer de commit permet a Jenkins de reconnaitre ces PR. Cf. rhDemo/docs/RENOVATE_AUTOMERGE_CI.md.",
+      "matchDatasources": ["docker"],
+      "minimumReleaseAge": null,
+      "commitBody": "Quarantaine-Image: oui"
+    },
+    {
       "matchPackageNames": ["rhdemo-api"],
       "enabled": false
     },

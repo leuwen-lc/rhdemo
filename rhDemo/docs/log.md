@@ -131,3 +131,7 @@ Diagnostic : aucune PR de tag d'image tierce depuis fin juillet. Renovate ne tro
 ## [2026-11-05] ingest | stagingkub : déploiement Keycloak 26.8.1 bloqué par un split-brain
 
 Montée de Keycloak 26.7.2 → 26.8.1 bloquée (release Helm 98 en `pending-upgrade`). Le Deployment, en `RollingUpdate` (surge 1, indisponibilité 0), fait coexister l'ancien et le nouveau pod sur la même base. La découverte `JDBC_PING` les met en relation, mais `keycloak-netpol` bloque JGroups (7800, 57800) : le nouveau pod se déclare en split-brain, partition perdante, et depuis la 26.8 sa readiness reste DOWN. L'ancien pod n'est donc jamais supprimé. Correctif du chart : `keycloak.strategy: Recreate` (deux versions ne tournent plus sur le même schéma) et `keycloak.cache: local` (instance unique, plus de clustering), sans ouvrir de nouveaux flux réseau. Section de dépannage ajoutée dans `infra/stagingkub/README.md`, `index.md` inchangé.
+
+## [2026-11-05] ingest | stagingkub : passage de Keycloak en Recreate refusé par le server-side apply
+
+Le CD suivant (révision Helm 99) échoue avec `spec.strategy.rollingUpdate: Forbidden`. Helm 4 applique en server-side apply et ne peut pas supprimer `rollingUpdate`, une valeur par défaut sans propriétaire ; `rollingUpdate: null` est refusé de la même façon (dry-run serveur). Correction faite une seule fois sur le cluster : patch JSON de `spec.strategy` en `{type: Recreate}`, puis dry-run du manifeste Helm accepté. Procédure ajoutée dans la section de dépannage de `infra/stagingkub/README.md`, `index.md` inchangé.

@@ -142,7 +142,7 @@ L'aiguillage se fait sur `git diff --name-only origin/${BASE_BRANCH}...HEAD` (ca
 fois par PR, loggé explicitement dans la console Jenkins avant le choix du chemin), avec quatre
 chemins mutuellement exclusifs, évalués dans cet ordre de priorité :
 
-1. **Composant d'infrastructure stagingkub → Kubernetes dry-run**
+1. **Composant d'infrastructure stagingkub → Kubernetes dry-run + Trivy sur les images du chart**
 2. **Image Docker épinglée par digest → Trivy scan ciblé**
 3. **Manifeste de dépendances Maven/npm modifié → Maven + OWASP Dependency-Check** (chemin historique, inchangé)
 4. **Aucun manifeste de dépendances modifié → validation directe, hors périmètre OWASP**
@@ -154,7 +154,7 @@ second job avec son propre listing Forgejo aurait dupliqué le code de listing/s
 Un seul listing Forgejo, un seul job qui merge — la classification se fait à l'intérieur de la
 boucle existante, PR par PR.
 
-### 1. Composant d'infrastructure stagingkub → Kubernetes dry-run
+### 1. Composant d'infrastructure stagingkub → Kubernetes dry-run + Trivy sur les images du chart
 
 **Détection** : le diff touche `rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-*.sh`
 ou `rhDemo/infra/stagingkub/kind-config.yaml`.
@@ -172,6 +172,22 @@ exécution réelle (Kubernetes vérifie l'autorisation avant d'évaluer le drape
 garantie de sécurité vient de l'absence de persistance server-side, pas d'un credential moins
 privilégié. `FORGEJO_TOKEN` reste absent de ce bloc (même raisonnement supply-chain que pour le
 bloc Maven : le script exécuté vient d'une PR non revue).
+
+**Scan Trivy des images du chart** : `RHDemo-CI` ne scanne que l'applicatif (cf.
+[TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)) ; les images des composants
+système sont donc contrôlées ici, à chaque montée de version. Pendant le dry-run, Jenkins passe
+`CHART_IMAGES_FILE` au script : la fonction `record_chart_images` de `rbac-preflight-check.sh`
+y écrit les images rendues par le même `helm template` que le préflight RBAC (mêmes `--version`,
+`-f` et `--set` que l'installation réelle). Si le dry-run est vert, les images sont scannées en parallèle par
+`lib.generateTrivyReport`, avec le même seuil CRITICAL et le même `.trivyignore.yaml` que
+`RHDemo-CI` ; rapports archivés dans `trivy-reports-pr<N>/`. Fail-closed : aucune image listée
+(rendu en échec) ou référence au format inattendu → PR refusée.
+
+Limites : seuls les champs `image:` sont lus, en chaîne ou en objet `{repository, tag, digest}`. Une
+image passée uniquement en argument de conteneur (ex. le config-reloader de prometheus-operator)
+n'est pas vue. Les images non épinglées par digest par leur chart (cas de NGF) sont scannées sur
+leur tag au moment de la validation. `kind-config.yaml` seul (`kindest/node`) n'a pas de script
+composant : il n'est pas concerné.
 
 **Prérequis réseau** : l'agent éphémère `builder` n'est attaché par défaut qu'à
 `rhdemo-jenkins-network` (cf. `jenkins-casc.yaml`), pas au réseau Docker `kind` du cluster KinD —
@@ -205,7 +221,7 @@ pour ce que fait ce job.
 ### 2. Image Docker épinglée par digest → Trivy scan ciblé
 
 **Détection** : le diff ne touche **que** `rhDemo/Jenkinsfile-CI` (variables
-`NGINX_IMAGE`/`POSTGRES_IMAGE`/`KEYCLOAK_IMAGE`/`NGF_IMAGE`) et/ou
+`NGINX_IMAGE`/`POSTGRES_IMAGE`/`KEYCLOAK_IMAGE`) et/ou
 `rhDemo/infra/stagingkub/helm/rhdemo/values.yaml` (`global.images.*` :
 `postgres`/`keycloak`/`busybox`/`postgresExporter`) — les deux familles de fichiers où Renovate
 suit des images en chaîne complète `repo:tag@sha256:digest` via un `customManager` (pas un manager
@@ -223,7 +239,8 @@ le même scan, ciblé sur la seule image modifiée, plutôt que d'attendre le pr
 `git diff origin/${BASE_BRANCH}...HEAD -- rhDemo/Jenkinsfile-CI rhDemo/infra/stagingkub/helm/rhdemo/values.yaml`,
 lignes ajoutées (`+`) matchant le motif `repo:tag@sha256:digest` — pas besoin de savoir quelle
 variable/clé a changé, la valeur ajoutée suffit. Le nom du rapport Trivy est dérivé du dernier
-segment du chemin d'image (`ghcr.io/nginx/nginx-gateway-fabric:2.6.1@...` → `nginx-gateway-fabric`).
+segment du chemin d'image (`quay.io/keycloak/keycloak:26.8.1@...` → `keycloak`), suffixé `-2`, `-3`…
+en cas de doublon. Le scan est partagé avec le chemin 1 (closure `scanImagesWithTrivy`).
 
 **Validation** : réutilisation de `lib.generateTrivyReport(image, name)` /
 `lib.aggregateTrivyResults()` (déjà utilisées par `Jenkinsfile-CI`, voir `rhDemoLib.groovy`) — même

@@ -90,3 +90,7 @@ Flux autorisés : [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md).
 ## Pourquoi le merge Renovate est piloté par Jenkins ?
 
 Jenkins n'est pas exposé sur Internet : Forgejo ne peut pas déclencher de webhook entrant et les statuts CI ne remontent jamais vers Forgejo. Le merge se fait donc via l'API Forgejo depuis le pipeline, pas par l'automerge natif de Renovate. Détail : [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md).
+
+## Pourquoi la CI ne scanne-t-elle que les images de l'application ?
+
+Le scan Trivy de `Jenkinsfile-CI` couvre l'application et ce qui est livré avec elle (images d'ephemere et du chart `rhdemo`), pas les composants système de stagingkub (Cilium, NGF, observabilité). Ces composants ne sont pas livrés par la CI : un CVE dans l'un d'eux bloquerait un commit applicatif sans rapport, et recopier leurs images dans `Jenkinsfile-CI` crée un écart avec ce qui est déployé (cas constaté : NGF scanné en 2.6.7, déployé en 2.6.0). Leurs images sont scannées par `Jenkinsfile-Renovate` à chaque montée de chart, à partir du rendu `helm template`. Un CVE publié après un déploiement n'est pas encore détecté : un scan périodique des images du cluster reste à mettre en place. Détail : [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan).

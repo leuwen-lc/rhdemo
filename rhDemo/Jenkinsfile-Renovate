@@ -14,7 +14,9 @@
  *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
  *      base + push (évite qu'un correctif déjà mergé sur la base fasse
  *      échouer la CI pour une raison sans rapport avec la PR)
- *   4. Build Maven + tests + OWASP Dependency-Check
+ *   4. Validation selon les fichiers modifiés : Maven + tests + OWASP
+ *      Dependency-Check, ou Trivy sur l'image épinglée, ou dry-run Kubernetes
+ *      + Trivy sur les images du chart (composant d'infra stagingkub)
  *   5. CI verte  -> merge automatique via l'API Forgejo + commentaire
  *      CI rouge  -> commentaire d'échec, PR conservée ouverte
  *
@@ -505,6 +507,44 @@ RENOVATE_SCAN_EOF
                             echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (manifeste de dépendances modifié : ${matchedFiles.join(', ')})"
                         }
 
+                        // Scan Trivy d'une liste d'images, seuil CRITICAL bloquant et .trivyignore.yaml
+                        // identiques à RHDemo-CI. Partagé par le chemin « image épinglée » et le chemin
+                        // « composant d'infra ». Rapports archivés par PR (sinon écrasés par la suivante).
+                        // Renvoie 0 si aucune CRITICAL non ignorée, 1 sinon.
+                        def scanImagesWithTrivy = { List images ->
+                            sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
+                            sh '''
+                                TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
+                                mkdir -p "${TRIVY_CACHE_DIR}"
+                                export TRIVY_CACHE_DIR
+                                trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                            '''
+                            // Noms de rapport calculés avant le lancement (dédoublonnage séquentiel),
+                            // puis scans en parallèle comme dans Jenkinsfile-CI : generateTrivyReport
+                            // copie le cache partagé dans un répertoire propre à chaque scan.
+                            def usedNames = []
+                            def scanStages = [:]
+                            images.each { image ->
+                                def baseName = (image =~ /([^\/:@]+)(:[^\/@]*)?(@sha256:[a-f0-9]+)?$/)[0][1]
+                                def reportName = baseName
+                                def n = 2
+                                while (reportName in usedNames) {
+                                    reportName = "${baseName}-${n}".toString()
+                                    n++
+                                }
+                                usedNames << reportName
+                                echo "→ Scan Trivy : ${image} (rapport ${reportName})"
+                                scanStages["Scan ${reportName}".toString()] = {
+                                    lib.generateTrivyReport(image, reportName)
+                                }
+                            }
+                            parallel(scanStages + [failFast: false])
+                            def ok = lib.aggregateTrivyResults()
+                            sh "rm -rf trivy-reports-pr${prNumber} && cp -r trivy-reports trivy-reports-pr${prNumber}"
+                            archiveArtifacts artifacts: "trivy-reports-pr${prNumber}/**", allowEmptyArchive: true
+                            return ok ? 0 : 1
+                        }
+
                         def ciStatus
                         if (isInfraComponentPr) {
                             def componentFile = changedFiles.split('\n').find {
@@ -538,10 +578,37 @@ RENOVATE_SCAN_EOF
 
                                         SCRIPT="''' + componentFile + '''"
                                         chmod +x "$SCRIPT"
-                                        HELM_DRY_RUN=true "$SCRIPT"
+                                        # CHART_IMAGES_FILE : le préflight RBAC du script y écrit les
+                                        # images rendues par le chart (cf. rbac-preflight-check.sh).
+                                        rm -f "$WORKSPACE/chart-images.txt"
+                                        CHART_IMAGES_FILE="$WORKSPACE/chart-images.txt" HELM_DRY_RUN=true "$SCRIPT"
                                     ''',
                                     returnStatus: true
                                 )
+                            }
+
+                            // Scan Trivy des images que la nouvelle version du chart déploierait (mêmes
+                            // seuils que RHDemo-CI, qui ne scanne que l'applicatif — cf.
+                            // docs/TRIVY_SECURITY_SCAN.md, « Périmètre du scan »). Fail-closed : un
+                            // chart dont aucune image n'a pu être listée est refusé. kind-config.yaml
+                            // seul (kindest/node, reconstruction complète) n'a pas de script composant
+                            // et n'arrive jamais ici avec ciStatus == 0.
+                            if (ciStatus == 0) {
+                                def chartImages = fileExists('chart-images.txt') ?
+                                    sh(script: "grep -vE '^[[:space:]]*\$' chart-images.txt | sort -u || true", returnStdout: true).trim() : ''
+                                if (!chartImages) {
+                                    echo "ERREUR: aucune image listée pour le chart de ${env.RENOVATE_TARGET_COMPONENT} (rendu helm template en échec ?) — validation refusée"
+                                    ciStatus = 1
+                                } else {
+                                    def invalid = chartImages.split('\n').findAll { !(it ==~ /[a-zA-Z0-9.\/_-]+(:[a-zA-Z0-9._-]+)?(@sha256:[a-f0-9]{64})?/) }
+                                    if (invalid) {
+                                        echo "ERREUR: référence(s) d'image inattendue(s) rendue(s) par le chart : ${invalid.join(', ')} — validation refusée"
+                                        ciStatus = 1
+                                    } else {
+                                        echo "Images rendues par le chart ${env.RENOVATE_TARGET_COMPONENT} : ${chartImages.replaceAll('\n', ', ')}"
+                                        ciStatus = scanImagesWithTrivy(chartImages.split('\n') as List)
+                                    }
+                                }
                             }
                         } else if (isPinnedImagePr) {
                             // Extraction de l'image ajoutée par le diff (motif repo:tag@sha256:digest),
@@ -562,22 +629,7 @@ RENOVATE_SCAN_EOF
                                 ciStatus = 1
                             } else {
                                 echo "Image(s) à scanner : ${changedImages.replaceAll('\n', ', ')}"
-
-                                sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
-                                sh '''
-                                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
-                                    mkdir -p "${TRIVY_CACHE_DIR}"
-                                    export TRIVY_CACHE_DIR
-                                    trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
-                                '''
-
-                                changedImages.split('\n').each { image ->
-                                    def reportName = (image =~ /([^\/:]+):[^:]+$/)[0][1]
-                                    echo "→ Scan Trivy : ${image} (rapport ${reportName})"
-                                    lib.generateTrivyReport(image, reportName)
-                                }
-
-                                ciStatus = lib.aggregateTrivyResults() ? 0 : 1
+                                ciStatus = scanImagesWithTrivy(changedImages.split('\n') as List)
                             }
                         } else if (isOutOfMavenScopePr) {
                             // Aucun manifeste de dépendances touché : rien à construire ni à scanner,

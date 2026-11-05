@@ -66,22 +66,20 @@ image: ${POSTGRES_IMAGE:-postgres:18.2-alpine3.22@sha256:198c...}
 
 Les images sont définies dans les variables d'environnement du pipeline.
 
-**Fichier** : [`Jenkinsfile-CI`](../Jenkinsfile-CI) (variables `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE`, `NGF_IMAGE`)
+**Fichier** : [`Jenkinsfile-CI`](../Jenkinsfile-CI) (variables `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE`)
 
 ```groovy
 environment {
     NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0..."
     POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924a..."
     KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb..."
-    // NGINX Gateway Fabric — scanné en CI sans être déployé par ce pipeline
-    NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.0@sha256:9f209a20..."
 }
 ```
 
 `NGINX_IMAGE`, `POSTGRES_IMAGE` et `KEYCLOAK_IMAGE` sont exportées vers Docker Compose lors du
-déploiement ephemere. `NGF_IMAGE` est utilisée **uniquement par le scan Trivy** — NGF n'est pas
-déployé par le pipeline CI (il est installé via Helm dans `init-stagingkub.sh`). Ce scan en CI
-évite une dépendance Trivy sur le pipeline CD.
+déploiement ephemere. NGINX Gateway Fabric n'a pas de variable ici : c'est un composant système
+de stagingkub, suivi par la version de son chart (voir le tableau ci-dessous) et scanné par
+`Jenkinsfile-Renovate` à chaque montée (cf. [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)).
 
 ### Helm / Kubernetes (stagingkub)
 
@@ -144,12 +142,12 @@ for d in m.get('manifests', []):
 | --- | --- |
 | `postgres`, `keycloak` | `values.yaml` → `global.images.<nom>` · `infra/dev/docker-compose.yml` · `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` |
 | `nginx` (reverse proxy ephemere) | `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` (`NGINX_IMAGE`) |
-| `nginx-gateway-fabric` (stagingkub) | `infra/stagingkub/scripts/init-stagingkub.sh` (`NGF_VERSION` + `NGF_IMAGE_DIGEST`) · `Jenkinsfile-CI` (`NGF_IMAGE`) |
+| `nginx-gateway-fabric` (stagingkub) | `infra/stagingkub/scripts/components/install-or-upgrade-ngf.sh` (`NGF_VERSION`, version du chart) + CRDs vendorées (`vendor-gateway-api-crds.sh`) |
 | `busybox`, `postgres-exporter` | `values.yaml` → `global.images.<nom>` |
 
-> **Important** : pour `nginx-gateway-fabric`, mettre à jour `NGF_VERSION` / `NGF_IMAGE_DIGEST` dans
-> `init-stagingkub.sh` **et** `NGF_IMAGE` dans `Jenkinsfile-CI` de façon cohérente.
-> Le digest doit être récupéré par `docker pull ghcr.io/nginx/nginx-gateway-fabric:<nouvelle-version>`.
+> **Important** : pour `nginx-gateway-fabric`, la montée de `NGF_VERSION` doit s'accompagner du
+> manifeste de CRDs Gateway API de la nouvelle version (`./vendor-gateway-api-crds.sh <version>`,
+> commité dans la même PR), sans quoi le script échoue. Le chart référence ses images par tag, sans digest.
 
 ### 3. Vérifier
 

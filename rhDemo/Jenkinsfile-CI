@@ -52,9 +52,6 @@ pipeline {
         POSTGRES_IMAGE = "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
         // renovate: datasource=docker depName=quay.io/keycloak/keycloak
         KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332"
-        // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
-        // renovate: datasource=docker depName=ghcr.io/nginx/nginx-gateway-fabric
-        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.7@sha256:bc1e0677ab0c077fc12851dbd2311fce9358d0f6f3140035f8dc5e5ede7b9cc1"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -1104,7 +1101,7 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Scan de sécurité des images Docker avec Trivy (parallélisé)..."
-                    echo "   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps"
+                    echo "   ℹ️  Images de l'application (ephemere + chart stagingkub rhdemo) scannées en parallèle"
                     echo ""
                     echo "   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées"
                     echo "   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)"
@@ -1157,14 +1154,44 @@ YMLEOF
                         echo "   Cache persistant via volume Docker — réutilisé entre les builds"
                     '''
 
-                    // Définir les images à scanner avec leurs noms de rapports
+                    // Périmètre : l'application et ce qui est livré avec elle, rien d'autre.
+                    // Les composants système stagingkub (Cilium, NGF, observabilité) sont scannés
+                    // par Jenkinsfile-Renovate avant merge de leur montée de version — cf.
+                    // docs/TRIVY_SECURITY_SCAN.md, section « Périmètre du scan ».
                     def imagesToScan = [
                         [image: env.POSTGRES_IMAGE, name: 'postgres'],
                         [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
                         [image: env.NGINX_IMAGE, name: 'nginx'],
-                        [image: env.NGF_IMAGE, name: 'nginx-gateway-fabric'],
                         [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
                     ]
+
+                    // Images tierces du chart rhdemo, lues dans values.yaml (source unique, pas
+                    // de recopie ici). Une image déjà scannée au titre d'ephemere (même référence
+                    // tag@digest) n'est pas scannée deux fois ; si elle diverge, elle a son propre
+                    // rapport suffixé « -stagingkub ». Noms de rapport alignés sur TRIVY_IMAGES de
+                    // scripts/fixcve-detect.py.
+                    def chartImages = sh(
+                        script: "yq '.global.images | to_entries | .[] | .key + \" \" + .value' rhDemo/infra/stagingkub/helm/rhdemo/values.yaml",
+                        returnStdout: true
+                    ).trim()
+                    if (!chartImages) {
+                        error("Aucune image lue dans global.images de values.yaml : scan Trivy incomplet, build arrêté")
+                    }
+                    chartImages.split('\n').each { line ->
+                        def parts = line.trim().split(' ')
+                        if (parts.size() != 2 || !(parts[1] ==~ /[a-zA-Z0-9.\/_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}/)) {
+                            error("Entrée global.images inattendue dans values.yaml (attendu clé + repo:tag@sha256:digest) : ${line}")
+                        }
+                        def image = parts[1]
+                        if (imagesToScan.any { it.image == image }) {
+                            return
+                        }
+                        def name = parts[0].replaceAll(/([A-Z])/, '-$1').toLowerCase()
+                        if (imagesToScan.any { it.name == name }) {
+                            name = "${name}-stagingkub"
+                        }
+                        imagesToScan << [image: image, name: name]
+                    }
 
                     echo "📋 Images à scanner:"
                     imagesToScan.each { img ->
@@ -1559,7 +1586,8 @@ YMLEOF
                         ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
                         ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
                         ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
-                        ['trivy-reports', 'nginx-gateway-fabric.html', 'Trivy - NGF'],
+                        ['trivy-reports', 'busybox.html', 'Trivy - Busybox'],
+                        ['trivy-reports', 'postgres-exporter.html', 'Trivy - postgres-exporter'],
                         ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
                         ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
                         ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']

@@ -29,8 +29,6 @@ IMAGES = {
               "repository": "nginx", "variable": "NGINX_IMAGE"},
     "postgres": {"registry": "registry-1.docker.io", "path": "library/postgres",
                  "repository": "postgres", "variable": "POSTGRES_IMAGE"},
-    "nginx-gateway-fabric": {"registry": "ghcr.io", "path": "nginx/nginx-gateway-fabric",
-                             "repository": "ghcr.io/nginx/nginx-gateway-fabric", "variable": "NGF_IMAGE"},
 }
 
 _MANIFEST_ACCEPT = ", ".join([

@@ -15,19 +15,30 @@ Un stage de scan de sécurité Trivy (`Jenkinsfile-CI`) détecte les vulnérabil
 dans les images Docker du stack. Les scans tournent **en parallèle**, avec un
 cache Trivy partagé (bases `vuln` + `java`) pré-alimenté en début de stage.
 
+## Périmètre du scan
+
+`Jenkinsfile-CI` ne scanne que **l'application et ce qui est livré avec elle** : les images de
+l'environnement ephemere et celles du chart Helm `rhdemo`. Les composants système de stagingkub
+(Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana) n'y figurent pas : ils
+ne sont pas livrés par ce pipeline, et un CVE dans l'un d'eux ne doit pas bloquer un commit
+applicatif. Leurs images sont scannées par `Jenkinsfile-Renovate` avant le merge de chaque montée
+de version, à partir du rendu de leur chart (cf.
+[RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md), aiguillage, chemin 1). Raisons du choix :
+[DECISIONS.md](DECISIONS.md).
+
 ## Images scannées
 
-Le stage scanne automatiquement **5 images** (les 4 images tierces pré-épinglées
-par tag + digest via les variables `*_IMAGE` du `Jenkinsfile-CI`, mises à jour
-par Renovate, plus l'image applicative fraîchement construite) :
+1. **postgres**, **keycloak**, **nginx** — variables `*_IMAGE` de `Jenkinsfile-CI`, exportées vers
+   le Docker Compose d'ephemere
+2. **rhdemo-app** — `RHDEMO_IMAGE` (application, construite par `docker build` sur `rhDemo/Dockerfile`, base Eclipse Temurin 25)
+3. **images tierces du chart `rhdemo`** — lues dans `global.images` de
+   `infra/stagingkub/helm/rhdemo/values.yaml` au moment du scan (aujourd'hui `busybox` et
+   `postgres-exporter` en plus de postgres et keycloak). Une image identique à celle d'ephemere
+   n'est pas scannée deux fois ; une référence divergente a son propre rapport suffixé `-stagingkub`.
 
-1. **postgres** — `POSTGRES_IMAGE` (base de données rhdemo-db et keycloak-db)
-2. **keycloak** — `KEYCLOAK_IMAGE` (serveur d'authentification)
-3. **nginx** — `NGINX_IMAGE` (reverse proxy HTTPS de l'environnement ephemere)
-4. **nginx-gateway-fabric** — `NGF_IMAGE` (Gateway API de stagingkub)
-5. **rhdemo-app** — `RHDEMO_IMAGE` (application, construite par `docker build` sur `rhDemo/Dockerfile`, base Eclipse Temurin 25)
+Les noms de rapport doivent rester alignés sur `TRIVY_IMAGES` de `scripts/fixcve-detect.py`.
 
-> Les valeurs exactes (versions + digests) vivent dans `Jenkinsfile-CI` ; ne pas
+> Les valeurs exactes (versions + digests) vivent dans `Jenkinsfile-CI` et `values.yaml` ; ne pas
 > les recopier ici, elles bougent à chaque PR Renovate.
 
 ## Critères de succès/échec
@@ -111,20 +122,20 @@ Le stage affiche automatiquement un rapport consolidé :
 postgres             : CRITICAL=  0, HIGH=  5, MEDIUM= 12
 keycloak             : CRITICAL=  0, HIGH=  8, MEDIUM= 23
 nginx                : CRITICAL=  0, HIGH=  2, MEDIUM=  7
-nginx-gateway-fabric : CRITICAL=  0, HIGH=  1, MEDIUM=  4
 rhdemo-app           : CRITICAL=  0, HIGH=  3, MEDIUM= 15
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL                : CRITICAL=  0, HIGH= 19, MEDIUM= 61
+TOTAL                : CRITICAL=  0, HIGH= 18, MEDIUM= 57
 ```
 
 ## Corriger les vulnérabilités
 
-### Images tierces (postgres, keycloak, nginx, nginx-gateway-fabric)
+### Images tierces (postgres, keycloak, nginx, busybox, postgres-exporter)
 
 Elles sont pré-épinglées `tag@sha256:digest` dans les variables `*_IMAGE` de
 `Jenkinsfile-CI` (et dans `global.images.*` des values Helm de stagingkub).
 Renovate ouvre les PR de montée ; en remédiation manuelle, voir la skill
-`/fixcve`. Le même tag+digest est réutilisé par `infra/ephemere/docker-compose.yml`
+`/fixcve` (busybox et postgres-exporter sont détectés mais jamais remédiés automatiquement :
+ils ne figurent pas dans `IMAGES` de `scripts/fixcve_lib/registry.py`). Le même tag+digest est réutilisé par `infra/ephemere/docker-compose.yml`
 via ces variables d'environnement.
 
 ### Image applicative (rhdemo-app)
@@ -184,6 +195,7 @@ fi
 
 - **2025-11-27** : Ajout initial du stage Trivy au pipeline Jenkins
 - **2026-08** : 5e image scannée (nginx-gateway-fabric) ; images tierces pré-épinglées `tag@sha256:digest` et suivies par Renovate ; image applicative construite via `docker build` (Dockerfile Temurin 25) et non plus Paketo ; ajout du cache Trivy partagé et du stage SBOM CycloneDX
+- **2026-11** : périmètre recentré sur l'applicatif : nginx-gateway-fabric retiré (l'image scannée n'était pas celle déployée par le chart), busybox et postgres-exporter ajoutés depuis `values.yaml` ; composants système scannés par `Jenkinsfile-Renovate` à chaque montée de chart
 
 ## Historique des vulnérabilités détectées
 

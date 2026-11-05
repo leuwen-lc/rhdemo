@@ -143,3 +143,7 @@ Le CD suivant (révision Helm 99) échoue avec `spec.strategy.rollingUpdate: For
 ## [2026-11-05] ingest | Renovate : login du bot CI déclaré en constante
 
 Le premier passage du pipeline avec la quarantaine des images échoue : « Identité du bot CI introuvable (GET /user) ». `GET /user` exige le scope `read:user`, absent de `ci-bot-forgejo-token` (scopes `repository` + `issue`). Plutôt que d'élargir le token, `Jenkinsfile-Renovate` déclare `CI_BOT_LOGIN = 'rhdemo-ci-bot'` dans son bloc `environment`. `RENOVATE_AUTOMERGE_CI.md` mis à jour, `index.md` inchangé.
+
+## [2026-11-05] ingest | périmètre Trivy : applicatif en CI, composants système avant merge Renovate
+
+`Jenkinsfile-CI` scannait `NGF_IMAGE` (2.6.7) alors que le chart installé sur stagingkub (`NGF_VERSION`, 2.6.0) déploie une autre image, et ne scannait aucun autre composant système. `NGF_IMAGE` est supprimé ; la CI scanne en plus les images de `global.images` du chart `rhdemo` lues dans `values.yaml` (busybox et postgres-exporter n'étaient pas scannés). Dans `Jenkinsfile-Renovate`, le chemin « composant d'infra » scanne avec Trivy les images rendues par le chart (`record_chart_images` dans `rbac-preflight-check.sh`, activée par `CHART_IMAGES_FILE`), fail-closed. Listes d'images de fixcve alignées (`TRIVY_IMAGES`, `fixcve-validate-json.py`, `registry.py`). Nouvelle entrée dans `DECISIONS.md` ; `TRIVY_SECURITY_SCAN.md`, `RENOVATE_AUTOMERGE_CI.md` et `IMAGE_VERSIONS_MANAGEMENT.md` mis à jour, `index.md` inchangé.

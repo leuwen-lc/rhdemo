@@ -226,13 +226,18 @@ pipeline {
         }
         failure {
             script {
-                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'} — rollback automatique déclenché par --rollback-on-failure dans le script composant."
+                // --rollback-on-failure n'agit que si le client helm survit à l'échec :
+                // agent tué ou déconnecté (OOM hôte, timeout du pipeline), aucun rollback
+                // n'a lieu et la release peut rester en pending-upgrade.
+                echo "❌ Mise à jour en place échouée pour ${env.TARGET_COMPONENT ?: 'N/A'}."
+                echo "   Rollback tenté par --rollback-on-failure uniquement si helm a pu aller au bout (pas si l'agent a été tué ou déconnecté)."
+                echo "   Vérifiez l'état réel : helm history ${env.TARGET_COMPONENT ?: '<release>'} -n <namespace> (statut pending-upgrade ou failed = intervention manuelle)."
                 echo "   Consultez les logs ci-dessus pour le détail de l'échec."
 
                 try {
                     emailext to: env.NOTIFICATION_EMAIL,
                              subject: "❌ RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} : échec (${env.TARGET_COMPONENT ?: 'N/A'})",
-                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback automatique déclenché par --rollback-on-failure dans le script composant.\nConsultez les logs : ${env.BUILD_URL}console"
+                             body: "Le pipeline RHDemo-Stagingkub-Upgrade-Deploy #${env.BUILD_NUMBER} a échoué pour le composant ${env.TARGET_COMPONENT ?: 'N/A'}.\n\nRollback tenté par --rollback-on-failure uniquement si helm a pu aller au bout (pas si l'agent a été tué ou déconnecté).\nVérifier l'état réel de la release avec helm history (statut pending-upgrade ou failed = intervention manuelle).\nConsultez les logs : ${env.BUILD_URL}console"
                 } catch (Exception e) {
                     echo "⚠️  Notification email non envoyée : ${e.message}"
                 }

@@ -10,6 +10,8 @@ metadata:
 spec:
   serviceName: postgresql-keycloak
   replicas: 1
+  updateStrategy:
+    {{- toYaml (index .Values "postgresql-keycloak" "updateStrategy") | nindent 4 }}
   selector:
     matchLabels:
       app: postgresql-keycloak

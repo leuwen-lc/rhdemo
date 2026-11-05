@@ -135,3 +135,7 @@ Montée de Keycloak 26.7.2 → 26.8.1 bloquée (release Helm 98 en `pending-upgr
 ## [2026-11-05] ingest | stagingkub : passage de Keycloak en Recreate refusé par le server-side apply
 
 Le CD suivant (révision Helm 99) échoue avec `spec.strategy.rollingUpdate: Forbidden`. Helm 4 applique en server-side apply et ne peut pas supprimer `rollingUpdate`, une valeur par défaut sans propriétaire ; `rollingUpdate: null` est refusé de la même façon (dry-run serveur). Correction faite une seule fois sur le cluster : patch JSON de `spec.strategy` en `{type: Recreate}`, puis dry-run du manifeste Helm accepté. Procédure ajoutée dans la section de dépannage de `infra/stagingkub/README.md`, `index.md` inchangé.
+
+## [2026-11-05] ingest | stagingkub : stratégies de mise à jour déclarées explicitement
+
+`rhdemo-app` (`strategy` RollingUpdate, `maxSurge: 1`, `maxUnavailable: 0`) et les StatefulSets `postgresql-rhdemo` et `postgresql-keycloak` (`updateStrategy` RollingUpdate, `partition: 0`) déclarent désormais leur stratégie dans le chart, paramétrée dans `values.yaml`. Helm devient propriétaire de ces champs : un futur changement de stratégie s'appliquera sans le patch manuel nécessaire pour Keycloak. Dry-run serveur en server-side apply (gestionnaire `helm`) : manifestes acceptés et Helm propriétaire de `type` et `rollingUpdate`. Aucun redémarrage de pod, le template des pods ne change pas. `index.md` inchangé.

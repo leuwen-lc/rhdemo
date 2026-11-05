@@ -39,6 +39,14 @@ postgresqlBackup:
 postgresql-rhdemo:
   enabled: true
 
+  # Stratégie de mise à jour déclarée explicitement (valeur par défaut de
+  # Kubernetes) pour que Helm en soit propriétaire : un changement ultérieur
+  # (ex. OnDelete) s'appliquera proprement en server-side apply.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
   database:
     name: rhdemo
     user: rhdemo
@@ -84,6 +92,14 @@ postgresql-rhdemo:
 # ═══════════════════════════════════════════════════════════════
 postgresql-keycloak:
   enabled: true
+
+  # Stratégie de mise à jour déclarée explicitement (valeur par défaut de
+  # Kubernetes) pour que Helm en soit propriétaire : un changement ultérieur
+  # (ex. OnDelete) s'appliquera proprement en server-side apply.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
 
   database:
     name: keycloak
@@ -195,6 +211,17 @@ rhdemo:
     pullPolicy: IfNotPresent
 
   replicaCount: 1
+
+  # Stratégie de déploiement déclarée explicitement pour que Helm en soit
+  # propriétaire (un passage ultérieur en Recreate s'appliquera proprement en
+  # server-side apply). maxUnavailable 0 : le nouveau pod doit être Ready avant
+  # l'arrêt de l'ancien (pas de coupure). Suppose un schéma de base compatible
+  # entre deux versions successives de l'application.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
 
   springProfile: stagingkub
   serverPort: 9000

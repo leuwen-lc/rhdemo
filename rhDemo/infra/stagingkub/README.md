@@ -29,7 +29,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
 | **Cilium** | 1.20.2 | CNI avec kube-proxy replacement (eBPF) |
 | **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
 | **PostgreSQL** | 18.4-alpine | Base de données (pinnée par digest, gérée par Renovate) |
-| **Keycloak** | 26.7.2 | IAM / OAuth2 (pinné par digest, géré par Renovate) |
+| **Keycloak** | 26.8.1 | IAM / OAuth2 (pinné par digest, géré par Renovate) |
 | **Helm** | 4.x | Déploiement du chart et des composants d'infra (`--rollback-on-failure`) |
 
 ### Différences avec ephemere (Docker Compose)

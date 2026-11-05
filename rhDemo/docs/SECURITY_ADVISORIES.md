@@ -4,6 +4,26 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## Revue des exceptions Trivy (2026-11-05) — 6 exceptions retirées
+
+- **Date** : 2026-11-05 — **Outil** : Trivy 0.76.1, base du jour, scan des images actuelles et candidates — **Source** : revue manuelle
+- **Montées d'image** (`Jenkinsfile-CI`, `infra/dev` et `infra/ephemere/docker-compose.yml`, `values.yaml`) :
+  - `KEYCLOAK_IMAGE` : `quay.io/keycloak/keycloak` 26.7.2 → 26.8.1 (digest `sha256:3f3c5f8e…`)
+  - `NGINX_IMAGE` : `nginx` 1.31.3-alpine → 1.31.8-alpine-slim (digest `sha256:f45171d3…`)
+- **Exceptions retirées de `.trivyignore.yaml`** :
+  - `io.netty:netty-handler` (CVE-2026-75595) — corrigé dans Keycloak 26.8.1
+  - `org.bouncycastle:bcprov-jdk18on` (CVE-2026-8763) — corrigé dans Keycloak 26.8.1
+  - `org.freemarker:freemarker` (CVE-2026-84939) — corrigé dans Keycloak 26.8.1
+  - `ca-certificates` (CVE-2026-114406) — corrigé dans Keycloak 26.8.1 (pas dans 26.7.5)
+  - `brotli-libs` (CVE-2026-111497) — aucun tag `nginx:*-alpine` ne corrige (1.31.8 compris, `brotli-libs` 1.2.0-r1) ; la variante `alpine-slim` n'embarque pas brotli. La configuration éphémère n'utilise que des modules du cœur (ssl, http2, gzip) ; `wget` (healthcheck) et `envsubst` sont présents
+  - `libexpat` (CVE-2026-32767) — absent de l'image nginx déjà déployée (1.31.3-alpine, Alpine 3.24) : exception obsolète
+- **Exceptions conservées** :
+  - `gosu` (CVE-2025-68121, permanente) — toujours présent dans postgres 18.4 et 18.6
+  - `java-21-openjdk-headless` (CVE-2026-91403, critère B) — toujours sans correctif dans Keycloak 26.8.1 (1:21.0.13.0.9-1.2.el9)
+- **Validation locale** : 0 CRITICAL avec le nouveau `.trivyignore.yaml` sur les 4 images épinglées (nginx, Keycloak, PostgreSQL, NGF). Preuve finale : build CI (Selenium, init du realm sur Keycloak 26.8)
+
+---
+
 ## flat, follow-redirects, open (build #1003)
 
 - **Date** : 2026-11-05 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
@@ -52,6 +72,10 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Revue au plus tard le 2026-11-05** (7 jours, le CVE étant exploité ailleurs) : contrôle manuel, aucune expiration automatique (`expired_at` n'est pas géré par le retrait automatique des suppressions).
 - **À retirer quand** : une image `nginx:alpine` contient `brotli-libs` ≥ 1.2.1-r0 (Alpine l'a déjà publié) ; monter alors `NGINX_IMAGE` et retirer l'entrée. À réexaminer aussitôt si un module nginx ou une directive brotli est ajouté à l'environnement éphémère.
 
+### Résolution (2026-11-05)
+
+- **Exception retirée** de `.trivyignore.yaml` : `NGINX_IMAGE` passe en `nginx:1.31.8-alpine-slim`, qui n'embarque pas `brotli-libs` (aucun tag `alpine` ne corrigeait encore). Voir « Revue des exceptions Trivy (2026-11-05) ».
+
 ---
 
 ## webpack-dev-server (build #974)
@@ -76,6 +100,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
   - `ca-certificates` 2025.2.80_v9.0.305-91.el9 (CVE-2026-114406, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
   - `java-21-openjdk-headless` 1:21.0.12.1.1-1.2.el9 (CVE-2026-91403, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+- **Résolution (2026-11-05)** : `ca-certificates` (CVE-2026-114406) corrigé dans Keycloak 26.8.1, exception retirée. `java-21-openjdk-headless` (CVE-2026-91403) toujours sans correctif (1:21.0.13.0.9-1.2.el9 dans 26.8.1), exception conservée.
 
 ---
 
@@ -141,6 +167,10 @@ Les versions corrigées (`1.85`, `2.3.35`) sont des versions de bibliothèques, 
 - **Limites de cette justification (non vérifié)** : le chemin de génération des mails (aucun SMTP configuré dans le realm, sortie SMTP interdite par la NetworkPolicy `allowSmtp: false` — mais le rendu du gabarit reste théoriquement possible) ; les environnements dev et ephemere (même image et même code d'initialisation, non testés) ; le mécanisme interne de Keycloak (conclusion tirée du comportement observé, pas de la lecture du code).
 - **À retirer quand** : Keycloak publie une release stable embarquant `bcprov` ≥ 1.85 et `freemarker` ≥ 2.3.35 — puis monter `KEYCLOAK_IMAGE` et retirer les entrées de `.trivyignore.yaml`.
 - **À réexaminer immédiatement si** : l'internationalisation est activée sur le realm, un SMTP est configuré, ou un flux X.509 / mTLS / fournisseur d'identité externe est ajouté (les deux justifications cesseraient d'être valables).
+
+### Résolution (2026-11-05)
+
+- **Exceptions retirées** de `.trivyignore.yaml` : Keycloak 26.8.1 embarque `bcprov` et `freemarker` corrigés (scan Trivy) ; `KEYCLOAK_IMAGE` monté en 26.8.1. Voir « Revue des exceptions Trivy (2026-11-05) ».
 
 ---
 
@@ -237,6 +267,10 @@ Aucune suppression ni montée de version : `fix_status: lookup_failed` (Maven Ce
 - **Justification (exploitabilité nulle)** : la faille n'est atteignable que si Keycloak/Quarkus termine lui-même le TLS avec un routage per-SNI `clientAuth=REQUIRE` comme seule barrière mTLS. Or dans tous les environnements RHDemo, Keycloak tourne en `start-dev --http-enabled=true`, le TLS est terminé par Nginx / NGF (`--proxy-headers=xforwarded`), le listener HTTPS est explicitement désactivé en stagingkub (`--https-port=-1`), et aucune authentification par certificat client (mTLS) n'est configurée. Le handler vulnérable `io.netty.handler.ssl.SslClientHelloHandler` n'est jamais instancié. La NetworkPolicy Zero Trust restreint par ailleurs l'entrée vers Keycloak au proxy d'ingress et à `rhdemo-app`.
 - **Aucune montée de version possible** : aucune image Keycloak stable ne corrige la CVE au 2026-09-10. La `26.7.3` (dernière stable, 2026-08-31) embarque toujours `netty-handler` 4.1.136.Final. Seule l'image `quay.io/keycloak/keycloak:nightly` (Quarkus 3.39.1) embarque `netty-handler` 4.1.137.Final.
 - **À retirer quand** : Keycloak publie une release stable basée sur Quarkus ≥ 3.39 (`netty-handler` ≥ 4.1.137.Final) — puis monter `KEYCLOAK_IMAGE` et retirer l'entrée de `.trivyignore.yaml`. Revérification automatique via l'étape 0 de fixcve-auto (jeton `[PENDING_UPSTREAM_FIX]`).
+
+### Résolution (2026-11-05)
+
+- **Exception retirée** de `.trivyignore.yaml` : Keycloak 26.8.1 embarque `netty-handler` corrigé (scan Trivy) ; `KEYCLOAK_IMAGE` monté en 26.8.1. Voir « Revue des exceptions Trivy (2026-11-05) ».
 
 ---
 

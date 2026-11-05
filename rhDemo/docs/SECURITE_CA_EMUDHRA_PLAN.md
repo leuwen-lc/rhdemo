@@ -82,7 +82,7 @@ Trivy a détecté l'incident sur l'image Keycloak (RHEL 9) et `fixcve-auto` a aj
 | CVE-2026-114406 | `ca-certificates` (RHEL, magasin système) | 2025.2.80_v9.0.305-91.el9 |
 | CVE-2026-91403 | `java-21-openjdk-headless` (JDK Red Hat) | 1:21.0.12.1.1-1.2.el9 |
 
-Ces acceptations sont revérifiées à chaque cycle ; elles ne sont pas une correction et sont à retirer dès que Red Hat publie les paquets corrigés. Trivy détecte l'incident via les avis des distributions ; pour les JDK Temurin, dont le paquet n'est pas géré par le gestionnaire de paquets de l'image, l'étape de contrôle de la phase 3 reste nécessaire.
+Mise à jour du 2026-11-05 : l'acceptation de CVE-2026-114406 est retirée (Keycloak 26.8.1 embarque `ca-certificates` corrigé, scan Trivy) ; celle de CVE-2026-91403 reste. Ces acceptations sont revérifiées à chaque cycle ; elles ne sont pas une correction et sont à retirer dès que Red Hat publie les paquets corrigés. Trivy détecte l'incident via les avis des distributions ; pour les JDK Temurin, dont le paquet n'est pas géré par le gestionnaire de paquets de l'image, l'étape de contrôle de la phase 3 reste nécessaire.
 
 ## 4. Actions
 
@@ -101,7 +101,7 @@ Ces acceptations sont revérifiées à chaque cycle ; elles ne sont pas une corr
 | --- | --- | --- | --- |
 | 1 | Redémarrer le contrôleur (`./start-jenkins.sh`) pour prendre l'image reconstruite, puis exécuter une CI complète : l'agent et le contrôleur n'ont été validés qu'en local | Jenkins | à faire |
 | 2 | Rebuild de l'application et du builder avec `--pull` dès qu'une image Ubuntu Temurin 25.0.5+8 (ou plus) est publiée et embarque `ca-certificates` 20260816 ; Renovate proposera la montée de digest et de tag (`25.0.3_9` est épinglé dans `rhDemo/Dockerfile`) | App, builder | en attente d'image Temurin Ubuntu |
-| 3 | Retirer les deux acceptations de `.trivyignore.yaml` quand Red Hat publie `ca-certificates` et `java-21-openjdk` corrigés | Keycloak | en attente d'un correctif amont |
+| 3 | Retirer les deux acceptations de `.trivyignore.yaml` quand Red Hat publie `ca-certificates` et `java-21-openjdk` corrigés | Keycloak | `ca-certificates` : retirée le 2026-11-05 (Keycloak 26.8.1 corrigé) ; `java-21-openjdk` : en attente d'un correctif amont (toujours vulnérable en 1:21.0.13.0.9-1.2.el9) |
 | 4 | Image `zaproxy` dérivée avec `ca-certificates` `~deb12u2` si l'amont tarde ; suivre aussi SonarQube (JDK 25.0.4) | ZAP, SonarQube | ouvert |
 | 5 | Laisser Renovate proposer les montées de digest Alpine (`20261020-r0`), Keycloak, nginx, postgres, puis refaire le test de contrôle | Autres images | suivi continu |
 | 6 | Après chaque rebuild, refaire le test de contrôle (section 3 ter) | Tous JDK | permanent |

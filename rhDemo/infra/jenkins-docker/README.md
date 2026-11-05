@@ -172,7 +172,7 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
 
 - Image `rhdemo-jenkins-agent:latest` instanciée à la demande par Docker Cloud
 - Créés pour chaque build, détruits immédiatement après
-- Max 2 simultanés (`instanceCapStr: "2"`)
+- Un seul à la fois (`instanceCapStr: "1"`) : les builds de tous les jobs sont sérialisés, les suivants attendent dans la file
 - Contiennent tous les outils de build :
   - JDK 25 (Eclipse Temurin) + Maven 3.9.12
   - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
@@ -276,7 +276,7 @@ jenkins-docker/
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
 - ✅ Controller en mode pilotage (`numExecutors: 0`, `mode: EXCLUSIVE`)
-- ✅ Docker Cloud avec template agent éphémère (label `builder`, max 2 simultanés)
+- ✅ Docker Cloud avec template agent éphémère (label `builder`, un seul à la fois)
 - ✅ Connexion Docker via `tcp://docker-socket-proxy:2375` (pas de socket direct)
 - ✅ Outils (JDK25, Maven3, Git, OWASP Dependency-Check)
 - ✅ Intégrations (SonarQube)
@@ -875,7 +875,7 @@ docker volume rm rhdemo-wdm-cache
 1. **`docker-socket-proxy` non démarré** : `docker-compose ps docker-socket-proxy`
 2. **Image agent introuvable** : `docker images rhdemo-jenkins-agent` — construire avec `docker build -f Dockerfile.agent -t rhdemo-jenkins-agent:latest .`
 3. **Docker Cloud mal configuré** : Jenkins > Manage Jenkins > Clouds > docker-local > Test Connection
-4. **Capacité atteinte** : max 2 agents simultanés (`instanceCapStr: "2"`) — attendre qu'un build se termine
+4. **Capacité atteinte** : un seul agent à la fois (`instanceCapStr: "1"`) — normal si un autre build tourne, attendre qu'il se termine (un job Renovate peut durer jusqu'à 2 h)
 
 ```bash
 # Vérifier que le proxy répond

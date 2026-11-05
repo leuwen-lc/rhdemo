@@ -55,7 +55,12 @@ jenkins:
                 jenkinsUrl: "http://jenkins:8080/"
             retentionStrategy:
               idleMinutes: 5
-            instanceCapStr: "2"
+            # 1 : un seul build à la fois, tous jobs confondus (CI, CD, Renovate,
+            # Stagingkub-Upgrade-Deploy). Évite qu'une CI démarre pendant une série de
+            # merges Renovate, que CD et Upgrade-Deploy touchent stagingkub en même temps,
+            # et la pression mémoire de deux pipelines lourds côte à côte. Pas de blocage
+            # mutuel : les déclenchements entre jobs sont en « wait: false ».
+            instanceCapStr: "1"
             # true : supprime à la destruction de l'agent les 2 volumes anonymes créés par
             # les VOLUME de jenkins/inbound-agent (/home/jenkins/agent, /home/jenkins/.jenkins).
             # Les volumes nommés (cache Maven, Trivy, Selenium) ne sont jamais supprimés par docker rm -v.

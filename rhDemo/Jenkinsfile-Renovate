@@ -51,6 +51,12 @@ pipeline {
         REPO            = 'leuwen-lc/rhdemo'
         BASE_BRANCH     = 'evolutions-post-1.1.10'
         RENOVATE_IMAGE  = 'renovate/renovate:43.288.0'
+        // Compte propriétaire de ci-bot-forgejo-token, seul auteur reconnu des commentaires
+        // qui datent la quarantaine des images. Constante plutôt que GET /user : cet appel
+        // exige le scope read:user, que le token (repository + issue) n'a pas et n'a pas
+        // à avoir. Un login public ne donne aucun droit : seul le détenteur du token peut
+        // commenter sous cette identité.
+        CI_BOT_LOGIN    = 'rhdemo-ci-bot'
 
         // Notification email d'échec uniquement — SMTP configuré en JCasC
         // (unclassified.mailer, credential smtp-infomaniak-credentials), même
@@ -176,18 +182,6 @@ RENOVATE_SCAN_EOF
                         }
 
                         sh "rm -f /tmp/renovate-prs-${BUILD_NUMBER}.json"
-
-                        // Quarantaine des images Docker (docs/RENOVATE_AUTOMERGE_CI.md, section
-                        // « Quarantaine des images ») : identité du bot, seule autrice reconnue des
-                        // commentaires qui datent la première observation.
-                        env.CI_BOT_LOGIN = sh(
-                            script: """
-                                set +x
-                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" "${FORGEJO_API}/user" | jq -r '.login // empty'
-                            """,
-                            returnStdout: true
-                        ).trim()
-                        if (!env.CI_BOT_LOGIN) error("Identité du bot CI introuvable (GET /user) — quarantaine des images impossible")
                     }
                 }
                 script {

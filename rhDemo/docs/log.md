@@ -139,3 +139,7 @@ Le CD suivant (révision Helm 99) échoue avec `spec.strategy.rollingUpdate: For
 ## [2026-11-05] ingest | stagingkub : stratégies de mise à jour déclarées explicitement
 
 `rhdemo-app` (`strategy` RollingUpdate, `maxSurge: 1`, `maxUnavailable: 0`) et les StatefulSets `postgresql-rhdemo` et `postgresql-keycloak` (`updateStrategy` RollingUpdate, `partition: 0`) déclarent désormais leur stratégie dans le chart, paramétrée dans `values.yaml`. Helm devient propriétaire de ces champs : un futur changement de stratégie s'appliquera sans le patch manuel nécessaire pour Keycloak. Dry-run serveur en server-side apply (gestionnaire `helm`) : manifestes acceptés et Helm propriétaire de `type` et `rollingUpdate`. Aucun redémarrage de pod, le template des pods ne change pas. `index.md` inchangé.
+
+## [2026-11-05] ingest | Renovate : login du bot CI déclaré en constante
+
+Le premier passage du pipeline avec la quarantaine des images échoue : « Identité du bot CI introuvable (GET /user) ». `GET /user` exige le scope `read:user`, absent de `ci-bot-forgejo-token` (scopes `repository` + `issue`). Plutôt que d'élargir le token, `Jenkinsfile-Renovate` déclare `CI_BOT_LOGIN = 'rhdemo-ci-bot'` dans son bloc `environment`. `RENOVATE_AUTOMERGE_CI.md` mis à jour, `index.md` inchangé.

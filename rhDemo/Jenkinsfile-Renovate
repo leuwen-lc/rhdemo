@@ -9,6 +9,8 @@
  * ouvertes sur la branche evolutions-post-1.1.10 :
  *   1. Scan Renovate (image officielle renovate/renovate, commits signés GPG)
  *   2. Liste les PRs Renovate ouvertes via l'API Forgejo
+ *   2 bis. PR d'image Docker : quarantaine (minimumReleaseAge de renovate.json,
+ *      compté depuis la première observation) avant toute validation
  *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
  *      base + push (évite qu'un correctif déjà mergé sur la base fasse
  *      échouer la CI pour une raison sans rapport avec la PR)
@@ -174,6 +176,51 @@ RENOVATE_SCAN_EOF
                         }
 
                         sh "rm -f /tmp/renovate-prs-${BUILD_NUMBER}.json"
+
+                        // Quarantaine des images Docker (docs/RENOVATE_AUTOMERGE_CI.md, section
+                        // « Quarantaine des images ») : identité du bot, seule autrice reconnue des
+                        // commentaires qui datent la première observation.
+                        env.CI_BOT_LOGIN = sh(
+                            script: """
+                                set +x
+                                curl -sf -H "Authorization: token \${FORGEJO_TOKEN}" "${FORGEJO_API}/user" | jq -r '.login // empty'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        if (!env.CI_BOT_LOGIN) error("Identité du bot CI introuvable (GET /user) — quarantaine des images impossible")
+                    }
+                }
+                script {
+                    // Délai de quarantaine = minimumReleaseAge global de renovate.json, lu sur master
+                    // (fichier que Renovate lit lui-même) et JAMAIS dans la PR : une PR qui baisserait
+                    // le délai lèverait sinon sa propre quarantaine. Format strict « N unité » ; tout
+                    // autre format, ou une valeur absente, laisse QUARANTINE_SECONDS vide : les PR
+                    // d'image sont alors refusées (jamais de repli silencieux sur zéro).
+                    def delay = sh(
+                        script: '''#!/bin/bash
+                            git fetch -q origin master
+                            RAW=$(git show origin/master:renovate.json | jq -r '.minimumReleaseAge // empty')
+                            OVERRIDES=$(git show origin/master:renovate.json | jq '[.packageRules[]? | select(.minimumReleaseAge != null)] | length')
+                            if [[ "$RAW" =~ ^([0-9]+)\\ ?(minute|hour|day|week)s?$ ]]; then
+                                case "${BASH_REMATCH[2]}" in
+                                    minute) U=60 ;; hour) U=3600 ;; day) U=86400 ;; week) U=604800 ;;
+                                esac
+                                echo "$(( BASH_REMATCH[1] * U ))|${RAW}|${OVERRIDES}"
+                            else
+                                echo "|${RAW:-absent}|${OVERRIDES}"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim().split('\\|', -1)
+                    env.QUARANTINE_SECONDS = delay[0]
+                    env.QUARANTINE_RAW = delay[1]
+                    if (env.QUARANTINE_SECONDS) {
+                        echo "Quarantaine des images : ${env.QUARANTINE_RAW} (${env.QUARANTINE_SECONDS} s), lu dans renovate.json de master"
+                    } else {
+                        echo "⚠️  minimumReleaseAge illisible dans renovate.json de master (« ${env.QUARANTINE_RAW} ») : toute PR d'image sera refusée"
+                    }
+                    if (delay[2] && delay[2] != '0') {
+                        echo "⚠️  ${delay[2]} packageRule(s) de renovate.json fixent un minimumReleaseAge propre : ignorées par la quarantaine (seule la valeur globale compte)"
                     }
                 }
             }
@@ -210,6 +257,93 @@ RENOVATE_SCAN_EOF
                         // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
                         def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                         sh "git fetch origin ${BASE_BRANCH}"
+
+                        // ── Quarantaine des images Docker ───────────────────────────────────────
+                        // Renovate n'obtient aucune date de publication pour les images (Docker Hub
+                        // refuse la pagination anonyme au-delà de 1 000 tags, Quay et ghcr n'en
+                        // fournissent pas) : son minimumReleaseAge est désactivé pour la source
+                        // docker (renovate.json) et le délai est appliqué ici, compté depuis la
+                        // première observation du changement. Une PR d'image = commit Renovate portant
+                        // le trailer « Quarantaine-Image: oui » (commitBody de renovate.json), OU diff
+                        // touchant une ligne annotée « renovate: datasource=docker », OU diff ajoutant
+                        // une référence @sha256 (filets si le trailer venait à manquer).
+                        // Clé = branche + lignes ajoutées par la PR : une nouvelle version ou un
+                        // nouveau digest change la clé et relance le compteur. Date de départ = date
+                        // serveur (created_at) du commentaire du bot CI portant la clé : ni le code
+                        // non revu exécuté plus bas (pas de token), ni l'éditeur de l'image ne
+                        // peuvent l'antidater. Détails : docs/RENOVATE_AUTOMERGE_CI.md.
+                        def isImagePr = sh(
+                            script: """
+                                git log --format=%B origin/${BASE_BRANCH}..${prTipSha} | grep -qx 'Quarantaine-Image: oui' && exit 0
+                                git diff -U1 origin/${BASE_BRANCH}...${prTipSha} | grep -q 'renovate: datasource=docker' && exit 0
+                                git diff origin/${BASE_BRANCH}...${prTipSha} | grep -E '^[+]' | grep -vE '^[+][+][+]' | grep -qE '@sha256:[0-9a-f]{64}'
+                            """,
+                            returnStatus: true
+                        ) == 0
+                        if (isImagePr) {
+                            if (!env.QUARANTINE_SECONDS) {
+                                echo "❌ PR #${prNumber} (image) : délai de quarantaine illisible (« ${env.QUARANTINE_RAW} ») — merge refusé"
+                                failures << prNumber
+                                return
+                            }
+                            def qKey = sh(
+                                script: """
+                                    { echo '${branchRef}'; git diff origin/${BASE_BRANCH}...${prTipSha} | grep -E '^[+]' | grep -vE '^[+][+][+]' | LC_ALL=C sort -u; } | sha256sum | cut -c1-16
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            // Sortie : AUCUNE|<fin prévue> (première observation), RESTE|<heures>|<fin>,
+                            // ECOULE|<début> ou ERREUR (API injoignable : on ne merge pas, nouvel essai
+                            // au passage suivant).
+                            def qState = withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                withEnv(["Q_PR=${prNumber}", "Q_KEY=${qKey}"]) {
+                                    sh(
+                                        script: '''#!/bin/bash
+                                            set +x
+                                            F="/tmp/quarantaine-${Q_PR}.json"
+                                            if ! curl -sf -H "Authorization: token ${FORGEJO_TOKEN}" \
+                                                 "${FORGEJO_API}/repos/${REPO}/issues/${Q_PR}/comments" -o "$F"; then
+                                                echo ERREUR; exit 0
+                                            fi
+                                            FIRST=""
+                                            while read -r TS; do
+                                                E=$(date -u -d "$TS" +%s 2>/dev/null) || continue
+                                                if [ -z "$FIRST" ] || [ "$E" -lt "$FIRST" ]; then FIRST=$E; fi
+                                            done < <(jq -r --arg login "$CI_BOT_LOGIN" --arg m "quarantaine-image:${Q_KEY}" \
+                                                       '.[] | select(.user.login == $login and (.body | contains($m))) | .created_at' "$F")
+                                            rm -f "$F"
+                                            NOW=$(date -u +%s)
+                                            if [ -z "$FIRST" ]; then
+                                                echo "AUCUNE|$(date -u -d "@$(( NOW + QUARANTINE_SECONDS ))" '+%F %H:%M UTC')"
+                                            elif [ $(( NOW - FIRST )) -lt "$QUARANTINE_SECONDS" ]; then
+                                                echo "RESTE|$(( (FIRST + QUARANTINE_SECONDS - NOW + 3599) / 3600 ))|$(date -u -d "@$(( FIRST + QUARANTINE_SECONDS ))" '+%F %H:%M UTC')"
+                                            else
+                                                echo "ECOULE|$(date -u -d "@${FIRST}" '+%F %H:%M UTC')"
+                                            fi
+                                        ''',
+                                        returnStdout: true
+                                    ).trim()
+                                }
+                            }
+                            def q = qState.split('\\|', -1)
+                            if (q[0] == 'AUCUNE') {
+                                withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                    lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                        "Quarantaine image : changement observé pour la première fois, merge automatique possible à partir du ${q[1]} (délai ${env.QUARANTINE_RAW}, minimumReleaseAge de renovate.json). Toute nouvelle version ou tout nouveau digest relance le délai.\n\n`quarantaine-image:${qKey}`")
+                                }
+                                echo "⏳ PR #${prNumber} : quarantaine démarrée (clé ${qKey}), merge possible à partir du ${q[1]} — PR ignorée pour ce passage"
+                                return
+                            }
+                            if (q[0] == 'RESTE') {
+                                echo "⏳ PR #${prNumber} : en quarantaine jusqu'au ${q[2]} (encore ${q[1]} h, clé ${qKey}) — PR ignorée pour ce passage"
+                                return
+                            }
+                            if (q[0] != 'ECOULE') {
+                                echo "⚠️  PR #${prNumber} : état de quarantaine indéterminé (${qState}) — PR ignorée pour ce passage, sans merge"
+                                return
+                            }
+                            echo "✅ PR #${prNumber} : quarantaine écoulée (observée depuis le ${q[1]}, clé ${qKey}) — validation"
+                        }
 
                         // Une branche Renovate non rebasée depuis longtemps peut hériter
                         // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée

@@ -53,7 +53,7 @@ Mesures en lecture seule sur les images locales : version de `ca-certificates`, 
 | Contrôleur Jenkins | Debian 13 | 20250419+deb13u1 | Temurin 25.0.5+8 | retirée de `cacerts` | 2026-11-05 | **corrigé** (redémarré le 2026-10-29 sur l'image reconstruite) |
 | Nœud KinD | Debian 13 | 20250419+deb13u1 | n/a | retirée | 2026-10-23 | **corrigé** |
 | Application `rhdemo-api` (`eclipse-temurin:25.0.5_8-jre-noble`) | Ubuntu 24.04 | 20260816ubuntu0.24.04.1 | Temurin 25.0.5+8 | retirée de `cacerts` et du bundle | 2026-11-05 | **corrigé** (base montée, test de contrôle G3 rejeté ; rebuild par la CI) |
-| Builder (`maven:3.9-eclipse-temurin-25-noble`) | Ubuntu 24.04 | 20260601~24.04.1 | Temurin 25.0.4.1 | présente | 2026-11-05 | non corrigé (aucune image Maven en 25.0.5) |
+| Builder (`maven:3.9-eclipse-temurin-25-noble`) | Ubuntu 24.04 | 20260601~24.04.1 | Temurin 25.0.4.1 | présente | 2026-11-05 | non corrigé (aucune image Maven en 25.0.5) ; épinglé par digest le 2026-11-05 |
 | Keycloak 26.7.x | RHEL 9.8 | RHEL (sans correctif) | JDK Red Hat 21.0.12.1 | présente | 2026-10-23 | non corrigé (acceptations Trivy, section 3 quater) |
 | SonarQube 26.8.0 | Ubuntu 24.04 | 20260601~24.04.1 | 25.0.4 | présente | 2026-10-23 | non corrigé (image tierce) |
 | ZAP `stable` | Debian 12 | 20230311+deb12u1 | 17.0.19 | présente, AAA aussi | 2026-10-23 | non corrigé (image tierce) |

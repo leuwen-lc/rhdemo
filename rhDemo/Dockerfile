@@ -9,7 +9,7 @@
 # STAGE 1 : BUILD
 # Construction de l'application avec Maven et Java 25
 # ───────────────────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-25-noble AS builder
+FROM maven:3.9-eclipse-temurin-25-noble@sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976 AS builder
 
 LABEL stage=builder
 

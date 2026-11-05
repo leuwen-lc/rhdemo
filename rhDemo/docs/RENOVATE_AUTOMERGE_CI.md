@@ -112,6 +112,23 @@ Ajouter `automerge: false` explicitement pour les mises à jour **major** (déj�
 
 ---
 
+## Quarantaine des images Docker
+
+Le délai `minimumReleaseAge` (7 jours) laisse le temps de détecter une version compromise avant de l'installer. Il n'est pas applicable par Renovate aux images Docker : aucun registre ne lui fournit de date de publication. Docker Hub refuse la pagination anonyme au-delà de 1 000 tags (`pagination offset too large for anonymous requests`), ce qui fait perdre toutes les dates des grosses images (nginx, eclipse-temurin, maven, postgres) ; Quay et ghcr n'en fournissent pas. Avec `minimumReleaseAgeBehaviour=timestamp-required` (défaut), ces montées restaient indéfiniment en « Pending Status Checks » : aucune PR de tag d'image n'a été créée entre fin juillet et novembre 2026 (constat du 2026-11-05, dry-run Renovate en debug).
+
+Le délai est donc appliqué par `Jenkinsfile-Renovate`, compté depuis la **première observation** du changement :
+
+- **`renovate.json`** : règle `matchDatasources: ["docker"]` avec `minimumReleaseAge: null` (Renovate ouvre la PR sans attendre) et `commitBody: "Quarantaine-Image: oui"` (trailer de commit qui identifie la PR). npm et Maven gardent le délai natif de Renovate.
+- **Durée** : la valeur globale `minimumReleaseAge` de `renovate.json`, lue sur `master` et jamais dans la PR (une PR ne peut pas raccourcir sa propre quarantaine). Format strict `N minutes|hours|days|weeks` ; valeur absente ou autre format : les PR d'image sont refusées, sans repli. Les `packageRules` qui fixent leur propre `minimumReleaseAge` sont ignorées et signalées dans le log.
+- **Détection d'une PR d'image** : trailer `Quarantaine-Image: oui`, ou diff touchant une ligne annotée `renovate: datasource=docker`, ou diff ajoutant une référence `@sha256:`.
+- **Clé** : empreinte de la branche et des lignes ajoutées par la PR. Une nouvelle version ou un nouveau digest change la clé et relance le délai ; une synchronisation avec la base ne la change pas.
+- **Date de départ** : `created_at` (date serveur Codeberg) du premier commentaire du bot CI portant `quarantaine-image:<clé>`. Seuls les commentaires du compte du bot comptent. Le code non revu exécuté par l'étape Maven/OWASP n'a pas le token du bot et ne peut donc pas antidater une observation, contrairement à un fichier d'état sur l'agent ; l'éditeur de l'image non plus, contrairement à la date `created` d'une image.
+- **Déroulement** : première observation → commentaire posté, PR ignorée ; délai non écoulé → PR ignorée (log : heures restantes) ; délai écoulé → validation habituelle (Trivy, dry-run ou Maven) puis merge. Commentaires illisibles (API en panne) : PR ignorée pour ce passage, jamais mergée.
+
+Limites : granularité d'un passage Renovate par jour (attente réelle de 7 à 8 jours) ; une image référencée par tag sans digest garde la même clé si le tag est republié (toutes les images du dépôt sont épinglées par digest) ; une PR fermée puis recréée repart de zéro.
+
+---
+
 ## Aiguillage de la validation selon les fichiers modifiés
 
 Le stage « Valider et merger chaque PR » ne peut pas soumettre toutes les PRs Renovate au même
@@ -335,8 +352,8 @@ le manager Renovate `github-actions` ne détecte plus aucune dépendance.
 
 | Type de mise à jour | Traitement |
 |---|---|
-| `patch` (ex: 1.2.3 → 1.2.4) | Automerge Jenkins si CI verte |
-| `minor` (ex: 1.2.3 → 1.3.0) | Automerge Jenkins si CI verte |
+| `patch` (ex: 1.2.3 → 1.2.4) | Automerge Jenkins si CI verte (images Docker : après quarantaine, voir ci-dessus) |
+| `minor` (ex: 1.2.3 → 1.3.0) | Automerge Jenkins si CI verte (images Docker : après quarantaine) |
 | `major` (ex: 1.x → 2.x) | Bloqué — `dependencyDashboardApproval: true` — revue manuelle |
 | Plugins Jenkins | Exclus — `matchManagers: ["jenkins"]` désactivé |
 | Image `rhdemo-api` | Exclue — `matchPackageNames: ["rhdemo-api"]` désactivé |

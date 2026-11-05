@@ -119,3 +119,7 @@ Revue des 8 exceptions de `.trivyignore.yaml` par scan Trivy (base du jour) des 
 ## [2026-11-05] ingest | eMudhra : image de l'application sur Temurin 25.0.5
 
 `rhDemo/Dockerfile` : base d'exécution montée de `eclipse-temurin:25.0.3_9-jre-noble` (non épinglée) à `25.0.5_8-jre-noble`, épinglée par digest. Racines emSign G3, C3 et C1 absentes de `cacerts`, `ca-certificates` 20260816 ; test de contrôle (section 3 ter) : chaîne G3 rejetée par le nouveau JRE, acceptée par l'ancien. Le builder `maven:3.9-eclipse-temurin-25-noble` reste en 25.0.4.1 avec G3 (aucune image Maven corrigée). `SECURITE_CA_EMUDHRA_PLAN.md` mis à jour, `index.md` inchangé.
+
+## [2026-11-05] ingest | contrôle de fraîcheur de la base Trivy en CI
+
+Le téléchargement de la base Trivy dans `Jenkinsfile-CI` est masqué par `|| true`, et les scans tournent en `--skip-db-update` : un échec de téléchargement laissait scanner sur une base périmée sans alerte. Ajout d'un contrôle après le téléchargement : échec du stage si la base `vuln` a plus de 72 h (`UpdatedAt`) ou si la Java DB a dépassé sa date `NextUpdate`. Vérifié le 2026-11-05 : la base réellement utilisée (volume `rhdemo-trivy-cache`) était à jour ; la base de janvier 2026 trouvée dans `/var/jenkins_home/.cache/trivy` n'est utilisée par aucun build. `TRIVY_SECURITY_SCAN.md` mis à jour, `index.md` inchangé.

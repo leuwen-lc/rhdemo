@@ -149,7 +149,7 @@ Quand aucun correctif n'est publié en amont, une vulnérabilité peut être exc
 Le stage Trivy (`Jenkinsfile-CI`) :
 
 1. s'exécute **après** le build de l'image applicative et le déploiement du stack ephemere, **avant** les tests Selenium ;
-2. pré-alimente le cache Trivy (`vuln` + `java`), puis lance les 5 scans en `parallel` (`failFast: false`) ;
+2. pré-alimente le cache Trivy (`vuln` + `java`, volume `rhdemo-trivy-cache` de l'agent), contrôle sa fraîcheur (échec si la base `vuln` a plus de 72 h ou si la date `NextUpdate` de la Java DB est dépassée : un téléchargement en échec n'est sinon pas visible, les scans tournant en `--skip-db-update`), puis lance les 5 scans en `parallel` (`failFast: false`) ;
 3. agrège les résultats (`aggregateTrivyResults`) et **échoue le build** dès une vulnérabilité `CRITICAL` ;
 4. archive `trivy-reports/**` et publie un rapport HTML agrégé ;
 5. est suivi d'un stage **SBOM CycloneDX** sur l'image applicative.

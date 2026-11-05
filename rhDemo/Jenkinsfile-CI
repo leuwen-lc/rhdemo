@@ -1133,6 +1133,26 @@ YMLEOF
                         echo "📥 Téléchargement de la Java DB..."
                         trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
 
+                        # Fraîcheur : un téléchargement en échec est masqué ci-dessus (|| true) et les scans
+                        # tournent ensuite avec --skip-db-update ; sans ce contrôle, une base périmée passerait
+                        # inaperçue. Base vuln : échec au-delà de 72 h. Java DB (publiée tous les 3 jours) :
+                        # échec si sa date NextUpdate est dépassée, c'est-à-dire si son rafraîchissement a échoué.
+                        NOW=$(date -u +%s)
+                        VULN_UPDATED=$(jq -r '.UpdatedAt // empty' "${TRIVY_CACHE_DIR}/db/metadata.json" 2>/dev/null || true)
+                        JAVA_NEXT=$(jq -r '.NextUpdate // empty' "${TRIVY_CACHE_DIR}/java-db/metadata.json" 2>/dev/null || true)
+                        VULN_TS=$(date -u -d "${VULN_UPDATED%%.*}Z" +%s 2>/dev/null || echo 0)
+                        JAVA_TS=$(date -u -d "${JAVA_NEXT%%.*}Z" +%s 2>/dev/null || echo 0)
+                        VULN_AGE_H=$(( (NOW - VULN_TS) / 3600 ))
+                        echo "   Base vuln : UpdatedAt=${VULN_UPDATED:-absente} (${VULN_AGE_H} h) ; Java DB : NextUpdate=${JAVA_NEXT:-absente}"
+                        if [ "${VULN_TS}" -eq 0 ] || [ "${VULN_AGE_H}" -gt 72 ]; then
+                            echo "❌ Base de vulnérabilités Trivy absente ou périmée (plus de 72 h) : téléchargement en échec ?"
+                            exit 1
+                        fi
+                        if [ "${JAVA_TS}" -eq 0 ] || [ "${JAVA_TS}" -lt "${NOW}" ]; then
+                            echo "❌ Java DB Trivy absente ou non rafraîchie (NextUpdate dépassé) : téléchargement en échec ?"
+                            exit 1
+                        fi
+
                         echo "✅ Bases de données Trivy prêtes dans ${TRIVY_CACHE_DIR} (vuln + java)"
                         echo "   Cache persistant via volume Docker — réutilisé entre les builds"
                     '''

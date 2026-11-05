@@ -20,6 +20,12 @@ TIMEOUT_SECONDS = 15
 VULN_ID_RE = re.compile(r"^(CVE-\d{4}-\d{4,7}|GHSA-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4})$")
 # Écosystèmes OSV correspondant au champ `ecosystem` de detected.json.
 ECOSYSTEMS = {"npm": "npm", "maven": "Maven"}
+# Avis de distribution à identifiant prévisible `<PRÉFIXE>-<CVE>` (ex. ALPINE-CVE-2026-22184) ->
+# préfixe de l'écosystème OSV de chaque branche (`Alpine:v3.24`, `Debian:12`, `Ubuntu:22.04:LTS`).
+# Red Hat non couvert : ses avis (RHSA-AAAA:NNNN) ne se déduisent pas du numéro de CVE.
+DISTROS = {"ALPINE": "Alpine", "DEBIAN": "Debian", "UBUNTU": "Ubuntu"}
+CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,7}$")
+DISTRO_BRANCH_RE = re.compile(r"^[A-Za-z0-9.]{1,16}$")
 
 
 class OsvError(Exception):
@@ -35,6 +41,16 @@ class OsvClient:
         """-> avis (dict) ou None si inconnu (404). Lève OsvError si injoignable."""
         if not VULN_ID_RE.match(vuln_id or ""):
             return None
+        return self._fetch(vuln_id)
+
+    def get_distro(self, distro, cve_id):
+        """Avis de distribution `<distro>-<cve_id>` ou None (404 : la distribution n'a encore rien
+        publié). Identifiant construit ici à partir d'une liste blanche : jamais fourni tel quel."""
+        if distro not in DISTROS or not CVE_RE.match(cve_id or ""):
+            return None
+        return self._fetch(f"{distro}-{cve_id}")
+
+    def _fetch(self, vuln_id):
         if vuln_id in self._cache:
             return self._cache[vuln_id]
         if self.fixture_dir is not None:
@@ -184,3 +200,35 @@ def advisory_fix(client, ids, ecosystem, name, installed):
     if not relevant:
         return ("error" if errored else "unknown"), None, sorted(all_aliases)
     return "none", None, sorted(all_aliases)
+
+
+def distro_fixes(doc, distro, branch):
+    """[(paquet source, version corrigée)] de l'avis de distribution pour la branche `branch`.
+
+    Aucun nom de paquet en entrée : Trivy rapporte le sous-paquet binaire (`brotli-libs`,
+    `libexpat`), la distribution suit le paquet source (`brotli`, `expat`). Une branche sans
+    événement `fixed` (non corrigée, ou last_affected seul) ne donne rien."""
+    prefix = DISTROS.get(distro)
+    if not doc or prefix is None or not DISTRO_BRANCH_RE.match(branch or ""):
+        return []
+    wanted = f"{prefix}:{branch}"
+    out = []
+    for aff in doc.get("affected") or []:
+        pkg = aff.get("package") or {}
+        eco = pkg.get("ecosystem") or ""
+        # Ubuntu suffixe parfois la branche (`Ubuntu:22.04:LTS`).
+        if eco != wanted and not eco.startswith(wanted + ":"):
+            continue
+        for rng in aff.get("ranges") or []:
+            if rng.get("type") != "ECOSYSTEM":
+                continue
+            for ev in rng.get("events") or []:
+                fixed = ev.get("fixed")
+                if isinstance(fixed, str) and re.match(r"^[A-Za-z0-9.:+~_-]{1,64}$", fixed):
+                    out.append((ascii_name(pkg.get("name")), fixed))
+    return sorted(set(out))
+
+
+def ascii_name(name):
+    """Nom de paquet affichable dans poll.log (texte externe filtré)."""
+    return name if isinstance(name, str) and re.match(r"^[A-Za-z0-9.+_-]{1,64}$", name) else "?"

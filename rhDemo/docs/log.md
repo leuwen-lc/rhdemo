@@ -107,3 +107,7 @@ Le build #975 a fait annuler à tort l'acceptation de risque du #974 (CVE DOMPur
 ## [2026-10-29] ingest | webhook SonarQube bloqué et healthcheck sans wget
 
 Timeout de l'étape Quality Gate (builds #978+) : SonarQube 26.10 refuse les webhooks vers une adresse privée (`jenkins:8080`), `waitForQualityGate` n'est jamais notifié. Ajout de `SONAR_VALIDATEWEBHOOKS=false` au service `sonarqube`. Healthcheck réécrit avec `curl` (l'image n'a plus `wget`, conteneur `unhealthy` en continu). `infra/jenkins-docker/README.md` : section SonarQube complétée. `index.md` inchangé.
+
+## [2026-11-05] ingest | fixcve-auto : alerte sur les correctifs de distribution des suppressions Trivy
+
+La suppression temporaire de CVE-2026-111497 (brotli-libs, image nginx éphémère) n'était jamais revérifiée : les entrées Trivy `[PENDING_UPSTREAM_FIX]` étaient seulement listées dans `poll.log`. fixcve lit désormais l'avis OSV de distribution (`<DISTRO>-<CVE>`, sans dépendre du nom de sous-paquet) pour les entrées portant le jeton `[OSV:…]` et écrit une ligne `ALERTE` si un correctif est publié dans la branche installée (constaté : brotli 1.2.1-r0 dans Alpine v3.24). Pas de montée automatique. `FIXCVE_AUTO.md` mis à jour, `index.md` inchangé. À approuver avec `fixcve-install.sh --trust` (modification de `fixcve_lib/osv.py` et `resolve.py`).

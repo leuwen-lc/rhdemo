@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-29
+verifie_le: 2026-11-05
 sources:
   - rhDemo/scripts/fixcve-auto-poll.sh
   - rhDemo/scripts/fixcve-classify.py
@@ -79,7 +79,7 @@ Une montée qui ne peut pas être appliquée ou que la vérification ne confirme
 
 Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>` pour un CVE, `<vulnerabilityName>` pour un GHSA : OSS Index nomme par CVE, Node Audit par GHSA, voir [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md)) ; formes manquantes ajoutées au bloc existant ; portée `groupId` entier pour les groupes à CPE générique (tomcat, log4j, spring-security, jackson...) ; justification dans `<notes>`, jamais en commentaire XML. Trivy : entrée `.trivyignore.yaml` avec jeton `[OSV:<DISTRO>:<branche>]` pour un paquet système.
 
-**Clôture automatique** des suppressions temporaires : à chaque cycle, les blocs `[PENDING_UPSTREAM_FIX]` npm et Maven sont revérifiés (avis OSV + registre) ; si un correctif est publié, toutes les formes de la faille sont retirées et la montée appliquée (événement `pending_fix_resolved`). Les suppressions Trivy (composants d'images tierces) restent à revérifier manuellement (`poll.log` les liste).
+**Clôture automatique** des suppressions temporaires : à chaque cycle, les blocs `[PENDING_UPSTREAM_FIX]` npm et Maven sont revérifiés (avis OSV + registre) ; si un correctif est publié, toutes les formes de la faille sont retirées et la montée appliquée (événement `pending_fix_resolved`). Les suppressions Trivy (composants d'images tierces) restent à revérifier manuellement (`poll.log` les liste) ; pour un paquet système portant le jeton `[OSV:<DISTRO>:<branche>]`, l'avis de distribution OSV (`ALPINE-<CVE>`, `DEBIAN-<CVE>`, `UBUNTU-<CVE>`) est lu et une ligne `ALERTE` est écrite si la branche installée a un correctif, uniquement dans `~/.config/rhdemo-fixcve/poll.log` (préfixe `resolve info: ALERTE`, répétée à chaque cycle tant que la suppression reste en place ; rien dans le journal d'audit ni dans Jenkins). Aucune action automatique : un correctif de distribution ne prouve pas qu'une image tierce l'embarque. Cette revérification n'a lieu que dans un cycle déclenché par un build en échec.
 
 ---
 

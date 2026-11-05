@@ -14,7 +14,7 @@ import re
 
 from . import npm as npm_mod
 from .common import ascii_text, compare, is_prerelease, major, numeric, run, same_minor, version_key
-from .osv import OsvError, advisory_fix
+from .osv import OsvError, advisory_fix, distro_fixes
 from .registry import IMAGES, RegistryError
 from .suppressions import OWASP_FILE, TRIVY_FILE, parse_owasp, parse_trivy
 
@@ -259,7 +259,8 @@ def reverify_pending(ctx, owasp_text, trivy_text):
     """Suppressions temporaires dont un correctif est désormais publié -> entrées pending_reverified.
 
     Couvert : dépendances npm et Maven du projet. Non couvert (journalisé seulement, décision
-    humaine) : jars embarqués dans une image tierce, paquets système d'image."""
+    humaine) : jars embarqués dans une image tierce, paquets système d'image ; pour ces derniers,
+    alerte si la distribution a publié un correctif (voir `alert_trivy_pending`)."""
     out = []
     lock = ctx.lock_index()
     for block in parse_owasp(owasp_text or ""):
@@ -301,8 +302,7 @@ def reverify_pending(ctx, owasp_text, trivy_text):
                                     "new_fixed_version": fixed})
     for entry in parse_trivy(trivy_text or ""):
         if entry["pending"]:
-            ctx.log(f"suppression Trivy temporaire {entry['id']} ({entry['package']}) : revérification "
-                    "manuelle (composant d'image tierce, voir docs/SECURITY_ADVISORIES.md)")
+            alert_trivy_pending(ctx, entry)
     # Dédoublonnage (un même CVE peut figurer dans deux blocs).
     seen, unique = set(), []
     for e in out:
@@ -311,6 +311,33 @@ def reverify_pending(ctx, owasp_text, trivy_text):
             seen.add(key)
             unique.append(e)
     return unique
+
+
+def alert_trivy_pending(ctx, entry):
+    """Suppression Trivy temporaire : alerte si la distribution a publié un correctif (niveau 1).
+
+    Jeton `[OSV:<DISTRO>:<branche>]` requis. Un correctif de distribution ne prouve pas qu'une
+    image tierce l'embarque déjà : aucune action automatique, seulement une ligne ALERTE."""
+    label = f"suppression Trivy temporaire {entry['id']} ({entry['package']})"
+    manual = "revérification manuelle (composant d'image tierce, voir docs/SECURITY_ADVISORIES.md)"
+    osv = entry.get("osv")
+    if not osv:
+        ctx.log(f"{label} : {manual}")
+        return
+    distro, branch = osv["distro"], osv["branch"]
+    try:
+        doc = ctx.osv.get_distro(distro, entry["id"])
+    except OsvError:
+        ctx.log(f"{label} : avis {distro}-{entry['id']} injoignable sur OSV ; {manual}")
+        return
+    fixes = distro_fixes(doc, distro, branch)
+    if not fixes:
+        ctx.log(f"{label} : aucun correctif {distro} {branch} publié (OSV) ; {manual}")
+        return
+    found = ", ".join(f"{pkg} {ver}" for pkg, ver in fixes)
+    ctx.log(f"ALERTE : {label} : correctif publié par {distro} {branch} ({found}, avis OSV "
+            f"{distro}-{entry['id']}). Vérifier si une image tierce plus récente l'embarque, puis monter "
+            "l'image et retirer la suppression (voir docs/SECURITY_ADVISORIES.md).")
 
 
 def resolve(detected, ctx, owasp_text=None, trivy_text=None):

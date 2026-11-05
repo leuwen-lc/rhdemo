@@ -121,5 +121,63 @@ class PendingTest(unittest.TestCase):
         self.assertEqual(reverify_pending(ctx, self.OWASP, ""), [])
 
 
+class TrivyPendingAlertTest(unittest.TestCase):
+    """Niveau 1 : alerte si la distribution a publié un correctif d'une suppression Trivy temporaire."""
+    TRIVY = """vulnerabilities:
+  - id: CVE-2026-111497
+    pkg-name: brotli-libs
+    statement: "[PENDING_UPSTREAM_FIX] [OSV:ALPINE:v3.24] brotli-libs 1.2.0-r1 dans nginx:1.31.3-alpine"
+"""
+
+    @staticmethod
+    def alpine_doc(*branches):
+        return {"affected": [{"package": {"name": "brotli", "ecosystem": f"Alpine:{b}"},
+                              "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}] + (
+                                  [{"fixed": f}] if f else [])}]} for (b, f) in branches]}
+
+    def run_alert(self, osv, trivy=None):
+        ctx = context(osv)
+        logs = []
+        ctx.log = logs.append
+        self.assertEqual(reverify_pending(ctx, "", trivy if trivy is not None else self.TRIVY), [])
+        return logs
+
+    def test_correctif_alpine_publie_alerte(self):
+        osv = OsvDir({"ALPINE-CVE-2026-111497": self.alpine_doc(("v3.23", "1.1.0-r3"), ("v3.24", "1.2.1-r0"))})
+        logs = self.run_alert(osv)
+        self.assertEqual(len(logs), 1)
+        self.assertTrue(logs[0].startswith("ALERTE : "))
+        self.assertIn("brotli 1.2.1-r0", logs[0])
+        self.assertNotIn("1.1.0-r3", logs[0])  # autre branche ignorée
+
+    def test_avis_absent_pas_d_alerte(self):
+        logs = self.run_alert(OsvDir())
+        self.assertNotIn("ALERTE", logs[0])
+        self.assertIn("aucun correctif ALPINE v3.24", logs[0])
+
+    def test_branche_installee_non_corrigee_pas_d_alerte(self):
+        osv = OsvDir({"ALPINE-CVE-2026-111497": self.alpine_doc(("v3.24", None), ("v3.25", "1.2.1-r0"))})
+        self.assertNotIn("ALERTE", self.run_alert(osv)[0])
+
+    def test_osv_injoignable_pas_d_alerte(self):
+        logs = self.run_alert(OsvDir(errors=["ALPINE-CVE-2026-111497"]))
+        self.assertIn("injoignable", logs[0])
+        self.assertNotIn("ALERTE", logs[0])
+
+    def test_sans_jeton_osv_revérification_manuelle(self):
+        trivy = self.TRIVY.replace("[OSV:ALPINE:v3.24] ", "")
+        logs = self.run_alert(OsvDir(), trivy)
+        self.assertIn("revérification manuelle", logs[0])
+        self.assertNotIn("ALERTE", logs[0])
+
+    def test_ubuntu_branche_suffixee(self):
+        doc = {"affected": [{"package": {"name": "expat", "ecosystem": "Ubuntu:22.04:LTS"},
+                             "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.4.7-1ubuntu0.4"}]}]}]}
+        trivy = self.TRIVY.replace("[OSV:ALPINE:v3.24]", "[OSV:UBUNTU:22.04]")
+        logs = self.run_alert(OsvDir({"UBUNTU-CVE-2026-111497": doc}), trivy)
+        self.assertIn("ALERTE", logs[0])
+        self.assertIn("expat 2.4.7-1ubuntu0.4", logs[0])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,10 @@ metadata:
     app: keycloak
 spec:
   replicas: {{ .Values.keycloak.replicaCount }}
+  # Recreate : deux versions de Keycloak ne doivent jamais tourner en même temps
+  # sur le même schéma (la nouvelle migre la base au démarrage).
+  strategy:
+    type: {{ .Values.keycloak.strategy }}
   selector:
     matchLabels:
       app: keycloak
@@ -39,6 +43,7 @@ spec:
         imagePullPolicy: {{ .Values.global.imagePullPolicy }}
         args:
         - start
+        - --cache={{ .Values.keycloak.cache }}
         - --db=postgres
         - --db-url=jdbc:postgresql://{{ .Values.keycloak.database.host }}:{{ .Values.keycloak.database.port }}/{{ .Values.keycloak.database.name }}
         - --db-username={{ .Values.keycloak.database.user }}

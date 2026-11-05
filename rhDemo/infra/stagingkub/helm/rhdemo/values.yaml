@@ -120,6 +120,17 @@ keycloak:
 
   replicaCount: 1
 
+  # Stratégie de déploiement : Recreate, car une montée de version migre le
+  # schéma de la base. En RollingUpdate, l'ancien et le nouveau pod coexistent
+  # sur la même base ; depuis Keycloak 26.8 le nouveau pod détecte un
+  # split-brain JGroups et reste non Ready, ce qui bloque le déploiement.
+  strategy: Recreate
+
+  # Cache Infinispan : local (instance unique, pas de clustering JGroups ni de
+  # découverte JDBC_PING). Passer à "ispn" impose replicaCount > 1 ET l'ouverture
+  # des ports JGroups (7800, 57800) entre pods Keycloak dans la NetworkPolicy.
+  cache: local
+
   admin:
     user: admin
     # Le mot de passe sera fourni via secret

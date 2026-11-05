@@ -635,6 +635,10 @@ Symptôme : `nc: bad address 'postgresql-rhdemo'` dans les logs des initContaine
 ./scripts/repair-cluster-after-restart.sh           # corrige : redémarre Cilium puis CoreDNS
 ```
 
+### Montée de version Keycloak bloquée (nouveau pod `0/1 Running`)
+
+Symptôme : release Helm en `pending-upgrade`, ancien et nouveau pod Keycloak côte à côte, le nouveau reste non Ready avec `Split-brain detected for cluster 'ISPN'` dans ses logs et `Keycloak cluster health check` DOWN dans `/health/ready`. Cause : un déploiement en `RollingUpdate` avec le cache clusterisé, alors que la NetworkPolicy bloque JGroups entre les pods. Depuis la version 26.8, la readiness de Keycloak vérifie la santé du cluster. Le chart impose désormais `keycloak.strategy: Recreate` et `keycloak.cache: local` (`helm/rhdemo/values.yaml`). Si le blocage se produit quand même, le nouveau pod a déjà migré la base : **ne pas revenir à l'ancienne version de Keycloak**, mais redéployer la nouvelle avec le chart corrigé. C'est aussi pour cette raison que `Jenkinsfile-CD` n'utilise pas `--rollback-on-failure` : un retour automatique remettrait l'ancienne version de Keycloak sur un schéma déjà migré. Un `helm upgrade` en échec laisse la révision en `failed`, et le CD suivant repart normalement.
+
 ### /etc/hosts non configuré
 
 ```bash

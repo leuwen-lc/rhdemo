@@ -188,4 +188,17 @@
         <cve>CVE-2026-116804</cve>
     </suppress>
 
+    <suppress>
+        <notes>CVE-2026-119051 : flat 5.0.2 (CVSS 8.2). Critère A (A:npm_dev_only) : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production. Aucun correctif publié dans la branche installée. Remédiation automatique build #1003.</notes>
+        <packageUrl regex="true">^pkg:npm/flat@.*$</packageUrl>
+        <cve>CVE-2026-119051</cve>
+    </suppress>
+
+    <suppress>
+        <notes>CVE-2026-119025 / GHSA-q978-78c7-phqw : open 8.4.2 (CVSS 7.7). Critère A (A:npm_dev_only) : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production. Aucun correctif publié dans la branche installée. Remédiation automatique build #1003.</notes>
+        <packageUrl regex="true">^pkg:npm/open@.*$</packageUrl>
+        <cve>CVE-2026-119025</cve>
+        <vulnerabilityName>GHSA-q978-78c7-phqw</vulnerabilityName>
+    </suppress>
+
 </suppressions>

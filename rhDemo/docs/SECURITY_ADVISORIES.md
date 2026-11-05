@@ -4,6 +4,17 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## flat, follow-redirects, open (build #1003)
+
+- **Date** : 2026-11-05 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `follow-redirects` 1.16.1 → 1.16.2 (CVE-2026-116689, GHSA-mrwp-f3q8-3g9p, CVSS 8.2)
+- **Remédiation automatique — risque accepté (permanent)** :
+  - `flat` 5.0.2 (CVE-2026-119051, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+  - `open` 8.4.2 (CVE-2026-119025, GHSA-q978-78c7-phqw, CVSS 7.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+
+---
+
 ## joi, node-forge (build #989)
 
 - **Date** : 2026-10-31 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

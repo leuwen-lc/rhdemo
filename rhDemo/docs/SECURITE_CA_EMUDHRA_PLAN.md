@@ -50,10 +50,10 @@ Mesures en lecture seule sur les images locales : version de `ca-certificates`, 
 | --- | --- | --- | --- | --- | --- | --- |
 | Hôte | Ubuntu 24.04 | 20260816ubuntu0.24.04.1 | n/a | absente | 2026-10-23 | **corrigé** |
 | Agent Jenkins | Debian 13 | 20250419+deb13u1 | Temurin 25.0.5+8 | retirée de `cacerts` et du bundle | 2026-10-29 | **corrigé** |
-| Contrôleur Jenkins | Debian 13 | 20250419+deb13u1 | Temurin 25.0.5+8 | retirée de `cacerts` | 2026-10-29 | **corrigé** (image reconstruite, redémarrage à faire) |
+| Contrôleur Jenkins | Debian 13 | 20250419+deb13u1 | Temurin 25.0.5+8 | retirée de `cacerts` | 2026-11-05 | **corrigé** (redémarré le 2026-10-29 sur l'image reconstruite) |
 | Nœud KinD | Debian 13 | 20250419+deb13u1 | n/a | retirée | 2026-10-23 | **corrigé** |
-| Application `rhdemo-api` (`eclipse-temurin:25.0.3_9-jre-noble`) | Ubuntu 24.04 | 20260601~24.04.1 | Temurin 25.0.3 | présente | 2026-10-23 | non corrigé |
-| Builder (`maven:3.9-eclipse-temurin-25-noble`) | Ubuntu 24.04 | 20260601~24.04.1 | Temurin 25.0.3 | présente | 2026-10-29 | non corrigé |
+| Application `rhdemo-api` (`eclipse-temurin:25.0.5_8-jre-noble`) | Ubuntu 24.04 | 20260816ubuntu0.24.04.1 | Temurin 25.0.5+8 | retirée de `cacerts` et du bundle | 2026-11-05 | **corrigé** (base montée, test de contrôle G3 rejeté ; rebuild par la CI) |
+| Builder (`maven:3.9-eclipse-temurin-25-noble`) | Ubuntu 24.04 | 20260601~24.04.1 | Temurin 25.0.4.1 | présente | 2026-11-05 | non corrigé (aucune image Maven en 25.0.5) |
 | Keycloak 26.7.x | RHEL 9.8 | RHEL (sans correctif) | JDK Red Hat 21.0.12.1 | présente | 2026-10-23 | non corrigé (acceptations Trivy, section 3 quater) |
 | SonarQube 26.8.0 | Ubuntu 24.04 | 20260601~24.04.1 | 25.0.4 | présente | 2026-10-23 | non corrigé (image tierce) |
 | ZAP `stable` | Debian 12 | 20230311+deb12u1 | 17.0.19 | présente, AAA aussi | 2026-10-23 | non corrigé (image tierce) |
@@ -65,7 +65,7 @@ Les images `postgres`, `nginx` et `busybox` épinglées dans `values.yaml` ne so
 
 - **Mécanisme** : Temurin `25.0.5+8` (publié le 2026-10-22) **retire les racines emSign G3, C3 et C1 de `cacerts`** (seule G1 reste ; 118 entrées contre 144 en 25.0.3). Le fichier `blocked.certs` n'est pas modifié (39 lignes). Le JDK Oracle utilise un autre mécanisme (ajout de hachages dans `blocked.certs`, version `25.0.5.0.2`) qui n'est pas nécessaire ici.
 - **Portée** : le correctif est dans le JDK lui-même, indépendant du système d'exploitation de l'image et de la version de `ca-certificates`. Il est donc durable tant que les images utilisent Temurin 25.0.5 ou plus. Une image rebasée sur un Temurin plus ancien perd la protection : le test de contrôle sert à le détecter.
-- **Disponibilité au 2026-10-29** : présent dans les images Debian (`jenkins/inbound-agent:latest-jdk25`, `jenkins/jenkins:2.580.2-lts-jdk25`). **Absent des images `eclipse-temurin` et `maven` Ubuntu (noble et resolute, 25.0.4.1) et Alpine (25.0.4.1)**, qui contiennent encore G3 : aucune image pour l'application et le builder n'est corrigée.
+- **Disponibilité au 2026-10-29** : présent dans les images Debian (`jenkins/inbound-agent:latest-jdk25`, `jenkins/jenkins:2.580.2-lts-jdk25`). **Absent des images `eclipse-temurin` et `maven` Ubuntu (noble et resolute, 25.0.4.1) et Alpine (25.0.4.1)**, qui contiennent encore G3 : aucune image pour l'application et le builder n'est corrigée. **Au 2026-11-05** : `eclipse-temurin:25.0.5_8-jre-noble` est publiée (G3, C3, C1 retirées de `cacerts`, `ca-certificates` 20260816) et sert de base à l'application ; `maven:3.9-eclipse-temurin-25-noble` reste en 25.0.4.1 avec G3.
 
 ## 3 ter. Test de contrôle
 
@@ -100,7 +100,7 @@ Mise à jour du 2026-11-05 : l'acceptation de CVE-2026-114406 est retirée (Keyc
 | # | Action | Cible | État |
 | --- | --- | --- | --- |
 | 1 | Redémarrer le contrôleur (`./start-jenkins.sh`) pour prendre l'image reconstruite, puis exécuter une CI complète : l'agent et le contrôleur n'ont été validés qu'en local | Jenkins | à faire |
-| 2 | Rebuild de l'application et du builder avec `--pull` dès qu'une image Ubuntu Temurin 25.0.5+8 (ou plus) est publiée et embarque `ca-certificates` 20260816 ; Renovate proposera la montée de digest et de tag (`25.0.3_9` est épinglé dans `rhDemo/Dockerfile`) | App, builder | en attente d'image Temurin Ubuntu |
+| 2 | Rebuild de l'application et du builder avec `--pull` dès qu'une image Ubuntu Temurin 25.0.5+8 (ou plus) est publiée et embarque `ca-certificates` 20260816 ; Renovate proposera la montée de digest et de tag (`25.0.3_9` est épinglé dans `rhDemo/Dockerfile`) | App, builder | App : **fait** le 2026-11-05 (`25.0.5_8-jre-noble`, épinglée par digest) ; builder : en attente d'une image Maven Temurin 25.0.5 |
 | 3 | Retirer les deux acceptations de `.trivyignore.yaml` quand Red Hat publie `ca-certificates` et `java-21-openjdk` corrigés | Keycloak | `ca-certificates` : retirée le 2026-11-05 (Keycloak 26.8.1 corrigé) ; `java-21-openjdk` : en attente d'un correctif amont (toujours vulnérable en 1:21.0.13.0.9-1.2.el9) |
 | 4 | Image `zaproxy` dérivée avec `ca-certificates` `~deb12u2` si l'amont tarde ; suivre aussi SonarQube (JDK 25.0.4) | ZAP, SonarQube | ouvert |
 | 5 | Laisser Renovate proposer les montées de digest Alpine (`20261020-r0`), Keycloak, nginx, postgres, puis refaire le test de contrôle | Autres images | suivi continu |
@@ -123,3 +123,4 @@ Mise à jour du 2026-11-05 : l'acceptation de CVE-2026-114406 est retirée (Keyc
 
 - 2026-10-23 : création, mesure initiale, phase 1 (nœud KinD, agent, contrôleur, épinglages), acceptations `fixcve-auto`.
 - 2026-10-29 : agent et contrôleur sur Temurin 25.0.5+8 (correctif par retrait des racines emSign de `cacerts`) ; réécriture du document autour de l'état courant ; retrait du contournement par vérification de révocation CRL (non viable, il rejetait `github.com` et `ghcr.io`).
+- 2026-11-05 : base de l'application montée en `eclipse-temurin:25.0.5_8-jre-noble` (digest), test de contrôle G3 rejeté ; builder toujours vulnérable ; acceptation `ca-certificates` de Keycloak retirée (Keycloak 26.8.1).

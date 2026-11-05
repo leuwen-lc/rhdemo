@@ -39,7 +39,7 @@ RUN ls -lh /build/target/*.jar
 # STAGE 2 : RUNTIME
 # Image finale légère avec uniquement le JRE 25 et l'application
 # ───────────────────────────────────────────────────────────────────
-FROM eclipse-temurin:25.0.3_9-jre-noble
+FROM eclipse-temurin:25.0.5_8-jre-noble@sha256:a98128a57de944a72bd31fbc79b898edd5a5864d3652071d5bbd2160ab7d7dce
 
 # Arguments de build (optionnels, fournis par Jenkins)
 ARG BUILD_DATE

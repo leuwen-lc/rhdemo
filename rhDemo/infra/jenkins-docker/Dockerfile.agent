@@ -1,4 +1,4 @@
-FROM jenkins/inbound-agent:latest-jdk25@sha256:9f243ac38c833d2955fa8e36220329d55e232d46667769c02376cd246e3250a3
+FROM jenkins/inbound-agent:latest-jdk25@sha256:b800dc3ef1e95eb74918f61d7323b31bff7fd2c8d7e692f8f56578e7541d84ea
 
 # Passer en root pour installer les dépendances
 USER root

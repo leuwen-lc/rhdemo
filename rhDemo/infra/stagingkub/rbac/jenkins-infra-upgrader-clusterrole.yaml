@@ -476,6 +476,16 @@ rules:
       - tlsroutes/status
       - udproutes/status
     verbs: ["update"]
+  # GatewayClass "nginx" (cluster-scoped, rendue par la release ngf) : Helm doit
+  # pouvoir la lire/patcher à l'upgrade et au rollback automatique
+  # (--rollback-on-failure). Échec observé : « cannot get resource gatewayclasses ».
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses"]
+    resourceNames: ["nginx"]
+    verbs: ["get", "update", "patch", "delete"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gatewayclasses"]
+    verbs: ["create"]
   - apiGroups: ["gateway.nginx.org"]
     resources: ["nginxgateways"]
     verbs: ["get", "list", "watch"]

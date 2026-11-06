@@ -180,6 +180,10 @@ Frontend migré vers Vite 8 : `vite.config.js` (port 8081, proxy `/api`), `index
 
 `owasp-suppressions.xml` ramené à 3 entrées (DOMPurify, 2 Spring Security) : la suppression `picomatch` est aussi retirée (4.0.7 via Vite, la 2.3.2 visée n'est plus installée). Mention « Résolu le 2026-11-06 » ajoutée à 9 avis de `SECURITY_ADVISORIES.md` (#1003, #974, #914, #907, #884, #849, #717, postcss 7.0.39, #936), à la demande de l'utilisateur malgré la règle de ne pas éditer ce fichier à la main. Non vérifié par un scan Dependency-Check local (clé NVD absente) : la preuve sera le prochain build CI.
 
-## [2026-11-06] fix | upgrade NGF 2.8.0 : RBAC et NetworkPolicy du hook cert-generator
+## [2026-11-06] ingest | upgrade NGF 2.8.0 : RBAC et NetworkPolicy du hook cert-generator
 
 Premier upgrade de NGF sous `default-deny-all` et sous le compte `jenkins-infra-upgrader`. Trois manques, tous liés au hook Helm `cert-generator` (devenu `pre-install, pre-upgrade` pour tous ses objets en 2.8.0) : (1) droits RBAC `delete`/`create` sur Role, RoleBinding et Job, `get` sur la GatewayClass `nginx` pour le rollback automatique, droits sur NginxGateway/NginxProxy ; (2) CiliumNetworkPolicy `allow-apiserver-cert-generator` (les pods du Job n'ont pas le label ciblé par `allow-apiserver-access`) ; (3) verbe `bind` restreint à ce Role, car le préflight RBAC échouait en `NotFound` quand le Role du hook n'existe pas entre deux upgrades. `SECURITE_NETWORK_POLICY.md` complété.
+
+## [2026-11-06] ingest | observabilité : clôture des 4 points ouverts
+
+Loki : `compactor.retention_enabled: true` ajouté (la rétention de 7 jours n'était jamais appliquée). Datasource Prometheus : source unique dans les values Grafana, ConfigMap du script remplacée par sa suppression. `grafana-gateway.yaml` supprimé, références corrigées. Alertmanager sans destinataire documenté comme choix assumé (pas d'egress). Section « Points ouverts » retirée de `OBSERVABILITY_STACK_INTEGRATION.md`. À appliquer sur le cluster : relancer les scripts Loki et Grafana puis contrôler `kubectl get cm -n loki-stack loki -o yaml | grep -A3 compactor`.

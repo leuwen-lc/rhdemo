@@ -75,7 +75,7 @@ Internet (HTTPS :443)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  NAMESPACE: loki-stack                                                       │
 │  ┌───────────────┐                                                          │
-│  │ HTTPRoute     │ (créé par grafana-gateway.yaml)                          │
+│  │ HTTPRoute     │ (créé par install-or-upgrade-grafana.sh)                 │
 │  │ grafana       │                                                          │
 │  │ → grafana     │                                                          │
 │  └───────────────┘                                                          │

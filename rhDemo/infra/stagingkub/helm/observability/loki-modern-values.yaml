@@ -28,6 +28,11 @@ loki:
           prefix: loki_index_
           period: 24h
 
+  # Sans retention_enabled, retention_period n'est jamais appliqué
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
   limits_config:
     retention_period: 168h  # 7 jours
     ingestion_rate_mb: 10

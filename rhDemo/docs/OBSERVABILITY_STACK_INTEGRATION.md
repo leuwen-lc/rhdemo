@@ -55,7 +55,7 @@ Labels disponibles dans Loki : `namespace`, `pod`, `container`, `app`, `componen
 **Un script par composant.** Chaque étape appelle `scripts/components/install-or-upgrade-<composant>.sh`, idempotent (`helm upgrade --install --rollback-on-failure --wait`). Ces scripts sont aussi utilisés par le pipeline de mise à jour en place `RHDemo-Stagingkub-Upgrade-Deploy` : les deux chemins ne peuvent pas diverger. Particularités :
 
 - **kube-prometheus-stack** : les CRDs du chart sont appliquées à part, en server-side apply, avant la release : `helm upgrade` ne met jamais à jour le dossier `crds/` d'un chart, et ces CRDs dépassent la taille maximale d'un apply côté client. Les webhooks d'admission de l'Operator sont désactivés.
-- **Grafana** : le script crée en plus la `HTTPRoute` `grafana-route`, la ConfigMap de datasource Prometheus, redémarre Grafana puis redéploie les dashboards.
+- **Grafana** : le script crée en plus la `HTTPRoute` `grafana-route`, supprime l'ancienne ConfigMap de datasource Prometheus (les datasources sont dans les values) puis redéploie les dashboards.
 - **Mode validation** : avec `HELM_DRY_RUN=true`, les scripts ne font qu'un `--dry-run=server`, sans modifier le cluster. `Jenkinsfile-Renovate` s'en sert pour valider une montée de chart avant merge, et scanne avec Trivy les images rendues par le chart.
 
 **Montées de version.** Renovate propose les montées de chart (variables `*_VERSION`) ; après merge, `RHDemo-Stagingkub-Upgrade-Deploy` applique le script du composant concerné avec le compte `jenkins-infra-upgrader`. Détails : [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) et le README de stagingkub, section « Mise à jour en place ».
@@ -116,7 +116,7 @@ Les dashboards fournis contiennent d'autres exemples : ouvrir un panneau en édi
 
 Requêtes et limites CPU/mémoire de chaque composant : fichiers de values. Loki tourne en un seul pod, avec deux caches memcached (chunks et résultats) ; les déploiements `read`, `write` et `backend` sont à zéro réplique. Son auto-monitoring, Loki Canary et les tests du chart sont désactivés.
 
-Les règles d'alerte par défaut de kube-prometheus-stack sont créées, sauf celles des composants inaccessibles sur KinD (etcd, scheduler, controller-manager, SLO de l'API server). Aucun destinataire n'est configuré dans Alertmanager : les alertes sont visibles dans son interface mais ne sont envoyées nulle part.
+Les règles d'alerte par défaut de kube-prometheus-stack sont créées, sauf celles des composants inaccessibles sur KinD (etcd, scheduler, controller-manager, SLO de l'API server). Aucun destinataire n'est configuré dans Alertmanager, par choix : l'egress Internet est interdit (pas d'e-mail ni de Slack) et un récepteur interne serait disproportionné pour du staging. Les alertes se consultent dans l'interface d'Alertmanager (port-forward ci-dessus) et ne sont envoyées nulle part.
 
 ## Sécurité
 
@@ -135,13 +135,6 @@ Les règles d'alerte par défaut de kube-prometheus-stack sont créées, sauf ce
 | Grafana inaccessible | `kubectl get httproute -n loki-stack grafana-route` et entrée `/etc/hosts` ; à défaut, port-forward |
 | Datasource en erreur | Depuis le pod Grafana, joindre `loki-gateway` et `prometheus-kube-prometheus-prometheus.monitoring.svc:9090` ; vérifier les NetworkPolicies de `loki-stack` |
 | Volume Loki plein | `kubectl exec -n loki-stack loki-0 -- df -h /var/loki` ; voir aussi le point ouvert sur la rétention |
-
-## Points ouverts
-
-- **Rétention de Loki à vérifier** : Loki n'applique `retention_period` que si le compactor a `retention_enabled: true`, absent des values du projet. Contrôler la configuration rendue (`kubectl get configmap -n loki-stack loki -o yaml | grep retention`) ; sinon les logs ne sont jamais supprimés et le volume de 5 Gi finira par se remplir.
-- **Datasource Prometheus déclarée deux fois**, dans `grafana-values.yaml` et dans la ConfigMap créée par `install-or-upgrade-grafana.sh`.
-- **`helm/observability/grafana-gateway.yaml` n'est plus utilisé** : Grafana passe par la Gateway partagée (`grafana-route`), et aucun script n'applique ce fichier.
-- **Aucune alerte n'est acheminée** (Alertmanager sans destinataire).
 
 ## Références
 

@@ -5,7 +5,7 @@ set -e
 # Installation ou mise à jour en place de Grafana
 # ═══════════════════════════════════════════════════════════════
 # Idempotent (helm upgrade --install) : release Helm + HTTPRoute +
-# datasource Prometheus + redémarrage + dashboards.
+# dashboards.
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -91,30 +91,9 @@ spec:
       port: 80
 EOF
 
-# Datasource Prometheus — idempotente
-cat <<EOF | kubectl apply -n "${LOKI_NS}" -f - >/dev/null 2>&1
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-datasource-prometheus
-  namespace: ${LOKI_NS}
-  labels:
-    grafana_datasource: "1"
-data:
-  prometheus-datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
-        isDefault: false
-        editable: true
-        jsonData:
-          timeInterval: 30s
-EOF
-
-kubectl rollout restart deployment/grafana -n "${LOKI_NS}" >/dev/null 2>&1
+# Les datasources (Loki, Prometheus) sont déclarées dans grafana-values.yaml
+# (source unique) ; l'ancienne ConfigMap est supprimée si elle subsiste.
+kubectl delete configmap grafana-datasource-prometheus -n "${LOKI_NS}" --ignore-not-found >/dev/null
 kubectl rollout status deployment/grafana -n "${LOKI_NS}" --timeout=2m
 
 "${SCRIPT_DIR}/../deploy-grafana-dashboard.sh" all

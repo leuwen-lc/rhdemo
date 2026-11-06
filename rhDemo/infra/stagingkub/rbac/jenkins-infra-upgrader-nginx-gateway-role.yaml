@@ -39,6 +39,16 @@ rules:
     resourceNames:
       - ngf-nginx-gateway-fabric-cert-generator
     verbs: ["update", "patch", "delete"]
+  # `bind` sur ce seul Role : sans lui, créer/valider le RoleBinding du hook
+  # exige de résoudre le Role visé pour vérifier l'anti-élévation. Or le Role
+  # d'un hook n'existe pas entre deux upgrades (supprimé par Helm), d'où
+  # « rolebindings ... not found » dans le préflight RBAC (dry-run, qui ne crée
+  # pas le Role). Le verbe `bind` est restreint par resourceNames.
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    resourceNames:
+      - ngf-nginx-gateway-fabric-cert-generator
+    verbs: ["bind"]
   # Job du hook cert-generator (créé/supprimé par Helm)
   - apiGroups: ["batch"]
     resources: ["jobs"]

@@ -25,7 +25,7 @@ source "${SCRIPT_DIR}/rbac-preflight-check.sh"
 # Le datasource "helm" ne convient pas non plus : il ne sait pas résoudre un
 # registryUrl oci:// (erreur "cannot parse url" observée en production).
 # renovate: datasource=github-releases depName=nginx/nginx-gateway-fabric
-NGF_VERSION="2.6.0"
+NGF_VERSION="2.8.0"
 
 NGF_NAMESPACE="nginx-gateway"
 

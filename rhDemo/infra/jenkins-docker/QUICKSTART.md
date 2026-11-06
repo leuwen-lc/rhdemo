@@ -47,16 +47,17 @@ Jenkins est accessible sur **http://localhost:8080**.
 
 ### Pour Jenkinsfile-Renovate (pipeline `RHDemo-Renovate`, automerge des PRs de dépendances)
 
-Réutilise `nvd-api-key` et `ossindex-credentials` déjà créés ci-dessus. En plus, à créer :
+Réutilise `nvd-api-key` déjà créé ci-dessus. En plus, à créer :
 
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|
-| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `rhdemo-ci-bot` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
-| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + **`user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) |
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `cibot-leuwen-lc` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `cibot-leuwen-lc`), scopes `repository` + `issue` + **`user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) |
 | `renovate-gpg-key` | Secret text | Clé GPG privée dédiée à la signature des commits Renovate, exportée en base64 : `gpg --export-secret-keys <KEY_ID> \| base64 -w0` |
 | `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) pour les lookups de changelogs/release notes des dépendances hébergées sur GitHub |
+| `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID, pas l'e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sans lui, Renovate n'a pas les dates de publication des grosses images et le stage de scan échoue |
 
-> Pourquoi deux comptes bot distincts (`rhdemo-ci-bot` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md` sections 1 et « Credentials Jenkins nécessaires ».
+> Pourquoi deux comptes bot distincts (`cibot-leuwen-lc` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md`, section « Comptes et credentials ».
 
 ### Pour la mise à jour en place de l'infra stagingkub (`RHDemo-Stagingkub-Upgrade-Deploy`)
 

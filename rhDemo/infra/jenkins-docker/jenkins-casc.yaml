@@ -166,12 +166,12 @@ tool:
 # 5. ci-bot-forgejo-token
 #    - Type: Secret text
 #    - ID: ci-bot-forgejo-token
-#    - Secret: token du compte Codeberg dédié "rhdemo-ci-bot" (PAS le compte personnel
+#    - Secret: token du compte Codeberg dédié "cibot-leuwen-lc" (PAS le compte personnel
 #      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope
 #      "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
 #      "repository" seul ne suffit pas.
 #    - Prérequis avant de générer le token :
-#        1. Créer le compte "rhdemo-ci-bot" sur https://codeberg.org
+#        1. Créer le compte "cibot-leuwen-lc" sur https://codeberg.org
 #        2. L'ajouter comme collaborateur du repo leuwen-lc/rhdemo avec la permission
 #           "Write" (pas "Admin") : Settings > Collaborators
 #        3. Se connecter avec ce compte et générer le token sur
@@ -248,6 +248,17 @@ tool:
 #      fichiers : dépôt public, une adresse mail personnelle en clair dans le code n'a aucun
 #      bénéfice (contrairement à security.txt, exposition volontaire pour un contact sécurité)
 #      et alimente le harvesting de spam.
+#
+# 11. dockerhub-renovate-readonly
+#    - Type: Username with password
+#    - ID: dockerhub-renovate-readonly
+#    - Username: identifiant Docker Hub (Docker ID, pas l'adresse e-mail) ; Password : jeton
+#      personnel de portée "Public Repo Read-only", avec date d'expiration
+#      (hub.docker.com > Account settings > Personal access tokens)
+#    - Pourquoi : en anonyme, l'API hub.docker.com refuse la pagination au-delà de 1 000 tags,
+#      Renovate perd alors la date de publication des grosses images et leur délai minimal.
+#      Échec de connexion (jeton expiré) : le stage "Scan Renovate" échoue, donc mail.
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate" (RENOVATE_HOST_RULES)
 
 
 # ═══════════════════════════════════════════════════════════════════

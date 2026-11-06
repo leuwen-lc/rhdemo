@@ -26,10 +26,9 @@
       "automerge": false
     },
     {
-      "description": "Images Docker : aucun registre ne fournit de date de publication exploitable (Docker Hub refuse la pagination anonyme au-dela de 1 000 tags, Quay et ghcr n'en donnent pas), donc minimumReleaseAge les bloquerait indefiniment. Le delai est applique par Jenkinsfile-Renovate (quarantaine comptee depuis la premiere observation, meme duree que le minimumReleaseAge global ci-dessus) ; le trailer de commit permet a Jenkins de reconnaitre ces PR. Cf. rhDemo/docs/RENOVATE_AUTOMERGE_CI.md.",
-      "matchDatasources": ["docker"],
-      "minimumReleaseAge": null,
-      "commitBody": "Quarantaine-Image: oui"
+      "description": "Chart NGINX Gateway Fabric : publie uniquement en OCI sur ghcr.io, qui ne fournit aucune date de publication (minimumReleaseAge bloquerait indefiniment). Version suivie via les releases GitHub, datees et alignees sur les versions du chart ; le tag 'v2.8.1' devient '2.8.1'. Cf. rhDemo/docs/RENOVATE_AUTOMERGE_CI.md, section Delai des images Docker.",
+      "matchPackageNames": ["nginx/nginx-gateway-fabric"],
+      "extractVersion": "^v(?<version>.+)$"
     },
     {
       "matchPackageNames": ["rhdemo-api"],

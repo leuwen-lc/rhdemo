@@ -12,12 +12,12 @@ global:
   images:
     # renovate: datasource=docker depName=postgres
     postgres: "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
-    # renovate: datasource=docker depName=quay.io/keycloak/keycloak
-    keycloak: "quay.io/keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332"
+    # renovate: datasource=docker depName=keycloak/keycloak
+    keycloak: "keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332"
     # renovate: datasource=docker depName=busybox
     busybox: "busybox:1.38@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4"
-    # renovate: datasource=docker depName=quay.io/prometheuscommunity/postgres-exporter
-    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e"
+    # renovate: datasource=docker depName=prometheuscommunity/postgres-exporter
+    postgresExporter: "prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e"
   imagePullPolicy: IfNotPresent
 
 # ═══════════════════════════════════════════════════════════════

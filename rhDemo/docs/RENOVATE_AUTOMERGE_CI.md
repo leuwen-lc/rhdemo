@@ -1,414 +1,184 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-06
 sources:
   - rhDemo/Jenkinsfile-Renovate
   - renovate.json
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
 ---
 
-# Intégration automatique des mises à jour Renovate après validation CI Jenkins
-
-## Contexte et solution retenue
-
-Renovate crée chaque nuit (3h) des PRs de mise à jour de dépendances vers `evolutions-post-1.1.9`,
-mais ne peut pas les merger lui-même : Jenkins n'est pas exposé sur Internet donc Forgejo ne peut
-pas lui envoyer de webhook, et les statuts CI ne sont jamais remontés vers Forgejo
-(`prCreation: immediate`) — Renovate attendrait donc indéfiniment un statut qui n'arrive jamais.
-Plusieurs pistes ont été écartées : faire remonter les statuts CI à Forgejo pour laisser Renovate
-merger lui-même (rejeté — délai d'environ 24h jusqu'au passage nocturne suivant, et nécessite un
-pipeline Jenkins multibranch supplémentaire sur `renovate/*`) ; migrer la CI vers Codeberg Actions
-pour bénéficier des webhooks natifs (hors scope — refonte complète du pipeline) ; paramétrer le
-`Jenkinsfile-CI` existant avec un orchestrateur minimal qui le déclenche pour chaque PR (rejeté —
-couple la validation Renovate à la durée et aux évolutions du CI complet, alors que
-Selenium/ZAP/SonarQube/publication n'ont pas besoin d'y tourner) ; et factoriser build/tests/OWASP
-dans une shared library Jenkins commune aux deux pipelines (rejeté — le `Jenkinsfile-CI` déclaratif
-actuel devrait être réécrit en pipeline scripté pour être appelable dynamiquement, un refactoring
-risqué pour un gain marginal). La solution retenue est un pipeline Jenkins dédié,
-[`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate) : il liste les PRs Renovate ouvertes via l'API
-Forgejo, exécute pour chacune un build Maven + tests + OWASP Dependency-Check (sans
-Selenium/ZAP/SonarQube, déjà couverts par `RHDemo-CI` sur master après merge), puis merge
-automatiquement via l'API Forgejo si la CI est verte, ou commente un échec sinon. Les PRs major
-restent bloquées côté Renovate (`dependencyDashboardApproval: true`).
-
----
-
-## Implémentation
-
-> **Statut** : implémenté — [`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate), job `RHDemo-Renovate`
-> dans [`jenkins-casc.yaml`](../infra/jenkins-docker/jenkins-casc.yaml) et fonction
-> `postForgejoComment` dans [`rhDemoLib.groovy`](../vars/rhDemoLib.groovy).
-
-### 1. Credential Jenkins : token API Forgejo
-
-**Compte dédié, pas le compte personnel.** Le token qui liste/synchronise/merge les PRs et poste
-les commentaires est généré sur un compte Codeberg bot dédié (`rhdemo-ci-bot`), pas sur le compte
-personnel `leuwen-lc`. Raisons :
-- **Blast radius** : un token hérite de l'identité qui l'a créé, même avec un scope réduit. Une
-  fuite du credential Jenkins authentifierait l'attaquant "en tant que vous" sur Codeberg (accès
-  aux autres repos/organisations du compte). Un compte bot collaborateur d'un seul repo, avec
-  permission "Write" (pas "Admin"), limite les dégâts à ce repo.
-- **Audit** : les merges automatiques apparaissent dans l'historique Forgejo sous l'identité
-  `rhdemo-ci-bot`, distincts de vos actions manuelles — utile pour distinguer "c'est la CI qui a
-  mergé" de "c'est moi qui ai mergé".
-- **Cycle de vie découplé** : rotation de mot de passe/2FA sur le compte personnel ne casse pas
-  la CI.
-- **Séparation des rôles** : ce compte est distinct du bot Renovate (`renovate-forgejo-token`,
-  compte qui *propose* les PRs) — c'est une identité différente qui *valide/merge* après CI verte,
-  comme une revue à deux acteurs même si le second est entièrement automatisé.
-
-Ce token reste distinct de celui déjà utilisé par `/fixcve-auto`
-(`~/.config/rhdemo-fixcve/credentials.sops.yaml`), pour isoler les deux automatisations.
-
-### 2. Fichier `Jenkinsfile-Renovate`
-
-Voir [`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate) pour le script complet — trois stages :
-**Scan Renovate** (image officielle `renovate/renovate`, cf. section dédiée plus bas),
-**Lister les PRs Renovate** (API Forgejo + filtre `jq` sur `head.ref`/`base.ref`/`head.repo.full_name`),
-et **Valider et merger chaque PR** (fetch de la branche, synchronisation avec la base si en retard,
-build Maven + OWASP, puis merge API en squash si la CI passe — un seul commit par PR sur
-`evolutions-post-1.1.9`, historique linéaire ; nécessite « Allow squash merging » activé côté
-réglages du dépôt Codeberg).
-
-Le credential `ci-bot-forgejo-token` (accès Write) est scopé au strict nécessaire dans ce dernier
-stage : il n'est jamais exposé en variable d'environnement pendant l'exécution du build
-(`mvnw verify`/OWASP), qui ne dispose que de `NVD_API_KEY`/`OSSINDEX_*` — le code de la PR (non
-revu) ne doit jamais tourner avec un token à accès Write en environnement, voir section
-« Sécurité » ci-dessous.
-
-La fonction `postForgejoComment` (dans `rhDemoLib.groovy`, chargée via `load` comme le reste de la
-lib) construit le JSON avec `jq -n --arg` plutôt que par interpolation directe dans une chaîne
-`-d '{"body":"..."}'`, pour ne pas casser la requête si un message venait à contenir un guillemet.
-
-### 3. Déclaration dans `jenkins-casc.yaml`
-
-Job `RHDemo-Renovate` ajouté dans le bloc `jobs` du CASC (voir
-[`jenkins-casc.yaml`](../infra/jenkins-docker/jenkins-casc.yaml) pour la version exacte), sur le
-même modèle que `RHDemo-CI`/`RHDemo-CD` (checkout du repo public sans credentials, `scriptPath`
-vers le nouveau Jenkinsfile, `disableConcurrentBuilds`, `buildDiscarder`). Le cron `H 4 * * *` est
-déclaré dans le `triggers {}` du job CASC, pas dans le Jenkinsfile lui-même.
-
-Prise en compte : `docker-compose restart jenkins` (mécanisme déjà documenté dans `QUICKSTART.md`)
-suffit à recharger la configuration et faire apparaître le nouveau job — aucune étape
-supplémentaire nécessaire.
-
-### 4. Ajustements `renovate.json`
-
-Ajouter `automerge: false` explicitement pour les mises à jour **major** (déjà bloquées par `dependencyDashboardApproval`) et confirmer que minor/patch ne bloquent pas sur les statuts :
-
-```json
-{
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": false
-    }
-  ]
-}
-```
-
-(`prCreation: "immediate"` est déjà défini globalement dans `renovate.json`, pas besoin de le répéter par règle.)
-
-> Note : `automerge: false` ici signifie que Renovate lui-même ne tente pas de merger (c'est Jenkins qui le fait). Cela évite les conflits entre les deux mécanismes.
-
----
-
-## Quarantaine des images Docker
-
-Le délai `minimumReleaseAge` (7 jours) laisse le temps de détecter une version compromise avant de l'installer. Il n'est pas applicable par Renovate aux images Docker : aucun registre ne lui fournit de date de publication. Docker Hub refuse la pagination anonyme au-delà de 1 000 tags (`pagination offset too large for anonymous requests`), ce qui fait perdre toutes les dates des grosses images (nginx, eclipse-temurin, maven, postgres) ; Quay et ghcr n'en fournissent pas. Avec `minimumReleaseAgeBehaviour=timestamp-required` (défaut), ces montées restaient indéfiniment en « Pending Status Checks » : aucune PR de tag d'image n'a été créée entre fin juillet et novembre 2026 (constat du 2026-11-05, dry-run Renovate en debug).
-
-Le délai est donc appliqué par `Jenkinsfile-Renovate`, compté depuis la **première observation** du changement :
-
-- **`renovate.json`** : règle `matchDatasources: ["docker"]` avec `minimumReleaseAge: null` (Renovate ouvre la PR sans attendre) et `commitBody: "Quarantaine-Image: oui"` (trailer de commit qui identifie la PR). npm et Maven gardent le délai natif de Renovate.
-- **Durée** : la valeur globale `minimumReleaseAge` de `renovate.json`, lue sur `master` et jamais dans la PR (une PR ne peut pas raccourcir sa propre quarantaine). Format strict `N minutes|hours|days|weeks` ; valeur absente ou autre format : les PR d'image sont refusées, sans repli. Les `packageRules` qui fixent leur propre `minimumReleaseAge` sont ignorées et signalées dans le log.
-- **Détection d'une PR d'image** : trailer `Quarantaine-Image: oui`, ou diff touchant une ligne annotée `renovate: datasource=docker`, ou diff ajoutant une référence `@sha256:`.
-- **Clé** : empreinte de la branche et des lignes ajoutées par la PR. Une nouvelle version ou un nouveau digest change la clé et relance le délai ; une synchronisation avec la base ne la change pas.
-- **Date de départ** : `created_at` (date serveur Codeberg) du premier commentaire du bot CI portant `quarantaine-image:<clé>`. Seuls les commentaires du compte du bot comptent ; son login (`rhdemo-ci-bot`) est une constante de `Jenkinsfile-Renovate` et non le résultat de `GET /user`, qui exigerait le scope `read:user` que `ci-bot-forgejo-token` n'a pas. Le code non revu exécuté par l'étape Maven/OWASP n'a pas le token du bot et ne peut donc pas antidater une observation, contrairement à un fichier d'état sur l'agent ; l'éditeur de l'image non plus, contrairement à la date `created` d'une image.
-- **Déroulement** : première observation → commentaire posté, PR ignorée ; délai non écoulé → PR ignorée (log : heures restantes) ; délai écoulé → validation habituelle (Trivy, dry-run ou Maven) puis merge. Commentaires illisibles (API en panne) : PR ignorée pour ce passage, jamais mergée.
-
-Limites : granularité d'un passage Renovate par jour (attente réelle de 7 à 8 jours) ; une image référencée par tag sans digest garde la même clé si le tag est republié (toutes les images du dépôt sont épinglées par digest) ; une PR fermée puis recréée repart de zéro.
-
----
-
-## Aiguillage de la validation selon les fichiers modifiés
-
-Le stage « Valider et merger chaque PR » ne peut pas soumettre toutes les PRs Renovate au même
-traitement : un `mvnw verify` + OWASP Dependency-Check ne valide ni un composant d'infrastructure
-Kubernetes (Cilium, NGF, kube-prometheus-stack...) ni un simple bump d'image Docker épinglée par
-digest (`NGINX_IMAGE`, `POSTGRES_IMAGE`, `global.images.postgresExporter`...) — dans les deux cas
-le code Java ne change pas, donc le build/tests Maven passeraient de toute façon sans avoir
-exercé le moindre bit du changement réel.
-
-L'aiguillage se fait sur `git diff --name-only origin/${BASE_BRANCH}...HEAD` (calculé une seule
-fois par PR, loggé explicitement dans la console Jenkins avant le choix du chemin), avec quatre
-chemins mutuellement exclusifs, évalués dans cet ordre de priorité :
-
-1. **Composant d'infrastructure stagingkub → Kubernetes dry-run + Trivy sur les images du chart**
-2. **Image Docker épinglée par digest → Trivy scan ciblé**
-3. **Manifeste de dépendances Maven/npm modifié → Maven + OWASP Dependency-Check** (chemin historique, inchangé)
-4. **Aucun manifeste de dépendances modifié → validation directe, hors périmètre OWASP**
-
-**Pourquoi une extension du pipeline existant plutôt qu'un second job Renovate séparé** : un
-second job avec son propre listing Forgejo aurait dupliqué le code de listing/synchronisation/merge
-(`postForgejoComment`, boucle de sync, squash-merge) déjà présent dans `rhDemoLib.groovy`/
-`Jenkinsfile-Renovate`, et introduit un risque de recouvrement entre les deux jobs sur une même PR.
-Un seul listing Forgejo, un seul job qui merge — la classification se fait à l'intérieur de la
-boucle existante, PR par PR.
-
-### 1. Composant d'infrastructure stagingkub → Kubernetes dry-run + Trivy sur les images du chart
-
-**Détection** : le diff touche `rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-*.sh`
-ou `rhDemo/infra/stagingkub/kind-config.yaml`.
-
-**Pourquoi** : ces fichiers pilotent Cilium/NGF/kube-prometheus-stack/Loki/Alloy/Grafana —
-l'infrastructure du cluster elle-même, hors du périmètre applicatif Java. Le détail du RBAC dédié
-(`jenkins-infra-upgrader`), du choix « mise à jour en place » plutôt que reconstruction complète, et
-du job de déploiement réel post-merge sont documentés dans
-[STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) — ce document-ci ne couvre que le
-branchement dans `Jenkinsfile-Renovate`.
-
-**Validation** : credential `kubeconfig-stagingkub-infra-upgrader` + `HELM_DRY_RUN=true <script>`
-contre le cluster stagingkub réel. Un `--dry-run=server` exige les mêmes autorisations RBAC qu'une
-exécution réelle (Kubernetes vérifie l'autorisation avant d'évaluer le drapeau dry-run) — la
-garantie de sécurité vient de l'absence de persistance server-side, pas d'un credential moins
-privilégié. `FORGEJO_TOKEN` reste absent de ce bloc (même raisonnement supply-chain que pour le
-bloc Maven : le script exécuté vient d'une PR non revue).
-
-**Scan Trivy des images du chart** : `RHDemo-CI` ne scanne que l'applicatif (cf.
-[TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)) ; les images des composants
-système sont donc contrôlées ici, à chaque montée de version. Pendant le dry-run, Jenkins passe
-`CHART_IMAGES_FILE` au script : la fonction `record_chart_images` de `rbac-preflight-check.sh`
-y écrit les images rendues par le même `helm template` que le préflight RBAC (mêmes `--version`,
-`-f` et `--set` que l'installation réelle). Si le dry-run est vert, les images sont scannées en parallèle par
-`lib.generateTrivyReport`, avec le même seuil CRITICAL et le même `.trivyignore.yaml` que
-`RHDemo-CI` ; rapports archivés dans `trivy-reports-pr<N>/`. Fail-closed : aucune image listée
-(rendu en échec) ou référence au format inattendu → PR refusée.
-
-Limites : seuls les champs `image:` sont lus, en chaîne ou en objet `{repository, tag, digest}`. Une
-image passée uniquement en argument de conteneur (ex. le config-reloader de prometheus-operator)
-n'est pas vue. Les images non épinglées par digest par leur chart (cas de NGF) sont scannées sur
-leur tag au moment de la validation. `kind-config.yaml` seul (`kindest/node`) n'a pas de script
-composant : il n'est pas concerné.
-
-**Prérequis réseau** : l'agent éphémère `builder` n'est attaché par défaut qu'à
-`rhdemo-jenkins-network` (cf. `jenkins-casc.yaml`), pas au réseau Docker `kind` du cluster KinD —
-sans connexion explicite, `kubectl`/`helm` échouent à résoudre `rhdemo-control-plane` (« server
-misbehaving »). Le stage connecte l'agent au réseau `kind` via `lib.dockerNetworkConnect` avant la
-boucle de traitement des PR (déconnexion symétrique dans `post { always {} }`) — même mécanisme
-que `Jenkinsfile-CD`/`Jenkinsfile-Stagingkub-Upgrade-Deploy`. **Incident corrigé** : ce bloc a
-d'abord été implémenté sans cette connexion, ce qui a fait échouer silencieusement (DNS, pas RBAC)
-les premiers dry-run de composants d'infra — les PR concernées étaient restées ouvertes plutôt que
-mergées à tort, mais sans jamais avoir réellement validé quoi que ce soit.
-
-**Incident corrigé — test de connectivité `kubectl cluster-info`** : une fois le réseau `kind`
-joint, le bloc appelait `kubectl cluster-info` comme simple sanity check avant le dry-run réel.
-Cette commande interroge en interne les Services de `kube-system` (label
-`kubernetes.io/cluster-service=true`, pour afficher les adresses KubeDNS/etc.) — un `list services`
-que `jenkins-infra-upgrader` n'a délibérément pas (cf. `rbac/README.md`). Conséquence observée :
-les 3 PR d'infra ouvertes (Cilium, kube-prometheus-stack minor et major) ont échoué avec
-`services is forbidden ... in the namespace "kube-system"`, un faux-positif RBAC qui n'avait rien à
-voir avec le composant réellement testé. `Jenkinsfile-CD` documentait déjà ce piège pour
-`jenkins-deployer` ; remplacé par `kubectl config current-context` (purement local, aucun appel
-API), comme le fait déjà `Jenkinsfile-Stagingkub-Upgrade-Deploy`.
-
-**Cas limite** : si le cluster stagingkub n'est pas démarré au moment du scan, la validation
-dry-run échoue proprement (message explicite, PR conservée ouverte) plutôt que de bloquer le
-traitement des autres PR de la même exécution.
-
-**Après merge** : déclenchement de `RHDemo-Stagingkub-Upgrade-Deploy`
-(`build job: ..., wait: false`) — voir [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)
-pour ce que fait ce job.
-
-### 2. Image Docker épinglée par digest → Trivy scan ciblé
-
-**Détection** : le diff ne touche **que** `rhDemo/Jenkinsfile-CI` (variables
-`NGINX_IMAGE`/`POSTGRES_IMAGE`/`KEYCLOAK_IMAGE`) et/ou
-`rhDemo/infra/stagingkub/helm/rhdemo/values.yaml` (`global.images.*` :
-`postgres`/`keycloak`/`busybox`/`postgresExporter`) — les deux familles de fichiers où Renovate
-suit des images en chaîne complète `repo:tag@sha256:digest` via un `customManager` (pas un manager
-natif Renovate, cf. CLAUDE.md). Si le diff touche l'un de ces fichiers **et** un autre fichier hors
-de cette liste, la PR retombe sur le chemin Maven par défaut (chemin 3).
-
-**Pourquoi pas Maven** : ces PR ne touchent ni `pom.xml` ni le code Java — `mvnw verify`/OWASP
-passerait quel que soit le contenu réel du bump, sans jamais avoir scanné l'image concernée. Le
-seul risque réel introduit par ce type de PR est une vulnérabilité dans la nouvelle image, exactement
-ce que `Jenkinsfile-CI` scanne déjà via Trivy après build — la validation avant merge réutilise donc
-le même scan, ciblé sur la seule image modifiée, plutôt que d'attendre le prochain passage de
-`RHDemo-CI` sur la base pour le découvrir.
-
-**Extraction de l'image modifiée** :
-`git diff origin/${BASE_BRANCH}...HEAD -- rhDemo/Jenkinsfile-CI rhDemo/infra/stagingkub/helm/rhdemo/values.yaml`,
-lignes ajoutées (`+`) matchant le motif `repo:tag@sha256:digest` — pas besoin de savoir quelle
-variable/clé a changé, la valeur ajoutée suffit. Le nom du rapport Trivy est dérivé du dernier
-segment du chemin d'image (`quay.io/keycloak/keycloak:26.8.1@...` → `keycloak`), suffixé `-2`, `-3`…
-en cas de doublon. Le scan est partagé avec le chemin 1 (closure `scanImagesWithTrivy`).
-
-**Validation** : réutilisation de `lib.generateTrivyReport(image, name)` /
-`lib.aggregateTrivyResults()` (déjà utilisées par `Jenkinsfile-CI`, voir `rhDemoLib.groovy`) — même
-seuil de blocage (CRITICAL), même mécanisme `.trivyignore.yaml`. `FORGEJO_TOKEN` reste absent de ce
-bloc par cohérence avec le principe de moindre privilège appliqué partout ailleurs dans ce pipeline.
-
-**Cas limite** : si aucune image reconnue n'est trouvée dans le diff (format inattendu), la PR
-échoue proprement avec un commentaire dédié plutôt que de silencieusement retomber sur Maven.
-
-**Après merge** : pas de déclenchement supplémentaire — ces images ne sont consommées que par
-`Jenkinsfile-CI`/`Jenkinsfile-CD` au prochain build normal, comme n'importe quelle autre dépendance
-passée par le chemin Maven.
-
-### 3. Manifeste de dépendances Maven/npm modifié → Maven + OWASP Dependency-Check (inchangé)
-
-**Détection** : le diff touche `rhDemo/pom.xml`, `rhDemo/frontend/package.json` et/ou
-`rhDemo/frontend/package-lock.json`.
-
-Chemin historique, décrit en section « Implémentation » ci-dessus.
-
-### 4. Aucun manifeste de dépendances modifié → validation directe, hors périmètre OWASP
-
-**Détection** : le diff ne touche ni un composant d'infra stagingkub, ni une image épinglée par
-digest, ni `pom.xml`/`package.json`/`package-lock.json`.
-
-**Pourquoi** : OWASP Dependency-Check scanne l'arbre de dépendances Maven/npm du projet — sans
-modification d'un de ces manifestes, l'arbre scanné serait strictement identique à celui déjà en
-place sur `${BASE_BRANCH}`. Toute CVE remontée dans ce cas est donc préexistante et sans rapport
-avec la PR (ex: **build #45** — bump du tag Docker `RENOVATE_IMAGE` dans `Jenkinsfile-Renovate`
-lui-même, PR bloquée par une CVE apparue entre-temps sur une bibliothèque totalement étrangère à
-ce changement). Bloquer une telle PR est à la fois inutile (rien de nouveau à scanner) et injuste
-(elle ne peut rien faire pour corriger une CVE qui n'est pas la sienne — c'est le rôle de
-`/fixcve`/`fixcve-auto` sur `RHDemo-CI`, pas de ce garde-fou de merge). Couvre entre autres les
-bumps d'outils CI n'affectant pas l'application (tag Docker de Renovate lui-même, tag de l'image
-Jenkins dans `Dockerfile.jenkins`, GitHub Actions, etc.).
-
-**Validation** : `ciStatus = 0` directement, aucun build ni scan exécuté.
-
-**Après merge** : pas de déclenchement supplémentaire.
-
-### Traçabilité
-
-Chaque itération de la boucle logge explicitement, avant tout choix de chemin : la liste des
-fichiers modifiés (`git diff --name-only`) puis une ligne dédiée « chemin retenu = ... » indiquant
-le chemin choisi et le motif ayant matché (composant d'infra nommé, fichier(s) d'image épinglée
-détecté(s), manifeste de dépendances modifié, ou absence de tout motif reconnu) — pour diagnostiquer
-un aiguillage inattendu directement depuis les logs Jenkins sans avoir à rejouer `git diff` à la main.
-
----
-
-## Rapatriement du scan Renovate depuis Codeberg Actions
-
-**Statut : implémenté.** Le scan Renovate (précédemment `.forgejo/workflows/renovate.yml` sur
-Codeberg Actions) tourne désormais dans le même job Jenkins `RHDemo-Renovate`, en amont des
-stages de validation/merge — un seul pipeline, un seul cron (3h), plus de dépendance à
-Codeberg Actions pour cette automatisation.
-
-### Pourquoi
-
-Le pool de runners `codeberg-medium` est devenu indisponible de façon récurrente ("plus de
-container disponible"), un problème de **capacité** distinct du timeout `codeberg-small`
-(~5 min, "context deadline exceeded") déjà documenté dans
-`.forgejo/workflows/README.md` (supprimé du dépôt) — ce dernier a un
-fallback (split en deux workflows `codeberg-small`) qui reste disponible en secours, mais ne
-règle pas un manque de capacité généralisé côté Codeberg Actions. Rapatrier vers Jenkins
-élimine complètement la dépendance à un système de CI externe pour cette automatisation,
-cohérent avec la philosophie du projet (indépendance vis-à-vis des grandes plateformes).
-
-### Implémentation
-
-Nouveau stage `🔄 Scan Renovate` dans `Jenkinsfile-Renovate`, avant le listing des PRs :
-l'image officielle `renovate/renovate:43.249.5` est lancée en conteneur frère (`docker run`,
-via docker-socket-proxy — même mécanisme que pour l'environnement ephemere), avec le même
-script d'import GPG et les mêmes variables d'environnement que l'ancien workflow Forgejo.
-
-**Piège Docker-outside-of-Docker évité** : un conteneur frère lancé depuis l'agent Jenkins ne
-partage pas le système de fichiers de l'agent — un bind-mount vers un chemin de l'agent ne
-pointerait nulle part côté hôte Docker réel (c'est pourquoi l'environnement ephemere utilise
-`docker cp` pour ses secrets). La clé GPG est donc passée en base64 via variable
-d'environnement (`RENOVATE_GPG_KEY`) et importée à l'intérieur du conteneur Renovate lui-même,
-sans jamais toucher le système de fichiers de l'agent — aucun bind-mount nécessaire.
-
-**Pourquoi pas `npm install -g renovate` sur l'image agent** : Renovate 43.x exige une version
-de Node récente, alors que le `nodejs`/`npm` installé via `apt` dans `Dockerfile.agent` est une
-version Debian probablement ancienne (le build frontend Vue.js utilise sa propre installation
-Node 20.10.0 via `frontend-maven-plugin`, jamais le Node système). Utiliser l'image officielle
-évite tout problème de version Node à gérer côté agent.
-
-**Piège GPG rencontré** : `GNUPGHOME` a d'abord été mis à un chemin custom (`/tmp/gnupg`), mais
-les commits Renovate échouaient avec `gpg: skipped "<KEY_ID>": No secret key` — un nouveau
-trousseau vide apparaissait dans `/home/ubuntu/.gnupg`. Renovate sandboxe l'environnement des
-sous-processus git qu'il lance pour committer et ne propage pas un `GNUPGHOME` custom vers ces
-sous-processus, qui retombent alors sur l'emplacement par défaut (`$HOME/.gnupg`). Fix : utiliser
-`GNUPGHOME="${HOME}/.gnupg"` (comme le faisait déjà l'ancien workflow Codeberg Actions) plutôt
-qu'un chemin custom, pour que l'import atterrisse là où les sous-processus de Renovate le
-chercheront par défaut.
-
-### Credentials Jenkins nécessaires (en plus de `ci-bot-forgejo-token`)
-
-- **`renovate-gpg-key`** (Secret text) : clé GPG privée exportée en base64, même valeur que
-  l'ancien secret Codeberg Actions `RENOVATE_GPG_KEY`.
-- **`renovate-github-token`** (Secret text) : token GitHub read-only (dépôts publics), pour les
-  lookups de changelogs/release notes des dépendances hébergées sur GitHub, même valeur que
-  l'ancien secret Codeberg Actions `RENOVATE_GH_TOKEN`.
-- **`renovate-forgejo-token`** (Secret text) : même valeur que l'ancien secret Codeberg Actions
-  `RENOVATE_TOKEN`, dédié au compte bot Renovate lui-même — distinct du compte `rhdemo-ci-bot`
-  (variable `RENOVATE_TOKEN` du stage "Scan Renovate").
-  **Distinct de `ci-bot-forgejo-token`** — essayé en premier par souci de simplicité (un secret de
-  moins), mais l'initialisation de Renovate échoue avec `"Authentication failure"` avec les
-  scopes `repository` + `issue` de `ci-bot-forgejo-token` : elle a besoin d'un scope `user`
-  supplémentaire, absent de ce token. Réutiliser le token qui fonctionnait déjà côté Codeberg
-  Actions pour Renovate règle le problème sans avoir à déterminer/régénérer le scope exact requis,
-  et rejoint au passage l'isolation des responsabilités déjà appliquée pour `/fixcve-auto`. Les deux
-  comptes bot (`rhdemo-ci-bot` et celui de Renovate) restent malgré tout des identités distinctes
-  — voir section 1 pour le raisonnement (séparation propose/merge).
-
-### Devenir de `.forgejo/workflows/renovate.yml`
-
-Le workflow a été supprimé du dépôt (il ne servait plus que de secours manuel). Il reste
-récupérable dans l'historique Git si Jenkins devient durablement indisponible. Effet de bord :
-le manager Renovate `github-actions` ne détecte plus aucune dépendance.
-
----
-
-## Périmètre d'automerge
-
-| Type de mise à jour | Traitement |
-|---|---|
-| `patch` (ex: 1.2.3 → 1.2.4) | Automerge Jenkins si CI verte (images Docker : après quarantaine, voir ci-dessus) |
-| `minor` (ex: 1.2.3 → 1.3.0) | Automerge Jenkins si CI verte (images Docker : après quarantaine) |
-| `major` (ex: 1.x → 2.x) | Bloqué — `dependencyDashboardApproval: true` — revue manuelle |
-| Plugins Jenkins | Exclus — `matchManagers: ["jenkins"]` désactivé |
-| Image `rhdemo-api` | Exclue — `matchPackageNames: ["rhdemo-api"]` désactivé |
-
----
+# Mises à jour Renovate validées et mergées par Jenkins
+
+Le job Jenkins `RHDemo-Renovate` ([`Jenkinsfile-Renovate`](../Jenkinsfile-Renovate)) exécute Renovate, puis valide et merge lui-même les PR de mise à jour de dépendances qu'il a ouvertes sur la branche d'évolution courante.
+
+## Pourquoi Jenkins merge à la place de Renovate
+
+Jenkins n'est pas exposé sur Internet : Codeberg ne peut pas lui envoyer de webhook, et les statuts CI ne remontent jamais vers Forgejo. Renovate, qui attend ces statuts pour merger, attendrait indéfiniment. Le job liste donc lui-même les PR Renovate par l'API Forgejo, les valide et les merge par la même API ; Renovate ne merge jamais (`automerge: false`).
+
+Pistes écartées : faire remonter les statuts CI vers Forgejo (un passage de plus pour merger et un pipeline multibranche sur `renovate/*`), migrer la CI vers Codeberg Actions (refonte complète), relancer `Jenkinsfile-CI` pour chaque PR (Selenium, ZAP et SonarQube inutiles ici, durée de la CI complète) ou extraire build et tests dans une shared library (réécriture risquée de `Jenkinsfile-CI` en pipeline scripté).
+
+## Déroulement d'un passage
+
+Le job est déclaré dans [`jenkins-casc.yaml`](../infra/jenkins-docker/jenkins-casc.yaml) (job `RHDemo-Renovate`, déclenchement `cron` quotidien, `scriptPath` vers `Jenkinsfile-Renovate`). Ses builds ne se chevauchent pas (`disableConcurrentBuilds`), et Jenkins n'exécute qu'un agent à la fois.
+
+1. **Scan Renovate** : Renovate tourne dans son image officielle et ouvre ou met à jour ses PR (voir [Exécution de Renovate](#exécution-de-renovate-dans-jenkins)).
+2. **Liste des PR** : PR ouvertes dont la branche contient `renovate`, qui ciblent `BASE_BRANCH` et dont la branche vit dans le dépôt lui-même, jamais dans un fork.
+3. **Pour chaque PR**, dans l'ordre :
+   1. **Délai des images** : une PR qui ajoute une image `image:tag@sha256:…` trop récente est ignorée pour ce passage ([section dédiée](#délai-des-images-docker)).
+   2. **Synchronisation** : si la branche est en retard sur la base, merge de la base dans la branche et push (voir [Synchronisation](#synchronisation-avec-la-base)).
+   3. **Validation** selon les fichiers modifiés (voir [Aiguillage](#aiguillage-de-la-validation)).
+   4. **Merge** si la validation passe, sinon commentaire d'échec et PR laissée ouverte.
+4. **Notification** : un mail n'est envoyé qu'en cas d'échec du build. Un succès qui merge déclenche `RHDemo-CI` sur la base, qui envoie son propre mail ; un passage sans PR à merger est le cas normal.
+
+## Comptes et credentials
+
+Deux comptes bot Codeberg distincts, aucun n'étant le compte personnel :
+
+- **Le bot Renovate** *propose* les PR (credential `renovate-forgejo-token`).
+- **Le bot CI `cibot-leuwen-lc`** *valide et merge* : il liste, synchronise, merge et commente (credential `ci-bot-forgejo-token`). Collaborateur du dépôt avec le droit Write, pas Admin ; token limité aux portées `repository` et `issue`.
+
+Raisons : un token agit avec l'identité de son compte, même à portée réduite. Une fuite exposerait donc tous les dépôts du compte personnel, alors qu'un bot collaborateur d'un seul dépôt limite les dégâts à ce dépôt. Les merges automatiques restent aussi identifiables dans l'historique, et une rotation du mot de passe personnel ne casse pas la CI. Séparer celui qui propose de celui qui merge reproduit une revue à deux acteurs. Le token de fixcve-auto est encore un autre compte.
+
+| Credential Jenkins | Type | Usage |
+| --- | --- | --- |
+| `renovate-forgejo-token` | Secret text | Renovate (portées `repository`, `issue` et `user` : sans `user`, l'initialisation de Renovate échoue en « Authentication failure ») |
+| `renovate-gpg-key` | Secret text | Clé GPG privée en base64, signature des commits de Renovate |
+| `renovate-github-token` | Secret text | Lecture des dépôts publics GitHub : notes de version et releases (dont celles de NGF) |
+| `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID, pas l'adresse e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sert uniquement aux dates de publication des images |
+| `ci-bot-forgejo-token` | Secret text | Bot CI : liste, synchronisation, merge, commentaires |
+| `kubeconfig-stagingkub-infra-upgrader` | Secret file | Dry-run des composants système sur stagingkub |
+| `nvd-api-key` | Secret text | OWASP Dependency-Check |
+| `notification-email` | Secret text | Destinataire du mail d'échec (adresse hors du dépôt public) |
+
+Création des credentials : commentaires de `jenkins-casc.yaml`, section CREDENTIALS.
+
+## Configuration Renovate
+
+[`renovate.json`](../../renovate.json), à la racine du dépôt. **Renovate le lit sur `master`**, pas sur la branche d'évolution : toute modification doit être reportée sur `master` immédiatement.
+
+| Réglage | Effet |
+| --- | --- |
+| `baseBranchPatterns` | PR ouvertes vers la branche d'évolution courante |
+| `prCreation: "immediate"` | PR créée sans attendre de statut CI, qui n'arrivera jamais |
+| `minimumReleaseAge: "7 days"` | Une version n'est proposée que 7 jours après sa publication (`timestamp-required` par défaut : sans date, pas de PR) |
+| `matchUpdateTypes: ["major"]` → `dependencyDashboardApproval` | Montée majeure seulement après approbation dans le tableau de bord |
+| `matchUpdateTypes: ["patch", "minor"]` → `automerge: false` | Renovate ne merge jamais lui-même |
+| `kindest/node` → approbation, pas d'automerge | Changer la version de Kubernetes impose une reconstruction du cluster |
+| `rhdemo-api`, manager `jenkins` → `enabled: false` | Image applicative et plugins Jenkins exclus |
+| `osvVulnerabilityAlerts`, `rebaseWhen: "behind-base-branch"` | Alertes de vulnérabilité OSV ; rebase par Renovate quand la PR est en retard |
+
+Les `customManagers` suivent ce que les managers natifs ne voient pas : images épinglées dans `Jenkinsfile-CI`, `values.yaml` et `kind-config.yaml` ; charts des composants système (`scripts/components/install-or-upgrade-*.sh`) ; Node et npm de `frontend-maven-plugin` ; Maven, SOPS, Helm et Cosign de `Dockerfile.agent` ; image de Renovate. Format des annotations : [IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md).
+
+La branche d'évolution est écrite en dur à trois endroits : `BASE_BRANCH` de `Jenkinsfile-Renovate`, `baseBranchPatterns` de `renovate.json` et les `branches(…)` des jobs de `jenkins-casc.yaml`. `release.sh post-merge` les met à jour au changement de branche ([GIT-PROCEDURE-RELEASE.md](GIT-PROCEDURE-RELEASE.md)).
+
+## Délai des images Docker
+
+Le délai `minimumReleaseAge` (7 jours) laisse le temps de détecter une version compromise avant de l'installer. Pour les images, il repose sur deux mécanismes, car Renovate ne retarde que les nouvelles versions, jamais les mises à jour de digest.
+
+**Nouvelles versions : Renovate, avec Docker Hub authentifié.** Renovate a besoin de la date de publication de chaque tag. En anonyme, Docker Hub refuse la pagination au-delà de 1 000 tags (`pagination offset too large for anonymous requests`) : les grosses images (nginx, maven, postgres, eclipse-temurin, jenkins) n'avaient pas de date, et `minimumReleaseAgeBehaviour=timestamp-required` les laissait indéfiniment en « Pending Status Checks ». Aucune PR de tag d'image n'a été créée entre fin juillet et novembre 2026. Le stage « Scan Renovate » se connecte donc à Docker Hub avec `dockerhub-renovate-readonly`. L'API `hub.docker.com` n'accepte qu'un jeton Bearer : il est obtenu à chaque passage par `/v2/auth/token` et transmis à Renovate par `RENOVATE_HOST_RULES` (une authentification Basic est ignorée, même 403 qu'en anonyme ; test du 2026-11-06). La date retenue par Renovate est `tag_last_pushed`, fixée par Docker Hub et non par l'éditeur de l'image. Si la connexion échoue (jeton expiré ou révoqué), le build échoue, ce qui envoie le mail.
+
+**Registres sans date.** Quay et ghcr ne fournissent aucune date. Les images qui en venaient sont désormais prises sur Docker Hub, chez le même éditeur et avec les mêmes digests (vérifié le 2026-11-06) : `keycloak/keycloak`, `prometheuscommunity/postgres-exporter`, `zaproxy/zap-stable`. Le chart NGINX Gateway Fabric, publié seulement en OCI sur ghcr, est suivi par les releases GitHub `nginx/nginx-gateway-fabric`, datées et alignées sur les versions du chart (`extractVersion` dans `renovate.json`).
+
+**Mises à jour de digest : contrôle Jenkins de 48 h.** Renovate ne date pas la republication d'un tag et ne la retarde jamais : en octobre 2026, des PR de digest zaproxy (ghcr) et `inbound-agent` ont été créées et mergées sans aucune date disponible. Avant toute validation, `Jenkinsfile-Renovate` vérifie donc sur l'API publique de Docker Hub chaque référence `image:tag@sha256:…` ajoutée par la PR :
+
+| Résultat | Condition | Effet |
+|---|---|---|
+| OK | digest identique au digest actuel du tag, publié depuis au moins `IMAGE_MIN_AGE_HOURS` (48 h) | suite du traitement |
+| ATTENTE | publié depuis moins de 48 h, ou tag republié depuis (Renovate mettra la PR à jour) | PR ignorée pour ce passage |
+| ERREUR | API injoignable, tag inconnu, date illisible | PR ignorée pour ce passage, jamais mergée |
+| REFUS | registre hors Docker Hub | PR en échec |
+
+Le contrôle est sans état : aucun commentaire ni fichier que le code non revu d'une PR pourrait antidater. Il s'applique aussi aux PR de version, déjà retardées de 7 jours par Renovate. Les 48 h sont comptées depuis la publication : la PR étant créée au plus un passage (24 h) après la publication, au moins 24 h séparent toujours sa création de son merge.
+
+Limites :
+
+- Renovate date une version par le dernier push de son tag : si le tag est republié pendant les 7 jours, le délai repart. Les rafales de republication observées durent quelques jours.
+- `jenkins/inbound-agent` reste sur le tag flottant `latest-jdk25`. Ses tags versionnés (`3395.v6e5377b_0fb_3c-3-jdk25`) ne semblent pas comparables par le versioning `docker` de Renovate, qui cesserait alors de proposer des mises à jour ; à vérifier par un dry-run avant de l'épingler. Une nouvelle version de l'agent arrive donc comme une mise à jour de digest, avec 48 h de délai seulement.
+- Une image référencée par tag sans digest (`RENOVATE_IMAGE`, images de SonarQube et du registre local) n'a que le délai de Renovate.
+- Le jeton Docker Hub expire. Renouvellement : nouveau jeton personnel (portée « Public Repo Read-only ») sur hub.docker.com, puis mise à jour du credential Jenkins.
+
+Historique : une première version (5 novembre 2026) comptait le délai depuis la première observation de la PR, datée par un commentaire du bot CI. Elle ne se terminait jamais (login du bot erroné) et relançait le délai à chaque nouveau digest ; elle a été remplacée le lendemain.
+
+## Synchronisation avec la base
+
+Une branche Renovate ancienne peut échouer pour une raison sans rapport avec elle, par exemple une CVE déjà corrigée sur la base. Si la base n'est pas un ancêtre de la PR (`git merge-base --is-ancestor`), le job merge la base dans la branche, par un merge classique, puis pousse avant de valider. Un merge `--squash` a été essayé puis abandonné : sans commit de fusion, git perd la trace des synchronisations précédentes et produit de faux conflits aux suivantes.
+
+En cas de conflit :
+
+- **PR dépassée** : si, pour chaque fichier en conflit, la base est déjà à une version supérieure ou égale (première version `"X.Y.Z"` du fichier, comparée par `sort -V`), une autre PR a déjà livré mieux. La PR est alors fermée automatiquement, avec un commentaire. Cas vécu : PR mineure de kube-prometheus-stack en conflit après le merge de la majeure.
+- **Sinon**, commentaire « rebase manuel nécessaire » et PR comptée en échec. C'est toujours le cas pour les images épinglées par digest, dont le format n'est pas reconnu par cette comparaison.
+
+Ce mécanisme coexiste avec le `rebaseWhen: "behind-base-branch"` de Renovate.
+
+## Aiguillage de la validation
+
+Un `mvnw verify` ne valide ni un composant Kubernetes ni une image Docker : le code Java ne change pas, les tests passeraient sans avoir exercé le changement. Le chemin de validation est donc choisi à partir de `git diff --name-only` (liste affichée dans la console avec le chemin retenu), parmi quatre chemins exclusifs, dans cet ordre :
+
+| # | Détection | Validation |
+| --- | --- | --- |
+| 1 | Le diff touche `infra/stagingkub/scripts/components/install-or-upgrade-*.sh` ou `kind-config.yaml` | Dry-run Kubernetes + Trivy sur les images du chart |
+| 2 | Le diff ne touche **que** `Jenkinsfile-CI` et/ou `infra/stagingkub/helm/rhdemo/values.yaml` | Trivy sur les images ajoutées |
+| 3 | Le diff touche `pom.xml`, `frontend/package.json` ou `frontend/package-lock.json` | Maven (build, tests) + OWASP Dependency-Check |
+| 4 | Aucun des cas précédents | Aucune : validation directe |
+
+Un seul job liste, valide et merge : un second job séparé aurait dupliqué le listing, la synchronisation et le merge, avec un risque de traiter deux fois la même PR.
+
+### 1. Composant système de stagingkub
+
+Ces scripts pilotent Cilium, NGF, kube-prometheus-stack, Loki, Alloy et Grafana. Le job exécute le script modifié avec `HELM_DRY_RUN=true` contre le cluster réel, avec le kubeconfig de `jenkins-infra-upgrader`. Un `--dry-run=server` exige les mêmes droits qu'une exécution réelle : la protection vient de l'absence de persistance, pas d'un compte moins privilégié. `FORGEJO_TOKEN` n'est pas exposé à ce bloc, qui exécute un script venu d'une PR non revue.
+
+Pendant le dry-run, `record_chart_images` (`rbac-preflight-check.sh`) écrit dans `CHART_IMAGES_FILE` les images rendues par `helm template`, avec les mêmes options que l'installation. Si le dry-run passe, ces images sont scannées par Trivy (seuil CRITICAL et `.trivyignore.yaml` identiques à `RHDemo-CI`, rapports dans `trivy-reports-pr<N>/`). Comportement fermé : aucune image listée, ou une référence au format inattendu, et la PR est refusée. Seuls les champs `image:` sont lus : une image passée en argument de conteneur (le config-reloader de prometheus-operator par exemple) n'est pas vue, et une image que le chart n'épingle pas par digest (NGF) est scannée sur son tag du moment. `kind-config.yaml` n'a pas de script composant : seul son changement de version déclenche ce chemin, et il exige de toute façon une approbation manuelle.
+
+Après merge, le job déclenche `RHDemo-Stagingkub-Upgrade-Deploy` pour le composant concerné, sans attendre sa fin ([STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)).
+
+Prérequis et incidents passés :
+
+- L'agent n'est relié par défaut qu'au réseau `rhdemo-jenkins-network`. Le stage le connecte au réseau Docker `kind` (`lib.dockerNetworkConnect`) et l'en déconnecte dans `post { always }`, comme `Jenkinsfile-CD`. Les premiers dry-run, lancés sans cette connexion, échouaient sur la résolution DNS de `rhdemo-control-plane`.
+- `kubectl cluster-info` liste les Services de `kube-system`, ce que `jenkins-infra-upgrader` n'a pas le droit de faire : trois PR ont échoué sur ce faux problème RBAC. Le test de connexion utilise `kubectl config current-context`, purement local.
+- Si le cluster n'est pas démarré, le dry-run échoue avec un message explicite et la PR reste ouverte ; les autres PR du passage sont traitées.
+
+### 2. Image épinglée dans `Jenkinsfile-CI` ou `values.yaml`
+
+Le job extrait les références `repo:tag@sha256:…` ajoutées dans ces deux fichiers et les scanne avec Trivy, avec le même seuil et les mêmes exceptions que `RHDemo-CI`. Le rapport est nommé d'après le dernier segment du nom d'image (`keycloak/keycloak` → `keycloak`). Si aucune référence reconnue n'est trouvée, la PR échoue avec un commentaire dédié.
+
+En pratique, ce chemin ne concerne que `busybox` et `postgres-exporter`, qui ne figurent que dans `values.yaml`. Une PR postgres, keycloak ou nginx touche aussi les fichiers Docker Compose de dev et d'ephemere : elle relève du chemin 4.
+
+### 3. Dépendances Maven ou npm
+
+Build Maven, tests et OWASP Dependency-Check sur la branche de la PR. Ce bloc exécute le code non revu de la mise à jour : il ne dispose que de `NVD_API_KEY`, jamais de `FORGEJO_TOKEN`. Le rapport OWASP est archivé par PR.
+
+### 4. Validation directe
+
+Sans manifeste de dépendances modifié, OWASP scannerait exactement le même arbre que sur la base : une CVE trouvée serait préexistante et sans rapport avec la PR. Exemple vécu, le build #45 : montée du tag de Renovate bloquée par une CVE d'une bibliothèque étrangère au changement. Bloquer serait inutile et injuste ; corriger une CVE existante est le rôle de `/fixcve` et fixcve-auto sur `RHDemo-CI`.
+
+**Ce chemin merge sans scan préalable** les images des Dockerfiles et des fichiers Docker Compose : postgres, keycloak, nginx, base de l'application, builder Maven et images de l'usine logicielle. Le délai avant installation s'applique, et `RHDemo-CI` scanne ensuite sur la base les images qu'il couvre.
+
+## Merge
+
+Merge par l'API Forgejo en **squash** : un seul commit par PR, historique linéaire, branche supprimée. Cela suppose « Allow squash merging » activé dans les réglages du dépôt. L'appel est retenté jusqu'à quatre fois, car Forgejo refuse un merge tant qu'il recalcule l'état de la PR. Si l'API répond en erreur, le job relit l'état réel de la PR avant de conclure : un merge a déjà abouti malgré une réponse 504. Un commentaire indique le résultat sur la PR.
+
+Après merge, `RHDemo-CI`, qui interroge la branche d'évolution toutes les 5 minutes, reconstruit et teste l'application complète, Selenium, ZAP et SonarQube compris.
+
+## Exécution de Renovate dans Jenkins
+
+Renovate tournait sur Codeberg Actions jusqu'à ce que le pool de runners `codeberg-medium` devienne indisponible de façon récurrente. Il tourne désormais dans le stage « Scan Renovate », avant la validation : un seul job et plus de dépendance à une CI externe. Le workflow `.forgejo/workflows/renovate.yml` a été supprimé ; il reste dans l'historique Git.
+
+- **Image officielle** `renovate/renovate` (`RENOVATE_IMAGE`, suivie par Renovate lui-même), lancée en conteneur frère par docker-socket-proxy, et non `npm install -g renovate` sur l'agent : Renovate exige une version de Node récente que l'agent n'a pas.
+- **Pas de bind-mount** : un chemin de l'agent n'existe pas forcément sur l'hôte Docker réel (Docker-outside-of-Docker). La clé GPG est passée en base64 par variable d'environnement et importée dans le conteneur.
+- **`GNUPGHOME="${HOME}/.gnupg"`** : Renovate ne transmet pas un `GNUPGHOME` personnalisé aux processus git qu'il lance pour committer. Avec `/tmp/gnupg`, les commits échouaient en « No secret key ».
+- **Jeton Docker Hub** : obtenu dans le même `sh` que `docker run`, sous `set +x`, et transmis uniquement par l'environnement (`RENOVATE_HOST_RULES`).
 
 ## Sécurité
 
-- Le token Forgejo (`ci-bot-forgejo-token`) appartient au compte bot dédié `rhdemo-ci-bot`, pas au
-  compte personnel — voir section 1 pour le raisonnement (blast radius, audit, cycle de vie)
-- Le compte `rhdemo-ci-bot` est collaborateur du repo avec la permission **Write** uniquement
-  (pas Admin) ; le token n'a que les scopes `repository` + `issue` (pas d'accès admin)
-- Le token est stocké comme credential Jenkins chiffré (jamais en clair dans les fichiers)
-- Le pipeline vérifie que la PR cible bien `evolutions-post-1.1.9` avant de merger
-- Les PRs major ne passent jamais par ce pipeline (bloquées côté Renovate)
-- Le listing des PRs (stage « Lister les PRs Renovate ») rejette explicitement les PRs dont la
-  branche source vit dans un fork (`select(.head.repo.full_name == $repo)`) — seules les branches
-  poussées directement dans `leuwen-lc/rhdemo` (donc par un compte ayant déjà l'accès Write) sont
-  éligibles à l'automerge
-- `FORGEJO_TOKEN` (accès Write) n'est jamais exposé en variable d'environnement pendant
-  l'exécution du build (`mvnw verify`/OWASP) : le code de la PR (dépendance mise à jour, non revu)
-  ne dispose que de `NVD_API_KEY`/`OSSINDEX_*` (lecture seule sur des bases de vulnérabilités
-  publiques), pour empêcher qu'une dépendance compromise exfiltre le token d'écriture
-
----
+- Seules les branches poussées dans le dépôt lui-même sont éligibles (`select(.head.repo.full_name == $repo)`), donc par un compte qui a déjà le droit Write ; les PR venant d'un fork sont ignorées.
+- Le code d'une PR (dépendance mise à jour, non revue) ne s'exécute jamais avec `FORGEJO_TOKEN` en environnement : le token n'est ouvert que pour le push de synchronisation, les commentaires et le merge.
+- Les montées majeures n'arrivent pas jusqu'au job sans approbation dans le tableau de bord.
+- Délai avant installation : 7 jours pour une version, 48 h pour un digest d'image.
+- Tous les tokens sont des credentials Jenkins ; aucun n'est en clair dans le dépôt.
 
 ## Limites connues
 
-1. **Durée** : Si Renovate crée 15 PRs en une nuit, le pipeline peut tourner 2-3h (CI séquentielle). Mitigation : paralléliser avec `parallel {}` Jenkins si les ressources le permettent.
-
-2. **Conflits entre PRs** : Si deux PRs modifient le même fichier (rare pour des dépendances), la seconde peut conflictiquer après merge de la première. Le pipeline détecte l'échec du merge API et laisse la PR ouverte.
-
-3. ~~Pas de rebase automatique~~ **Résolu** : avant les tests, le pipeline détecte (`git merge-base --is-ancestor`) si la PR est en retard sur la base, puis fait un `git merge` classique (pas squash — un squash perd l'ancêtre commun et provoque de faux conflits `add/add` aux syncs suivantes, incident déjà observé) et pousse avant de lancer la CI.
-   - Conflit de merge → PR marquée en échec avec commentaire ("rebase manuel nécessaire"), **sauf supersession** : si une autre PR Renovate pour la même dépendance a déjà mergé une version plus récente (versions extraites des fichiers `scripts/components/*.sh` en conflit, comparées via `sort -V`), la PR est fermée automatiquement via l'API Forgejo au lieu d'être comptée en échec. Non applicable aux images épinglées par digest (format non reconnu) → traitement en échec classique.
-   - Indépendant du `rebaseWhen: "behind-base-branch"` de Renovate (nocturne) : les deux mécanismes cohabitent sans conflit.
-
-4. **Pas de déclenchement CD** : Ce pipeline ne déclenche pas le CD après merge. Le CI principal (`RHDemo-CI`) doit être étendu pour surveiller aussi `evolutions-post-X.Y.Z` (branche courante, voir point 6) (ou un cron nocturne séparé).
-
-5. **Pipeline unique scan + validation** : le scan Renovate et la validation/merge sont dans le même job (choix assumé lors du rapatriement depuis Codeberg Actions). Si le scan Renovate échoue (image indisponible, erreur de config...), toute la validation/merge de ce cycle est également sautée — pas d'isolation entre les deux responsabilités. Alternative possible : scinder en deux jobs (`RHDemo-Renovate-Scan` + `RHDemo-Renovate`) si l'isolation des pannes devient un problème en pratique.
-
-6. **Branche `evolutions-post-X.Y.Z` en dur à 3 endroits** : `BASE_BRANCH` dans `Jenkinsfile-Renovate`, `baseBranchPatterns` dans `renovate.json`, et `branches('*/evolutions-post-X.Y.Z')` dans `jenkins-casc.yaml` (job `RHDemo-Renovate`, comme `RHDemo-CI`/`RHDemo-CD`). Ces trois références sont mises à jour automatiquement par `rhDemo/scripts/release.sh post-merge` (fonctions `bump_casc_branch` et `bump_renovate_branch`) lors du passage à la branche d'évolution suivante — voir [`GIT-PROCEDURE-RELEASE.md`](GIT-PROCEDURE-RELEASE.md). Si la procédure de release change, penser à vérifier que ces trois fichiers restent synchronisés.
+1. **Durée** : les PR sont validées l'une après l'autre, dans un build limité à 2 heures, avec un seul agent Jenkins pour tous les jobs. Un passage chargé (nombreuses PR Maven) peut atteindre la limite.
+2. **Conflits entre PR** : deux PR qui modifient le même fichier peuvent entrer en conflit après le merge de la première ; voir [Synchronisation](#synchronisation-avec-la-base).
+3. **Scan et validation liés** : si le scan Renovate échoue (image indisponible, configuration invalide, jeton Docker Hub expiré), la validation et le merge du passage sont sautés. Les séparer en deux jobs reste possible si cela devient gênant.
+4. **Images non scannées avant merge** : voir le chemin 4.

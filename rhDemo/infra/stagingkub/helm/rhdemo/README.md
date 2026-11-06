@@ -146,7 +146,7 @@ postgresql-keycloak:              # Config PostgreSQL Keycloak
 keycloak:                         # Config Keycloak
   enabled: true
   image:
-    repository: quay.io/keycloak/keycloak
+    repository: keycloak/keycloak
     tag: "26.4.2"
   replicaCount: 1                 # Nombre de pods
   admin:
@@ -465,7 +465,7 @@ spec:
       containers:
       - name: keycloak
         image: "{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
-        # → quay.io/keycloak/keycloak:26.4.2
+        # → keycloak/keycloak:26.4.2
         args:                  # Arguments de démarrage Keycloak
         - start-dev            # Mode dev (pas de TLS obligatoire)
         - --db=postgres
@@ -538,7 +538,7 @@ kubectl get replicaset -n rhdemo-stagingkub
 kubectl scale deployment keycloak --replicas=2 -n rhdemo-stagingkub
 
 # Rolling update (changer l'image)
-kubectl set image deployment/keycloak keycloak=quay.io/keycloak/keycloak:27.0.0 -n rhdemo-stagingkub
+kubectl set image deployment/keycloak keycloak=keycloak/keycloak:27.0.0 -n rhdemo-stagingkub
 ```
 
 ---

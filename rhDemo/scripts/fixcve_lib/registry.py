@@ -23,8 +23,8 @@ _TAG_RE = re.compile(r"^v?[0-9][A-Za-z0-9._-]{0,127}$")
 # Jeton d'image (champ `image` de detected.json) -> dépôt de registre. Doit rester aligné sur
 # TRIVY_IMAGES de fixcve-detect.py et sur les variables *_IMAGE de Jenkinsfile-CI.
 IMAGES = {
-    "keycloak": {"registry": "quay.io", "path": "keycloak/keycloak",
-                 "repository": "quay.io/keycloak/keycloak", "variable": "KEYCLOAK_IMAGE"},
+    "keycloak": {"registry": "registry-1.docker.io", "path": "keycloak/keycloak",
+                 "repository": "keycloak/keycloak", "variable": "KEYCLOAK_IMAGE"},
     "nginx": {"registry": "registry-1.docker.io", "path": "library/nginx",
               "repository": "nginx", "variable": "NGINX_IMAGE"},
     "postgres": {"registry": "registry-1.docker.io", "path": "library/postgres",
@@ -165,9 +165,6 @@ def _registry_request(url, image, method="GET"):
 
 def _list_tags(image):
     """Liste des tags par l'API propre au registre (une page de 100, les plus récents)."""
-    if image["registry"] == "quay.io":
-        body = _http_get(f"https://quay.io/api/v1/repository/{image['path']}/tag/?onlyActiveTags=true&limit=100")
-        return [t.get("name", "") for t in json.loads(body or b"{}").get("tags", [])]
     if image["registry"] == "registry-1.docker.io":
         body = _http_get(f"https://hub.docker.com/v2/repositories/{image['path']}/tags"
                          "?page_size=100&ordering=last_updated")

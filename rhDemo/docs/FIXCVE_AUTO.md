@@ -176,7 +176,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 ### 1. Comptes externes
 
 - **Jenkins** : un compte dédié (`claude`, **pas** `admin`), lecture seule suffisante.
-- **Codeberg** : un compte bot séparé (`fixcvebot-leuwen-lc`), jamais le compte personnel ; distinct de `rhdemo-ci-bot` (Renovate, voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
+- **Codeberg** : un compte bot séparé (`fixcvebot-leuwen-lc`), jamais le compte personnel ; distinct de `cibot-leuwen-lc` (bot CI de Renovate, voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
   1. Créer le compte sur `https://codeberg.org`.
   2. L'ajouter comme collaborateur **Write** (pas Admin) de `leuwen-lc/rhdemo`.
   3. Générer un token à scope écriture restreint à `rhdemo`.

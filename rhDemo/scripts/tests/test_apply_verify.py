@@ -34,7 +34,7 @@ BOM = """<project><dependencyManagement><dependencies>
 <dependency><groupId>org.hibernate.orm</groupId><artifactId>hibernate-core</artifactId><version>${hibernate.version}</version></dependency>
 <dependency><groupId>com.fasterxml.jackson</groupId><artifactId>jackson-bom</artifactId><version>${jackson-2-bom.version}</version><type>pom</type><scope>import</scope></dependency>
 </dependencies></dependencyManagement></project>"""
-KC_OLD = "quay.io/keycloak/keycloak:26.6.2@sha256:" + "0" * 64
+KC_OLD = "keycloak/keycloak:26.6.2@sha256:" + "0" * 64
 ADVISORIES = "# Avis\n\nIntro.\n\n---\n\n## ancien (build #1)\n\n---\n"
 OWASP = '<?xml version="1.0"?>\n<suppressions>\n</suppressions>\n'
 
@@ -111,7 +111,7 @@ class ImageEditTest(Workdir):
         status, _ = edits.image_upgrade("keycloak", ("26.6.2", "sha256:" + "0" * 64), "26.7.2", new)
         self.assertEqual(status, "applied")
         for path in ("Jenkinsfile-CI", "infra/dev/docker-compose.yml"):
-            self.assertIn(f"quay.io/keycloak/keycloak:26.7.2@{new}", self.read(path))
+            self.assertIn(f"keycloak/keycloak:26.7.2@{new}", self.read(path))
 
     def test_reference_absente(self):
         status, _ = edits.image_upgrade("keycloak", ("26.0.0", "sha256:" + "9" * 64), "26.7.2", "sha256:" + "a" * 64)

@@ -188,14 +188,22 @@ configmaps, secrets, serviceaccounts, services, roles, rolebindings...).
 Liste vérifiée par `helm show crds` / `kubectl kustomize` sur les charts
 réels (voir `jenkins-infra-upgrader-clusterrole.yaml` pour le détail complet) :
 
-- **Gateway API (channel standard, 8 CRDs)** : `backendtlspolicies`,
+- **Gateway API (channel standard, 10 CRDs)** : `backendtlspolicies`,
   `gatewayclasses`, `gateways`, `grpcroutes`, `httproutes`, `listenersets`,
-  `referencegrants`, `tlsroutes` (`.gateway.networking.k8s.io`).
-- **NGINX Gateway Fabric (11 CRDs embarquées dans le chart)** :
-  `authenticationfilters`, `clientsettingspolicies`, `nginxgateways`,
-  `nginxproxies`, `observabilitypolicies`, `proxysettingspolicies`,
+  `referencegrants`, `tcproutes`, `tlsroutes`, `udproutes`
+  (`.gateway.networking.k8s.io`). `tcproutes` et `udproutes` sont entrées
+  dans le channel standard avec Gateway API v1.6 (NGF 2.8.0).
+- **NGINX Gateway Fabric (14 CRDs embarquées dans le chart)** :
+  `accesspolicies`, `authenticationfilters`, `clientsettingspolicies`,
+  `externalloadbalancers`, `nginxgateways`, `nginxproxies`,
+  `observabilitypolicies`, `payloadprocessors`, `proxysettingspolicies`,
   `ratelimitpolicies`, `snippetsfilters`, `snippetspolicies`,
   `upstreamsettingspolicies`, `wafpolicies` (`.gateway.nginx.org`).
+
+Une CRD absente du cluster est créée par le même `kubectl apply` : le
+`create` non nommé sur `customresourcedefinitions` (exception Cilium, voir
+plus bas) le permet ; son nom doit en revanche figurer dans la liste
+`update`/`patch`, l'apply côté serveur demandant `patch`.
 - **kube-prometheus-stack (10 CRDs)** : `alertmanagerconfigs`,
   `alertmanagers`, `podmonitors`, `probes`, `prometheusagents`,
   `prometheuses`, `prometheusrules`, `scrapeconfigs`, `servicemonitors`,
@@ -228,6 +236,22 @@ absentes de ce fichier ont été ajoutées (bloc dédié en fin de
 étant déjà couvert par des règles existantes (mirrors kube-state-metrics/
 Operator-Prometheus, bloc `configmaps`/`secrets` `verbs: ["*"]`, etc.). Liste
 vérifiée exhaustivement via `helm template grafana/alloy --version 1.11.1`.
+
+### Miroir des règles NGF (`jenkins-infra-upgrader-clusterrole.yaml`)
+
+Même garde-fou, sur le `ClusterRole` et le `ClusterRoleBinding`
+`ngf-nginx-gateway-fabric`. Il ne s'est déclenché qu'à la montée 2.6.0 →
+2.8.0 (RHDemo-Renovate #160, 2026-11-06) : tant que le chart ne modifie pas
+ce `ClusterRole`, l'apply côté serveur ne change rien et Kubernetes ne
+contrôle pas les règles. Comme pour Alloy, seules les combinaisons absentes
+ont été ajoutées (bloc dédié en fin de fichier) : déploiements, daemonsets,
+HPA, PDB et comptes de service cluster-wide, `tokenreviews`, lecture et
+statut des ressources Gateway API et `gateway.nginx.org`. Pas
+d'élargissement réel : créer des pods dans tout le cluster était déjà
+possible (`statefulsets` `*` du miroir Operator/Prometheus). Liste vérifiée
+par un dry-run serveur du script NGF 2.8.0 sous l'identité de
+`jenkins-infra-upgrader`, puis par un contrôle de couverture règle par
+règle contre `helm template` du chart 2.8.0.
 
 ### Admission webhooks Prometheus Operator : désactivés
 

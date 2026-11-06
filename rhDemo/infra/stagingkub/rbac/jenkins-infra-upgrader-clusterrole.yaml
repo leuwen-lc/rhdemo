@@ -56,13 +56,18 @@ rules:
       - httproutes.gateway.networking.k8s.io
       - listenersets.gateway.networking.k8s.io
       - referencegrants.gateway.networking.k8s.io
+      - tcproutes.gateway.networking.k8s.io
       - tlsroutes.gateway.networking.k8s.io
+      - udproutes.gateway.networking.k8s.io
       # NGINX Gateway Fabric (embarquées dans le chart, cf. `helm show crds`)
+      - accesspolicies.gateway.nginx.org
       - authenticationfilters.gateway.nginx.org
       - clientsettingspolicies.gateway.nginx.org
+      - externalloadbalancers.gateway.nginx.org
       - nginxgateways.gateway.nginx.org
       - nginxproxies.gateway.nginx.org
       - observabilitypolicies.gateway.nginx.org
+      - payloadprocessors.gateway.nginx.org
       - proxysettingspolicies.gateway.nginx.org
       - ratelimitpolicies.gateway.nginx.org
       - snippetsfilters.gateway.nginx.org
@@ -418,6 +423,86 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["endpoints", "endpointslices", "pods", "services"]
     verbs: ["get", "list", "watch"]
+  # Miroir des règles portées par le ClusterRole ngf-nginx-gateway-fabric
+  # (chart NGINX Gateway Fabric 2.8.0). Même raisonnement que les blocs miroir
+  # ci-dessus : dès qu'une montée de chart modifie ce ClusterRole (ou son
+  # ClusterRoleBinding), le garde-fou RBAC non-escalation exige que
+  # jenkins-infra-upgrader détienne déjà TOUTES ses règles. Jamais exercé
+  # avant la montée 2.6.0 → 2.8.0 (ClusterRole inchangé jusque-là, donc
+  # aucun contrôle) : échec RHDemo-Renovate #160 (2026-11-06). Comme pour
+  # Alloy, seules les combinaisons apiGroup/resource/verbe absentes des
+  # blocs existants sont ajoutées ; liste vérifiée par un dry-run serveur
+  # du script NGF 2.8.0 sous l'identité de jenkins-infra-upgrader, croisée
+  # avec `helm template` du chart. Pas d'élargissement réel du périmètre :
+  # créer des pods cluster-wide était déjà possible (statefulsets `*`).
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["create", "update", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets"]
+    verbs: ["create", "update", "delete", "get"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["create", "update", "delete", "get"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["create", "update", "delete", "get"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources:
+      - backendtlspolicies
+      - gatewayclasses
+      - gateways
+      - grpcroutes
+      - httproutes
+      - listenersets
+      - referencegrants
+      - tcproutes
+      - tlsroutes
+      - udproutes
+    verbs: ["list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources:
+      - backendtlspolicies/status
+      - gatewayclasses/status
+      - gateways/finalizers
+      - gateways/status
+      - grpcroutes/status
+      - httproutes/status
+      - listenersets/status
+      - tcproutes/status
+      - tlsroutes/status
+      - udproutes/status
+    verbs: ["update"]
+  - apiGroups: ["gateway.nginx.org"]
+    resources: ["nginxgateways"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.nginx.org"]
+    resources:
+      - accesspolicies
+      - authenticationfilters
+      - clientsettingspolicies
+      - nginxproxies
+      - observabilitypolicies
+      - proxysettingspolicies
+      - ratelimitpolicies
+      - upstreamsettingspolicies
+      - wafpolicies
+    verbs: ["list", "watch"]
+  - apiGroups: ["gateway.nginx.org"]
+    resources:
+      - accesspolicies/status
+      - authenticationfilters/status
+      - clientsettingspolicies/status
+      - nginxgateways/status
+      - observabilitypolicies/status
+      - proxysettingspolicies/status
+      - ratelimitpolicies/status
+      - upstreamsettingspolicies/status
+      - wafpolicies/status
+    verbs: ["update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

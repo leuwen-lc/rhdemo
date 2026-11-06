@@ -26,9 +26,14 @@
       "automerge": false
     },
     {
-      "description": "Chart NGINX Gateway Fabric : publie uniquement en OCI sur ghcr.io, qui ne fournit aucune date de publication (minimumReleaseAge bloquerait indefiniment). Version suivie via les releases GitHub, datees et alignees sur les versions du chart ; le tag 'v2.8.1' devient '2.8.1'. Cf. rhDemo/docs/RENOVATE_AUTOMERGE_CI.md, section Delai des images Docker.",
+      "description": "Chart NGINX Gateway Fabric : publie uniquement en OCI sur ghcr.io, qui ne fournit aucune date de publication (minimumReleaseAge bloquerait indefiniment). Version suivie via les releases GitHub, datees et alignees sur les versions du chart ; le tag 'v2.8.1' devient '2.8.1'. Chaque montee doit embarquer les CRDs Gateway API de la nouvelle version : postUpgradeTasks lance vendor-gateway-api-crds.sh (commande autorisee par RENOVATE_ALLOWED_COMMANDS dans Jenkinsfile-Renovate). Cf. rhDemo/docs/RENOVATE_AUTOMERGE_CI.md.",
       "matchPackageNames": ["nginx/nginx-gateway-fabric"],
-      "extractVersion": "^v(?<version>.+)$"
+      "extractVersion": "^v(?<version>.+)$",
+      "postUpgradeTasks": {
+        "commands": ["bash rhDemo/infra/stagingkub/scripts/vendor-gateway-api-crds.sh {{{newVersion}}}"],
+        "fileFilters": ["rhDemo/infra/stagingkub/gateway-api-crds/**"],
+        "executionMode": "update"
+      }
     },
     {
       "matchPackageNames": ["rhdemo-api"],

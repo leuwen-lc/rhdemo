@@ -134,8 +134,16 @@ pipeline {
                             {hostType: "docker", matchHost: "docker.io", username: $u, password: $p}
                         ]')
                         export RENOVATE_HOST_RULES
+                        # Seule commande que les postUpgradeTasks de renovate.json peuvent lancer :
+                        # vendoring des CRDs Gateway API à chaque montée de NGF. Option globale,
+                        # fixée ici et non dans renovate.json. Expression ancrée, version limitée à
+                        # des chiffres : le paramètre vient d'un tag de release GitHub, aucune
+                        # injection possible (Renovate lance d'ailleurs la commande sans shell).
+                        # [.] plutôt qu'un antislash : chaîne Groovy, puis JSON, puis regex.
+                        export RENOVATE_ALLOWED_COMMANDS='["^bash rhDemo/infra/stagingkub/scripts/vendor-gateway-api-crds[.]sh [0-9]+[.][0-9]+[.][0-9]+$"]'
                         docker run --rm -i \
                           -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN -e RENOVATE_HOST_RULES \
+                          -e RENOVATE_ALLOWED_COMMANDS \
                           -e RENOVATE_PLATFORM=forgejo \
                           -e RENOVATE_ENDPOINT=https://codeberg.org \
                           -e RENOVATE_REPOSITORIES="${REPO}" \
@@ -245,6 +253,61 @@ RENOVATE_SCAN_EOF
                         // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
                         def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                         sh "git fetch origin ${BASE_BRANCH}"
+
+                        // ── Délai des nouvelles versions (statut renovate/stability-days) ───────
+                        // Détail : docs/RENOVATE_AUTOMERGE_CI.md, « Délai des nouvelles versions ».
+                        // Renovate n'applique minimumReleaseAge qu'en créant ou en mettant à jour une
+                        // branche : une PR ouverte avant une règle de délai, ou dont Renovate n'a plus
+                        // mis la branche à jour, peut contenir une version trop récente. Renovate
+                        // publie l'état du délai sur chaque commit qu'il pousse : on exige « success »
+                        // sur son dernier commit (les merges de synchronisation de ce job n'en ont
+                        // pas, d'où --no-merges). Exception : une PR qui ne change que des digests
+                        // d'image. Renovate n'a pas de date pour eux, son statut reste « pending »
+                        // indéfiniment ; le contrôle des 48 h ci-dessous les couvre.
+                        def digestOnly = withEnv(["PR_TIP=${prTipSha}"]) {
+                            sh(
+                                script: '''#!/bin/bash
+                                    # Lignes retirées et ajoutées, digests effacés : identiques si et
+                                    # seulement si la PR ne change que des digests.
+                                    D=$(git diff -U0 "origin/${BASE_BRANCH}...${PR_TIP}" | grep -E '^[-+]' | grep -vE '^([+][+][+]|---) ')
+                                    grep -qE '@sha256:[0-9a-f]{64}' <<< "$D" || exit 1
+                                    S=$(sed -E 's/@sha256:[0-9a-f]{64}//g' <<< "$D")
+                                    diff -q <(grep '^-' <<< "$S" | cut -c2- | sort) <(grep '^[+]' <<< "$S" | cut -c2- | sort) >/dev/null
+                                ''',
+                                returnStatus: true
+                            ) == 0
+                        }
+                        if (digestOnly) {
+                            echo "   délai Renovate : PR de digest seul, couverte par le contrôle des ${IMAGE_MIN_AGE_HOURS} h"
+                        } else {
+                            def renovateSha = sh(
+                                script: "git log --no-merges --format=%H -1 origin/${BASE_BRANCH}..${prTipSha}",
+                                returnStdout: true
+                            ).trim()
+                            def stability = withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                withEnv(["R_SHA=${renovateSha}"]) {
+                                    sh(
+                                        script: '''#!/bin/bash
+                                            set +x
+                                            [ -n "$R_SHA" ] || { echo absent; exit 0; }
+                                            curl -sf --max-time 20 -H "Authorization: token ${FORGEJO_TOKEN}" \
+                                                 "${FORGEJO_API}/repos/${REPO}/commits/${R_SHA}/status" |
+                                              jq -r '[.statuses[]? | select(.context == "renovate/stability-days") | .status] | first // "absent"' ||
+                                              echo erreur
+                                        ''',
+                                        returnStdout: true
+                                    ).trim()
+                                }
+                            }
+                            if (stability != 'success') {
+                                def hint = stability == 'absent'
+                                    ? " (PR antérieure à la règle de délai : cocher la case de rebase de la PR pour que Renovate la reprenne)"
+                                    : ''
+                                echo "⏳ PR #${prNumber} : délai Renovate non confirmé (statut renovate/stability-days : ${stability})${hint} — PR ignorée pour ce passage"
+                                return
+                            }
+                            echo "   délai Renovate : renovate/stability-days = success"
+                        }
 
                         // ── Délai des images Docker ─────────────────────────────────────────────
                         // Détail : docs/RENOVATE_AUTOMERGE_CI.md, section « Délai des images Docker ».

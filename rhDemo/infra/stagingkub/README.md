@@ -333,7 +333,7 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `scripts/repair-cluster-after-restart.sh` | Réparation après redémarrage : IP du nœud changée (DNS cassé), registre hors du réseau `kind`, pods en ImagePullBackOff |
 | `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
 | `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
-| `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) |
+| `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) ; produit par Renovate dans la PR de montée de NGF (`postUpgradeTasks`) |
 | `rbac/` | Configuration RBAC Jenkins — `jenkins-deployer` et `jenkins-infra-upgrader`, voir `rbac/README.md` |
 
 ### Configuration Gateway API (values.yaml)

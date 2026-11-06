@@ -24,7 +24,7 @@ Le job est déclaré dans [`jenkins-casc.yaml`](../infra/jenkins-docker/jenkins-
 1. **Scan Renovate** : Renovate tourne dans son image officielle et ouvre ou met à jour ses PR (voir [Exécution de Renovate](#exécution-de-renovate-dans-jenkins)).
 2. **Liste des PR** : PR ouvertes dont la branche contient `renovate`, qui ciblent `BASE_BRANCH` et dont la branche vit dans le dépôt lui-même, jamais dans un fork.
 3. **Pour chaque PR**, dans l'ordre :
-   1. **Délai des images** : une PR qui ajoute une image `image:tag@sha256:…` trop récente est ignorée pour ce passage ([section dédiée](#délai-des-images-docker)).
+   1. **Délai** : une PR dont Renovate n'a pas confirmé le délai de 7 jours ([section dédiée](#délai-des-nouvelles-versions)), ou qui ajoute une image `image:tag@sha256:…` trop récente ([section dédiée](#délai-des-images-docker)), est ignorée pour ce passage.
    2. **Synchronisation** : si la branche est en retard sur la base, merge de la base dans la branche et push (voir [Synchronisation](#synchronisation-avec-la-base)).
    3. **Validation** selon les fichiers modifiés (voir [Aiguillage](#aiguillage-de-la-validation)).
    4. **Merge** si la validation passe, sinon commentaire d'échec et PR laissée ouverte.
@@ -70,6 +70,14 @@ Création des credentials : commentaires de `jenkins-casc.yaml`, section CREDENT
 Les `customManagers` suivent ce que les managers natifs ne voient pas : images épinglées dans `Jenkinsfile-CI`, `values.yaml` et `kind-config.yaml` ; charts des composants système (`scripts/components/install-or-upgrade-*.sh`) ; Node et npm de `frontend-maven-plugin` ; Maven, SOPS, Helm et Cosign de `Dockerfile.agent` ; image de Renovate. Format des annotations : [IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md).
 
 La branche d'évolution est écrite en dur à trois endroits : `BASE_BRANCH` de `Jenkinsfile-Renovate`, `baseBranchPatterns` de `renovate.json` et les `branches(…)` des jobs de `jenkins-casc.yaml`. `release.sh post-merge` les met à jour au changement de branche ([GIT-PROCEDURE-RELEASE.md](GIT-PROCEDURE-RELEASE.md)).
+
+## Délai des nouvelles versions
+
+Renovate n'applique `minimumReleaseAge` qu'au moment où il crée ou met à jour une branche. Une PR déjà ouverte n'est donc pas protégée si Renovate cesse de la mettre à jour. C'était le cas de #354 (maven 3.10), ouverte le 05/11 quand la règle docker désactivait le délai : Jenkins aurait pu la merger au bout de 55 h, et seul un conflit l'en a empêché.
+
+Renovate publie l'état du délai sur chaque commit qu'il pousse, sous forme d'un statut `renovate/stability-days` (`pending` ou `success`). `Jenkinsfile-Renovate` lit ce statut sur le dernier commit de Renovate dans la PR (`git log --no-merges`, pour écarter les merges de synchronisation du job) et ne poursuit que s'il vaut `success`. Statut absent : PR antérieure à la règle, ignorée jusqu'à ce que Renovate la reprenne ; cocher la case de rebase de la PR force cette reprise.
+
+Exception : une PR qui ne change **que des digests** d'image (lignes retirées et ajoutées identiques une fois les `@sha256:…` effacés). Renovate n'a aucune date pour un digest, son statut reste `pending` indéfiniment ; le contrôle des 48 h de la section suivante prend le relais.
 
 ## Délai des images Docker
 
@@ -131,6 +139,8 @@ Pendant le dry-run, `record_chart_images` (`rbac-preflight-check.sh`) écrit dan
 
 Après merge, le job déclenche `RHDemo-Stagingkub-Upgrade-Deploy` pour le composant concerné, sans attendre sa fin ([STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)).
 
+**CRDs Gateway API de NGF.** `install-or-upgrade-ngf.sh` applique le manifeste vendoré `gateway-api-crds/v<NGF_VERSION>/crds.yaml` et échoue s'il manque. Renovate le produit lui-même dans la PR de montée : `postUpgradeTasks` de `renovate.json` lance `vendor-gateway-api-crds.sh <nouvelle version>`, qui lit la version de Gateway API épinglée par NGF puis télécharge l'asset `standard-install.yaml` de cette release (sans `kubectl`, absent de l'image Renovate), et supprime le manifeste de l'ancienne version. Renovate n'exécute que les commandes autorisées par l'option globale `allowedCommands`, fixée dans `Jenkinsfile-Renovate` (`RENOVATE_ALLOWED_COMMANDS`) par une expression ancrée qui n'admet que ce script suivi d'un numéro de version ; la commande est lancée sans shell. Si la tâche échoue, Renovate le signale dans la PR et le dry-run échoue faute de manifeste : la PR n'est pas mergée.
+
 Prérequis et incidents passés :
 
 - L'agent n'est relié par défaut qu'au réseau `rhdemo-jenkins-network`. Le stage le connecte au réseau Docker `kind` (`lib.dockerNetworkConnect`) et l'en déconnecte dans `post { always }`, comme `Jenkinsfile-CD`. Les premiers dry-run, lancés sans cette connexion, échouaient sur la résolution DNS de `rhdemo-control-plane`.
@@ -173,7 +183,8 @@ Renovate tournait sur Codeberg Actions jusqu'à ce que le pool de runners `codeb
 - Seules les branches poussées dans le dépôt lui-même sont éligibles (`select(.head.repo.full_name == $repo)`), donc par un compte qui a déjà le droit Write ; les PR venant d'un fork sont ignorées.
 - Le code d'une PR (dépendance mise à jour, non revue) ne s'exécute jamais avec `FORGEJO_TOKEN` en environnement : le token n'est ouvert que pour le push de synchronisation, les commentaires et le merge.
 - Les montées majeures n'arrivent pas jusqu'au job sans approbation dans le tableau de bord.
-- Délai avant installation : 7 jours pour une version, 48 h pour un digest d'image.
+- Délai avant installation : 7 jours pour une version (statut Renovate vérifié avant merge), 48 h pour un digest d'image.
+- Renovate ne peut exécuter qu'une commande, le vendoring des CRDs de NGF (`RENOVATE_ALLOWED_COMMANDS`, option globale fixée dans le pipeline et non modifiable par `renovate.json`).
 - Tous les tokens sont des credentials Jenkins ; aucun n'est en clair dans le dépôt.
 
 ## Limites connues

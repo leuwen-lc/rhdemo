@@ -22,4 +22,10 @@
         <cve>CVE-2026-116804</cve>
     </suppress>
 
+    <suppress>
+        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-112366 : picomatch 4.0.7 (CVSS 8.7). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS &lt; 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #1023.</notes>
+        <packageUrl regex="true">^pkg:npm/picomatch@.*$</packageUrl>
+        <cve>CVE-2026-112366</cve>
+    </suppress>
+
 </suppressions>

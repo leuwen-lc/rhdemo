@@ -4,6 +4,14 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## picomatch (build #1023)
+
+- **Date** : 2026-11-06 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `picomatch` 4.0.7 (CVE-2026-112366, CVSS 8.7) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+---
+
 ## Revue des exceptions Trivy (2026-11-05) — 6 exceptions retirées
 
 - **Date** : 2026-11-05 — **Outil** : Trivy 0.76.1, base du jour, scan des images actuelles et candidates — **Source** : revue manuelle

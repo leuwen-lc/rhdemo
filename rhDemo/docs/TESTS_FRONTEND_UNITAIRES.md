@@ -37,7 +37,7 @@ La couche unitaire proposée se positionne donc **avant** Selenium dans la pyram
 |---|---|---|
 | Compatibilité Vue 3 / Composition API | Native | Nécessite `babel-jest` + config ESM supplémentaire |
 | Vitesse | Très rapide (esbuild) | Plus lent (transform Babel) |
-| Conflit avec Vue CLI Service 5 (webpack) | Aucun — Vitest exécute les tests indépendamment du build webpack, il n'a pas besoin de `vue.config.js` | Aucun non plus, mais configuration ESM plus verbeuse pour Vue 3 |
+| Conflit avec Vue CLI Service 5 (webpack) | Sans objet depuis la migration vers Vite (voir MIGRATION_VITE.md) : Vitest réutilise `vite.config.js` | Aucun non plus, mais configuration ESM plus verbeuse pour Vue 3 |
 | Maintenance | Activement maintenu, écosystème Vite/Vitest = standard actuel Vue 3 | Toujours maintenu mais plus de friction sur ce stack |
 
 **Recommandation : Vitest + `@vue/test-utils` v2**, complété par `@testing-library/vue` pour interroger le DOM par rôle/texte/`data-testid` plutôt que par structure interne des composants — cohérent avec la logique déjà en place pour Selenium (voir [DATA_TESTID_GUIDE.md](DATA_TESTID_GUIDE.md)).

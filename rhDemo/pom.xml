@@ -271,13 +271,6 @@
             <version>2.0.2</version>
             <configuration>
                 <workingDirectory>frontend</workingDirectory>
-                <environmentVariables>
-                    <!-- Silence l'avertissement "browsers data (caniuse-lite) is N months old"
-                         relayé en [ERROR] par le plugin sous `mvn -q`. Sans effet fonctionnel :
-                         n'influe que sur les préfixes CSS d'autoprefixer (navigateurs evergreen).
-                         Rafraîchir ponctuellement via `npx update-browserslist-db@latest`. -->
-                    <BROWSERSLIST_IGNORE_OLD_DATA>1</BROWSERSLIST_IGNORE_OLD_DATA>
-                </environmentVariables>
             </configuration>
             <executions>
                 <!-- Install Node et npm -->

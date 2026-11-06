@@ -121,6 +121,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [TESTS_REFONTE.md](TESTS_REFONTE.md) | historique | Refonte du parc de tests backend |
 | [API_REST_NORMALISATION.md](API_REST_NORMALISATION.md) | historique | Normalisation REST de l'API Employé |
 | [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md) | historique | Plan d'évolutions de fixcve-auto, essentiellement appliqué (voir le bilan en tête) |
+| [MIGRATION_VITE.md](MIGRATION_VITE.md) | historique | Migration du frontend de Vue CLI (webpack) vers Vite : étude et bilan |
 
 ## Propositions (non validées)
 

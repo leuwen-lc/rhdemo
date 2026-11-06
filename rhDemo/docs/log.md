@@ -167,3 +167,15 @@ Premier passage du nouveau pipeline (build #159) : délai et Docker Hub conforme
 ## [2026-11-06] ingest | RBAC de jenkins-infra-upgrader pour NGF 2.8.0
 
 Build #160 : le vendoring des CRDs par `postUpgradeTasks` fonctionne, mais le dry-run de #358 échoue sur le RBAC. Cinq nouvelles CRDs (`tcproutes`, `udproutes` de Gateway API v1.6, `accesspolicies`, `externalloadbalancers`, `payloadprocessors` de NGF) ajoutées à la liste `update`/`patch` ; bloc miroir du `ClusterRole` `ngf-nginx-gateway-fabric` ajouté, ce garde-fou anti-élévation ne s'étant jamais déclenché pour NGF avant que le chart modifie ce `ClusterRole`. Liste établie par un dry-run serveur sous l'identité du compte, puis vérifiée règle par règle contre `helm template` du chart 2.8.0. `rbac/README.md` de stagingkub mis à jour, `index.md` inchangé.
+
+## [2026-11-06] ingest | étude de migration Vue CLI vers Vite
+
+Nouveau document `MIGRATION_VITE.md` (statut `proposition`) : le build Maven n'est touché que par la suppression de `BROWSERSLIST_IGNORE_OLD_DATA`, les contrats `npm run build` et `frontend/dist` restant identiques. Travaux : `vite.config.js`, `index.html` déplacé à la racine de `frontend/`, scripts npm. Points de vigilance : sortie dans `assets/` (mappages de `WebMvcConfig`), CSP, flux OAuth2 en dev. Gain principal : disparition de la chaîne webpack et de ses CVE devDependencies. `index.md` mis à jour.
+
+## [2026-11-06] ingest | migration Vue CLI vers Vite réalisée
+
+Frontend migré vers Vite 8 : `vite.config.js` (port 8081, proxy `/api`), `index.html` déplacé à la racine de `frontend/`, scripts npm `serve`/`dev`/`build`, `@vue/cli-service` et `source-map-js` retirés. Contrats Maven inchangés (`npm run build`, `frontend/dist`) ; `BROWSERSLIST_IGNORE_OLD_DATA` supprimé du POM. Assets désormais dans `assets/`. `owasp-suppressions.xml` allégé des entrées de la chaîne webpack. `MIGRATION_VITE.md` reclassé en `historique` avec son bilan, `INVENTAIRE_COMPOSANTS_OPEN_SOURCE.md` réaligné, `index.md` mis à jour.
+
+## [2026-11-06] ingest | clôture des avis npm liés à la chaîne webpack
+
+`owasp-suppressions.xml` ramené à 3 entrées (DOMPurify, 2 Spring Security) : la suppression `picomatch` est aussi retirée (4.0.7 via Vite, la 2.3.2 visée n'est plus installée). Mention « Résolu le 2026-11-06 » ajoutée à 9 avis de `SECURITY_ADVISORIES.md` (#1003, #974, #914, #907, #884, #849, #717, postcss 7.0.39, #936), à la demande de l'utilisateur malgré la règle de ne pas éditer ce fichier à la main. Non vérifié par un scan Dependency-Check local (clé NVD absente) : la preuve sera le prochain build CI.

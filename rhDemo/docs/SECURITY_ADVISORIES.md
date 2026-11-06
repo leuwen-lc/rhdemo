@@ -33,6 +33,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
   - `flat` 5.0.2 (CVE-2026-119051, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
   - `open` 8.4.2 (CVE-2026-119025, GHSA-q978-78c7-phqw, CVSS 7.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
 
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `flat` et `open` ne sont plus dans l'arbre. Suppressions retirées de `owasp-suppressions.xml`.
+
 ---
 
 ## joi, node-forge (build #989)
@@ -84,6 +86,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Remédiation automatique — risque accepté (permanent)** :
   - `webpack-dev-server` 4.15.2 (CVE-2026-112085, GHSA-cfqc-fj3v-j925, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
 
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `webpack-dev-server` n'est plus dans l'arbre. Suppression retirée de `owasp-suppressions.xml`.
+
 ---
 
 ## body-parser (build #956)
@@ -124,6 +128,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Remédiation automatique — risque accepté (permanent)** :
   - `picomatch` 2.3.2 (CVE-2026-112366, CVSS 8.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
 
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `picomatch` 2.3.2 n'est plus dans l'arbre (seul 4.0.7 reste, via Vite), `npm audit` sans alerte. Suppression retirée de `owasp-suppressions.xml`.
+
 ---
 
 ## node-forge, webpack-dev-middleware, source-map-js (build #914) — CVSS 7.5 / 7.4 / 8.7
@@ -134,6 +140,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Remédiation automatique** : `source-map-js` monté en 1.2.2 (clôture de l'exclusion temporaire CVE-2026-93749, `[PENDING_UPSTREAM_FIX]` retirée de `owasp-suppressions.xml`, correctif désormais publié).
 - **Non traité (bloqué)** : `brace-expansion` 1.1.18 (GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, CVSS 7.5) — `lookup_failed` avec CVSS ≥ 7.0, aucune suppression appliquée ; revue humaine requise.
 
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `node-forge` et `webpack-dev-middleware` ne sont plus dans l'arbre ; `source-map-js` n'est plus une dépendance directe. Suppressions retirées de `owasp-suppressions.xml`.
+
 ---
 
 ## shell-quote (build #907) — CVE-2026-102422, CVSS 9.2
@@ -142,6 +150,8 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 - **Remédiation automatique — risque accepté (permanent)** : suppression ajoutée dans `rhDemo/owasp-suppressions.xml`, sans jeton `[PENDING_UPSTREAM_FIX]`.
 - **Justification (Critère A)** : toutes les copies installées sont marquées `dev=true` dans `frontend/package-lock.json` (`npm_dev_only: true`), atteintes uniquement via la chaîne de build `@vue/cli-service`, jamais dans le bundle de production. `npm audit` ne propose aucun correctif.
 - **Limite** : la validation locale `dependency-check` n'a pas pu mettre à jour la base NVD (clé API absente) ; la suppression n'a donc pas été confirmée par un scan local.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `shell-quote` n'est plus dans l'arbre. Suppression retirée de `owasp-suppressions.xml`.
 
 ---
 
@@ -245,6 +255,8 @@ Aucune suppression ni montée de version : `fix_status: lookup_failed` (Maven Ce
 
 `owasp-suppressions.xml` : parsing XML validé. `./mvnw org.owasp:dependency-check-maven:check` n'a **pas** pu s'exécuter complètement (clé API NVD absente de l'environnement : `Invalid API Key, length of 0`) ; la validation complète est donc reportée au prochain scan Jenkins.
 
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `braces`, `compression`, `minimatch`, `proxy-addr`, `serialize-javascript` et `uri-js` ne sont plus dans l'arbre ; la suppression npm restante de ce build (`source-map-js`) était déjà levée. Les findings Maven du même build ne sont pas concernés. Suppressions retirées de `owasp-suppressions.xml`.
+
 ---
 
 ## netty-handler (build #860) — CVE-2026-75595 (CVSS 9.1)
@@ -304,6 +316,8 @@ Suppressions `owasp-suppressions.xml` **avec** jeton `[PENDING_UPSTREAM_FIX]` en
 - **CVE-2026-47838** — `org.springframework.security:spring-security-web` 7.1.1 (`SubjectDnX509PrincipalExtractor` traite mal certaines valeurs CN de certificat X.509 malformées et peut lire un mauvais nom d'utilisateur ; `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`, CVSS 8.1). Scope runtime via `spring-boot-starter-security`, pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central.
 
 - **À retirer** : automatiquement, dès qu'une version corrigée sera détectée par la phase 2 (revérification du jeton `[PENDING_UPSTREAM_FIX]`) — montée de version réelle appliquée et note de clôture ajoutée ici.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `minimatch` et `serialize-javascript` ne sont plus dans l'arbre ; `form-data` (production, via `axios`) n'est pas concerné. Suppressions retirées de `owasp-suppressions.xml`.
 
 ---
 
@@ -440,6 +454,8 @@ Un lot de CVE/GHSA CVSS ≥ 7 a été détecté sur des dépendances npm transit
   - `uuid` GHSA-w5hq-g745-h8pq
 - **CVE-2022-37620 (`html-minifier-terser`)** : faux positif de correspondance CPE (confusion avec le projet non maintenu `html-minifier`) — suppression documentée, package également limité à la chaîne de build.
 - **CVE-2026-65898 (DOMPurify 3.3.2 dans swagger-ui)** : pas de version springdoc-openapi plus récente que 3.0.3 disponible sur Maven Central ; suppression ajoutée à la suite des suppressions DOMPurify déjà existantes (même rationale : Swagger UI protégé par Spring Security, DOMPurify jamais utilisé par `frontend/src`).
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). Les suppressions permanentes `serialize-javascript`, `uuid` et `html-minifier-terser` ne sont plus dans l'arbre. Suppressions retirées de `owasp-suppressions.xml`.
 
 ---
 
@@ -762,6 +778,8 @@ Lecture de fichier arbitraire via `sourceMappingURL` lors du traitement d'un fic
 - **Justification** : `postcss:7.0.39` est fixé par la contrainte `^7.0.36` de `@vue/component-compiler-utils:3.3.0`, lui-même dépendance de build de `@vue/cli-service` (`dev=true` dans `package-lock.json` — absent de `dependencies`/`devDependencies` directes de `frontend/package.json`). `npm audit fix --package-lock-only` rapporte `fixAvailable: false` : la mise à jour vers `8.5.12` impliquerait un saut de version majeure (7.x → 8.x) au-delà de la contrainte semver déclarée, nécessitant `--force` — exclu par la politique du skill `fixcve-auto`. Cette instance de `postcss` ne traite que le CSS des composants `.vue` écrits par l'équipe (pipeline `vue-cli-service build`), jamais de CSS externe/non fiable comme le décrit le vecteur d'attaque de la CVE, et n'est jamais embarquée dans le bundle de production (un second `postcss` 8.5.26, non affecté, coexiste au niveau supérieur du graphe pour l'usage de production).
 - **Incident associé** : ce CVE est la cause racine des rollbacks automatiques des builds #760 et #762 (le correctif poussé au build #759 avait traité DOMPurify sans traiter celui-ci — voir `rhDemo/docs/FIXCVE_AUTO.md`) — corrigé manuellement après durcissement du skill `fixcve-auto` (validation locale obligatoire avant push ; cette étape vit désormais dans `.claude/skills/fixcve-auto-apply/SKILL.md` suite à la séparation en 3 phases, voir `rhDemo/docs/FIXCVE_AUTO.md`).
 - **À retirer** : dès que `@vue/component-compiler-utils` (ou sa chaîne de dépendances) embarque une version de `postcss >= 8.5.12`.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `postcss` 7.0.39 (transitif de `@vue/component-compiler-utils`, dépendance de `@vue/cli-service`) n'existe plus ; seul `postcss` 8.5.32 (Vite) reste. Suppressions retirées de `owasp-suppressions.xml`.
 
 ---
 

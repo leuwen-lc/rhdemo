@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build"
+    "serve": "vite",
+    "dev": "vite",
+    "build": "vite build"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
@@ -14,10 +15,8 @@
     "vue-router": "^5.0.0"
   },
   "devDependencies": {
-    "@vue/cli-service": "~5.0.0",
-    "source-map-js": "1.2.2"
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.6"
   },
-  "overrides": {
-    "nanoid": "^6.0.1"
-  }
+  "type": "module"
 }

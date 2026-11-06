@@ -1,105 +1,48 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-06
 sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
   - rhDemo/infra/ephemere/docker-compose.yml
+  - rhDemo/infra/dev/docker-compose.yml
+  - rhDemo/infra/jenkins-docker/
+  - rhDemo/infra/stagingkub/kind-config.yaml
+  - rhDemo/Dockerfile
   - rhDemo/Jenkinsfile-CI
   - renovate.json
 ---
 
 # Gestion des versions d'images Docker
 
-## Vue d'ensemble
+Toutes les images tierces exécutées par l'application, ses environnements et la CI sont **épinglées par digest** : `image:tag@sha256:<digest>`. Le tag est gardé pour la lisibilité, le digest garantit le contenu. Les montées de version et de digest sont proposées par Renovate puis mergées par Jenkins après validation ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
 
-Toutes les images Docker externes du projet sont **épinglées par digest SHA-256** pour garantir l'immuabilité des déploiements. Un tag Docker est mutable (un push upstream peut remplacer son contenu), alors qu'un digest identifie de manière cryptographique le contenu exact d'une image.
+Ce document dit **où** chaque image est déclarée et **comment** elle est mise à jour. Les versions et digests en vigueur se lisent dans les fichiers cités, jamais ici.
 
-**Format utilisé** : `image:tag@sha256:<digest>`
+## Règles
 
-Le tag est conservé pour la lisibilité ; le digest assure l'intégrité.
+- **Digest de l'index multi-architecture**, celui que renvoie `docker buildx imagetools inspect <image>:<tag>` (ligne `Digest:`) et que Renovate épingle. Pas le digest d'une seule plateforme.
+- **Tag versionné plutôt que flottant** (`3.9.16-…` plutôt que `3.9-…`, `v0.5.0` plutôt que `latest`) : une nouvelle version publiée sous un tag flottant arriverait comme une simple mise à jour de digest, avec un délai de 48 h au lieu de 7 jours. Seule exception : `jenkins/inbound-agent:latest-jdk25` (voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md#délai-des-images-docker)).
+- **Images prises sur Docker Hub** : c'est le seul registre qui fournit une date de publication à Renovate, nécessaire au délai avant installation. Keycloak, postgres-exporter et ZAP sont publiés à l'identique sur Docker Hub et sur Quay ou ghcr ; on prend Docker Hub.
+- **Une annotation Renovate par référence** hors des formats natifs (Dockerfile, Docker Compose) : `# renovate: datasource=docker depName=<image>` sur la ligne qui précède.
 
----
+## Où sont déclarées les images
 
-## Table des matières
+### Application et environnements
 
-- [Images externes utilisées](#images-externes-utilisées)
-- [Organisation par environnement](#organisation-par-environnement)
-- [Procédure de mise à jour d'une image](#procédure-de-mise-à-jour-dune-image)
-- [Gestion de la version de RHDemo API](#gestion-de-la-version-de-rhdemo-api)
-- [Pourquoi épingler par digest ?](#pourquoi-épingler-par-digest-)
-
----
-
-## Images externes utilisées
-
-| Image | Usage | Environnements |
+| Fichier | Images | Suivi Renovate |
 | --- | --- | --- |
-| `postgres:18.2-alpine3.22` | BDD rhdemo + keycloak, backups | dev, ephemere, stagingkub |
-| `quay.io/keycloak/keycloak:26.5.0` | Serveur d'authentification | dev, ephemere, stagingkub |
-| `nginx:1.29.6-alpine` | Reverse proxy HTTPS | ephemere, Jenkinsfile-CI |
-| `ghcr.io/nginx/nginx-gateway-fabric:2.6.0` | API Gateway / Ingress Kubernetes | stagingkub, Jenkinsfile-CI (scan Trivy) |
-| `busybox:1.36` | Init containers (fix-permissions, wait-for) | stagingkub |
-| `quay.io/prometheuscommunity/postgres-exporter:v0.15.0` | Métriques PostgreSQL | stagingkub |
+| [`Dockerfile`](../Dockerfile) | builder `maven`, base d'exécution `eclipse-temurin` | manager natif `dockerfile` |
+| [`Jenkinsfile-CI`](../Jenkinsfile-CI) | `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE` | annotations + `customManagers` de `renovate.json` |
+| [`infra/ephemere/docker-compose.yml`](../infra/ephemere/docker-compose.yml) | postgres (×2), keycloak, nginx | manager natif `docker-compose` |
+| [`infra/dev/docker-compose.yml`](../infra/dev/docker-compose.yml) | postgres, keycloak | manager natif `docker-compose` |
+| [`infra/stagingkub/helm/rhdemo/values.yaml`](../infra/stagingkub/helm/rhdemo/values.yaml) | `global.images` : postgres, keycloak, busybox, postgresExporter | annotations + `customManagers` |
+| [`infra/stagingkub/kind-config.yaml`](../infra/stagingkub/kind-config.yaml) | `kindest/node` (version de Kubernetes) | annotation ; **approbation manuelle**, la montée impose une reconstruction du cluster |
 
-> **Note** : `rhdemo-api` est l'image applicative construite par le pipeline CI, elle n'est pas concernée par l'épinglage externe.
+Dans ephemere, les images de postgres, keycloak et nginx acceptent une surcharge par variable d'environnement (`${KEYCLOAK_IMAGE:-…}`), dont la valeur par défaut porte le digest. `Jenkinsfile-CI` exporte ses trois variables vers Docker Compose : **les valeurs de `Jenkinsfile-CI` et des fichiers Compose doivent rester identiques**, ce que Renovate assure en les mettant à jour dans la même PR.
 
----
+Dans stagingkub, `global.images` est la source unique des images tierces du chart `rhdemo` : les templates les consomment par `{{ .Values.global.images.<nom> }}`.
 
-## Organisation par environnement
-
-### Docker Compose (dev, ephemere)
-
-Les images sont référencées directement dans les fichiers Docker Compose avec le digest en suffixe.
-
-**Fichiers** :
-
-- [`infra/dev/docker-compose.yml`](../infra/dev/docker-compose.yml) : postgres, keycloak
-- [`infra/ephemere/docker-compose.yml`](../infra/ephemere/docker-compose.yml) : postgres, keycloak, nginx
-
-Les images ephemere acceptent un override via variable d'environnement (ex : `POSTGRES_IMAGE`), la valeur par défaut inclut le digest :
-
-```yaml
-image: ${POSTGRES_IMAGE:-postgres:18.2-alpine3.22@sha256:198c...}
-```
-
-### Jenkinsfile-CI
-
-Les images sont définies dans les variables d'environnement du pipeline.
-
-**Fichier** : [`Jenkinsfile-CI`](../Jenkinsfile-CI) (variables `NGINX_IMAGE`, `POSTGRES_IMAGE`, `KEYCLOAK_IMAGE`)
-
-```groovy
-environment {
-    NGINX_IMAGE = "nginx:1.29.6-alpine@sha256:08fe94b0..."
-    POSTGRES_IMAGE = "postgres:18.2-alpine3.22@sha256:198c924a..."
-    KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.5.0@sha256:24896bcb..."
-}
-```
-
-`NGINX_IMAGE`, `POSTGRES_IMAGE` et `KEYCLOAK_IMAGE` sont exportées vers Docker Compose lors du
-déploiement ephemere. NGINX Gateway Fabric n'a pas de variable ici : c'est un composant système
-de stagingkub, suivi par la version de son chart (voir le tableau ci-dessous) et scanné par
-`Jenkinsfile-Renovate` à chaque montée (cf. [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)).
-
-### Helm / Kubernetes (stagingkub)
-
-Les images tierces sont **centralisées** dans la section `global.images` de `values.yaml`. Toutes les templates Helm consomment cette source unique.
-
-**Fichier** : [`infra/stagingkub/helm/rhdemo/values.yaml`](../infra/stagingkub/helm/rhdemo/values.yaml)
-
-```yaml
-global:
-  images:
-    postgres: "postgres:18.2-alpine3.22@sha256:198c..."
-    keycloak: "quay.io/keycloak/keycloak:26.5.0@sha256:2489..."
-    busybox: "busybox:1.36@sha256:0ad6..."
-    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.15.0@sha256:31bd..."
-  imagePullPolicy: IfNotPresent
-```
-
-**Templates consommateurs** (via `{{ .Values.global.images.<nom> }}`) :
-
-| Template | Images utilisées |
+| Template | Images |
 | --- | --- |
 | `postgresql-rhdemo-statefulset.yaml` | postgres, postgresExporter, busybox |
 | `postgresql-keycloak-statefulset.yaml` | postgres, busybox |
@@ -107,123 +50,48 @@ global:
 | `rhdemo-app-deployment.yaml` | busybox |
 | `postgresql-backup-cronjob.yaml` | postgres, busybox |
 
-**Avantage** : une seule ligne à modifier dans `values.yaml` pour mettre à jour postgres dans tous les StatefulSets, Deployments et CronJobs.
+### Usine logicielle (Jenkins)
 
-### Différence architecturale ephemere vs stagingkub
-
-| Composant | Ephemere | Stagingkub |
-| --- | --- | --- |
-| PostgreSQL | `postgres:18.2-alpine3.22` (conteneur) | `postgres:18.2-alpine3.22` (StatefulSet) |
-| Keycloak | `quay.io/keycloak/keycloak:26.5.0` | idem |
-| Nginx | `nginx:1.29.6-alpine` (reverse proxy) | NGINX Gateway Fabric 2.6.0 (Helm, namespace `nginx-gateway`) |
-
----
-
-## Procédure de mise à jour d'une image
-
-### 1. Récupérer le nouveau digest
-
-```bash
-# Récupérer le digest linux/amd64 d'une image
-docker buildx imagetools inspect <image>:<nouveau-tag> --raw \
-  | python3 -c "
-import sys, json
-m = json.load(sys.stdin)
-for d in m.get('manifests', []):
-    p = d.get('platform', {})
-    if p.get('architecture') == 'amd64' and p.get('os') == 'linux':
-        print(d['digest'])
-"
-```
-
-### 2. Mettre à jour les fichiers
-
-| Image | Fichier(s) à modifier |
+| Fichier | Images |
 | --- | --- |
-| `postgres`, `keycloak` | `values.yaml` → `global.images.<nom>` · `infra/dev/docker-compose.yml` · `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` |
-| `nginx` (reverse proxy ephemere) | `infra/ephemere/docker-compose.yml` · `Jenkinsfile-CI` (`NGINX_IMAGE`) |
-| `nginx-gateway-fabric` (stagingkub) | `infra/stagingkub/scripts/components/install-or-upgrade-ngf.sh` (`NGF_VERSION`, version du chart) + CRDs vendorées (`vendor-gateway-api-crds.sh`) |
-| `busybox`, `postgres-exporter` | `values.yaml` → `global.images.<nom>` |
+| [`infra/jenkins-docker/Dockerfile.jenkins`](../infra/jenkins-docker/Dockerfile.jenkins) | `jenkins/jenkins` (contrôleur) |
+| [`infra/jenkins-docker/Dockerfile.agent`](../infra/jenkins-docker/Dockerfile.agent) | `jenkins/inbound-agent` (agents) |
+| [`infra/jenkins-docker/docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml) | `tecnativa/docker-socket-proxy` |
+| [`infra/jenkins-docker/docker-compose.zap.yml`](../infra/jenkins-docker/docker-compose.zap.yml) | `zaproxy/zap-stable` |
 
-> **Important** : pour `nginx-gateway-fabric`, la montée de `NGF_VERSION` doit s'accompagner du
-> manifeste de CRDs Gateway API de la nouvelle version (`./vendor-gateway-api-crds.sh <version>`,
-> commité dans la même PR), sans quoi le script échoue. Le chart référence ses images par tag, sans digest.
+Restent **épinglées par tag seulement** : SonarQube, sa base `postgres:18-alpine` et le registre local `registry:3` (`infra/jenkins-docker/docker-compose.yml`), ainsi que l'image `renovate/renovate` (`RENOVATE_IMAGE` de `Jenkinsfile-Renovate`). Renovate les suit par tag, avec le délai de 7 jours des nouvelles versions.
 
-### 3. Vérifier
+### Composants système de stagingkub
 
-```bash
-# Helm : vérifier les manifests générés
-helm template rhdemo infra/stagingkub/helm/rhdemo/ \
-  --set postgresql-rhdemo.database.password=x \
-  --set postgresql-keycloak.database.password=x \
-  --set keycloak.admin.password=x \
-  | grep "image:"
+Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy et Grafana sont installés par Helm à partir des scripts `infra/stagingkub/scripts/components/install-or-upgrade-*.sh`. On y fixe la **version du chart** (variable `*_VERSION` annotée pour Renovate), pas les images : chaque chart référence ses propres images. Ces images sont scannées par Trivy à chaque montée de chart, à partir du rendu `helm template` ([TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)).
 
-# Docker Compose : vérifier la syntaxe
-docker compose -f infra/dev/docker-compose.yml config | grep "image:"
-docker compose -f infra/ephemere/docker-compose.yml config | grep "image:"
-```
+Le chart NGF est publié uniquement en OCI sur ghcr, qui ne donne pas de date : Renovate le suit par les releases GitHub `nginx/nginx-gateway-fabric`, dont les versions sont celles du chart. Une montée de `NGF_VERSION` exige aussi les CRDs Gateway API de la nouvelle version (`vendor-gateway-api-crds.sh <version>`, dans la même PR), sinon le script d'installation échoue.
 
----
+### Image de l'application
 
-## Gestion de la version de RHDemo API
+`rhdemo-api` est construite par `Jenkinsfile-CI`, signée avec cosign puis publiée sur le registre local `kind-registry` (port 5000). Son tag reprend la version de `pom.xml` (lue par `mvnw help:evaluate`), suivie du numéro de build pour une version `-SNAPSHOT`. `Jenkinsfile-CD` vérifie la signature avant de déployer et passe le tag au chart (`--set rhdemo.image.tag=…`) ; la valeur `rhdemo.image.tag` de `values.yaml` n'est qu'un défaut. Renovate ignore cette image (`matchPackageNames: ["rhdemo-api"]`). Procédure de version : [GIT-PROCEDURE-RELEASE.md](GIT-PROCEDURE-RELEASE.md).
 
-### Version lue depuis pom.xml
+## Mise à jour
 
-La version de l'application est **automatiquement lue depuis `pom.xml`** par le pipeline CI :
+**Cas normal : Renovate.** Il ouvre une PR par image (version ou digest), qui met à jour toutes les références à cette image. `Jenkinsfile-Renovate` attend le délai prévu (7 jours pour une version, 48 h pour un digest), valide la PR selon les fichiers qu'elle touche, puis la merge. Les montées majeures et `kindest/node` attendent une approbation dans le tableau de bord Renovate.
 
-```groovy
-stage('Lecture Version Maven') {
-    steps {
-        script {
-            env.APP_VERSION = sh(
-                script: 'cd rhDemo && ./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout',
-                returnStdout: true
-            ).trim()
-        }
-    }
-}
-```
+La validation avant merge dépend des fichiers ([aiguillage](RENOVATE_AUTOMERGE_CI.md#aiguillage-de-la-validation)) : scan Trivy de l'image seulement si la PR ne touche que `Jenkinsfile-CI` et `values.yaml` (busybox, postgres-exporter) ; dry-run Kubernetes et Trivy pour un composant système. Une PR qui touche aussi un Dockerfile ou un fichier Compose (postgres, keycloak, nginx, images de l'usine logicielle) est mergée **sans scan préalable** : l'image est scannée ensuite par `RHDemo-CI` sur la branche de base, pour celles qu'il couvre.
 
-### Workflow de version
+**Mise à jour manuelle** (correctif urgent, par exemple une CVE critique) :
 
-1. **Développement** : Version `X.Y.Z-SNAPSHOT` dans `pom.xml`
-2. **Release** : Version `X.Y.Z-RELEASE` dans `pom.xml`, tag git `vX.Y.Z`
-3. **Jenkins** : Lit automatiquement la version et construit l'image `rhdemo-api:X.Y.Z-RELEASE`
+1. Lire le digest de l'index : `docker buildx imagetools inspect <image>:<tag>`, ligne `Digest:`.
+2. Remplacer `tag@digest` dans **tous** les fichiers qui référencent l'image : `git grep -n '<image>:'`.
+3. Vérifier le rendu : `helm template` du chart (images de `global.images`) et `docker compose -f <fichier> config` pour les fichiers Compose.
+4. Une mise à jour manuelle ne bénéficie pas du délai avant installation : vérifier la date et l'origine de l'image avant de commiter.
 
----
+Pour une CVE détectée par la CI, `/fixcve` et fixcve-auto savent repiner Keycloak, nginx et postgres ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
 
 ## Pourquoi épingler par digest ?
 
-### Risques sans digest (tag seul)
-
-- **Supply chain attack** : un tag peut être remplacé par une image malveillante sur le registry
-- **Dérive silencieuse** : un rebuild upstream change le contenu sans changer le tag
-- **Non-reproductibilité** : impossible de garantir que deux déploiements utilisent exactement la même image
-
-### Garanties avec digest
-
-- **Immuabilité** : le digest SHA-256 identifie le contenu exact, bit à bit
-- **Reproductibilité** : un déploiement produit toujours le même résultat
-- **Auditabilité** : on peut vérifier a posteriori quelle image était déployée
-- **Détection de tampering** : toute modification du contenu invalide le digest
-
-### Complémentarité tag + digest
-
-Le format `image:tag@sha256:digest` combine les avantages :
-
-- Le **tag** donne la lisibilité (on voit la version)
-- Le **digest** donne la sécurité (on garantit le contenu)
-- Si le registry retourne un contenu différent du digest, le pull échoue
-
----
+Un tag est mutable : l'éditeur, ou un attaquant qui a pris le contrôle de son compte, peut publier un autre contenu sous le même tag. Sans digest, deux déploiements du même fichier peuvent exécuter des images différentes, et une image compromise s'installe au prochain téléchargement. Avec un digest, le contenu est fixé bit à bit, le téléchargement échoue si le registre renvoie autre chose, et l'image déployée reste vérifiable a posteriori. Toute nouvelle image passe alors par une PR : elle est datée, scannée et retardée avant d'être installée.
 
 ## Références
 
-- [Docker Image Digests](https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier)
-- [SLSA Supply Chain Levels](https://slsa.dev/) - Bonnes pratiques supply chain
-- [Kubernetes - Container Images](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
-
----
-
-**Dernière mise à jour** : 19 mars 2026
+- [Docker : pull par digest](https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier)
+- [Renovate : Docker](https://docs.renovatebot.com/docker/)
+- [SLSA](https://slsa.dev/)

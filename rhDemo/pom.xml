@@ -283,7 +283,7 @@
                         <!-- renovate: datasource=node-version depName=node -->
                         <nodeVersion>v24.22.2</nodeVersion>
                         <!-- renovate: datasource=npm depName=npm -->
-                        <npmVersion>12.2.1</npmVersion>
+                        <npmVersion>12.2.2</npmVersion>
                     </configuration>
                 </execution>
                 <!-- Install dependencies -->

@@ -187,3 +187,27 @@ Premier upgrade de NGF sous `default-deny-all` et sous le compte `jenkins-infra-
 ## [2026-11-06] ingest | observabilité : clôture des 4 points ouverts
 
 Loki : `compactor.retention_enabled: true` ajouté (la rétention de 7 jours n'était jamais appliquée). Datasource Prometheus : source unique dans les values Grafana, ConfigMap du script remplacée par sa suppression. `grafana-gateway.yaml` supprimé, références corrigées. Alertmanager sans destinataire documenté comme choix assumé (pas d'egress). Section « Points ouverts » retirée de `OBSERVABILITY_STACK_INTEGRATION.md`. À appliquer sur le cluster : relancer les scripts Loki et Grafana puis contrôler `kubectl get cm -n loki-stack loki -o yaml | grep -A3 compactor`.
+
+## [2026-11-16] ingest | étude de renouvellement rapide des secrets
+
+`ETUDE_ROTATION_SECRETS.md` (proposition) : inventaire de 18 secrets dont la fuite permet écriture, facturation ou malveillance (clé AGE, Cosign, tokens Codeberg, kubeconfigs, `admin` Jenkins, SMTP, Claude, secrets applicatifs…), capacités d'API de chaque fournisseur, script d'orchestration `rotate-secrets.sh` proposé avec un mode urgence ordonné, plan en 5 phases. Constats annexes : `adminPassword: "admin123"` dans `grafana-values.yaml` local, défaut `sonar123`, `.env` Jenkins en clair, tokens Kubernetes sans expiration.
+
+## [2026-11-16] ingest | étude de rotation des secrets : décisions de l'utilisateur
+
+`ETUDE_ROTATION_SECRETS.md` complété avec les réponses aux 4 questions ouvertes : abonnement Claude (rotation manuelle), 2FA absente sur les bots Codeberg (activation ajoutée en phase 0, mots de passe des bots inventoriés en #6b), SMTP par l'API Infomaniak, compte personnel hors script. API Infomaniak vérifiée dans la spécification OpenAPI officielle : rotation possible via les accès appareil de la boîte (scope `mail`), pas de champ mot de passe sur la route `mail_hostings` d'une boîte ; non testé sur le compte.
+
+## [2026-11-16] ingest | corrections immédiates hors étude de rotation
+
+`install-or-upgrade-grafana.sh` refuse un mot de passe admin de moins de 16 caractères. `infra/jenkins-docker/docker-compose.yml` n'a plus de défaut `sonar123` pour `SONAR_DB_PASSWORD` (syntaxe `${VAR:?}`, démarrage refusé sans la variable). Fichiers `.env` de jenkins-docker et dev passés en 600 par l'utilisateur. Constats du §1.3 de `ETUDE_ROTATION_SECRETS.md` annotés.
+
+## [2026-11-16] ingest | défaut ZAP_API_KEY supprimé, pas de SOPS pour les fichiers locaux
+
+`docker-compose.zap.yml` : plus de défaut `changeme` pour `ZAP_API_KEY` (la CI génère une clé aléatoire par build) ; démarrage manuel et arrêt adaptés dans `infra/jenkins-docker/README.md`. `ETUDE_ROTATION_SECRETS.md` : décision de ne pas chiffrer par SOPS les fichiers locaux non versionnés (clé AGE lisible par le même compte), recommandation retirée du §4.2 et de la phase 3 ; inventaire des fichiers locaux à secrets (tous en 600) ; phase 0 marquée réalisée sauf deux points non confirmés.
+
+## [2026-11-16] ingest | ZAP : port non publié, API restreinte ; étude allégée
+
+`docker-compose.zap.yml` : publication du port 8090 sur l'hôte supprimée (proxy ouvert sur le LAN pendant chaque build, la CI passe par le réseau Docker) ; `api.addrs` restreint à localhost (IPv4/IPv6), au nom `owasp-zap` et à 172.16.0.0/12. ZAP contrôle l'adresse du client et l'en-tête Host : testé avec un vrai conteneur ZAP (healthcheck et appel par `owasp-zap` acceptés, client 192.168.x et mauvaise clé refusés). `ETUDE_ROTATION_SECRETS.md` §1.3 : constats corrigés retirés à la demande de l'utilisateur, renvoi vers ce journal.
+
+## [2026-11-16] ingest | ports Jenkins limités à la boucle locale ; priorité aux secrets exposés sur Internet
+
+`infra/jenkins-docker/docker-compose.yml` : ports 8080 et 50000 (Jenkins), 9020 (SonarQube) et 5000 (registry sans authentification) publiés sur `127.0.0.1` au lieu de toutes les interfaces (joignables depuis le LAN, les règles iptables de Docker passant avant ufw). Agents, SonarQube, cosign et KinD passent par le réseau Docker ; le daemon de l'hôte pousse sur `localhost:5000`. Prise en compte au prochain `start-jenkins.sh`. `ETUDE_ROTATION_SECRETS.md` : colonne « Expo. » (Internet, LAN, Local) dans l'inventaire, token API Infomaniak ajouté (#19), ordre d'urgence du §3.3 refondu (secrets exploitables depuis Internet d'abord, exception en cas de compromission de Jenkins).

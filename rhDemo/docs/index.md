@@ -130,6 +130,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [IMPACT_CLEAN_ARCHITECTURE.md](IMPACT_CLEAN_ARCHITECTURE.md) | proposition | Analyse d'impact d'une migration vers la Clean Architecture |
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
+| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API (périodique et d'urgence) |
 
 ---
 

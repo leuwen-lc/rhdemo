@@ -145,7 +145,7 @@ docker info
 | `docker-socket-proxy` | Proxy API Docker filtré (création/arrêt agents uniquement) | 2375 (interne) | docker-compose.yml |
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
-| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
+| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 (interne, non publié) | docker-compose.zap.yml |
 | `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
 | agents éphémères | Créés à la demande par Docker Cloud, détruits après le build | - | Docker Cloud (JCasC) |
 
@@ -674,7 +674,8 @@ Cette approche offre :
 ```bash
 cd infra/jenkins-docker
 
-# Démarrer ZAP
+# Démarrer ZAP (clé API obligatoire, pas de valeur par défaut)
+export ZAP_API_KEY=$(openssl rand -hex 16)
 docker-compose -f docker-compose.yml \
                -f docker-compose.zap.yml \
                up -d owasp-zap
@@ -683,7 +684,7 @@ docker-compose -f docker-compose.yml \
 docker logs rhdemo-jenkins-zap
 
 # Tester l'API ZAP
-docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=changeme
+docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY}
 ```
 
 **Configuration Selenium :**
@@ -701,15 +702,9 @@ Les rapports sont stockés dans le volume `rhdemo-jenkins-zap-reports` et peuven
 **Arrêt de ZAP :**
 
 ```bash
-# Arrêter ZAP
-docker-compose -f docker-compose.yml \
-               -f docker-compose.zap.yml \
-               stop owasp-zap
-
-# Supprimer le container
-docker-compose -f docker-compose.yml \
-               -f docker-compose.zap.yml \
-               rm -f owasp-zap
+# Arrêter et supprimer le container (sans Compose : pas besoin de ZAP_API_KEY)
+docker stop rhdemo-jenkins-zap
+docker rm rhdemo-jenkins-zap
 ```
 
 **Volumes ZAP :**

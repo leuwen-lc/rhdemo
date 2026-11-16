@@ -39,7 +39,8 @@
 #                                Rapport HTML/JSON
 #
 # Variables attendues:
-#   ZAP_API_KEY=your-secure-api-key (généré automatiquement si absent)
+#   ZAP_API_KEY : obligatoire, générée aléatoirement à chaque build par Jenkinsfile-CI
+#   (démarrage manuel : export ZAP_API_KEY=$(openssl rand -hex 16))
 # ═══════════════════════════════════════════════════════════════
 
 services:
@@ -54,13 +55,19 @@ services:
     # Démarrage en mode daemon avec API activée
     # Note: Le port principal (-port) est utilisé pour le PROXY et l'API web
     # Il n'y a pas de séparation API/Proxy dans ZAP - un seul port pour les deux
+    # api.addrs : ZAP contrôle à la fois l'adresse du client ET l'en-tête Host, les deux
+    # doivent correspondre. Autorisés : localhost en IPv4/IPv6 (healthcheck, docker exec),
+    # le nom owasp-zap (appels de la CI) et les réseaux Docker par défaut (172.16.0.0/12 :
+    # rhdemo-jenkins-network, réseau ephemere). Si Docker attribue un jour une plage
+    # 192.168.x à ces réseaux, l'API répondra « not permitted » : ajouter la plage ici.
+    # Le proxy n'est pas concerné. Testé le 2026-11-16 (client 192.168.x refusé).
     command: >
       zap.sh -daemon
       -host 0.0.0.0
       -port 8090
-      -config api.addrs.addr.name=.*
+      -config 'api.addrs.addr.name=^(localhost|owasp-zap|127\.0\.0\.1|0:0:0:0:0:0:0:1|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)$$'
       -config api.addrs.addr.regex=true
-      -config api.key=${ZAP_API_KEY:-changeme}
+      -config api.key=${ZAP_API_KEY:?ZAP_API_KEY doit être défini}
       -config api.disablekey=false
       -config spider.maxDepth=5
       -config spider.maxChildren=10
@@ -76,10 +83,9 @@ services:
       # Timeout scans
       - ZAP_TIMEOUT=60
 
-    ports:
-      # Port unique ZAP (API + Proxy sur le même port)
-      # Port 8090 pour éviter conflit avec Jenkins (8080)
-      - "8090:8090"
+    # Pas de publication de port sur l'hôte : la CI joint ZAP (API et proxy, port 8090)
+    # par le réseau Docker (owasp-zap:8090). Un port publié exposait sur le LAN un
+    # proxy ouvert sans authentification pendant chaque build.
 
     volumes:
       # Persistence des sessions ZAP (dans le même volume que Jenkins)
@@ -102,7 +108,7 @@ services:
 
     # Healthcheck : vérifier que l'API ZAP répond
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY:-changeme} || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY:?ZAP_API_KEY doit être défini} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -38,6 +38,12 @@ if [ -z "$GRAFANA_PASSWORD" ] || [ "$GRAFANA_PASSWORD" = '""' ]; then
     echo -e "${RED}❌ Le mot de passe Grafana n'est pas configuré dans ${VALUES_DIR}/grafana-values.yaml${NC}"
     exit 1
 fi
+# Mot de passe faible refusé : 16 caractères minimum.
+# Générer une valeur avec : openssl rand -base64 24
+if [ "${#GRAFANA_PASSWORD}" -lt 16 ]; then
+    echo -e "${RED}❌ Mot de passe Grafana trop faible dans ${VALUES_DIR}/grafana-values.yaml (16 caractères minimum, générer avec : openssl rand -base64 24)${NC}"
+    exit 1
+fi
 
 if [ "$HELM_DRY_RUN" = "true" ]; then
     HELM_MODE_ARGS="--dry-run=server"

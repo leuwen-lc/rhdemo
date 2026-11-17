@@ -235,3 +235,7 @@ Essai réel de `rotate-secrets.py smtp-infomaniak` : un mot de passe d'applicati
 ## [2026-11-17] ingest | étude OpenBao
 
 Nouveau `ETUDE_OPENBAO.md` (proposition) : apport d'OpenBao par secret de l'inventaire (faible pour les secrets exposés sur Internet, fort pour Cosign via Transit, PostgreSQL via rôles statiques, audit et retrait des secrets de Git), compatibilités vérifiées au 2026-11-17 (cosign `openbao://`, ESO via le fournisseur Vault ; plugin Jenkins et moteur kubernetes à vérifier), architecture dans `jenkins-docker`, déverrouillage Shamir via KeePassXC, plan en 6 étapes. `ETUDE_ROTATION_SECRETS.md` : phase 2 mise en attente de cette décision. Index mis à jour.
+
+## [2026-11-17] ingest | portées du token Renovate
+
+`RENOVATE_AUTOMERGE_CI.md`, `infra/jenkins-docker/QUICKSTART.md`, `infra/jenkins-docker/README.md`, commentaires de `jenkins-casc.yaml` et `Jenkinsfile-Renovate` : la « portée user » exigée par Renovate est `read:user` (avec `write:repository`, `write:issue`, `read:organization`), confirmé par le scan Renovate qui suit le renouvellement du token. Mentions des anciens secrets Codeberg Actions retirées, renvoi vers `rotate-secrets.py` et `secrets/inventory.yaml`.

@@ -112,7 +112,7 @@ pipeline {
                     // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
                     // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
                     // Token dédié (pas ci-bot-forgejo-token) : l'initialisation de Renovate a besoin
-                    // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
+                    // de la portée read:user en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG repris de l'ancien workflow Forgejo Actions (supprimé).
                     // GNUPGHOME="${HOME}/.gnupg" (pas un chemin custom type /tmp/gnupg) : Renovate

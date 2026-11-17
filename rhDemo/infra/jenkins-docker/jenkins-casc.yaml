@@ -137,6 +137,7 @@ tool:
 #     pour permettre la persistance entre les redémarrages
 #
 # Liste des credentials à créer manuellement :
+# (renouvellement : rhDemo/scripts/rotate-secrets.py, inventaire rhDemo/secrets/inventory.yaml)
 #
 # 1. sops-age-key (Secret file)
 #    - Type: Secret file
@@ -192,28 +193,27 @@ tool:
 # 6. renovate-gpg-key (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-gpg-key
-#    - Secret: clé GPG privée exportée en base64 (même valeur que le secret Codeberg Actions
-#      RENOVATE_GPG_KEY), utilisée pour signer les commits Renovate
+#    - Secret: clé GPG privée exportée en base64, utilisée pour signer les commits Renovate ;
+#      générée et publiée sur le compte bot par rotate-secrets.py renovate-gpg-key
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
 # 7. renovate-github-token (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-github-token
 #    - Secret: token GitHub read-only (repos publics), pour les lookups de changelogs/release
-#      notes des dépendances hébergées sur GitHub (même valeur que le secret Codeberg Actions
-#      RENOVATE_GH_TOKEN)
+#      notes des dépendances hébergées sur GitHub
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
 # 8. renovate-forgejo-token (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-forgejo-token
-#    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
-#      Renovate lui-même, distinct de ci-bot-forgejo-token)
-#    - Pourquoi un token séparé : ci-bot-forgejo-token (scopes repository+issue) ne suffit pas pour
+#    - Secret: token du compte bot renovate-leuwen-lc (distinct de ci-bot-forgejo-token),
+#      portées write:repository, write:issue, read:user, read:organization ; créé par
+#      rotate-secrets.py renovate-forgejo-token
+#    - Pourquoi un token séparé : ci-bot-forgejo-token (repository+issue) ne suffit pas pour
 #      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
-#      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
-#      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
-#      déterminer/régénérer le scope exact requis.
+#      portée "user" — observé lors du rapatriement depuis Codeberg Actions. La lecture suffit
+#      (read:user, confirmé au renouvellement du 2026-11-17).
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
 #
 # 9. smtp-infomaniak-credentials

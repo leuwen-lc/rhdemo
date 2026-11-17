@@ -41,7 +41,7 @@ Raisons : un token agit avec l'identité de son compte, même à portée réduit
 
 | Credential Jenkins | Type | Usage |
 | --- | --- | --- |
-| `renovate-forgejo-token` | Secret text | Renovate (portées `repository`, `issue` et `user` : sans `user`, l'initialisation de Renovate échoue en « Authentication failure ») |
+| `renovate-forgejo-token` | Secret text | Renovate (portées `write:repository`, `write:issue`, `read:user` et `read:organization` : sans portée `user`, l'initialisation de Renovate échoue en « Authentication failure » ; la lecture suffit, `write:user` est inutile) |
 | `renovate-gpg-key` | Secret text | Clé GPG privée en base64, signature des commits de Renovate |
 | `renovate-github-token` | Secret text | Lecture des dépôts publics GitHub : notes de version et releases (dont celles de NGF) |
 | `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID, pas l'adresse e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sert uniquement aux dates de publication des images |

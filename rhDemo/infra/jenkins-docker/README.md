@@ -760,7 +760,7 @@ Le pipeline `RHDemo-Renovate` (job JCasC, déclenchement quotidien) scanne les d
 | ID | Kind | Contenu | Utilisé par |
 |----|------|---------|-------------|
 | `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot `cibot-leuwen-lc` (collaborateur **Write**, pas Admin), scopes `repository` + `issue` | Listing/sync/merge des PRs, commentaires |
-| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate (distinct de `cibot-leuwen-lc`), scopes `repository` + `issue` + `user` | Stage `🔄 Scan Renovate` |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate (distinct de `cibot-leuwen-lc`), portées `write:repository`, `write:issue`, `read:user` et `read:organization` | Stage `🔄 Scan Renovate` |
 | `renovate-gpg-key` | Secret text | Clé GPG privée dédiée, exportée en base64 (`gpg --export-secret-keys <KEY_ID> \| base64 -w0`) | Signature des commits Renovate |
 | `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) | Lookup changelogs/release notes GitHub |
 | `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID) + jeton personnel « Public Repo Read-only » avec date d'expiration | Dates de publication des images (délai avant installation) |

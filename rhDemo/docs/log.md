@@ -215,3 +215,19 @@ Loki : `compactor.retention_enabled: true` ajouté (la rétention de 7 jours n'�
 ## [2026-11-17] ingest | anciens secrets Codeberg Actions vérifiés, 2FA du compte personnel
 
 `ETUDE_ROTATION_SECRETS.md` : l'utilisateur a vérifié qu'il ne reste aucun secret Actions sur Codeberg (niveaux dépôt, organisation et utilisateur) ; les valeurs reprises dans Jenkins (`renovate-forgejo-token`, `renovate-gpg-key`, `renovate-github-token`) restent à renouveler selon l'étude. Constat retiré du §1.3, phase 0 terminée (2FA activée aussi sur le compte personnel, revue de ses tokens et clés SSH faite).
+
+## [2026-11-17] ingest | renouvellement des secrets : phase 1 implémentée
+
+`scripts/rotate-secrets.py` et `scripts/rotation_lib/` (Python, comme fixcve) : inventaire `secrets/inventory.yaml` sans valeur (20 entrées, numéros de l'étude), `--list`, `--check` (code retour 1 en cas de retard), `--preflight`, `--dry-run`, `--record`. Rotations automatisées : tokens des bots Codeberg (#3, #4, #5), clé GPG de Renovate avec preuve de possession (#7), accès appareil SMTP Infomaniak avec test de connexion SMTP (#12), valeur saisie puis propagée (#14). Le nouveau secret est vérifié avant d'être propagé, l'ancien révoqué seulement ensuite ; rollback si rien n'a été propagé. Tests `scripts/tests/test_rotation.py` avec faux serveurs locaux. `ETUDE_ROTATION_SECRETS.md` : §3 aligné sur l'implémentation (Python, ordre vérifier puis propager, dates de rotation dans le journal local et non dans l'inventaire), nouveau §3.4 (utilisation), piste des tokens restreints à un dépôt (Forgejo 17).
+
+## [2026-11-17] ingest | renouvellement des secrets : premier essai réel
+
+`fixcve-forgejo-token` renouvelé par `rotate-secrets.py` (nouveau token vérifié avec push sur le dépôt, ancien `fixcve-token` révoqué). Corrections du script pendant l'essai : décodage Latin-1 du XML Jenkins, masquage des valeurs recopiées par Forgejo dans ses erreurs 401 (une valeur saisie avait été affichée et journalisée, ligne purgée), vérification d'un token par le droit sur le dépôt et non par `GET /user` (portée `user` requise). Portées du token fixcve ramenées à `write:repository` dans l'inventaire.
+
+## [2026-11-17] ingest | SMTP Infomaniak : rotation semi-manuelle
+
+`ETUDE_ROTATION_SECRETS.md` §2, §3.4, §4.8, §6 : l'adresse des notifications est une boîte my kSuite ; les accès appareil de l'API (hébergements mail) ne s'y appliquent pas, et les mots de passe d'application n'ont pas de route de suppression, leur création exigeant un token `user_password` valable pour tout le compte. Rotation #12 semi-manuelle (création et suppression dans le Manager, test SMTP et mise à jour de Jenkins par le script), token API Infomaniak (#19) retiré de l'inventaire. Script : méthode `manual-value` avec `verify: smtp`, client Infomaniak supprimé (`rotation_lib/smtp.py`).
+
+## [2026-11-17] ingest | SMTP Infomaniak : appareil dédié à Jenkins
+
+Essai réel de `rotate-secrets.py smtp-infomaniak` : un mot de passe d'application du compte Infomaniak est refusé en SMTP (535), celui de juillet 2026 n'avait jamais servi (Jenkins utilisait le mot de passe principal de la boîte). Un « appareil » dédié (Gérer mon adresse mail > Appareils) fonctionne : Jenkins utilise désormais son mot de passe. `ETUDE_ROTATION_SECRETS.md` §1.1, §2, §3.4, §4.8, §6 et `secrets/inventory.yaml` corrigés (appareil au lieu de mot de passe d'application). Script : test SMTP prolongé à une minute, identifiant affiché, alerte sur les espaces dans la valeur collée.

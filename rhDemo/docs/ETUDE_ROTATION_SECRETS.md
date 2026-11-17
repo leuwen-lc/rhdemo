@@ -12,6 +12,9 @@ sources:
   - rhDemo/scripts/fixcve-auto-poll.sh
   - rhDemo/infra/stagingkub/rbac/
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/secrets/inventory.yaml
+  - rhDemo/scripts/rotate-secrets.py
+  - rhDemo/scripts/rotation_lib/
 ---
 
 # Étude : renouvellement rapide des secrets de RHDemo
@@ -20,7 +23,7 @@ sources:
 
 **Hors périmètre** (demande explicite) : les jetons qui n'ouvrent qu'un quota de lecture. Ils sont listés en fin d'inventaire pour mémoire.
 
-**Statut** : proposition, rien n'est implémenté. Les points marqués *à vérifier* reposent sur la documentation des éditeurs et doivent être testés avant d'être codés.
+**Statut** : proposition, phase 1 implémentée le 2026-11-17 (§3.4) ; premiers renouvellements réels réussis le même jour (`fixcve-forgejo-token`, `smtp-infomaniak`), les autres secrets restent à essayer. Les points marqués *à vérifier* reposent sur la documentation des éditeurs et doivent être testés avant d'être codés.
 
 ---
 
@@ -52,14 +55,13 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 | 9 | Kubeconfig `kubeconfig-stagingkub` (`jenkins-deployer`) | Credential Jenkins, fichier local non versionné | Déploiement et lecture des Secrets du namespace `rhdemo-stagingkub` | H | Local |
 | 10 | Mot de passe `admin` Jenkins | `infra/jenkins-docker/.env` (en clair), appliqué par JCasC | Tout : lecture de tous les credentials, **dont les secrets Internet #3, #4, #7, #12**, exécution de code | C | Local |
 | 11 | Mot de passe et token API du compte Jenkins `claude` | `.env` (mot de passe), `credentials.sops.yaml` (token) | Lecture des builds et des logs (lecture seule) | M | Local |
-| 12 | Identifiants SMTP Infomaniak | Credential Jenkins `smtp-infomaniak-credentials` | Envoyer des mails au nom de l'adresse de notification (hameçonnage), lire la boîte (IMAP) | H | Internet |
+| 12 | Mot de passe de l'appareil « Jenkins » de la boîte des notifications | Credential Jenkins `smtp-infomaniak-credentials` | Envoyer des mails au nom de l'adresse de notification (hameçonnage), lire la boîte (IMAP) | H | Internet |
 | 13 | Credential Claude (abonnement) | `~/.claude/.credentials.json` (jeton OAuth de Claude Code) | Consommation du quota d'abonnement, facturation si l'usage supplémentaire payant est activé, accès à l'historique des sessions | H | Internet |
 | 14 | Token SonarQube `jenkins-sonar-token`, mot de passe admin SonarQube, `SONAR_DB_PASSWORD` | Credential Jenkins, `.env` | Falsifier la Quality Gate ; base SonarQube | M | Local |
 | 15 | Secrets applicatifs stagingkub (PostgreSQL, Keycloak DB, Keycloak admin, secret client OIDC, mots de passe des utilisateurs de test) | `secrets/secrets-stagingkub.yml` (SOPS) → Secrets Kubernetes | Données de l'environnement « proche production », usurpation du client OIDC | H | LAN |
 | 16 | Mêmes secrets pour ephemere | `secrets/secrets-ephemere.yml` (SOPS) | Environnement jetable recréé à chaque CI | M | Local |
 | 17 | Mot de passe admin Grafana | `infra/stagingkub/helm/observability/grafana-values.yaml` (local, non versionné) | Lecture des logs et métriques, modification des dashboards | M | LAN |
 | 18 | Clés privées TLS (`shared-tls-cert`, certificat du registry) | Secret Kubernetes, `infra/*/certs/` | Interception si un attaquant est déjà sur le réseau local | M | LAN |
-| 19 | Token API Infomaniak (scope `mail`, à créer, voir §4.8) | Poste (fichier en 600) | Gérer toutes les boîtes de l'hébergement mail | H | Internet |
 
 ### 1.2 Hors périmètre (quota de lecture seulement)
 
@@ -91,13 +93,14 @@ Les constats corrigés les 2026-11-16 et 2026-11-17 (Grafana, défauts `sonar123
 | **PostgreSQL** | `ALTER ROLE … PASSWORD …` via `kubectl exec` | Immédiat | Rien |
 | **Grafana** | `PUT /api/admin/users/{id}/password` ou `grafana cli admin reset-admin-password` dans le pod | Immédiat | Rien |
 | **SonarQube** | `POST /api/user_tokens/generate` (avec `expirationDate`), `POST /api/users/change_password` | `POST /api/user_tokens/revoke` | Rien |
-| **Infomaniak (SMTP)** | **Accès appareil** de la boîte : `POST /1/mail_hostings/{service_mail}/mailboxes/{mailbox_name}/accesses/devices`, puis `POST …/accesses/devices/{device_access}` (corps `{"password": …}`) pour changer son mot de passe | `DELETE …/accesses/devices/{device_access}` | Rien, avec un token API Infomaniak de scope `mail` (§4.8). Vérifié dans la spécification OpenAPI officielle, pas encore testé sur le compte. |
+| **Infomaniak (boîte des notifications)** | Appareil dédié : `POST /1/mail_hostings/{service_mail}/mailboxes/{mailbox}/accesses/devices` | `DELETE …/accesses/devices/{id}` | Ces routes exigent l'identifiant d'un hébergement mail (produit « Service Mail ») et un token de scope `mail` ; non utilisées pour une adresse gérée depuis my kSuite. Rotation dans le Manager (§4.8). |
 | **Anthropic (abonnement Claude)** | `/logout` puis `/login` dans Claude Code | Déconnexion des sessions depuis les réglages du compte claude.ai *à vérifier* | Tout : l'authentification OAuth passe par un navigateur, et l'API d'administration Anthropic ne concerne que les clés API des organisations, pas les abonnements |
 
-**Conclusion** : tout est automatisable sauf deux points, qui demandent une action humaine courte et incompressible :
+**Conclusion** : tout est automatisable sauf trois points, qui demandent une action humaine courte et incompressible :
 
 1. le **mot de passe et le code 2FA des comptes bots Codeberg** au moment de créer leur token (c'est voulu : un token ne peut pas en créer un autre) ;
-2. la **reconnexion Claude** (OAuth dans un navigateur).
+2. la **reconnexion Claude** (OAuth dans un navigateur) ;
+3. le **mot de passe SMTP Infomaniak** : appareil créé et supprimé dans le Manager, le script ne fait que tester le mot de passe et le propager (§4.8).
 
 Stocker le mot de passe et la graine TOTP des bots pour supprimer l'étape 1 est déconseillé : ce secret permettrait de recréer des tokens à volonté, et la 2FA ne servirait plus à rien.
 
@@ -109,32 +112,33 @@ Le compte Codeberg personnel `leuwen-lc` reste **hors du script** (décision du 
 
 ### 3.1 Un inventaire déclaratif sans valeur
 
-Fichier versionné `rhDemo/secrets/inventory.yaml` : une entrée par secret du §1.1, avec identifiant, criticité, fournisseur, emplacements (credential Jenkins, fichier SOPS, Secret Kubernetes), consommateurs, méthode de rotation, date de dernière rotation et période cible. Il ne contient aucune valeur et peut être publié. Il remplace la liste en commentaire de `jenkins-casc.yaml` comme référence unique.
+Fichier versionné `rhDemo/secrets/inventory.yaml` : une entrée par secret du §1.1, avec identifiant, criticité, exposition, méthode de rotation et cibles (credential Jenkins, fichier SOPS), plus les périodes cibles par criticité. La date de dernière rotation n'y figure pas : elle vit dans le journal local, pour ne pas imposer un commit à chaque rotation. Il ne contient aucune valeur et peut être publié. Il remplace la liste en commentaire de `jenkins-casc.yaml` comme référence unique.
 
 ### 3.2 Un script d'orchestration
 
-`rhDemo/scripts/rotate-secrets.sh`, exécuté sur le poste (pas dans Jenkins : il doit pouvoir réparer un Jenkins compromis).
+`rhDemo/scripts/rotate-secrets.py` (Python, bibliothèque standard plus PyYAML, comme fixcve), exécuté sur le poste (pas dans Jenkins : il doit pouvoir réparer un Jenkins compromis).
 
 ```text
-rotate-secrets.sh <id>            # un secret
-rotate-secrets.sh --level C       # tous les secrets critiques
-rotate-secrets.sh --emergency     # tout le périmètre, dans l'ordre d'urgence
-rotate-secrets.sh --check         # âge des secrets, secrets en retard sur leur période
+rotate-secrets.py <id>            # un secret
+rotate-secrets.py --level C       # tous les secrets critiques
+rotate-secrets.py --emergency     # tout le périmètre, dans l'ordre d'urgence (phase 3)
+rotate-secrets.py --check         # âge des secrets, secrets en retard sur leur période
 ```
 
-Un module par fournisseur (`rotate/forgejo.sh`, `rotate/jenkins.sh`, `rotate/k8s.sh`…). Chaque rotation suit le même cycle :
+Un module par fournisseur dans `scripts/rotation_lib/` (`forgejo.py`, `jenkins.py`, `smtp.py`, puis `k8s.py`…). Chaque rotation suit le même cycle :
 
-1. **Créer** le nouveau secret (API du fournisseur) ;
-2. **Propager** aux consommateurs : credential Jenkins, `sops --set` dans le fichier SOPS, Secret Kubernetes (`kubectl create secret … --dry-run=client -o yaml | kubectl apply -f -` puis `rollout restart`) ;
-3. **Vérifier** par un appel réel avec le nouveau secret (par exemple `GET /api/v1/user` sur Codeberg, `kubectl auth can-i`, `cosign verify`) ;
-4. **Révoquer** l'ancien, seulement si l'étape 3 a réussi. En mode `--emergency`, la révocation passe **avant** la vérification : mieux vaut une CI cassée qu'un attaquant actif.
-5. **Tracer** : date et identifiant dans un journal local (`~/.config/rhdemo-rotation/journal.jsonl`), jamais de valeur.
+1. **Contrôler les cibles** avant toute création (credential Jenkins existant et du bon type, fichier SOPS déchiffrable) ;
+2. **Créer** le nouveau secret (API du fournisseur) ;
+3. **Vérifier** par un appel réel avec le nouveau secret, avant de le propager (par exemple `GET /api/v1/user` et droit d'écriture sur le dépôt pour Codeberg, connexion SMTP pour le mot de passe des notifications, `kubectl auth can-i`, `cosign verify`). En cas d'échec, le nouveau secret est supprimé et rien n'a changé ;
+4. **Propager** aux consommateurs : credential Jenkins, `sops set` dans le fichier SOPS, Secret Kubernetes (`kubectl create secret … --dry-run=client -o yaml | kubectl apply -f -` puis `rollout restart`). Si la propagation échoue sans avoir modifié de cible, le nouveau secret est supprimé ;
+5. **Révoquer** l'ancien, seulement si les étapes 3 et 4 ont réussi. En mode `--emergency`, la révocation passe **avant** la vérification : mieux vaut une CI cassée qu'un attaquant actif.
+6. **Tracer** : date et identifiant dans un journal local (`~/.config/rhdemo-rotation/journal.jsonl`), jamais de valeur.
 
 Règles de sécurité du script :
 
 - les valeurs ne transitent que par des variables et des tubes, jamais en argument de commande (visible dans `ps`) ni dans un fichier en clair ;
 - les identifiants maîtres (mot de passe admin Jenkins, mots de passe des bots) sont **demandés au lancement**, gardés en mémoire pour la session puis effacés ;
-- les nouvelles valeurs aléatoires sont générées par `openssl rand -base64 32` ;
+- les nouvelles valeurs aléatoires sont générées par `secrets.token_urlsafe(32)` (256 bits) ;
 - aucun secret n'est affiché, sauf à la demande pour un secret à saisir à la main ailleurs.
 
 ### 3.3 Ordre en mode urgence
@@ -142,12 +146,37 @@ Règles de sécurité du script :
 Principe : révoquer d'abord ce qui est **exploitable depuis Internet** (colonne Expo. du §1.1), puis les secrets LAN, puis les secrets locaux.
 
 1. Tokens Codeberg (#3, #4, #5), mots de passe des bots (#6b), contrôle manuel du compte personnel (#6)
-2. SMTP et token API Infomaniak (#12, #19), clé GPG (#7), Claude (#13)
+2. SMTP Infomaniak (#12), clé GPG (#7), Claude (#13)
 3. Clé AGE (#1), puis rechiffrement de tous les fichiers SOPS et de `credentials.sops.yaml`, et nouvelles valeurs pour tout ce qu'ils contiennent. Placée après les tokens car l'opération est longue, mais avant tout secret local : l'historique chiffré est public.
 4. Secrets LAN : applicatifs stagingkub (#15), Grafana (#17), clés TLS (#18)
 5. Secrets locaux : Cosign (#2), kubeconfigs (#8, #9), admin et `claude` Jenkins (#10, #11), SonarQube (#14), ephemere (#16)
 
 **Exception, compromission de Jenkins ou du poste** (code malveillant exécuté par la CI, accès à la session) : commencer par le mot de passe `admin` Jenkins (#10) et l'invalidation de ses sessions (redémarrage), car il donne accès aux secrets Internet stockés dans Jenkins. Sinon, l'attaquant relirait les nouveaux tokens au fur et à mesure de leur mise à jour. Enchaîner ensuite sur l'ordre ci-dessus.
+
+### 3.4 Utilisation (phase 1)
+
+Automatisés : tokens des trois bots Codeberg (#3, #4, #5), clé GPG de Renovate (#7). Semi-manuels (méthode `manual-value` : valeur créée à la main, saisie, vérifiée si possible, puis propagée) : mot de passe SMTP (#12, testé en SMTP avant la mise à jour de Jenkins), token SonarQube (#14). Les autres secrets affichent leur procédure manuelle ou leur phase prévue. Une rotation faite à la main se trace avec `--record <id>`.
+
+Avant la première rotation réelle :
+
+1. `scripts/rotate-secrets.py --preflight` : connexion à Jenkins (mot de passe admin demandé), existence et type de chaque credential cible, déchiffrement de `credentials.sops.yaml` ;
+2. `scripts/rotate-secrets.py --dry-run <id>` : lit les tokens, clés ou accès existants (mot de passe et code TOTP du bot demandés) et affiche ce qui serait créé et révoqué, sans rien modifier ;
+3. commencer par un secret peu risqué, par exemple `fixcve-forgejo-token`, puis vérifier le prochain cycle de fixcve-auto.
+
+Comportements à connaître :
+
+- **Noms datés** : les tokens et accès créés s'appellent `<préfixe>-AAAAMMJJ-HHMMSS` (préfixes dans l'inventaire). Aux rotations suivantes, les anciens de même préfixe sont révoqués d'office. Les tokens créés à la main (première rotation) sont listés un par un avec confirmation, et l'option `--no` les conserve tous.
+- **Portées** : si un token à révoquer n'a pas les mêmes portées que l'inventaire, le script demande confirmation. Sans accord, il s'arrête : corriger l'inventaire. Pour `fixcve-forgejo-token`, `write:repository` seul suffit (constaté sur le token d'origine).
+- **Codes TOTP** : un code saisi est réutilisé pendant 25 secondes (Forgejo ne refuse pas sa réutilisation sur l'API). Si Codeberg répond 401, le script en redemande un.
+- **Clé GPG** : RSA 4096, valable 2 ans, avec la même identité que l'actuelle (« Renovate Bot » et l'adresse du compte bot). Le script la génère dans un trousseau jetable en mémoire (`/dev/shm`), prouve sa possession à Codeberg (jeton signé), puis retire les anciennes clés du compte bot. Les anciens commits de Renovate apparaissent ensuite « non vérifiés » : c'est le prix de la révocation.
+- **SMTP (#12)** : le script lit l'adresse dans le credential Jenkins, teste la connexion SMTP avec le mot de passe collé, et ne met à jour Jenkins que si elle réussit. Il rappelle ensuite de supprimer l'ancien appareil dans le Manager.
+- **Code retour de `--check`** : 1 si un secret est en retard ou n'a jamais été tracé, ce qui permet un rappel par cron (phase 4).
+
+Tests : `scripts/tests/test_rotation.py` (lancé par `run-all.sh`), avec de faux Codeberg et Jenkins, et les vrais `gpg`, `sops` et `age` sur des clés jetables. Les routes Codeberg ont été vérifiées dans la spécification Swagger de Codeberg (Forgejo 17), puis validées sur le vrai compte fixcve.
+
+Corrections issues du premier essai réel : Jenkins renvoie parfois le XML des credentials en Latin-1 malgré sa déclaration UTF-8 ; Forgejo recopie la valeur saisie dans ses réponses 401, d'où le masquage systématique des chaînes longues dans les messages et le journal ; `GET /api/v1/user` exige une portée `user`, la vérification d'un token repose donc sur son droit d'écriture sur le dépôt.
+
+**Piste** : depuis Forgejo 17, un token peut être restreint à des dépôts précis (champ `repositories` à la création). Cela réduirait encore l'impact d'une fuite. Non activé : il faut d'abord vérifier que `GET /api/v1/user` et l'initialisation de Renovate acceptent un tel token.
 
 ---
 
@@ -180,7 +209,7 @@ Le CD vérifie les images avec `cosign-public-key`. Une rotation naïve rend ind
 
 Supprimer le Secret `service-account-token` du compte de service, réappliquer le manifeste de `rbac/` (le contrôleur émet un nouveau token), régénérer le kubeconfig, mettre à jour le credential. L'ancien token est invalide dès la suppression du Secret.
 
-Évolution recommandée : passer à des tokens à durée limitée (`kubectl create token --duration=720h`) renouvelés par `rotate-secrets.sh --check`, ce qui borne la fenêtre d'exploitation d'une fuite non détectée. La section RBAC de `SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md` serait à mettre à jour.
+Évolution recommandée : passer à des tokens à durée limitée (`kubectl create token --duration=720h`) renouvelés par `rotate-secrets.py --check`, ce qui borne la fenêtre d'exploitation d'une fuite non détectée. La section RBAC de `SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md` serait à mettre à jour.
 
 ### 4.5 Secrets applicatifs stagingkub (#15)
 
@@ -204,24 +233,22 @@ Mesure qui réduit le risque de facturation : ne pas activer l'usage supplément
 
 ### 4.8 SMTP Infomaniak (#12)
 
-Option retenue : l'API Infomaniak. Constats tirés de la spécification OpenAPI officielle (`https://developer.infomaniak.com/openapi.json`, consultée le 2026-11-16) :
+Jenkins s'authentifie en SMTP avec le mot de passe d'un **appareil** dédié (Manager > Gérer mon adresse mail > Appareils), et non avec le mot de passe principal de la boîte : une fuite du credential ne donne que ce mot de passe, révocable seul en supprimant l'appareil. Mis en place le 2026-11-17 ; jusque-là, Jenkins utilisait le mot de passe principal.
 
-- **Mot de passe principal de la boîte** : seul `PUT /2/profile/ksuites/mailboxes/{mailbox_id}/update_password` (scope `user_info`) le modifie, pour une boîte rattachée au profil kSuite. La route `mail_hostings` d'une boîte n'a pas de champ mot de passe.
-- **Accès appareil** (mots de passe propres à un client mail, scope `mail`) : création (`POST …/mailboxes/{mailbox_name}/accesses/devices`, champs `label`, `password` de 16 à 128 caractères, `protocols` parmi `imap`, `pop3`, `pop3-imap`, `type`), changement du mot de passe (`POST …/accesses/devices/{device_access}`), suppression (`DELETE`), liste (`GET`).
+Constats du 2026-11-17 (spécification OpenAPI officielle `https://developer.infomaniak.com/openapi.json`, puis essais réels) :
 
-**Procédure proposée** :
+- les **mots de passe d'application** du compte Infomaniak (`/2/profile/applications/passwords`) ne servent pas au SMTP de la boîte : refusés (535) ; celui créé en juillet 2026 n'avait jamais été utilisé. L'API ne permet d'ailleurs pas de les supprimer ;
+- les **appareils** correspondent aux « accès appareil » de l'API (`/1/mail_hostings/{service_mail}/mailboxes/{mailbox}/accesses/devices`, création, changement de mot de passe, suppression). Ces routes exigent l'identifiant d'un hébergement mail et un token de scope `mail`, valable pour toutes les boîtes de l'hébergement. L'adresse étant gérée depuis my kSuite, sans page « Service Mail » visible, cette voie n'est pas retenue.
 
-1. une fois, créer un accès appareil `jenkins-ci` pour la boîte de notification et mettre son mot de passe, et non celui de la boîte, dans le credential `smtp-infomaniak-credentials` ;
-2. à chaque rotation : nouveau mot de passe aléatoire (32 caractères), `POST …/accesses/devices/{id}`, mise à jour du credential Jenkins, mail de test ;
-3. en urgence : `DELETE` de l'accès, puis recréation.
+**Procédure retenue (semi-manuelle, sans token API)** : `rotate-secrets.py smtp-infomaniak`
 
-Le mot de passe principal de la boîte ne circule plus dans Jenkins. Une fuite du credential ne donne que cet accès, révocable seul.
+1. dans le Manager (Gérer mon adresse mail > Appareils), ajouter un appareil nommé `rhdemo-jenkins-ci-<date>` et copier le mot de passe affiché ;
+2. le coller quand le script le demande : il teste la connexion SMTP (`mail.infomaniak.com:465`) avec l'adresse lue dans le credential Jenkins, et ne met à jour `smtp-infomaniak-credentials` que si elle réussit ;
+3. supprimer l'ancien appareil dans le Manager (rappelé par le script).
 
-**Limites** :
+En urgence : supprimer d'abord l'ancien appareil (les notifications échouent jusqu'à l'étape 2), puis en créer un nouveau.
 
-- tous les protocoles disponibles incluent SMTP et un protocole de lecture (IMAP ou POP3) : l'accès appareil permet aussi de **lire** la boîte. D'où l'intérêt d'une boîte qui ne sert qu'aux notifications ;
-- le **token API Infomaniak** de scope `mail` devient un secret plus puissant que celui qu'il fait tourner : il gère toutes les boîtes de l'hébergement mail. Il reste sur le poste (fichier en 600), n'est jamais copié dans Jenkins, et il faut lui donner une date d'expiration si le Manager le permet *à vérifier* ;
-- *à tester avant d'implémenter* : l'authentification SMTP sur `mail.infomaniak.com:465` avec l'adresse de la boîte et le mot de passe d'un accès appareil, et le fait que le token soit bien accepté sur ces routes pour votre type d'offre (la spécification indique `x-auth-user`).
+Limite : le mot de passe d'un appareil permet aussi de **lire** la boîte (IMAP). D'où l'intérêt d'une adresse qui ne sert qu'aux notifications.
 
 ---
 
@@ -230,7 +257,7 @@ Le mot de passe principal de la boîte ne circule plus dans Jenkins. Une fuite d
 | Phase | Contenu | Effort estimé |
 | --- | --- | --- |
 | 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
-| 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), module Infomaniak (accès appareil), `--check` | 1,5 jour |
+| 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). Essai réel réussi sur `fixcve-forgejo-token` ; #12 renouvelé (semi-manuel) ; restent #3, #4, #7.* | 1,5 jour |
 | 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub | 1 à 2 jours |
 | 3 | Module AGE, mode `--emergency` | 1 jour |
 | 4 | Tokens Kubernetes à durée limitée, rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse) | 0,5 jour |
@@ -247,14 +274,14 @@ Tests : comme pour fixcve-auto, un bac à sable avec un faux Forgejo et un faux 
 
 ---
 
-## 6. Décisions du 2026-11-16
+## 6. Décisions
 
 | Question | Réponse | Conséquence |
 | --- | --- | --- |
 | Claude : abonnement ou clé API ? | Abonnement | Rotation manuelle (§4.7), pas d'API de révocation |
 | 2FA sur les bots Codeberg ? | Non activée | Activée le jour même (TOTP), mots de passe des bots ajoutés à l'inventaire (#6b) |
-| SMTP : API Infomaniak ou boîte dédiée ? | API Infomaniak | Rotation via les accès appareil (§4.8), à tester sur le compte |
+| SMTP : API Infomaniak ou boîte dédiée ? (2026-11-16) | API Infomaniak, sous réserve de vérification | Vérification du 2026-11-17 : l'API des appareils exige un hébergement mail et un token `mail` valable pour toutes les boîtes, les mots de passe d'application ne servent pas au SMTP. Rotation semi-manuelle par appareil dédié retenue (§4.8), token API Infomaniak (ancien #19) retiré de l'inventaire. |
 | Compte personnel dans le script ? | Non | Contrôle manuel uniquement (§4.1) |
 | Chiffrer par SOPS les fichiers locaux non versionnés (`.env` Jenkins, `grafana-values.yaml`) ? | Non | La clé AGE est lisible par le même compte unix que ces fichiers : contre un accès à la session, le chiffrement n'apporte rien. SOPS reste réservé aux secrets versionnés. Les droits 600 ferment l'accès aux autres comptes du poste. Gains résiduels jugés insuffisants face au coût (wrapper obligatoire pour toute commande Compose) : protection d'une copie accidentelle du dossier, source unique pour le script de rotation. À reconsidérer en phase 3 si le script en a besoin. |
 
-Points restant à vérifier avant d'implémenter : les mentions *à vérifier* de ce document, en priorité l'authentification SMTP par accès appareil Infomaniak.
+Points restant à vérifier avant d'implémenter : les mentions *à vérifier* de ce document.

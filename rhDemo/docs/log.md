@@ -211,3 +211,7 @@ Loki : `compactor.retention_enabled: true` ajouté (la rétention de 7 jours n'�
 ## [2026-11-16] ingest | ports Jenkins limités à la boucle locale ; priorité aux secrets exposés sur Internet
 
 `infra/jenkins-docker/docker-compose.yml` : ports 8080 et 50000 (Jenkins), 9020 (SonarQube) et 5000 (registry sans authentification) publiés sur `127.0.0.1` au lieu de toutes les interfaces (joignables depuis le LAN, les règles iptables de Docker passant avant ufw). Agents, SonarQube, cosign et KinD passent par le réseau Docker ; le daemon de l'hôte pousse sur `localhost:5000`. Prise en compte au prochain `start-jenkins.sh`. `ETUDE_ROTATION_SECRETS.md` : colonne « Expo. » (Internet, LAN, Local) dans l'inventaire, token API Infomaniak ajouté (#19), ordre d'urgence du §3.3 refondu (secrets exploitables depuis Internet d'abord, exception en cas de compromission de Jenkins).
+
+## [2026-11-17] ingest | anciens secrets Codeberg Actions vérifiés, 2FA du compte personnel
+
+`ETUDE_ROTATION_SECRETS.md` : l'utilisateur a vérifié qu'il ne reste aucun secret Actions sur Codeberg (niveaux dépôt, organisation et utilisateur) ; les valeurs reprises dans Jenkins (`renovate-forgejo-token`, `renovate-gpg-key`, `renovate-github-token`) restent à renouveler selon l'étude. Constat retiré du §1.3, phase 0 terminée (2FA activée aussi sur le compte personnel, revue de ses tokens et clés SSH faite).

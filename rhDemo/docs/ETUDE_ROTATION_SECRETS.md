@@ -1,6 +1,6 @@
 ---
 statut: proposition
-verifie_le: 2026-11-16
+verifie_le: 2026-11-17
 sources:
   - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
   - rhDemo/infra/jenkins-docker/QUICKSTART.md
@@ -67,10 +67,9 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 
 ### 1.3 Constats faits pendant l'inventaire
 
-Les constats corrigés le 2026-11-16 (Grafana, défauts `sonar123` et `changeme`, droits des fichiers locaux, exposition de ZAP) sont tracés dans [log.md](log.md).
+Les constats corrigés les 2026-11-16 et 2026-11-17 (Grafana, défauts `sonar123` et `changeme`, droits des fichiers locaux, exposition de ZAP, anciens secrets Codeberg Actions) sont tracés dans [log.md](log.md).
 
 - **Les tokens Kubernetes sont de longue durée** (`type: kubernetes.io/service-account-token` dans `rbac/`). Ils n'expirent jamais.
-- **Anciens secrets Codeberg Actions** (`RENOVATE_TOKEN`, `RENOVATE_GPG_KEY`, `RENOVATE_GH_TOKEN`) : la CASC indique que Renovate a été rapatrié dans Jenkins. S'ils existent encore dans les réglages Actions du dépôt, les supprimer.
 - **La clé AGE déchiffre l'historique** : SOPS ne protège que le présent. Après une fuite de la clé AGE, changer de clé ne suffit pas : toutes les valeurs des fichiers SOPS (#15, #16, `credentials.sops.yaml`) doivent changer, car les anciens fichiers chiffrés restent dans l'historique public.
 
 ---
@@ -230,7 +229,7 @@ Le mot de passe principal de la boîte ne circule plus dans Jenkins. Une fuite d
 
 | Phase | Contenu | Effort estimé |
 | --- | --- | --- |
-| 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, suppression des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg**, revue manuelle des tokens et clés SSH du compte personnel. *Réalisée le 2026-11-16, sauf la suppression des secrets Codeberg Actions et la revue du compte personnel, non confirmées.* | 1 h 30 |
+| 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
 | 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), module Infomaniak (accès appareil), `--check` | 1,5 jour |
 | 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub | 1 à 2 jours |
 | 3 | Module AGE, mode `--emergency` | 1 jour |

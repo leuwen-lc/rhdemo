@@ -231,3 +231,7 @@ Loki : `compactor.retention_enabled: true` ajouté (la rétention de 7 jours n'�
 ## [2026-11-17] ingest | SMTP Infomaniak : appareil dédié à Jenkins
 
 Essai réel de `rotate-secrets.py smtp-infomaniak` : un mot de passe d'application du compte Infomaniak est refusé en SMTP (535), celui de juillet 2026 n'avait jamais servi (Jenkins utilisait le mot de passe principal de la boîte). Un « appareil » dédié (Gérer mon adresse mail > Appareils) fonctionne : Jenkins utilise désormais son mot de passe. `ETUDE_ROTATION_SECRETS.md` §1.1, §2, §3.4, §4.8, §6 et `secrets/inventory.yaml` corrigés (appareil au lieu de mot de passe d'application). Script : test SMTP prolongé à une minute, identifiant affiché, alerte sur les espaces dans la valeur collée.
+
+## [2026-11-17] ingest | étude OpenBao
+
+Nouveau `ETUDE_OPENBAO.md` (proposition) : apport d'OpenBao par secret de l'inventaire (faible pour les secrets exposés sur Internet, fort pour Cosign via Transit, PostgreSQL via rôles statiques, audit et retrait des secrets de Git), compatibilités vérifiées au 2026-11-17 (cosign `openbao://`, ESO via le fournisseur Vault ; plugin Jenkins et moteur kubernetes à vérifier), architecture dans `jenkins-docker`, déverrouillage Shamir via KeePassXC, plan en 6 étapes. `ETUDE_ROTATION_SECRETS.md` : phase 2 mise en attente de cette décision. Index mis à jour.

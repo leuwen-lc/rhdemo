@@ -258,7 +258,7 @@ Limite : le mot de passe d'un appareil permet aussi de **lire** la boîte (IMAP)
 | --- | --- | --- |
 | 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
 | 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). Essai réel réussi sur `fixcve-forgejo-token` ; #12 renouvelé (semi-manuel) ; restent #3, #4, #7.* | 1,5 jour |
-| 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub | 1 à 2 jours |
+| 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub. *En attente de la décision sur [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), qui couvrirait Cosign et stagingkub autrement.* | 1 à 2 jours |
 | 3 | Module AGE, mode `--emergency` | 1 jour |
 | 4 | Tokens Kubernetes à durée limitée, rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse) | 0,5 jour |
 

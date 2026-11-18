@@ -4,6 +4,14 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## picomatch (build #1052)
+
+- **Date** : 2026-11-18 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `picomatch` 4.0.7 (CVE-2026-112366, GHSA-fc5q-39xc-vjpf, CVSS 7.5) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+---
+
 ## picomatch (build #1023)
 
 - **Date** : 2026-11-06 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

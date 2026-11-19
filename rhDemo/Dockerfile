@@ -21,15 +21,22 @@ COPY mvnw .
 
 # Télécharger les dépendances (layer séparé pour le cache)
 # Cette étape est mise en cache si pom.xml ne change pas
-RUN ./mvnw dependency:go-offline -B
+# -q : n'affiche que les erreurs (sinon liste de tous les plugins et dépendances résolus)
+RUN ./mvnw dependency:go-offline -B -q
 
 # Copier le code source backend et frontend
 COPY src ./src
 COPY frontend ./frontend
 
+# npm : ni annonce de nouvelle version ni lignes « notice » (le plugin Maven les affiche en
+# [ERROR] car npm les écrit sur stderr) ; avertissements et erreurs restent affichés
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_LOGLEVEL=warn
+
 # Compiler et packager l'application (skip tests pour accélérer le build)
 # Les tests sont exécutés séparément dans le pipeline Jenkins
-RUN ./mvnw clean package -DskipTests -B
+# -ntp : pas de lignes Downloading/Downloaded pour les artefacts absents du cache
+RUN ./mvnw clean package -DskipTests -B -ntp
 
 # Vérifier que le JAR a bien été créé
 RUN ls -lh /build/target/*.jar

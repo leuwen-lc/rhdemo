@@ -270,12 +270,17 @@ echo "🚀 Démarrage des conteneurs Docker..."
 # puis on connecte le registry existant au réseau Jenkins.
 if docker ps -q -f name=^/kind-registry$ | grep -q .; then
     echo "ℹ️  Registry kind-registry déjà actif (partagé avec KinD), réutilisation..."
-    docker compose up -d --no-deps jenkins docker-socket-proxy sonarqube sonarqube-db
+    docker compose up -d --no-deps jenkins docker-socket-proxy
     # S'assurer que le registry existant est connecté au réseau Jenkins
     docker network connect rhdemo-jenkins-network kind-registry 2>/dev/null || true
 else
-    docker compose up -d
+    docker compose up -d jenkins docker-socket-proxy registry
 fi
+
+# SonarQube et sa base sont créés (ou recréés après une montée de version) sans être démarrés :
+# la CI les démarre juste avant l'analyse et les arrête après la Quality Gate (mémoire du poste).
+# Pour ouvrir l'interface : docker start rhdemo-sonarqube-db rhdemo-sonarqube
+docker compose up --no-start sonarqube sonarqube-db
 
 echo ""
 echo "⏳ Attente du démarrage de Jenkins (peut prendre 1-2 minutes)..."
@@ -342,7 +347,7 @@ echo "   • ./start-jenkins.sh --clean-plugins      # Nettoie plugins + rebuild
 echo ""
 echo "🌐 Services disponibles:"
 echo "   • Jenkins:              http://localhost:8080"
-echo "   • SonarQube:            http://localhost:9020"
+echo "   • SonarQube:            http://localhost:9020 (arrêté hors CI : docker start rhdemo-sonarqube-db rhdemo-sonarqube)"
 echo "   • Docker Registry:      https://localhost:5000"
 echo ""
 echo "📖 Documentation:"

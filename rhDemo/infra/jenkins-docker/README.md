@@ -441,14 +441,19 @@ docker exec "$AGENT" docker ps
 
 ### SonarQube
 
-SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jenkins.
+SonarQube est inclus dans le docker-compose mais **ne tourne que pendant la CI**, pour libérer la mémoire du poste (environ 1,3 Go au repos, davantage pendant une analyse) :
+
+- `start-jenkins.sh` crée les conteneurs `rhdemo-sonarqube` et `rhdemo-sonarqube-db` sans les démarrer (`docker compose up --no-start`), ou les recrée après une montée de version ;
+- `Jenkinsfile-CI` les démarre au début du stage d'analyse (`startSonarQube()` dans `vars/rhDemoLib.groovy` : attente de l'état `UP`, lancement de la migration de base si une nouvelle version l'exige) et les arrête après la Quality Gate (`stopSonarQube()`, appelé aussi dans le `post` global en cas d'échec ou d'interruption). Les deux opérations sont idempotentes ;
+- le démarrage ajoute environ 3 minutes à la CI (mesure du 2026-11-19) ;
+- pour consulter l'interface hors CI : `docker start rhdemo-sonarqube-db rhdemo-sonarqube`, puis `docker stop rhdemo-sonarqube rhdemo-sonarqube-db` (sinon la CI suivante l'arrête).
 
 **Accès à SonarQube :**
 - URL : http://localhost:9020
 - Identifiants par défaut : `admin` / `admin` (changez-les au premier login)
 
 **Configuration initiale :**
-1. Connectez-vous à http://localhost:9020
+1. Démarrez SonarQube (`docker start rhdemo-sonarqube-db rhdemo-sonarqube`, prêt en quelques minutes) et connectez-vous à http://localhost:9020
 2. Changez le mot de passe admin
 3. Allez dans **Administration** → **Security** → **Users**
 4. Créez un token pour Jenkins : **My Account** → **Security** → **Generate Token**

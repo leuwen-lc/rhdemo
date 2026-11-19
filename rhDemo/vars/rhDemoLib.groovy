@@ -302,6 +302,78 @@ def aggregateTrivyResults() {
 }
 
 /**
+ * Démarre SonarQube et sa base juste avant l'analyse, puis attend qu'il soit prêt (idempotent :
+ * `docker start` sur un conteneur déjà démarré ne fait rien). Les conteneurs sont créés par
+ * infra/jenkins-docker/start-jenkins.sh et arrêtés par stopSonarQube() après la Quality Gate,
+ * pour libérer la mémoire du poste entre deux CI.
+ * Une montée de version de SonarQube (PR Renovate) laisse le serveur en DB_MIGRATION_NEEDED :
+ * la migration est alors lancée par l'API (accessible sans authentification dans cet état).
+ */
+def startSonarQube() {
+    echo "▶ Démarrage de SonarQube (rhdemo-sonarqube-db, rhdemo-sonarqube)..."
+    sh '''#!/bin/bash
+        set -euo pipefail
+        for C in rhdemo-sonarqube-db rhdemo-sonarqube; do
+            if ! docker container inspect "$C" > /dev/null 2>&1; then
+                echo "❌ Conteneur $C absent : lancer infra/jenkins-docker/start-jenkins.sh sur l'hôte"
+                exit 1
+            fi
+        done
+
+        docker start rhdemo-sonarqube-db > /dev/null
+        for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' rhdemo-sonarqube-db)" = "healthy" ] && break
+            if [ "$i" -eq 30 ]; then
+                echo "❌ rhdemo-sonarqube-db pas prête après 60 s"
+                exit 1
+            fi
+            sleep 2
+        done
+
+        docker start rhdemo-sonarqube > /dev/null
+        MIGRATION_LANCEE=false
+        STATUS=INJOIGNABLE
+        # 8 min : démarrage mesuré à 3 min 15 sur le poste (2026-11-19), davantage s'il est chargé
+        for i in $(seq 1 96); do
+            STATUS=$(curl -fs http://sonarqube:9000/api/system/status 2>/dev/null | jq -r '.status' 2>/dev/null || true)
+            STATUS=${STATUS:-INJOIGNABLE}
+            case "$STATUS" in
+                UP)
+                    echo "✅ SonarQube prêt"
+                    exit 0 ;;
+                DB_MIGRATION_NEEDED)
+                    if [ "$MIGRATION_LANCEE" = false ]; then
+                        echo "🔄 Nouvelle version de SonarQube : migration de la base lancée"
+                        curl -fs -X POST http://sonarqube:9000/api/system/migrate_db > /dev/null
+                        MIGRATION_LANCEE=true
+                    fi ;;
+                DB_MIGRATION_RUNNING|STARTING|RESTARTING|INJOIGNABLE) ;;
+                *)
+                    echo "❌ SonarQube dans un état inattendu : $STATUS (voir docker logs rhdemo-sonarqube)"
+                    exit 1 ;;
+            esac
+            sleep 5
+        done
+        echo "❌ SonarQube pas prêt après 8 min (dernier état : $STATUS, voir docker logs rhdemo-sonarqube)"
+        exit 1
+    '''
+}
+
+/**
+ * Arrête SonarQube et sa base pour libérer la mémoire (idempotent : `docker stop` sur un conteneur
+ * arrêté ne fait rien ; un conteneur absent est signalé sans faire échouer le build). Avec la
+ * politique `restart: unless-stopped`, un conteneur arrêté ainsi ne redémarre pas avec Docker.
+ */
+def stopSonarQube() {
+    echo "▶ Arrêt de SonarQube pour libérer la mémoire..."
+    sh '''
+        docker stop rhdemo-sonarqube > /dev/null 2>&1 || echo "⚠️  rhdemo-sonarqube absent ou déjà arrêté"
+        docker stop rhdemo-sonarqube-db > /dev/null 2>&1 || echo "⚠️  rhdemo-sonarqube-db absent ou déjà arrêté"
+        echo "✅ SonarQube arrêté"
+    '''
+}
+
+/**
  * Crée un réseau Docker s'il n'existe pas déjà
  * @param network Nom du réseau
  */

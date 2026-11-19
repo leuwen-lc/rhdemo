@@ -584,6 +584,11 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Analyse de la qualité du code avec SonarQube..."
+                    // SonarQube n'est démarré que le temps de l'analyse et de la Quality Gate
+                    // (mémoire du poste) ; arrêt dans le post de la Quality Gate et, en filet de
+                    // sécurité, dans le post global du pipeline.
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    lib.startSonarQube()
                 }
 
                 withSonarQubeEnv('SonarQube') {
@@ -605,6 +610,14 @@ YMLEOF
 
                 timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
+                }
+            }
+            post {
+                always {
+                    script {
+                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                        lib.stopSonarQube()
+                    }
                 }
             }
         }
@@ -1902,6 +1915,12 @@ YMLEOF
                 def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                 lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
+
+                // Filet de sécurité (idempotent) : SonarQube reste démarré si l'analyse échoue
+                // ou si le build est interrompu avant le post de la Quality Gate.
+                if (params.RUN_SONAR) {
+                    lib.stopSonarQube()
+                }
 
                 // Nettoyage de l'environnement ephemere
                 if (!params.KEEP_EPHEMERE_ENV) {

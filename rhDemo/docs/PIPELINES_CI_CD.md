@@ -3,6 +3,7 @@ statut: actif
 verifie_le: 2026-10-23
 sources:
   - rhDemo/Jenkinsfile-CI
+  - rhDemo/vars/rhDemoLib.groovy
   - rhDemo/Jenkinsfile-CD
   - rhDemo/Jenkinsfile-Renovate
   - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
@@ -118,7 +119,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Tests unitaires
 - Analyse OWASP Dependency-Check
 - Build Maven (création du JAR)
-- Analyse SonarQube (optionnel)
+- Analyse SonarQube (optionnel) : SonarQube est démarré au début du stage puis arrêté après la Quality Gate, pour libérer la mémoire du poste (voir `infra/jenkins-docker/README.md`)
 - Quality Gate SonarQube (optionnel)
 
 #### Phase 3 : Docker Build

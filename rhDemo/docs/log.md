@@ -251,3 +251,7 @@ Aucun contrôle n'existait : `fixcve-auto` ne revérifie que les entrées `[PEND
 ## [2026-11-19] ingest | SonarQube démarré seulement pendant la CI
 
 Pour libérer la mémoire du poste (environ 1,3 Go au repos), SonarQube et sa base ne tournent plus en permanence. `vars/rhDemoLib.groovy` : `startSonarQube()` (`docker start`, attente de l'état `UP` jusqu'à 8 min, migration de base lancée par l'API après une montée de version) et `stopSonarQube()` (`docker stop`), toutes deux idempotentes. `Jenkinsfile-CI` : démarrage au début du stage d'analyse, arrêt dans le `post` de la Quality Gate et dans le `post` global. `start-jenkins.sh` crée les conteneurs sans les démarrer. Testé depuis l'image de l'agent : arrêt et démarrage, chacun deux fois de suite ; démarrage en 3 min 15. `infra/jenkins-docker/README.md`, `QUICKSTART.md` et `PIPELINES_CI_CD.md` mis à jour, `index.md` inchangé.
+
+## [2026-11-19] ingest | attente « waiting for available executor » sans autre build
+
+Cause trouvée dans les logs du contrôleur : l'arrêt d'un agent échoue (`Broken pipe`, connexion keep-alive fermée par `docker-socket-proxy` après 10 s d'inactivité, pas de nouvel essai du plugin Docker). Le conteneur orphelin occupe l'unique place (`instanceCap 1`) jusqu'au passage du `DockerContainerWatchdog`, toutes les 300 s par défaut ; constaté le 2026-11-19 : 3 min d'attente. Période du watchdog réduite à 30 s (propriété système dans le `JAVA_OPTS` du contrôleur). `infra/jenkins-docker/README.md` (dépannage) mis à jour, `index.md` inchangé.

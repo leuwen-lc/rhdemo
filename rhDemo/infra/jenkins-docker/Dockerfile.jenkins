@@ -18,7 +18,11 @@ FROM jenkins/jenkins:2.580.2-lts-jdk25@sha256:415ab90d4e3b25148f7191bc04f455a208
 
 # Désactiver le wizard de setup initial
 # -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics"
+# -D...DockerContainerWatchdog.recurrenceInSeconds=30 : nettoyage des conteneurs d'agents orphelins
+#   toutes les 30 s au lieu de 300. Un arrêt d'agent échoue parfois (« Broken pipe » : connexion
+#   keep-alive fermée par docker-socket-proxy après 10 s d'inactivité) ; le conteneur occupe alors
+#   l'unique place (instanceCap 1) et le build suivant attend « waiting for available executor ».
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics -Dcom.nirima.jenkins.plugins.docker.DockerContainerWatchdog.recurrenceInSeconds=30"
 
 # Liste des plugins à installer automatiquement
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt

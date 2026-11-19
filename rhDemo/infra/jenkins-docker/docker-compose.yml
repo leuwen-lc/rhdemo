@@ -71,7 +71,9 @@ services:
     environment:
       # Désactiver le setup wizard
       # -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics
+      # recurrenceInSeconds=30 : conteneurs d'agents orphelins nettoyés en 30 s au lieu de 300
+      #   (voir Dockerfile.jenkins et README, section dépannage « waiting for available executor »)
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics -Dcom.nirima.jenkins.plugins.docker.DockerContainerWatchdog.recurrenceInSeconds=30
 
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs

@@ -120,6 +120,8 @@ def generateTrivyReport(String image, String reportName) {
         # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         # --ignorefile : Exclut les CVE documentées comme faux positifs (voir SECURITY_ADVISORIES.md)
+        # --show-suppressed : liste les findings exclus (ExperimentalModifiedFindings du JSON), lus
+        #   par aggregateTrivyResults pour détecter les exclusions devenues inutiles
         TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore.yaml"
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
@@ -137,6 +139,7 @@ def generateTrivyReport(String image, String reportName) {
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             \${IGNOREFILE_OPT} \\
+            --show-suppressed \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
             "\${IMAGE}" > "\${TRIVY_LOG}" 2>&1
@@ -242,6 +245,38 @@ def aggregateTrivyResults() {
                     FAILED=true
                 fi
             done
+
+            # Exclusions obsolètes : entrée de .trivyignore.yaml qui n'a supprimé aucun finding
+            # dans aucune image scannée (correctif embarqué, image retirée...). Non bloquant :
+            # un build UNSTABLE empêcherait la validation de fixcve-auto, qui exige SUCCESS.
+            # Valable ici seulement, où toutes les images sont scannées avec le même fichier
+            # (Jenkinsfile-Renovate n'en scanne qu'une partie). Comparaison par identifiant seul,
+            # comme Trivy : son format YAML ignore `pkg-name` (seuls id, paths, purls, statement et
+            # expired_at sont lus), une entrée exclut donc la CVE dans tous les paquets. Limite : un
+            # finding repassé en LOW, hors du périmètre --severity, fait aussi apparaître son
+            # exclusion comme obsolète.
+            TRIVYIGNORE="rhDemo/.trivyignore.yaml"
+            OBSOLETE_FILE="trivy-reports/trivyignore-obsolete.txt"
+            rm -f "$OBSOLETE_FILE"
+            if [ -f "$TRIVYIGNORE" ]; then
+                MATCHED=$(jq -r '.Results[]?.ExperimentalModifiedFindings[]? | select(.Type=="vulnerability") | .Finding.VulnerabilityID' trivy-reports/*.json 2>/dev/null | sort -u)
+                OBSOLETE=()
+                while IFS='|' read -r ID PKG; do
+                    [ -n "$ID" ] || continue
+                    grep -qxF "$ID" <<< "$MATCHED" && continue
+                    OBSOLETE+=("${ID}${PKG:+ (${PKG})}")
+                done < <(yq '.vulnerabilities[] | .id + "|" + (.["pkg-name"] // "")' "$TRIVYIGNORE")
+                if [ "${#OBSOLETE[@]}" -gt 0 ]; then
+                    printf '%s\\n' "${OBSOLETE[@]}" > "$OBSOLETE_FILE"
+                    echo "⚠️  ${#OBSOLETE[@]} exclusion(s) de .trivyignore.yaml sans effet (plus détectées dans aucune image) :"
+                    printf '   - %s\\n' "${OBSOLETE[@]}"
+                    echo "   À retirer, avec le contournement associé le cas échéant (voir docs/TRIVY_SECURITY_SCAN.md)"
+                    echo ""
+                else
+                    echo "✅ Toutes les exclusions de .trivyignore.yaml sont encore utiles"
+                    echo ""
+                fi
+            fi
 
             printf "   Total CRITICAL : %3d\\n" "$TOTAL_CRITICAL"
             printf "   Total HIGH     : %3d\\n" "$TOTAL_HIGH"

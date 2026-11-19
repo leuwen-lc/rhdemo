@@ -153,7 +153,8 @@ de base :
 Quand aucun correctif n'est publié en amont, une vulnérabilité peut être exclue du scan par une entrée de `rhDemo/.trivyignore.yaml` (champs `id`, `pkg-name`, `statement`). Le fichier est passé à Trivy par `--ignorefile` dans `vars/rhDemoLib.groovy`.
 
 - Chaque entrée est justifiée dans [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) ; les acceptations sans correctif amont portent la mention `[PENDING_UPSTREAM_FIX]` et sont revérifiées à chaque cycle de `fixcve-auto` ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
-- Une acceptation n'est pas une correction : elle doit être retirée dès que le paquet corrigé est publié.
+- Une acceptation n'est pas une correction : elle doit être retirée dès que le paquet corrigé est publié. Le stage Trivy de `RHDemo-CI` signale les entrées devenues inutiles (voir « Intégration dans le pipeline »).
+- **Portée réelle d'une entrée** : Trivy ne lit pas le champ `pkg-name` (seuls `id`, `paths`, `purls`, `statement` et `expired_at` le sont, constaté avec Trivy 0.76.1). Une entrée exclut la CVE dans tous les paquets de toutes les images scannées ; `pkg-name` ne sert que de documentation et de clé pour fixcve. Pour restreindre réellement une exclusion, il faudrait `purls`.
 - Une acceptation `[MITIGATED]` signale une faille sans correctif amont mais neutralisée par configuration ; elle est retirée, avec la configuration, au correctif amont. Exemple : CVE-2026-114938 (Java4Shell) sur le JDK de l'image Keycloak, neutralisée par `-XX:-UseBASE64Intrinsics` (`JAVA_OPTS_APPEND` dans les trois environnements). Le même flag est posé sur les JDK Temurin de l'application (`Dockerfile`) et de Jenkins, que Trivy ne voit pas (JDK hors gestionnaire de paquets).
 - Une acceptation permanente est réservée aux failles que l'éditeur ne corrigera pas et qui ne sont pas atteignables dans notre contexte : CVE-2026-91403 (Red Hat `will_not_fix`, incident eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md)).
 
@@ -164,6 +165,7 @@ Le stage Trivy (`Jenkinsfile-CI`) :
 1. s'exécute **après** le build de l'image applicative et le déploiement du stack ephemere, **avant** les tests Selenium ;
 2. pré-alimente le cache Trivy (`vuln` + `java`, volume `rhdemo-trivy-cache` de l'agent), contrôle sa fraîcheur (échec si la base `vuln` a plus de 72 h ou si la date `NextUpdate` de la Java DB est dépassée : un téléchargement en échec n'est sinon pas visible, les scans tournant en `--skip-db-update`), puis lance les 5 scans en `parallel` (`failFast: false`) ;
 3. agrège les résultats (`aggregateTrivyResults`) et **échoue le build** dès une vulnérabilité `CRITICAL` ;
+   il signale aussi, sans bloquer, les entrées de `.trivyignore.yaml` qui n'ont exclu aucun finding dans aucune image (scan JSON en `--show-suppressed`, comparaison par identifiant). La liste est archivée dans `trivy-reports/trivyignore-obsolete.txt`. Le build reste `SUCCESS` : la validation de `fixcve-auto` l'exige. Une CVE repassée en `LOW`, hors du périmètre `--severity`, apparaît aussi comme obsolète ;
 4. archive `trivy-reports/**` et publie un rapport HTML agrégé ;
 5. est suivi d'un stage **SBOM CycloneDX** sur l'image applicative.
 

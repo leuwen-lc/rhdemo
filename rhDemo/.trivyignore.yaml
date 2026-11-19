@@ -1,4 +1,8 @@
-# Fichier d'exclusion Trivy (format YAML — supporte le filtrage par package)
+# Fichier d'exclusion Trivy (format YAML)
+# Attention : Trivy ne lit pas `pkg-name` (champs lus : id, paths, purls, statement, expired_at,
+# constaté le 2026-11-19 avec Trivy 0.76.1). Une entrée exclut donc la CVE dans tous les paquets
+# de toutes les images ; `pkg-name` ne sert que de documentation et de clé pour fixcve.
+# Les entrées qui n'excluent plus rien sont signalées par le stage Trivy de RHDemo-CI.
 # Voir rhDemo/docs/SECURITY_ADVISORIES.md pour la justification de chaque exclusion
 
 vulnerabilities:

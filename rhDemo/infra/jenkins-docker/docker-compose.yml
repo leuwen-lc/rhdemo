@@ -70,7 +70,8 @@ services:
 
     environment:
       # Désactiver le setup wizard
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      # -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics
 
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
@@ -110,7 +111,7 @@ services:
   # SONARQUBE - Analyse qualité du code
   # ═══════════════════════════════════════════════════════════════════
   sonarqube:
-    image: sonarqube:26.10.0.133078-community
+    image: sonarqube:26.11.0.134175-community@sha256:65541accbdb92e27fe770fc6ba99988a3dd5a0c71ffafd67f88abfad366996fa
     container_name: rhdemo-sonarqube
     restart: unless-stopped
     stop_grace_period: 30s  # Temps d'arrêt gracieux

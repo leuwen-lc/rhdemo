@@ -17,7 +17,8 @@ FROM jenkins/jenkins:2.580.2-lts-jdk25@sha256:415ab90d4e3b25148f7191bc04f455a208
 # ═══════════════════════════════════════════════════════════════════
 
 # Désactiver le wizard de setup initial
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+# -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics"
 
 # Liste des plugins à installer automatiquement
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt

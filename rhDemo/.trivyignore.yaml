@@ -12,9 +12,25 @@ vulnerabilities:
     pkg-name: gosu
     statement: "gosu dans postgres:18-alpine - n'utilise pas crypto/tls à l'exécution (setuid/setgid uniquement)"
 
-  # CVE-2026-91403 - java-21-openjdk-headless (image keycloak), fixcve-auto build #948
-  # Revérifié le 2026-11-05 (scan Trivy) : toujours sans correctif dans keycloak:26.8.1 (1:21.0.13.0.9-1.2.el9).
+  # CVE-2026-91403 - java-21-openjdk-headless (image keycloak), incident CA eMudhra
+  # Acceptée par fixcve-auto (build #948) en [PENDING_UPSTREAM_FIX] ; Red Hat l'a passée en
+  # « will_not_fix » (constaté le 2026-11-19) : aucun RPM correctif ne viendra, acceptation permanente.
+  # Risque réel : faible - Keycloak n'ouvre pas de TLS sortant vers une CA publique (pas de SMTP,
+  # LDAP ni fournisseur d'identité externe) et le magasin système de l'image (ca-certificates) est
+  # corrigé depuis Keycloak 26.8.1. Voir docs/SECURITE_CA_EMUDHRA_PLAN.md.
+  # À revoir si : Keycloak ouvre un flux sortant vers Internet (IdP externe, SMTP public).
   - id: CVE-2026-91403
     pkg-name: java-21-openjdk-headless
-    statement: "[PENDING_UPSTREAM_FIX] CVE-2026-91403 : java-21-openjdk-headless 1:21.0.13.0.9-1.2.el9 dans keycloak:26.8.1 (CVSS 6.8). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS < 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #948."
+    statement: "CVE-2026-91403 (CA eMudhra) : Red Hat will_not_fix ; Keycloak sans TLS sortant vers une CA publique, ca-certificates corrigé depuis 26.8.1. Acceptation permanente (revue du 2026-11-19)."
 
+  # CVE-2026-114938 (Java4Shell) - java-21-openjdk-headless (image keycloak)
+  # Écriture hors limites dans l'intrinsèque Base64 AVX-512 de C2 (Red Hat CVSS 9.8, RCE pré-auth
+  # annoncée sur Keycloak). Aucun RPM corrigé publié (Keycloak 26.8.1 et 26.8.2 vulnérables).
+  # Atténuation effective : -XX:-UseBASE64Intrinsics (JAVA_OPTS_APPEND dans infra/dev,
+  # infra/ephemere et le chart stagingkub) ; de plus le processeur de l'hôte (AMD Zen 3) n'a pas
+  # AVX-512 VBMI, prérequis matériel de l'exploitation.
+  # À retirer quand : Red Hat publie java-21-openjdk corrigé et Renovate monte Keycloak (retirer
+  # alors aussi le flag JVM).
+  - id: CVE-2026-114938
+    pkg-name: java-21-openjdk-headless
+    statement: "[MITIGATED] CVE-2026-114938 (Java4Shell) : aucun correctif Red Hat publié ; intrinsèque vulnérable désactivé par -XX:-UseBASE64Intrinsics (JAVA_OPTS_APPEND Keycloak) et hôte sans AVX-512 VBMI. À retirer au correctif amont."

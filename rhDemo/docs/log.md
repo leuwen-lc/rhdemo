@@ -239,3 +239,7 @@ Nouveau `ETUDE_OPENBAO.md` (proposition) : apport d'OpenBao par secret de l'inve
 ## [2026-11-17] ingest | portées du token Renovate
 
 `RENOVATE_AUTOMERGE_CI.md`, `infra/jenkins-docker/QUICKSTART.md`, `infra/jenkins-docker/README.md`, commentaires de `jenkins-casc.yaml` et `Jenkinsfile-Renovate` : la « portée user » exigée par Renovate est `read:user` (avec `write:repository`, `write:issue`, `read:organization`), confirmé par le scan Renovate qui suit le renouvellement du token. Mentions des anciens secrets Codeberg Actions retirées, renvoi vers `rotate-secrets.py` et `secrets/inventory.yaml`.
+
+## [2026-11-19] ingest | Java4Shell et clôture de l'incident eMudhra
+
+CI en échec sur l'image Keycloak : le CRITICAL est CVE-2026-114938 (Java4Shell, JDK Red Hat 21.0.13, sans correctif, Keycloak 26.8.2 compris) et non CVE-2026-91403, déjà exclue. Contournement `-XX:-UseBASE64Intrinsics` posé sur Keycloak (trois environnements), l'application et Jenkins ; exclusion Trivy `[MITIGATED]`. CVE-2026-91403 passée en acceptation permanente (Red Hat `will_not_fix`). Builder `maven:3.10.0-eclipse-temurin-25-noble` et SonarQube 26.11 épinglés par digest (Temurin 25.0.5) ; ZAP et nginx constatés corrigés en amont. `SECURITE_CA_EMUDHRA_PLAN.md` réécrit en bilan et reclassé `historique` (`index.md` : déplacé dans « Traces de migration »). `TRIVY_SECURITY_SCAN.md` mis à jour ; `SECURITY_ADVISORIES.md` : entrée en tête (édition manuelle demandée).

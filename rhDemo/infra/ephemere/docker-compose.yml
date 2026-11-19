@@ -80,6 +80,9 @@ services:
 
       # Logging
       KC_LOG_LEVEL: info
+
+      # Contournement CVE-2026-114938 (Java4Shell) : JDK Red Hat de l'image non corrigé
+      JAVA_OPTS_APPEND: "-XX:-UseBASE64Intrinsics"
     depends_on:
       keycloak-db:
         condition: service_healthy

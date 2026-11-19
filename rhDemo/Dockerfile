@@ -2,14 +2,13 @@
 # Dockerfile pour l'application RHDemo API
 # Image de base : Eclipse Temurin 25 LTS (OpenJDK)
 # Build multi-stage pour optimiser la taille de l'image finale
-# Version Java : 25.0.2+10-LTS (Temurin)
 # ═══════════════════════════════════════════════════════════════════
 
 # ───────────────────────────────────────────────────────────────────
 # STAGE 1 : BUILD
 # Construction de l'application avec Maven et Java 25
 # ───────────────────────────────────────────────────────────────────
-FROM maven:3.9.16-eclipse-temurin-25-noble@sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976 AS builder
+FROM maven:3.10.0-eclipse-temurin-25-noble@sha256:8bc26436417b39cd3fbac4150d63df1fa6f8262b713c765c99f4d8075d79bcb8 AS builder
 
 LABEL stage=builder
 
@@ -75,10 +74,13 @@ COPY --from=builder --chown=spring:spring /build/target/*.jar app.jar
 # UseG1GC : Garbage Collector G1 (default, production-ready)
 # Alternative : UseZGC pour faible latence (production-ready en Java 25)
 # +ExitOnOutOfMemoryError : Arrêter proprement en cas d'OOM
+# -UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell, intrinsèque Base64 AVX-512
+#   de C2), Temurin 25.0.5 non corrigé ; à retirer avec un JDK corrigé
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
                -XX:+UseG1GC \
                -XX:+ExitOnOutOfMemoryError \
+               -XX:-UseBASE64Intrinsics \
                -Djava.security.egd=file:/dev/./urandom"
 
 # ───────────────────────────────────────────────────────────────────

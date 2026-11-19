@@ -4,6 +4,23 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## java-21-openjdk-headless : Java4Shell et eMudhra (2026-11-19)
+
+- **Date** : 2026-11-19 — **Outil** : Trivy 0.76.1 (CI en échec, scan local de contrôle) — **Source** : revue manuelle (`fixcve` bloqué : CVSS ≥ 9 sans correctif)
+- **Constat** : le CRITICAL bloquant est CVE-2026-114938 (« Java4Shell », Red Hat CVSS 9.8, statut `affected`), écriture hors limites dans l'intrinsèque Base64 AVX-512 de C2, RCE pré-authentification annoncée sur Keycloak. Aucun RPM corrigé : Keycloak 26.8.2 (`1:21.0.13.1.2`) reste vulnérable. Prérequis matériel : `avx512f`, `avx512bw`, `avx512vbmi`, `bmi2` ; l'hôte du projet (AMD Zen 3) n'a pas AVX-512.
+- **Atténuation** : `-XX:-UseBASE64Intrinsics` (contournement publié par les découvreurs et sur oss-security), vérifié actif par `-XX:+PrintFlagsFinal` :
+  - Keycloak : `JAVA_OPTS_APPEND` dans `infra/dev`, `infra/ephemere` et `keycloak-deployment.yaml` ;
+  - application : `JAVA_OPTS` du `Dockerfile` (Temurin 25.0.5, invisible pour Trivy) ;
+  - Jenkins : `JAVA_OPTS` du contrôleur (`Dockerfile.jenkins`, `docker-compose.yml`), `JDK_JAVA_OPTIONS` de l'agent.
+- **Exclusions `.trivyignore.yaml`** :
+  - `java-21-openjdk-headless` (CVE-2026-114938) — ajoutée, `[MITIGATED]`, à retirer avec le flag au correctif Red Hat ;
+  - `java-21-openjdk-headless` (CVE-2026-91403) — passée de `[PENDING_UPSTREAM_FIX]` à permanente : Red Hat `will_not_fix` ; Keycloak sans TLS sortant vers une CA publique, `ca-certificates` corrigé depuis 26.8.1.
+- **Incident eMudhra clos** : builder `maven:3.10.0-eclipse-temurin-25-noble` et SonarQube 26.11 (Temurin 25.0.5, G3 retirée), épinglés par digest. Voir `SECURITE_CA_EMUDHRA_PLAN.md`.
+- **Non couvert** : SonarQube (Temurin 25.0.5, boucle locale et réseau Jenkins uniquement) n'a pas reçu le flag.
+- **Validation locale** : 0 CRITICAL sur l'image Keycloak avec le nouveau `.trivyignore.yaml`. Preuve finale : build CI.
+
+---
+
 ## picomatch (build #1052)
 
 - **Date** : 2026-11-18 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

@@ -75,6 +75,9 @@ spec:
           value: {{ .Values.keycloak.hostname }}
         - name: KC_LOG_LEVEL
           value: {{ .Values.keycloak.logLevel }}
+        # Contournement CVE-2026-114938 (Java4Shell) : JDK Red Hat de l'image non corrigé
+        - name: JAVA_OPTS_APPEND
+          value: "-XX:-UseBASE64Intrinsics"
         livenessProbe:
           httpGet:
             path: /health/live

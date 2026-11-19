@@ -145,6 +145,9 @@ RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSI
 # dans /opt/java/openjdk : pas d'installation supplémentaire.
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+# CVE-2026-114938 (Java4Shell) : désactive l'intrinsèque Base64 AVX-512 vulnérable de C2
+# (Temurin 25.0.5 non corrigé). Lu par le lanceur `java` uniquement. À retirer avec un JDK corrigé.
+ENV JDK_JAVA_OPTIONS="-XX:-UseBASE64Intrinsics"
 
 # ═══════════════════════════════════════════════════════════════════
 # PERMISSIONS DOCKER

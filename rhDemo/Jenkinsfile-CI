@@ -634,6 +634,9 @@ YMLEOF
 
                 recordCoverage(
                     tools: [[parser: 'JACOCO', pattern: '**/rhDemo/target/site/jacoco/jacoco.xml']],
+                    // Chemins de jacoco.xml relatifs au package : sans ce répertoire, le plugin
+                    // cherche dans <workspace>/src/main/java et n'affiche aucune source colorée
+                    sourceDirectories: [[path: 'rhDemo/src/main/java']],
                     id: 'jacoco',
                     name: 'Code Coverage (JaCoCo)',
                     sourceCodeRetention: 'MODIFIED'

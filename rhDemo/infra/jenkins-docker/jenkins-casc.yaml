@@ -345,7 +345,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.10')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -433,7 +433,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.10')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -491,7 +491,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.10')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   cloneOptions {
                     shallow(false)
@@ -567,7 +567,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.10')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   cloneOptions {
                     shallow(false)

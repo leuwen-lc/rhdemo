@@ -226,8 +226,10 @@ cmd_pre_merge() {
     fi
 
     step "2/5 — Mise à jour de la branche"
-    log "Pull --rebase de origin/${branch}..."
-    git -C "${REPO_ROOT}" pull --rebase origin "${branch}"
+    log "Pull --rebase=merges de origin/${branch}..."
+    # --rebase=merges : conserve un merge de master déjà résolu localement (relance
+    # après conflit à l'étape 3) au lieu de le défaire et de rejouer ses conflits.
+    git -C "${REPO_ROOT}" pull --rebase=merges origin "${branch}"
     success "Branche à jour avec origin/${branch}"
 
     step "3/5 — Alignement avec master"

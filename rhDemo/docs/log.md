@@ -259,3 +259,7 @@ Cause trouvée dans les logs du contrôleur : l'arrêt d'un agent échoue (`Brok
 ## [2026-11-20] ingest | CHANGELOG.md extrait du README
 
 Le changelog quitte `README.md` pour un `CHANGELOG.md` à la racine du dépôt (convention Keep a Changelog, versions de la plus récente à la plus ancienne). Les entrées 1.1.0 à 1.1.10 sont reprises sans réécriture ; la 1.1.10, publiée, perd sa mention « en cours ». Ajout de la section 1.1.11 (en cours), synthèse des commits depuis `1.1.10-RELEASE`. `README.md` renvoie vers le nouveau fichier, `GIT-PROCEDURE-RELEASE.md` (prérequis) et `index.md` mis à jour.
+
+## [2026-11-20] ingest | relance de release.sh pre-merge après conflit avec master
+
+Après résolution d'un conflit à l'étape 3 (merge de master), la relance de `release.sh pre-merge` échouait à l'étape 2 : `git pull --rebase` défaisait le commit de merge local et rejouait les commits de master, avec le même conflit. L'étape 2 passe en `git pull --rebase=merges`, qui conserve le merge (vérifié sur un clone : branche inchangée, sans conflit). `GIT-PROCEDURE-RELEASE.md` mis à jour (étape 3 et marche à suivre après conflit).

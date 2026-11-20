@@ -26,7 +26,8 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 
 | Document | Statut | Résumé |
 | --- | --- | --- |
-| [README.md](../../README.md) | actif | Présentation du projet, feuille de route et changelog |
+| [README.md](../../README.md) | actif | Présentation du projet et feuille de route |
+| [CHANGELOG.md](../../CHANGELOG.md) | actif | Historique des versions, de la plus récente à la plus ancienne |
 | [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) | actif | Comparaison des environnements dev, ephemere, stagingkub et Jenkins |
 | [DECISIONS.md](DECISIONS.md) | actif | Raisons des choix techniques structurants (BFF, Keycloak, SOPS, KinD, RBAC, NetworkPolicies) |
 | [infra/dev/README.md](../infra/dev/README.md) | actif | Développement local avec PostgreSQL et Keycloak via Docker Compose |

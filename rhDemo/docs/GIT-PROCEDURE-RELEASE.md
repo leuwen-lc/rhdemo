@@ -18,7 +18,7 @@ Contexte (modifier les versions par remplacement global):
 ## Prérequis
 
 - chaine CI/CD complète au vert avec options sonarqube et selenium
-- README.md racine mis à jour en particulier la section changelog pour la nouvelle version
+- CHANGELOG.md racine mis à jour pour la nouvelle version (section « en cours » renommée avec le numéro de version)
 
 ---
 

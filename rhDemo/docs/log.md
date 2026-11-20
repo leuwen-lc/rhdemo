@@ -255,3 +255,7 @@ Pour libérer la mémoire du poste (environ 1,3 Go au repos), SonarQube et sa ba
 ## [2026-11-19] ingest | attente « waiting for available executor » sans autre build
 
 Cause trouvée dans les logs du contrôleur : l'arrêt d'un agent échoue (`Broken pipe`, connexion keep-alive fermée par `docker-socket-proxy` après 10 s d'inactivité, pas de nouvel essai du plugin Docker). Le conteneur orphelin occupe l'unique place (`instanceCap 1`) jusqu'au passage du `DockerContainerWatchdog`, toutes les 300 s par défaut ; constaté le 2026-11-19 : 3 min d'attente. Période du watchdog réduite à 30 s (propriété système dans le `JAVA_OPTS` du contrôleur). `infra/jenkins-docker/README.md` (dépannage) mis à jour, `index.md` inchangé.
+
+## [2026-11-20] ingest | CHANGELOG.md extrait du README
+
+Le changelog quitte `README.md` pour un `CHANGELOG.md` à la racine du dépôt (convention Keep a Changelog, versions de la plus récente à la plus ancienne). Les entrées 1.1.0 à 1.1.10 sont reprises sans réécriture ; la 1.1.10, publiée, perd sa mention « en cours ». Ajout de la section 1.1.11 (en cours), synthèse des commits depuis `1.1.10-RELEASE`. `README.md` renvoie vers le nouveau fichier, `GIT-PROCEDURE-RELEASE.md` (prérequis) et `index.md` mis à jour.

@@ -267,3 +267,7 @@ Après résolution d'un conflit à l'étape 3 (merge de master), la relance de `
 ## [2026-11-20] restructure | FIXCVE_AUTO_TODO renommé en FIXCVE_AUTO_REFONTE
 
 Le plan d'évolutions de fixcve-auto, essentiellement appliqué, est renommé `FIXCVE_AUTO_REFONTE.md` (le nom `TODO` ne correspondait plus à son statut historique). Contenu inchangé. Références mises à jour dans `index.md`, `FIXCVE_AUTO.md` et `CHANGELOG.md` ; les entrées antérieures de ce journal gardent l'ancien nom.
+
+## [2026-11-20] ingest | ETUDE_OPENBAO : résultats du prototype (étape 0)
+
+Prototype jetable (OpenBao 2.7.2, Jenkins et KinD jetables, supprimés ensuite) : cosign 3.1.4 des agents signe par Transit (`openbao://` et `hashivault://`, montage non standard), le plugin Jenkins HashiCorp Vault fonctionne avec OpenBao (AppRole, KV v2, `withCredentials` inchangé), le moteur kubernetes est intégré mais ses tokens ne sont pas révocables avant expiration, mémoire inférieure à 30 Mo. Points *à vérifier* levés, nouveau §7.1, décision de continuer. L'étude reste au statut `proposition`.

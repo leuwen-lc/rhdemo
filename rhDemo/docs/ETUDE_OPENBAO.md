@@ -1,6 +1,6 @@
 ---
 statut: proposition
-verifie_le: 2026-11-17
+verifie_le: 2026-11-20
 sources:
   - rhDemo/docs/ETUDE_ROTATION_SECRETS.md
   - rhDemo/secrets/inventory.yaml
@@ -10,15 +10,16 @@ sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-default-deny.yaml
   - rhDemo/Jenkinsfile-CI
   - rhDemo/Jenkinsfile-CD
+  - rhDemo/infra/jenkins-docker/Dockerfile.agent
 ---
 
 # Étude : OpenBao comme gestionnaire de secrets de RHDemo
 
 **Objectif** : évaluer ce qu'apporterait [OpenBao](https://openbao.org) (fork libre de HashiCorp Vault, licence MPL 2.0, projet de la Linux Foundation) par rapport à la démarche actuelle : secrets chiffrés par SOPS dans Git, credentials Jenkins saisis à la main, script `rotate-secrets.py` ([ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md)).
 
-**Statut** : proposition, rien n'est implémenté. Les points marqués *à vérifier* n'ont pas trouvé de source fiable au 2026-11-17 et sont à tester en premier (étape 0 du §7).
+**Statut** : proposition, rien n'est implémenté dans le dépôt. L'étape 0 (prototype jetable) a été réalisée le 2026-11-20 : tous les points *à vérifier* sont levés, résultats au §7.1. **Décision : continuer.**
 
-**Verdict** : OpenBao n'apporte presque rien pour les secrets exposés sur Internet (Codeberg, Infomaniak, Claude), qui restent gérés par `rotate-secrets.py`. Il apporte beaucoup pour les secrets internes : signature Cosign sans clé extractible, identifiants PostgreSQL renouvelés automatiquement, journal d'audit de chaque lecture, et plus aucun secret dans l'historique Git public. Il remplacerait avantageusement les phases 2 à 4 de l'étude de rotation. Coût principal : le **déverrouillage** après chaque redémarrage du poste (§5), et un service critique de plus.
+**Verdict** : OpenBao n'apporte presque rien pour les secrets exposés sur Internet (Codeberg, Infomaniak, Claude), qui restent gérés par `rotate-secrets.py`. Il apporte beaucoup pour les secrets internes : signature Cosign sans clé extractible, identifiants PostgreSQL renouvelés automatiquement, journal d'audit de chaque lecture, et plus aucun secret dans l'historique Git public. Il remplacerait avantageusement les phases 2 à 4 de l'étude de rotation. Coût principal : le **déverrouillage** après chaque redémarrage du poste (§5), et un service critique de plus. Le prototype a levé les doutes techniques : cosign signe par Transit avec la version des agents, le plugin Jenkins fonctionne tel quel, et la mémoire consommée est négligeable (moins de 30 Mo).
 
 ---
 
@@ -45,7 +46,7 @@ Numéros : inventaire de [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) 
 | 2 | Clé Cosign | Moteur **Transit** : la clé privée est créée et utilisée dans OpenBao, jamais exportée ; cosign signe par `openbao://<clé>` | **Fort** : la clé ne peut plus être volée, seulement utilisée tant qu'un accès est valide. Rotation par nouvelle version de clé. |
 | 15 | Secrets applicatifs stagingkub | KV synchronisé vers les Secrets Kubernetes par External Secrets Operator (ESO) ; mots de passe PostgreSQL gérés par le moteur **database** (rôles statiques renouvelés par OpenBao) | **Fort** : plus de secret dans Git, rotation automatique des mots de passe des bases. |
 | 1 | Clé AGE | Devient inutile une fois SOPS retiré | **Fort** : règle le constat du §1.3 de l'étude de rotation (historique public déchiffrable). La racine de confiance passe à la clé de déverrouillage (§5). |
-| 8, 9 | Kubeconfigs Jenkins | Moteur kubernetes *à vérifier dans OpenBao* ; sinon `kubectl create token --duration` sans OpenBao | Moyen, et atteignable sans OpenBao. |
+| 8, 9 | Kubeconfigs Jenkins | Moteur **kubernetes** (intégré, vérifié à l'étape 0) : token de compte de service à durée courte, émis à la demande. Ces tokens ne sont pas révocables avant expiration (§7.1) | Moyen : plus de token permanent dans Jenkins, mais une durée courte s'obtient aussi par `kubectl create token --duration`. |
 | 18 | Clés TLS | Moteur **PKI** : certificats à courte durée | Moyen, optionnel. |
 | Tous | — | **Audit device** : chaque lecture et écriture journalisée (identité, chemin, date, jamais la valeur) | **Fort** : en rotation d'urgence, savoir quels secrets ont été lus et par qui, donc quoi renouveler en premier. |
 
@@ -57,12 +58,12 @@ OpenBao ne remplace pas KeePassXC : la clé de déverrouillage, les mots de pass
 
 | Point | Constat | Source | À faire |
 | --- | --- | --- | --- |
-| Version | Ligne 2.7 (septembre–octobre 2026). Les seals KMS (AWS, GCP…) sont devenus des plugins externes en 2.7 ; le seal **static** (clé fournie par la configuration) existe depuis 2.4 | Notes de version OpenBao 2.7.0, docs du seal static | Épingler l'image par digest (invariant du projet), suivi par Renovate |
-| Cosign | Schémas `openbao://` et `hashivault://` reconnus, moteur Transit requis, variables `BAO_ADDR`/`BAO_TOKEN` ; signature sans Rekor (`--tlog-upload=false`) déjà utilisée par le projet | Docs KMS de Sigstore, billet Control Plane d'août 2026 | *À vérifier* : chemin de montage Transit non standard côté OpenBao, version de cosign des agents |
+| Version | Ligne 2.7 (dernière : 2.7.3 du 2026-11-19 ; prototype en 2.7.2). Les seals KMS (AWS, GCP…) sont devenus des plugins externes en 2.7 ; le seal **static** (clé fournie par la configuration) existe depuis 2.4 | Notes de version OpenBao 2.7.0, docs du seal static, Docker Hub `openbao/openbao` | Épingler l'image par digest (invariant du projet), suivi par Renovate |
+| Cosign | **Vérifié** avec la version des agents (`Dockerfile.agent`) : `openbao://` (variables `BAO_ADDR`/`BAO_TOKEN`) et `hashivault://` (`VAULT_*`) fonctionnent ; montage Transit non standard par `TRANSIT_SECRET_ENGINE_PATH` ; mêmes options sans Rekor que `Jenkinsfile-CI` | Docs KMS de Sigstore, étape 0 (§7.1) | — |
 | External Secrets Operator | Pas de fournisseur OpenBao dédié : le fournisseur Vault fonctionne (API compatible) ; ESO 2.7 ajoute des options propres à OpenBao (namespaces, CA) | Notes de version ESO 2.7.0, guides NVIDIA et Kubermatic | Authentification Kubernetes, KV v2 |
-| Plugin Jenkins HashiCorp Vault | Aucune source sur la compatibilité avec OpenBao | — | *À vérifier* (étape 0). Repli : CLI `bao` ou `curl` dans l'agent, authentification AppRole |
+| Plugin Jenkins HashiCorp Vault | **Vérifié** (version 384.vda_86ec66c537, cœur Jenkins 2.479.3 minimum) : AppRole, KV v2, `withVault` et credential « Vault Secret Text » lu par `withCredentials`, valeurs masquées dans la console | Étape 0 (§7.1) | Suivre ses avis de sécurité : six depuis 2022, tous corrigés |
 | PostgreSQL | Moteur database : rôles dynamiques, rôles **statiques** (utilisateur existant, mot de passe renouvelé selon une période), rotation des identifiants racine, hachage `scram-sha-256` | Docs OpenBao du moteur database et du plugin PostgreSQL | Ne pas gérer par rôle statique les identifiants racine confiés à OpenBao (avertissement de la doc) |
-| Kubernetes (moteur de tokens) | Non trouvé dans la documentation OpenBao | — | *À vérifier* ; repli sans OpenBao (§2) |
+| Kubernetes (moteur de tokens) | **Vérifié** : moteur intégré à l'image (`bao plugin list`), émission de tokens pour un compte de service existant | Étape 0 (§7.1) | Mode « compte de service existant » seulement (§7.1) |
 | Helm | Chart officiel (`openbao.github.io/openbao-helm`, aussi en OCI sur ghcr.io), injecteur d'agent et fournisseur CSI | Docs OpenBao Kubernetes | Non utilisé dans l'architecture retenue (§4) |
 
 ---
@@ -81,13 +82,13 @@ Configuration de l'option A :
 - image officielle épinglée par digest ; port `8200` publié sur `127.0.0.1` seulement (même raison que Jenkins : les règles iptables de Docker passent avant ufw) ; TLS avec un certificat de la même autorité locale que le registry ;
 - stockage intégré (**Raft**, un seul nœud) sur un volume nommé ;
 - **audit device** fichier sur un volume dédié, rotation des journaux ;
-- consommation mémoire de l'ordre de quelques centaines de Mo, *à mesurer* : le poste n'a qu'environ 2 Go libres quand la CI et stagingkub tournent ensemble.
+- consommation mémoire mesurée à l'étape 0 : 26 à 27 Mo après les tests (Raft, audit, Transit, KV, AppRole, kubernetes actifs), négligeable même avec la marge d'environ 2 Go du poste quand la CI et stagingkub tournent ensemble.
 
 ### 4.2 Identités et politiques
 
 | Client | Méthode d'authentification | Droits (politique) |
 | --- | --- | --- |
-| Jenkins (pipelines) | **AppRole** : `role_id` dans la configuration, `secret_id` à durée courte en credential Jenkins (le seul secret restant dans Jenkins) | Lecture des chemins KV des pipelines, `sign` sur la clé Transit Cosign |
+| Jenkins (pipelines) | **AppRole** : `role_id` et `secret_id` dans un credential « Vault App Role » du plugin (le seul secret restant dans Jenkins), qui ouvre une session à chaque lecture | Lecture des chemins KV des pipelines, `sign` sur la clé Transit Cosign |
 | ESO (stagingkub) | **Kubernetes** : OpenBao valide le token du compte de service d'ESO auprès de l'API du cluster | Lecture de `kv/stagingkub/*` et des identifiants database |
 | Administrateur | Utilisateur dédié, token de courte durée | Écriture KV, gestion des rôles ; le token root est révoqué après l'installation (`bao operator generate-root` pour le régénérer) |
 | `rotate-secrets.py` | Token administrateur demandé au lancement | Écriture des chemins des secrets qu'il renouvelle |
@@ -116,7 +117,7 @@ Au démarrage, OpenBao est **scellé** : il ne peut rien déchiffrer tant qu'on 
 - **SOPS** : retiré par étapes, fichier par fichier. `SOPS_SETUP.md` passe en historique à la fin de la migration. Les anciens fichiers chiffrés restent dans l'historique Git : leurs valeurs doivent avoir changé avant que la clé AGE soit abandonnée (même règle que le §1.3 de l'étude de rotation).
 - **`rotate-secrets.py`** : conservé pour les secrets exposés sur Internet ; nouvelle cible `{kind: openbao, path: …}` dans l'inventaire, à la place des credentials Jenkins migrés.
 - **Étude de rotation** : les phases 2 (Kubernetes, Cosign, stagingkub) et 4 (tokens à durée limitée) seraient remplacées par les étapes 2 à 4 ci-dessous.
-- **Pipelines** : les blocs `withCredentials` concernés sont remplacés par une lecture OpenBao (plugin ou CLI). `PIPELINES_CI_CD.md` est à mettre à jour.
+- **Pipelines** : changement minimal. Un credential Jenkins de type « Vault Secret Text » portant le même identifiant remplace l'ancien, et les blocs `withCredentials` existants restent inchangés (vérifié à l'étape 0). `withVault` reste possible pour les lectures groupées. `PIPELINES_CI_CD.md` est à mettre à jour.
 
 ---
 
@@ -126,14 +127,35 @@ Chaque étape est réversible et utilisable seule. Les credentials Jenkins et le
 
 | Étape | Contenu | Critère de sortie | Effort |
 | --- | --- | --- | --- |
-| 0 | Prototype jetable : OpenBao en conteneur, tests des points *à vérifier* (plugin Jenkins, cosign `openbao://` avec la version des agents, moteur kubernetes), mesure mémoire | Décision de continuer ou d'abandonner, consignée dans cette étude | 0,5 jour |
+| 0 ✅ | Prototype jetable : OpenBao en conteneur, tests des points *à vérifier* (plugin Jenkins, cosign `openbao://` avec la version des agents, moteur kubernetes), mesure mémoire | Décision de continuer ou d'abandonner, consignée dans cette étude : **continuer** (§7.1) | 0,5 jour, fait le 2026-11-20 |
 | 1 | OpenBao dans `jenkins-docker` (Raft, TLS, audit), procédure de déverrouillage via KeePassXC, KV v2 ; migration des secrets des pipelines Renovate et des notifications ; cible `openbao` dans `rotate-secrets.py` | Un cycle CI et Renovate vert sans les credentials migrés, lectures visibles dans le journal d'audit | 1,5 jour |
 | 2 | Cosign par Transit : signature `openbao://cosign` dans `Jenkinsfile-CI`, clé publique exportée pour `Jenkinsfile-CD` ; ancienne clé publique conservée tant que des images signées avec elle restent déployables | CD vert sur une image signée par Transit, credentials `cosign-private-key` et `cosign-password` supprimés | 1 jour |
 | 3 | ESO dans stagingkub, `ExternalSecret` à la place des `kubectl create secret` de `init-stagingkub.sh` ; NetworkPolicy de sortie d'ESO vers OpenBao | Recréation complète de stagingkub sans `secrets-stagingkub.yml` | 1 jour |
 | 4 | Rôles statiques PostgreSQL (bases rhdemo et Keycloak) ; redémarrage des pods à chaque renouvellement (Reloader ou `rollout restart`, car Spring Boot et Keycloak lisent le mot de passe au démarrage) | Mot de passe renouvelé par OpenBao, application et Keycloak reconnectés sans intervention | 1 jour |
 | 5 (option) | PKI pour les certificats internes, tokens Kubernetes à courte durée | — | 1 jour |
 
-Total : environ 5 jours, étape 0 comprise.
+Total : environ 5 jours, étape 0 comprise (4,5 jours restants).
+
+### 7.1 Résultats de l'étape 0 (2026-11-20)
+
+Prototype entièrement jetable, supprimé après les tests : OpenBao 2.7.2 (image officielle par digest) en mode serveur, Raft sur un seul nœud, Shamir 1 part, audit fichier ; registry `registry:3` éphémère ; Jenkins `2.580.2-lts-jdk25` jetable avec le plugin ; cluster KinD jetable (`kindest/node` de stagingkub). Aucun environnement du projet (Jenkins, `kind-registry`, cluster `rhdemo`) n'a été modifié.
+
+| Test | Résultat |
+| --- | --- |
+| Cosign 3.1.4 (image `rhdemo-jenkins-agent`), clé Transit `ecdsa-p256` non exportable, montage `cosign-transit` | Signature OK par `openbao://cosign` et par `hashivault://cosign`. Les options de `Jenkinsfile-CI` (`--use-signing-config=false --tlog-upload=false`) sont nécessaires : `--tlog-upload=false` seul est refusé par cosign 3.x. |
+| Politique de signature minimale (`update` sur `sign/cosign`, `read` sur `keys/cosign`), token de 15 min | Suffit pour signer et exporter la clé publique (`cosign public-key --key openbao://cosign`). Lecture de `export/signing-key` refusée. |
+| Vérification sans accès à OpenBao, comme `Jenkinsfile-CD` | OK avec la clé publique exportée ; échec attendu avec une autre clé. |
+| Rotation de la clé Transit | `public-key` renvoie ensuite la nouvelle version ; les signatures antérieures restent vérifiables avec l'ancienne clé publique. Confirme le plan de l'étape 2 (conserver l'ancienne clé publique dans la CD). |
+| Plugin Jenkins, AppRole (politique en lecture sur `kv/data/jenkins/*`), KV v2 | `withVault` et `withCredentials` sur un credential « Vault Secret Text » lisent la valeur, masquée (`****`) dans la console. |
+| Journal d'audit | Chaque connexion AppRole et lecture KV ou signature Transit est tracée : chemin, opération, politiques, adresse IP. Les valeurs (secret lu, condensé signé) sont remplacées par un HMAC. |
+| Moteur kubernetes, rôle sur un compte de service existant, compte d'OpenBao limité à `create` sur `serviceaccounts/token` de ce seul compte | Token de 10 min émis, droits du compte respectés (accès aux Secrets refusé). En revanche, la révocation du bail OpenBao **n'invalide pas** le token, qui reste valide jusqu'à son expiration. |
+| Mémoire | 26 à 27 Mo pour OpenBao, données Raft de 152 Ko. |
+
+Conséquences sur l'étude :
+
+- **Moteur kubernetes** : la révocation effective impose le mode où OpenBao crée lui-même un compte de service et ses rôles à chaque demande. OpenBao aurait alors besoin du droit de créer des `Role` et `RoleBinding`, soit un risque d'escalade de privilèges contraire au moindre privilège du RBAC Jenkins. On garde le mode « compte existant » avec une durée courte (15 min). L'étape 5 reste optionnelle.
+- **`secret_id` AppRole** : le plugin ne le renouvelle pas et ouvre une session à chaque lecture. Une durée de validité courte impose donc de remplacer régulièrement le credential Jenkins, tâche à confier à `rotate-secrets.py` (§8).
+- **Mémoire** : le risque du §8 est levé.
 
 ---
 
@@ -142,16 +164,18 @@ Total : environ 5 jours, étape 0 comprise.
 - **Point unique de défaillance** : OpenBao arrêté ou scellé bloque CI, CD et synchronisations. À mitiger avec un healthcheck, une alerte dans Grafana et une procédure de déverrouillage documentée.
 - **Sauvegarde** : instantané Raft régulier, à restaurer pour test au moins une fois ; sans la clé de déverrouillage, il ne sert à rien.
 - **Bootstrap** : le `secret_id` AppRole de Jenkins devient le secret le plus sensible de Jenkins. Il faut lui donner une durée courte et le renouveler par `rotate-secrets.py`.
-- **Mémoire** : à mesurer à l'étape 0, la marge du poste étant faible.
+- **Mémoire** : levé, moins de 30 Mo mesurés à l'étape 0 (§7.1).
+- **Plugin Jenkins** : six avis de sécurité depuis 2022 (tous corrigés), dont une exposition de credentials Vault de portée système en 2025. Garder le plugin à jour.
 - **Complexité pédagogique** : bénéfice réel pour une preuve de concept DevSecOps (secrets dynamiques, signature sans clé extractible, audit), mais la documentation d'exploitation (déverrouillage, sauvegarde, restauration) devient indispensable.
 
 ## 9. Recommandation
 
-Faire l'étape 0, puis décider. Si elle est concluante, enchaîner les étapes 2 (Cosign) et 3 (ESO), qui apportent le plus, l'étape 1 étant leur prérequis. Ne pas poursuivre la phase 2 de l'étude de rotation pour Cosign et les secrets stagingkub tant que cette décision n'est pas prise, pour ne pas coder deux fois.
+L'étape 0 est concluante (§7.1) : **continuer**. Faire l'étape 1, prérequis, puis enchaîner les étapes 2 (Cosign) et 3 (ESO), qui apportent le plus. Ne pas poursuivre la phase 2 de l'étude de rotation pour Cosign et les secrets stagingkub tant que cette décision n'est pas prise, pour ne pas coder deux fois.
 
 ## Sources
 
 - OpenBao : [notes de version 2.7.0](https://openbao.org/community/release-notes/2-7-0/), [seal static](https://openbao.org/docs/configuration/seal/static/), [moteur database](https://openbao.org/docs/secrets/databases/), [plugin PostgreSQL](https://openbao.org/docs/secrets/databases/postgresql/), [Helm](https://openbao.org/docs/platform/k8s/helm/)
 - Sigstore : [support KMS de cosign](https://docs.sigstore.dev/cosign/kms_support), [signature souveraine avec OpenBao et cosign](https://control-plane.io/posts/sovereign-signing-openbao-cosign-flux/)
 - External Secrets Operator : [version 2.7.0](https://newreleases.io/project/artifacthub/helm/external-secrets-operator/external-secrets/release/2.7.0), [guide ESO avec OpenBao](https://docs.nvidia.com/mission-control/docs/nmc-software-installation-guide/2.5.0/gitops-components/external-secrets.html)
-- Jenkins : [plugin HashiCorp Vault](https://plugins.jenkins.io/hashicorp-vault-plugin)
+- Jenkins : [plugin HashiCorp Vault](https://plugins.jenkins.io/hashicorp-vault-plugin) (avis de sécurité listés sur la page)
+- Prototype de l'étape 0 (2026-11-20) : §7.1

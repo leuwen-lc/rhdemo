@@ -263,3 +263,7 @@ Le changelog quitte `README.md` pour un `CHANGELOG.md` à la racine du dépôt (
 ## [2026-11-20] ingest | relance de release.sh pre-merge après conflit avec master
 
 Après résolution d'un conflit à l'étape 3 (merge de master), la relance de `release.sh pre-merge` échouait à l'étape 2 : `git pull --rebase` défaisait le commit de merge local et rejouait les commits de master, avec le même conflit. L'étape 2 passe en `git pull --rebase=merges`, qui conserve le merge (vérifié sur un clone : branche inchangée, sans conflit). `GIT-PROCEDURE-RELEASE.md` mis à jour (étape 3 et marche à suivre après conflit).
+
+## [2026-11-20] restructure | FIXCVE_AUTO_TODO renommé en FIXCVE_AUTO_REFONTE
+
+Le plan d'évolutions de fixcve-auto, essentiellement appliqué, est renommé `FIXCVE_AUTO_REFONTE.md` (le nom `TODO` ne correspondait plus à son statut historique). Contenu inchangé. Références mises à jour dans `index.md`, `FIXCVE_AUTO.md` et `CHANGELOG.md` ; les entrées antérieures de ce journal gardent l'ancien nom.

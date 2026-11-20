@@ -11,7 +11,7 @@ sources:
 
 # Remédiation CVE automatisée (fixcve-auto)
 
-Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. La procédure est **entièrement déterministe** (aucun LLM) depuis la refonte du 2026-10-09 (voir [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md), section 10). Le skill interactif `/fixcve` réutilise les mêmes scripts avec validation humaine.
+Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. La procédure est **entièrement déterministe** (aucun LLM) depuis la refonte du 2026-10-09 (voir [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md), section 10). Le skill interactif `/fixcve` réutilise les mêmes scripts avec validation humaine.
 
 **Objectif mesuré** : un cycle n'échoue que face à une CVE **sans correctif publié, CVSS ≥ 9 et sans critère A** (« échec conforme »). Tout autre échec est un défaut de la procédure, compté par l'indicateur `fixcve-stats.py` (voir « Indicateur »).
 
@@ -235,7 +235,7 @@ Héberger le poller dans Jenkins (job déclenché par `post { failure }` de `Jen
 
 ## Voir aussi
 
-- [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md) — plan d'évolutions et revue du 2026-10-09
+- [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md) — plan d'évolutions et revue du 2026-10-09
 - [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) — incidents, garde-fous et tests associés
 - [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) — parité CI / Renovate, double inscription CVE + GHSA
 - [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) — historique des CVE traitées

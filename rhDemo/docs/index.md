@@ -120,7 +120,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [NULL_REFONTE.md](NULL_REFONTE.md) | historique | Refonte de la gestion des null (Java 25) |
 | [TESTS_REFONTE.md](TESTS_REFONTE.md) | historique | Refonte du parc de tests backend |
 | [API_REST_NORMALISATION.md](API_REST_NORMALISATION.md) | historique | Normalisation REST de l'API Employé |
-| [FIXCVE_AUTO_TODO.md](FIXCVE_AUTO_TODO.md) | historique | Plan d'évolutions de fixcve-auto, essentiellement appliqué (voir le bilan en tête) |
+| [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md) | historique | Plan d'évolutions de fixcve-auto, essentiellement appliqué (voir le bilan en tête) |
 | [MIGRATION_VITE.md](MIGRATION_VITE.md) | historique | Migration du frontend de Vue CLI (webpack) vers Vite : étude et bilan |
 | [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md) | historique | Compromission des CA intermédiaires eMudhra (CVE-2026-111943) : remédiation par image, incident clos le 2026-11-19 |
 

@@ -16,7 +16,7 @@ Sécurité :
 
 fixcve-auto :
 - Procédure de remédiation entièrement déterministe, sans LLM : scripts testés `fixcve-resolve.py` (version corrigée lue dans l'avis OSV et confirmée par le registre), `fixcve-classify.py` (table de décision), `fixcve-apply.py` et `fixcve-verify.py` (vérification locale avant push) ; le skill /fixcve utilise les mêmes scripts (voir rhDemo/docs/FIXCVE_AUTO.md)
-- Fiabilisation au fil des incidents : identité d'un finding = paire (CVE, paquet), CVE bloquées traitées sans bloquer le reste du cycle, validation par non-régression au lieu d'un rollback systématique, parser OWASP DC étendu (OSS Index, CVSS v4, RetireJS, Node Audit sans score), cache NVD amorcé depuis Jenkins, rejeu des commits du bot en cas de divergence ; registre des incidents et plan d'évolutions (voir rhDemo/docs/FIXCVE_AUTO_INCIDENTS.md et rhDemo/docs/FIXCVE_AUTO_TODO.md)
+- Fiabilisation au fil des incidents : identité d'un finding = paire (CVE, paquet), CVE bloquées traitées sans bloquer le reste du cycle, validation par non-régression au lieu d'un rollback systématique, parser OWASP DC étendu (OSS Index, CVSS v4, RetireJS, Node Audit sans score), cache NVD amorcé depuis Jenkins, rejeu des commits du bot en cas de divergence ; registre des incidents et plan d'évolutions (voir rhDemo/docs/FIXCVE_AUTO_INCIDENTS.md et rhDemo/docs/FIXCVE_AUTO_REFONTE.md)
 - Alerte quand une distribution publie le correctif d'une CVE supprimée temporairement dans Trivy
 
 Frontend :

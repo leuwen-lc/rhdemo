@@ -1,0 +1,18 @@
+{
+  "jenkins_build": 818,
+  "stage": "trivy",
+  "findings": [
+    {
+      "finding_id": "CVE-2026-18963",
+      "source": "trivy",
+      "ecosystem": "maven",
+      "image": "keycloak",
+      "package_name": "org.keycloak:keycloak-services",
+      "installed_version": "26.6.2",
+      "cvss": 9.1,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+      "fixed_version_hint": "26.4.15",
+      "title": "keycloak-services: keycloak-services: Unauthenticated account takeover via reset-credentials flow bypass"
+    }
+  ]
+}

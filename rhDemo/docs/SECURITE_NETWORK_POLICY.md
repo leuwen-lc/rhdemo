@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-default-deny.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-rhdemo-app.yaml
+  - rhDemo/infra/stagingkub/networkpolicies/
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # Étude des flux réseau et Network Policies - Stagingkub
 
 Ce document décrit tous les flux réseau légitimes dans l'environnement stagingkub et les NetworkPolicies implémentées pour les sécuriser.
@@ -512,6 +522,7 @@ spec:
 | monitoring | `allow-apiserver-prometheus-operator` | Prometheus Operator | Watch ServiceMonitors/PrometheusRules |
 | monitoring | `allow-apiserver-kube-state-metrics` | Kube State Metrics | Collecte métriques état cluster |
 | nginx-gateway | `allow-apiserver-access` | NGINX Gateway Fabric | Watch Gateway/HTTPRoute |
+| nginx-gateway | `allow-apiserver-cert-generator` | Job hook Helm `cert-generator` (NGF) | Lecture/mise à jour des Secrets `server-tls`/`agent-tls` ; ses pods n'ont pas le label du contrôleur |
 
 ### Diagnostic
 

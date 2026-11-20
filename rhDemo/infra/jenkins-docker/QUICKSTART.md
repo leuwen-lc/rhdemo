@@ -32,7 +32,7 @@ Jenkins est accessible sur **http://localhost:8080**.
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|
 | `sops-age-key` | Secret file | Clé age pour déchiffrer `secrets-ephemere.yml` — voir `rhDemo/docs/SOPS_SETUP.md` |
-| `jenkins-sonar-token` | Secret text | http://localhost:9020 → My Account → Security → Generate Token |
+| `jenkins-sonar-token` | Secret text | `docker start rhdemo-sonarqube-db rhdemo-sonarqube` (SonarQube est arrêté hors CI), puis http://localhost:9020 → My Account → Security → Generate Token |
 | `nvd-api-key` | Secret text | https://nvd.nist.gov/developers/request-an-api-key |
 | `cosign-private-key` | Secret file | Fichier `cosign.key` généré ci-dessous (pipeline CI) |
 | `cosign-password` | Secret text | Mot de passe saisi lors de la génération Cosign (pipeline CI) |
@@ -47,16 +47,17 @@ Jenkins est accessible sur **http://localhost:8080**.
 
 ### Pour Jenkinsfile-Renovate (pipeline `RHDemo-Renovate`, automerge des PRs de dépendances)
 
-Réutilise `nvd-api-key` et `ossindex-credentials` déjà créés ci-dessus. En plus, à créer :
+Réutilise `nvd-api-key` déjà créé ci-dessus. En plus, à créer :
 
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|
-| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `rhdemo-ci-bot` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
-| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + **`user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) |
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot dédié `cibot-leuwen-lc` (collaborateur **Write** du repo, pas Admin), scopes `repository` + `issue`. Sert à lister/synchroniser/merger les PRs et poster les commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate lui-même (distinct de `cibot-leuwen-lc`), portées `write:repository`, `write:issue`, **`read:user`** (obligatoire, sinon `renovate` échoue avec `Authentication failure`) et `read:organization` |
 | `renovate-gpg-key` | Secret text | Clé GPG privée dédiée à la signature des commits Renovate, exportée en base64 : `gpg --export-secret-keys <KEY_ID> \| base64 -w0` |
 | `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) pour les lookups de changelogs/release notes des dépendances hébergées sur GitHub |
+| `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID, pas l'e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sans lui, Renovate n'a pas les dates de publication des grosses images et le stage de scan échoue |
 
-> Pourquoi deux comptes bot distincts (`rhdemo-ci-bot` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md` sections 1 et « Credentials Jenkins nécessaires ».
+> Pourquoi deux comptes bot distincts (`cibot-leuwen-lc` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md`, section « Comptes et credentials ».
 
 ### Pour la mise à jour en place de l'infra stagingkub (`RHDemo-Stagingkub-Upgrade-Deploy`)
 

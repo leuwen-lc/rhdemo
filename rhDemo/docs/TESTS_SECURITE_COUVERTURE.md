@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/test/java/fr/leuwen/rhdemoAPI/springconfig/
+  - rhDemo/sonar-project.properties
+  - rhDemo/src/test/resources/application-test.yml
+---
+
 # Tests de Couverture - Spring Security
 
 ## Vue d'ensemble

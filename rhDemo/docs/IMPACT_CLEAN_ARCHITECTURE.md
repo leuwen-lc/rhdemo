@@ -1,3 +1,10 @@
+---
+statut: proposition
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/
+---
+
 # Analyse d'impact : Migration vers la Clean Architecture
 
 ## État des lieux — ce que l'architecture actuelle fait déjà bien

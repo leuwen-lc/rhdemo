@@ -47,14 +47,11 @@ pipeline {
 
         // Configuration Docker
         // renovate: datasource=docker depName=nginx
-        NGINX_IMAGE = "nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752"
+        NGINX_IMAGE = "nginx:1.31.8-alpine-slim@sha256:4c734d33ee731135dc9f2349914a34551c920f4451fca8bb05bf5880eb9079e8"
         // renovate: datasource=docker depName=postgres
         POSTGRES_IMAGE = "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
-        // renovate: datasource=docker depName=quay.io/keycloak/keycloak
-        KEYCLOAK_IMAGE = "quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0"
-        // NGINX Gateway Fabric (stagingkub) — scanné en CI pour couverture Trivy complète
-        // renovate: datasource=docker depName=ghcr.io/nginx/nginx-gateway-fabric
-        NGF_IMAGE = "ghcr.io/nginx/nginx-gateway-fabric:2.6.7@sha256:bc1e0677ab0c077fc12851dbd2311fce9358d0f6f3140035f8dc5e5ede7b9cc1"
+        // renovate: datasource=docker depName=keycloak/keycloak
+        KEYCLOAK_IMAGE = "keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332"
 
         // Configuration des tests
         TEST_PORT = '9000'
@@ -90,8 +87,12 @@ pipeline {
         NETWORK_JENKINS = 'rhdemo-jenkins-network'
 
         // Notification email de fin de pipeline (succès/échec) — SMTP configuré en JCasC
-        // (unclassified.mailer, credential smtp-infomaniak-credentials)
-        NOTIFICATION_EMAIL = 'lcpro@etik.com'
+        // (unclassified.mailer, credential smtp-infomaniak-credentials). Adresse sourcée
+        // depuis un credential Jenkins dédié (Secret text "notification-email") plutôt
+        // qu'en clair dans ce fichier : dépôt public, une adresse mail personnelle en clair
+        // dans le code (sans bénéfice, contrairement à security.txt) alimente le harvesting
+        // de spam. Credential à créer manuellement, cf. jenkins-casc.yaml section CREDENTIALS.
+        NOTIFICATION_EMAIL = credentials('notification-email')
     }
 
     parameters {
@@ -548,7 +549,16 @@ YMLEOF
                             string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
                             usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
                         ]) {
-                            sh './mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}'
+                            // Secrets NVD + OSS Index lus depuis .mvn/ci-settings.xml (server ids "nvd" et
+                            // "ossindex", alimentés par $NVD_API_KEY / $OSSINDEX_USER / $OSSINDEX_PASSWORD),
+                            // jamais sur la ligne de commande (visible dans `ps` ; le debug Maven peut
+                            // exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5). NB OSS Index : les propriétés
+                            // sont ossIndexUsername/ossIndexPassword (I majuscule, sans "Analyzer") ;
+                            // l'ancien -DossindexAnalyzer* était ignoré -> "disabled due to missing credentials".
+                            // Cache OSS Index remonté à 7 jours (ossIndexAnalyzerCacheValidForHours dans
+                            // pom.xml) suite au 402 Payment Required du 11/09/2026 (quota Sonatype Guide
+                            // épuisé) : cf. docs/OWASP_DEPENDENCY_CHECK.md#oss-index pour le calcul.
+                            sh './mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex'
                         }
                     }
                 }
@@ -574,6 +584,11 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Analyse de la qualité du code avec SonarQube..."
+                    // SonarQube n'est démarré que le temps de l'analyse et de la Quality Gate
+                    // (mémoire du poste) ; arrêt dans le post de la Quality Gate et, en filet de
+                    // sécurité, dans le post global du pipeline.
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                    lib.startSonarQube()
                 }
 
                 withSonarQubeEnv('SonarQube') {
@@ -597,6 +612,14 @@ YMLEOF
                     waitForQualityGate abortPipeline: true
                 }
             }
+            post {
+                always {
+                    script {
+                        def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                        lib.stopSonarQube()
+                    }
+                }
+            }
         }
 
         stage('📈 Couverture de Code') {
@@ -611,6 +634,9 @@ YMLEOF
 
                 recordCoverage(
                     tools: [[parser: 'JACOCO', pattern: '**/rhDemo/target/site/jacoco/jacoco.xml']],
+                    // Chemins de jacoco.xml relatifs au package : sans ce répertoire, le plugin
+                    // cherche dans <workspace>/src/main/java et n'affiche aucune source colorée
+                    sourceDirectories: [[path: 'rhDemo/src/main/java']],
                     id: 'jacoco',
                     name: 'Code Coverage (JaCoCo)',
                     sourceCodeRetention: 'MODIFIED'
@@ -1091,7 +1117,7 @@ YMLEOF
             steps {
                 script {
                     echo "▶ Scan de sécurité des images Docker avec Trivy (parallélisé)..."
-                    echo "   ℹ️  Les 4 images seront scannées en parallèle pour optimiser le temps"
+                    echo "   ℹ️  Images de l'application (ephemere + chart stagingkub rhdemo) scannées en parallèle"
                     echo ""
                     echo "   ⚠️  Le build échouera si vulnérabilités CRITICAL détectées"
                     echo "   ⏱️  Timeout: 8 minutes (au lieu de 20 min séquentiel)"
@@ -1120,18 +1146,68 @@ YMLEOF
                         echo "📥 Téléchargement de la Java DB..."
                         trivy image --download-java-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
 
+                        # Fraîcheur : un téléchargement en échec est masqué ci-dessus (|| true) et les scans
+                        # tournent ensuite avec --skip-db-update ; sans ce contrôle, une base périmée passerait
+                        # inaperçue. Base vuln : échec au-delà de 72 h. Java DB (publiée tous les 3 jours) :
+                        # échec si sa date NextUpdate est dépassée, c'est-à-dire si son rafraîchissement a échoué.
+                        NOW=$(date -u +%s)
+                        VULN_UPDATED=$(jq -r '.UpdatedAt // empty' "${TRIVY_CACHE_DIR}/db/metadata.json" 2>/dev/null || true)
+                        JAVA_NEXT=$(jq -r '.NextUpdate // empty' "${TRIVY_CACHE_DIR}/java-db/metadata.json" 2>/dev/null || true)
+                        VULN_TS=$(date -u -d "${VULN_UPDATED%%.*}Z" +%s 2>/dev/null || echo 0)
+                        JAVA_TS=$(date -u -d "${JAVA_NEXT%%.*}Z" +%s 2>/dev/null || echo 0)
+                        VULN_AGE_H=$(( (NOW - VULN_TS) / 3600 ))
+                        echo "   Base vuln : UpdatedAt=${VULN_UPDATED:-absente} (${VULN_AGE_H} h) ; Java DB : NextUpdate=${JAVA_NEXT:-absente}"
+                        if [ "${VULN_TS}" -eq 0 ] || [ "${VULN_AGE_H}" -gt 72 ]; then
+                            echo "❌ Base de vulnérabilités Trivy absente ou périmée (plus de 72 h) : téléchargement en échec ?"
+                            exit 1
+                        fi
+                        if [ "${JAVA_TS}" -eq 0 ] || [ "${JAVA_TS}" -lt "${NOW}" ]; then
+                            echo "❌ Java DB Trivy absente ou non rafraîchie (NextUpdate dépassé) : téléchargement en échec ?"
+                            exit 1
+                        fi
+
                         echo "✅ Bases de données Trivy prêtes dans ${TRIVY_CACHE_DIR} (vuln + java)"
                         echo "   Cache persistant via volume Docker — réutilisé entre les builds"
                     '''
 
-                    // Définir les images à scanner avec leurs noms de rapports
+                    // Périmètre : l'application et ce qui est livré avec elle, rien d'autre.
+                    // Les composants système stagingkub (Cilium, NGF, observabilité) sont scannés
+                    // par Jenkinsfile-Renovate avant merge de leur montée de version — cf.
+                    // docs/TRIVY_SECURITY_SCAN.md, section « Périmètre du scan ».
                     def imagesToScan = [
                         [image: env.POSTGRES_IMAGE, name: 'postgres'],
                         [image: env.KEYCLOAK_IMAGE, name: 'keycloak'],
                         [image: env.NGINX_IMAGE, name: 'nginx'],
-                        [image: env.NGF_IMAGE, name: 'nginx-gateway-fabric'],
                         [image: env.RHDEMO_IMAGE, name: 'rhdemo-app']
                     ]
+
+                    // Images tierces du chart rhdemo, lues dans values.yaml (source unique, pas
+                    // de recopie ici). Une image déjà scannée au titre d'ephemere (même référence
+                    // tag@digest) n'est pas scannée deux fois ; si elle diverge, elle a son propre
+                    // rapport suffixé « -stagingkub ». Noms de rapport alignés sur TRIVY_IMAGES de
+                    // scripts/fixcve-detect.py.
+                    def chartImages = sh(
+                        script: "yq '.global.images | to_entries | .[] | .key + \" \" + .value' rhDemo/infra/stagingkub/helm/rhdemo/values.yaml",
+                        returnStdout: true
+                    ).trim()
+                    if (!chartImages) {
+                        error("Aucune image lue dans global.images de values.yaml : scan Trivy incomplet, build arrêté")
+                    }
+                    chartImages.split('\n').each { line ->
+                        def parts = line.trim().split(' ')
+                        if (parts.size() != 2 || !(parts[1] ==~ /[a-zA-Z0-9.\/_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}/)) {
+                            error("Entrée global.images inattendue dans values.yaml (attendu clé + repo:tag@sha256:digest) : ${line}")
+                        }
+                        def image = parts[1]
+                        if (imagesToScan.any { it.image == image }) {
+                            return
+                        }
+                        def name = parts[0].replaceAll(/([A-Z])/, '-$1').toLowerCase()
+                        if (imagesToScan.any { it.name == name }) {
+                            name = "${name}-stagingkub"
+                        }
+                        imagesToScan << [image: image, name: name]
+                    }
 
                     echo "📋 Images à scanner:"
                     imagesToScan.each { img ->
@@ -1526,7 +1602,8 @@ YMLEOF
                         ['trivy-reports', 'nginx.html', 'Trivy - Nginx'],
                         ['trivy-reports', 'postgres.html', 'Trivy - PostgreSQL'],
                         ['trivy-reports', 'keycloak.html', 'Trivy - Keycloak'],
-                        ['trivy-reports', 'nginx-gateway-fabric.html', 'Trivy - NGF'],
+                        ['trivy-reports', 'busybox.html', 'Trivy - Busybox'],
+                        ['trivy-reports', 'postgres-exporter.html', 'Trivy - postgres-exporter'],
                         ['trivy-reports', 'rhdemo-app.html', 'Trivy - RHDemo App'],
                         ['rhDemo/target', 'dependency-check-report.html', 'OWASP Dependency-Check'],
                         ['zap-reports', 'zap-report.html', 'OWASP ZAP Security Report']
@@ -1595,7 +1672,7 @@ YMLEOF
                         echo "   1. docker stop \$REGISTRY_NAME && docker rm \$REGISTRY_NAME"
                         echo "   2. cd rhDemo/infra/jenkins-docker && docker-compose up -d registry"
                         echo ""
-                        echo "   Voir la documentation: rhDemo/docs/REGISTRY_SETUP.md"
+                        echo "   Voir la documentation: rhDemo/docs/REGISTRY.md"
                         exit 1
                     fi
 
@@ -1674,8 +1751,15 @@ YMLEOF
                         # Cosign fait des appels HTTPS directs, utiliser kind-registry:5000
                         # avec le certificat CA monté dans le conteneur Jenkins
                         echo "▶ Signature de l'image..."
-                        SSL_CERT_FILE=/etc/ssl/certs/registry.crt \
+                        # --use-signing-config=false + --tlog-upload=false : pas d'envoi au journal public
+                        # Rekor (pas d'Internet). cosign 3.x utilise une signing-config par défaut, incompatible
+                        # avec --tlog-upload=false sans --use-signing-config=false.
+                        # SSL_CERT_FILE est exporté : un commentaire après un "\" en fin de ligne l'avait
+                        # transformé en simple variable shell, non transmise à cosign.
+                        export SSL_CERT_FILE=/etc/ssl/certs/registry.crt
                         COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
+                            --use-signing-config=false \
+                            --tlog-upload=false \
                             "${DIGEST}"
 
                         echo "✅ Image signée avec succès"
@@ -1834,6 +1918,12 @@ YMLEOF
                 def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
                 lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
+
+                // Filet de sécurité (idempotent) : SonarQube reste démarré si l'analyse échoue
+                // ou si le build est interrompu avant le post de la Quality Gate.
+                if (params.RUN_SONAR) {
+                    lib.stopSonarQube()
+                }
 
                 // Nettoyage de l'environnement ephemere
                 if (!params.KEEP_EPHEMERE_ENV) {

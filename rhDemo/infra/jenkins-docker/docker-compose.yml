@@ -7,7 +7,7 @@ services:
   # de conteneurs (agents éphémères). Tout le reste est bloqué.
   # ═══════════════════════════════════════════════════════════════════
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     container_name: rhdemo-docker-socket-proxy
     restart: unless-stopped
     privileged: true
@@ -53,9 +53,13 @@ services:
     restart: unless-stopped
     stop_grace_period: 60s
 
+    # Ports publiés sur la seule boucle locale : sans 127.0.0.1, Docker écoute sur
+    # toutes les interfaces (et ses règles iptables passent avant ufw), ce qui expose
+    # Jenkins à tout le réseau local. Les agents et SonarQube joignent Jenkins par le
+    # réseau Docker (jenkins:8080, jenkins:50000), pas par ces ports.
     ports:
-      - "8080:8080"      # Interface Web Jenkins
-      - "50000:50000"    # Port agents Jenkins (WebSocket/JNLP)
+      - "127.0.0.1:8080:8080"      # Interface Web Jenkins
+      - "127.0.0.1:50000:50000"    # Port agents Jenkins (WebSocket/JNLP)
 
     volumes:
       # Persistance des données Jenkins
@@ -66,7 +70,10 @@ services:
 
     environment:
       # Désactiver le setup wizard
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      # -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
+      # recurrenceInSeconds=30 : conteneurs d'agents orphelins nettoyés en 30 s au lieu de 300
+      #   (voir Dockerfile.jenkins et README, section dépannage « waiting for available executor »)
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics -Dcom.nirima.jenkins.plugins.docker.DockerContainerWatchdog.recurrenceInSeconds=30
 
       # Configuration as Code
       - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
@@ -78,6 +85,13 @@ services:
       - JENKINS_ADMIN_USER=${JENKINS_ADMIN_USER:-admin}
       - JENKINS_ADMIN_PASSWORD=${JENKINS_ADMIN_PASSWORD:?Définir JENKINS_ADMIN_PASSWORD dans .env avant de démarrer}
       - JENKINS_CLAUDE_PASSWORD=${JENKINS_CLAUDE_PASSWORD:?Définir JENKINS_CLAUDE_PASSWORD dans .env avant de démarrer}
+
+      # Adresse mail des notifications CI (unclassified.location.adminAddress dans
+      # jenkins-casc.yaml) — doit correspondre au compte SMTP authentifié
+      # (credential smtp-infomaniak-credentials) et au credential Jenkins
+      # notification-email (Secret text, créés manuellement), cf. jenkins-casc.yaml
+      # section CREDENTIALS pour le détail.
+      - JENKINS_NOTIFICATION_EMAIL=${JENKINS_NOTIFICATION_EMAIL:?Définir JENKINS_NOTIFICATION_EMAIL dans .env avant de démarrer}
 
       # Timezone
       - TZ=${TZ:-Europe/Paris}
@@ -99,13 +113,13 @@ services:
   # SONARQUBE - Analyse qualité du code
   # ═══════════════════════════════════════════════════════════════════
   sonarqube:
-    image: sonarqube:26.8.0.126808-community
+    image: sonarqube:26.11.0.134175-community@sha256:65541accbdb92e27fe770fc6ba99988a3dd5a0c71ffafd67f88abfad366996fa
     container_name: rhdemo-sonarqube
     restart: unless-stopped
     stop_grace_period: 30s  # Temps d'arrêt gracieux
 
     ports:
-      - "9020:9000"
+      - "127.0.0.1:9020:9000"   # Boucle locale seulement ; Jenkins utilise sonarqube:9000
 
     volumes:
       - sonarqube_data:/opt/sonarqube/data
@@ -115,9 +129,12 @@ services:
     environment:
       - SONAR_JDBC_URL=jdbc:postgresql://sonarqube-db:5432/sonar
       - SONAR_JDBC_USERNAME=sonar
-      - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
+      - SONAR_JDBC_PASSWORD=${SONAR_DB_PASSWORD:?SONAR_DB_PASSWORD doit être défini dans .env}
       - SONAR_WEB_PORT=9000
-    
+      # Autorise le webhook vers jenkins:8080 (IP privée du réseau Docker), bloqué par défaut
+      # depuis SonarQube 26.10 : sans cela waitForQualityGate n'est jamais notifié (timeout)
+      - SONAR_VALIDATEWEBHOOKS=false
+
       # Limiter Elasticsearch (Search)
       - SONAR_SEARCH_JAVAOPTS=-Xms512m -Xmx512m
       # Limiter le Web
@@ -133,7 +150,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/api/system/status || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -152,7 +169,7 @@ services:
 
     environment:
       - POSTGRES_USER=sonar
-      - POSTGRES_PASSWORD=${SONAR_DB_PASSWORD:-sonar123}
+      - POSTGRES_PASSWORD=${SONAR_DB_PASSWORD:?SONAR_DB_PASSWORD doit être défini dans .env}
       - POSTGRES_DB=sonar
       # PG18+ : le point de montage historique /var/lib/postgresql/data n'est plus le PGDATA par
       # défaut de l'image (nouveau layout style pg_ctlcluster, sous-répertoire par version majeure).
@@ -181,8 +198,10 @@ services:
     container_name: kind-registry
     restart: unless-stopped
 
+    # Boucle locale seulement : le daemon Docker de l'hôte pousse sur localhost:5000,
+    # cosign (agents) et KinD passent par le réseau Docker (kind-registry:5000).
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
 
     volumes:
       - registry_data:/var/lib/registry

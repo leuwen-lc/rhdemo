@@ -9,6 +9,8 @@ metadata:
     app: rhdemo-app
 spec:
   replicas: {{ .Values.rhdemo.replicaCount }}
+  strategy:
+    {{- toYaml .Values.rhdemo.strategy | nindent 4 }}
   selector:
     matchLabels:
       app: rhdemo-app

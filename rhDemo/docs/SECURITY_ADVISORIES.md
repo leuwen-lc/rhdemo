@@ -4,6 +4,356 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## java-21-openjdk-headless : Java4Shell et eMudhra (2026-11-19)
+
+- **Date** : 2026-11-19 — **Outil** : Trivy 0.76.1 (CI en échec, scan local de contrôle) — **Source** : revue manuelle (`fixcve` bloqué : CVSS ≥ 9 sans correctif)
+- **Constat** : le CRITICAL bloquant est CVE-2026-114938 (« Java4Shell », Red Hat CVSS 9.8, statut `affected`), écriture hors limites dans l'intrinsèque Base64 AVX-512 de C2, RCE pré-authentification annoncée sur Keycloak. Aucun RPM corrigé : Keycloak 26.8.2 (`1:21.0.13.1.2`) reste vulnérable. Prérequis matériel : `avx512f`, `avx512bw`, `avx512vbmi`, `bmi2` ; l'hôte du projet (AMD Zen 3) n'a pas AVX-512.
+- **Atténuation** : `-XX:-UseBASE64Intrinsics` (contournement publié par les découvreurs et sur oss-security), vérifié actif par `-XX:+PrintFlagsFinal` :
+  - Keycloak : `JAVA_OPTS_APPEND` dans `infra/dev`, `infra/ephemere` et `keycloak-deployment.yaml` ;
+  - application : `JAVA_OPTS` du `Dockerfile` (Temurin 25.0.5, invisible pour Trivy) ;
+  - Jenkins : `JAVA_OPTS` du contrôleur (`Dockerfile.jenkins`, `docker-compose.yml`), `JDK_JAVA_OPTIONS` de l'agent.
+- **Exclusions `.trivyignore.yaml`** :
+  - `java-21-openjdk-headless` (CVE-2026-114938) — ajoutée, `[MITIGATED]`, à retirer avec le flag au correctif Red Hat ;
+  - `java-21-openjdk-headless` (CVE-2026-91403) — passée de `[PENDING_UPSTREAM_FIX]` à permanente : Red Hat `will_not_fix` ; Keycloak sans TLS sortant vers une CA publique, `ca-certificates` corrigé depuis 26.8.1.
+- **Incident eMudhra clos** : builder `maven:3.10.0-eclipse-temurin-25-noble` et SonarQube 26.11 (Temurin 25.0.5, G3 retirée), épinglés par digest. Voir `SECURITE_CA_EMUDHRA_PLAN.md`.
+- **Non couvert** : SonarQube (Temurin 25.0.5, boucle locale et réseau Jenkins uniquement) n'a pas reçu le flag.
+- **Validation locale** : 0 CRITICAL sur l'image Keycloak avec le nouveau `.trivyignore.yaml`. Preuve finale : build CI.
+
+---
+
+## picomatch (build #1052)
+
+- **Date** : 2026-11-18 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `picomatch` 4.0.7 (CVE-2026-112366, GHSA-fc5q-39xc-vjpf, CVSS 7.5) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+---
+
+## picomatch (build #1023)
+
+- **Date** : 2026-11-06 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `picomatch` 4.0.7 (CVE-2026-112366, CVSS 8.7) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+---
+
+## Revue des exceptions Trivy (2026-11-05) — 6 exceptions retirées
+
+- **Date** : 2026-11-05 — **Outil** : Trivy 0.76.1, base du jour, scan des images actuelles et candidates — **Source** : revue manuelle
+- **Montées d'image** (`Jenkinsfile-CI`, `infra/dev` et `infra/ephemere/docker-compose.yml`, `values.yaml`) :
+  - `KEYCLOAK_IMAGE` : `quay.io/keycloak/keycloak` 26.7.2 → 26.8.1 (digest `sha256:3f3c5f8e…`)
+  - `NGINX_IMAGE` : `nginx` 1.31.3-alpine → 1.31.8-alpine-slim (digest `sha256:f45171d3…`)
+- **Exceptions retirées de `.trivyignore.yaml`** :
+  - `io.netty:netty-handler` (CVE-2026-75595) — corrigé dans Keycloak 26.8.1
+  - `org.bouncycastle:bcprov-jdk18on` (CVE-2026-8763) — corrigé dans Keycloak 26.8.1
+  - `org.freemarker:freemarker` (CVE-2026-84939) — corrigé dans Keycloak 26.8.1
+  - `ca-certificates` (CVE-2026-114406) — corrigé dans Keycloak 26.8.1 (pas dans 26.7.5)
+  - `brotli-libs` (CVE-2026-111497) — aucun tag `nginx:*-alpine` ne corrige (1.31.8 compris, `brotli-libs` 1.2.0-r1) ; la variante `alpine-slim` n'embarque pas brotli. La configuration éphémère n'utilise que des modules du cœur (ssl, http2, gzip) ; `wget` (healthcheck) et `envsubst` sont présents
+  - `libexpat` (CVE-2026-32767) — absent de l'image nginx déjà déployée (1.31.3-alpine, Alpine 3.24) : exception obsolète
+- **Exceptions conservées** :
+  - `gosu` (CVE-2025-68121, permanente) — toujours présent dans postgres 18.4 et 18.6
+  - `java-21-openjdk-headless` (CVE-2026-91403, critère B) — toujours sans correctif dans Keycloak 26.8.1 (1:21.0.13.0.9-1.2.el9)
+- **Validation locale** : 0 CRITICAL avec le nouveau `.trivyignore.yaml` sur les 4 images épinglées (nginx, Keycloak, PostgreSQL, NGF). Preuve finale : build CI (Selenium, init du realm sur Keycloak 26.8)
+
+---
+
+## flat, follow-redirects, open (build #1003)
+
+- **Date** : 2026-11-05 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `follow-redirects` 1.16.1 → 1.16.2 (CVE-2026-116689, GHSA-mrwp-f3q8-3g9p, CVSS 8.2)
+- **Remédiation automatique — risque accepté (permanent)** :
+  - `flat` 5.0.2 (CVE-2026-119051, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+  - `open` 8.4.2 (CVE-2026-119025, GHSA-q978-78c7-phqw, CVSS 7.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `flat` et `open` ne sont plus dans l'arbre. Suppressions retirées de `owasp-suppressions.xml`.
+
+---
+
+## joi, node-forge (build #989)
+
+- **Date** : 2026-10-31 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `joi` 17.13.8 → 17.13.9 (CVE-2026-118772, GHSA-4528-x5fx-h6hg, CVSS 7.5)
+  - `node-forge` 1.4.0 → 1.4.2 (CVE-2026-118779, CVE-2026-118782, CVE-2026-119187, CVE-2026-119188, CVE-2026-119190, GHSA-5x38-2vff-x55p, GHSA-7wch-p9px-956x, GHSA-8hrf-8g6f-7xwp, GHSA-hqq3-7jhf-c5jx, GHSA-jc66-7q78-782g, CVSS 7.5)
+
+---
+
+## Brotli (builds #978 et #979) — CVE-2026-111497, CVSS 9.8, exploité (CISA KEV)
+
+### Détection
+
+- **Date** : 2026-10-29 — **Outil** : Trivy (scan de l'image `nginx:1.31.3-alpine`, `NGINX_IMAGE` de `Jenkinsfile-CI`) — bloqué par `fixcve-auto` au build #978 (`findings_blocked`, CVSS ≥ 9,0 sans correctif)
+- **Composant** : `brotli-libs` 1.2.0-r1 (Alpine 3.24.1), corrigé en `1.2.1-r0` par Alpine
+- **Faille** : écriture hors limites dans le décodeur Brotli, déclenchée par un flux Brotli forgé que le logiciel décode. Score NVD `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H` = 9,8 (Red Hat 8,1 ; CVSS v4 Google/Bitnami 9,2)
+- **Exploitation connue** : ajouté au catalogue CISA KEV le 2026-10-27 (échéance fédérale 2026-11-10). Contextes cités : Node.js, Bun, .NET, Envoy, Istio, clients HTTP Python. L'attaque passe par un corps de requête `Content-Encoding: br` décodé par le serveur ou par une réponse décompressée par `fetch()`. Détail de l'exploitation non publié par CISA ; ni nginx, ni curl, ni freetype ne sont cités dans les avis consultés
+
+### Pourquoi aucun correctif automatique n'est possible
+
+`nginx:1.31.3-alpine` et les tags `1.31.4` à `1.31.8-alpine` embarquent tous `brotli-libs-1.2.0-r1` (vérifié le 2026-10-29 par `apk list -I` dans chaque image). Aucun tag d'image ne corrige encore la faille. L'image n'a pas de critère A : vecteur réseau, composant présent dans l'image.
+
+### Ce qui a été vérifié avant d'accepter (2026-10-29)
+
+- **Binaire nginx non lié à brotli** (`ldd /usr/sbin/nginx`). `brotli-libs` n'est tiré que par `freetype` et `libcurl` (`apk info -r`).
+- **Configuration de l'environnement éphémère** (`infra/ephemere/nginx/`) : aucun `load_module`, donc aucun des modules livrés avec l'image (`image_filter`, `acme`, `js`, `xslt`, `geoip`) n'est actif ; aucune directive brotli ni `js_*` ; healthcheck par `wget` ; seuls `nginx -t`, `nginx -s reload` et `netstat` sont lancés par `docker exec`.
+- **Périmètre d'usage** : l'image sert uniquement de proxy HTTPS du pipeline CI (Docker Compose éphémère). stagingkub utilise NGINX Gateway Fabric, image distincte, sans brotli dans le scan du build #979.
+- **Autres images du build #979** : Keycloak 26.7.2, NGINX Gateway Fabric 2.6.7 et PostgreSQL 18.4-alpine sans brotli ; `rhdemo-api` embarque `libbrotli1` 1.1.0-2build2 (Ubuntu 24.04), sévérité HIGH chez Ubuntu donc non bloquante, correctif `1.1.0-2ubuntu0.1` pris par une reconstruction de la base `eclipse-temurin` ; Spring Boot/Tomcat ne décode pas de Brotli.
+- **Node.js** : `pom.xml` épingle `v24.22.1`, version corrigée. La copie locale `rhDemo/frontend/node` est en `v24.21.0` (poste de développement, non exposée).
+- **Non vérifié** : images Jenkins, SonarQube, registre local, ZAP, Selenium/Chrome (hors scan Trivy) ; contenu exact du digest épinglé (vérification faite sur le tag `1.31.3-alpine`) ; fichiers de `infra/ephemere/nginx/html/` (page statique `429.html` seulement).
+
+### Remédiation — risque accepté, temporaire (2026-10-29, décision manuelle)
+
+- **Action** : suppression `CVE-2026-111497` (`brotli-libs`) ajoutée dans `rhDemo/.trivyignore.yaml`, avec jetons `[PENDING_UPSTREAM_FIX]` et `[OSV:ALPINE:v3.24]`.
+- **Revue au plus tard le 2026-11-05** (7 jours, le CVE étant exploité ailleurs) : contrôle manuel, aucune expiration automatique (`expired_at` n'est pas géré par le retrait automatique des suppressions).
+- **À retirer quand** : une image `nginx:alpine` contient `brotli-libs` ≥ 1.2.1-r0 (Alpine l'a déjà publié) ; monter alors `NGINX_IMAGE` et retirer l'entrée. À réexaminer aussitôt si un module nginx ou une directive brotli est ajouté à l'environnement éphémère.
+
+### Résolution (2026-11-05)
+
+- **Exception retirée** de `.trivyignore.yaml` : `NGINX_IMAGE` passe en `nginx:1.31.8-alpine-slim`, qui n'embarque pas `brotli-libs` (aucun tag `alpine` ne corrigeait encore). Voir « Revue des exceptions Trivy (2026-11-05) ».
+
+---
+
+## webpack-dev-server (build #974)
+
+- **Date** : 2026-10-29 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (permanent)** :
+  - `webpack-dev-server` 4.15.2 (CVE-2026-112085, GHSA-cfqc-fj3v-j925, CVSS 8.2) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `webpack-dev-server` n'est plus dans l'arbre. Suppression retirée de `owasp-suppressions.xml`.
+
+---
+
+## body-parser (build #956)
+
+- **Date** : 2026-10-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `body-parser` 1.20.8 → 1.20.9 (CVE-2026-111181, GHSA-27r3-jxmh-p828, CVSS 7.5)
+
+---
+
+## ca-certificates, java-21-openjdk-headless (build #948)
+
+- **Date** : 2026-10-23 — **Outil** : Trivy — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `ca-certificates` 2025.2.80_v9.0.305-91.el9 (CVE-2026-114406, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
+  - `java-21-openjdk-headless` 1:21.0.12.1.1-1.2.el9 (CVE-2026-91403, CVSS 6.8) — critère B, `[PENDING_UPSTREAM_FIX]`
+
+- **Résolution (2026-11-05)** : `ca-certificates` (CVE-2026-114406) corrigé dans Keycloak 26.8.1, exception retirée. `java-21-openjdk-headless` (CVE-2026-91403) toujours sans correctif (1:21.0.13.0.9-1.2.el9 dans 26.8.1), exception conservée.
+
+---
+
+## com.fasterxml.jackson.core:jackson-databind, tools.jackson.core:jackson-databind (build #942)
+
+- **Date** : 2026-10-22 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `com.fasterxml.jackson.core:jackson-databind` 2.21.7 → 2.21.8 (CVE-2026-110879, CVSS 9.2)
+  - `tools.jackson.core:jackson-databind` 3.1.7 → 3.1.8 (CVE-2026-110879, CVSS 9.2)
+
+---
+
+## follow-redirects, launch-editor, org.hibernate.validator:hibernate-validator, picomatch (build #936)
+
+- **Date** : 2026-10-21 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `follow-redirects` 1.16.0 → 1.16.1 (CVE-2026-111755, CVE-2026-111756, GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8, CVSS 10.0)
+  - `launch-editor` 2.14.1 → 2.14.2 (CVE-2026-112942, GHSA-587h-7wmj-h5pm, CVSS 10.0)
+  - `org.hibernate.validator:hibernate-validator` 9.1.3.Final → 9.1.5.Final (CVE-2026-93879, CVSS 8.7)
+- **Remédiation automatique — risque accepté (permanent)** :
+  - `picomatch` 2.3.2 (CVE-2026-112366, CVSS 8.7) — critère A : toutes les copies installées sont marquées dev=true dans frontend/package-lock.json : chaîne de build uniquement, jamais dans le bundle de production
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `picomatch` 2.3.2 n'est plus dans l'arbre (seul 4.0.7 reste, via Vite), `npm audit` sans alerte. Suppression retirée de `owasp-suppressions.xml`.
+
+---
+
+## node-forge, webpack-dev-middleware, source-map-js (build #914) — CVSS 7.5 / 7.4 / 8.7
+
+- **Date** : 2026-10-09 — **Outil** : OWASP Dependency-Check (npm)
+- **Remédiation automatique — risque accepté (permanent)** : suppressions ajoutées dans `rhDemo/owasp-suppressions.xml`, sans jeton `[PENDING_UPSTREAM_FIX]`, pour `node-forge` 1.4.0 (GHSA-86w9-cpqp-85rv / GHSA-ppp5-5v6c-4jwp, CVSS 7.5) et `webpack-dev-middleware` 5.3.4 (GHSA-g84c-rxfj-3j2c / GHSA-wr3j-pwj9-hqq6, CVE-2026-76844, CVSS 7.4).
+- **Justification (Critère A)** : `npm_dev_only: true` (toutes les copies `dev=true` dans `frontend/package-lock.json`), chaîne de build `@vue/cli-service` uniquement, jamais dans le bundle de production. `npm audit` ne propose aucun correctif.
+- **Remédiation automatique** : `source-map-js` monté en 1.2.2 (clôture de l'exclusion temporaire CVE-2026-93749, `[PENDING_UPSTREAM_FIX]` retirée de `owasp-suppressions.xml`, correctif désormais publié).
+- **Non traité (bloqué)** : `brace-expansion` 1.1.18 (GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7, CVSS 7.5) — `lookup_failed` avec CVSS ≥ 7.0, aucune suppression appliquée ; revue humaine requise.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `node-forge` et `webpack-dev-middleware` ne sont plus dans l'arbre ; `source-map-js` n'est plus une dépendance directe. Suppressions retirées de `owasp-suppressions.xml`.
+
+---
+
+## shell-quote (build #907) — CVE-2026-102422, CVSS 9.2
+
+- **Date** : 2026-10-05 — **Outil** : OWASP Dependency-Check (npm, `shell-quote` 1.10.0)
+- **Remédiation automatique — risque accepté (permanent)** : suppression ajoutée dans `rhDemo/owasp-suppressions.xml`, sans jeton `[PENDING_UPSTREAM_FIX]`.
+- **Justification (Critère A)** : toutes les copies installées sont marquées `dev=true` dans `frontend/package-lock.json` (`npm_dev_only: true`), atteintes uniquement via la chaîne de build `@vue/cli-service`, jamais dans le bundle de production. `npm audit` ne propose aucun correctif.
+- **Limite** : la validation locale `dependency-check` n'a pas pu mettre à jour la base NVD (clé API absente) ; la suppression n'a donc pas été confirmée par un scan local.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `shell-quote` n'est plus dans l'arbre. Suppression retirée de `owasp-suppressions.xml`.
+
+---
+
+## Keycloak (builds #890 à #895) — CVE-2026-8763 (bcprov) et CVE-2026-84939 (freemarker), CVSS 9.1
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (stage Trivy, atteint pour la première fois au build #890 une fois OWASP redevenu propre ; bloqué par `fixcve-auto` au build #895 : `blocked_needs_human`, CVSS ≥ 9.0 sans correctif)
+- **Outil** : Trivy (scan de l'image `quay.io/keycloak/keycloak:26.7.2`, `KEYCLOAK_IMAGE` de `Jenkinsfile-CI`)
+- **Composants affectés** (jars embarqués, non remédiables par un changement du projet) :
+  - `org.bouncycastle:bcprov-jdk18on` 1.84 (corrigé en 1.85) — présent à deux emplacements de l'image, d'où un doublon dans le rapport Trivy (corrigé côté `fixcve-detect.py`, commit 12e855a)
+  - `org.freemarker:freemarker` 2.3.32 (corrigé en 2.3.35)
+
+### Pourquoi aucun correctif automatique n'est possible
+
+Les versions corrigées (`1.85`, `2.3.35`) sont des versions de bibliothèques, pas des tags d'image : `fixcve-auto` ne peut pas en déduire un bump de `KEYCLOAK_IMAGE`. Vérification manuelle dans les POM publiés (2026-09-28) : les versions Keycloak 26.7.2, 26.7.3 et 26.7.4 (dernière stable) embarquent toutes `bcprov` 1.84 (BOM Quarkus 3.33.3.x) et `freemarker` 2.3.32. Un bump vers 26.7.3 ou 26.7.4 ne corrige donc ni l'une ni l'autre. Cette conclusion vient des POM et non d'un scan des images.
+
+### Remédiation — risque accepté (suppression Trivy documentée) (2026-09-28, décision manuelle)
+
+- **Action** : suppressions `CVE-2026-8763` (`org.bouncycastle:bcprov-jdk18on`) et `CVE-2026-84939` (`org.freemarker:freemarker`) ajoutées dans `rhDemo/.trivyignore.yaml`, avec jeton `[PENDING_UPSTREAM_FIX]`.
+- **CVE-2026-8763 (bcprov)** — contournement des contraintes de noms X.509 (point final dans un `rfc822Name` ou une URI) lors de la validation d'un chemin de certification portant une extension `NameConstraints`. Vecteur `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N`. **Justification (exploitabilité nulle)** : aucune validation de chemin de certification n'est sollicitée — clients Keycloak en `client-secret` (`ClientService`), aucun flux X.509 / truststore / mTLS / fournisseur d'identité configuré dans `rhDemoInitKeycloak`, LDAP désactivé (`allowLdap: false`), listener HTTPS de Keycloak désactivé en stagingkub (`--https-port=-1`), TLS terminé par Nginx/NGF.
+- **CVE-2026-84939 (freemarker)** — traversée de chemin lors du chargement d'un gabarit, si un attaquant peut fournir un identifiant de locale malformé et que la recherche localisée est active (par défaut) ; les fichiers lisibles restent bornés par le `TemplateLoader`. Vecteur `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N`. **Justification (mesurée)** : l'internationalisation est désactivée sur le realm RHDemo (aucun réglage de locales dans `RealmService`, aucun thème personnalisé). Test du 2026-09-28 sur le Keycloak de stagingkub (26.7.2) : la page de connexion est identique, aux 8 lignes de jetons de session près, avec `ui_locales`, `kc_locale`, `Accept-Language` et cookie `KEYCLOAK_LOCALE` valides (`fr`) ou malformés (`../../x`, `../../../../etc/passwd`, `en_US_../../x`), sans erreur : la locale de la requête n'atteint pas FreeMarker.
+- **Limites de cette justification (non vérifié)** : le chemin de génération des mails (aucun SMTP configuré dans le realm, sortie SMTP interdite par la NetworkPolicy `allowSmtp: false` — mais le rendu du gabarit reste théoriquement possible) ; les environnements dev et ephemere (même image et même code d'initialisation, non testés) ; le mécanisme interne de Keycloak (conclusion tirée du comportement observé, pas de la lecture du code).
+- **À retirer quand** : Keycloak publie une release stable embarquant `bcprov` ≥ 1.85 et `freemarker` ≥ 2.3.35 — puis monter `KEYCLOAK_IMAGE` et retirer les entrées de `.trivyignore.yaml`.
+- **À réexaminer immédiatement si** : l'internationalisation est activée sur le realm, un SMTP est configuré, ou un flux X.509 / mTLS / fournisseur d'identité externe est ajouté (les deux justifications cesseraient d'être valables).
+
+### Résolution (2026-11-05)
+
+- **Exceptions retirées** de `.trivyignore.yaml` : Keycloak 26.8.1 embarque `bcprov` et `freemarker` corrigés (scan Trivy) ; `KEYCLOAK_IMAGE` monté en 26.8.1. Voir « Revue des exceptions Trivy (2026-11-05) ».
+
+---
+
+## build #892 (OWASP Dependency-Check) — montées Hibernate/Jackson, 2 CVE spring-security acceptées temporairement
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (build Jenkins RHDemo-CI #892, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `org.hibernate.orm:hibernate-core` 7.4.5.Final, `jackson-core` / `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5), `spring-security-crypto` 7.1.1, `spring-security-web` 7.1.1 (maven)
+- **Contexte** : mêmes findings que le build #889. Le correctif du build #889 (commit 2e3ccc3) avait été annulé par le rollback du build #890 à cause d'un échec Trivy sans rapport (3 CRITICAL sur les images Docker, aucun finding OWASP dans le build de validation). Il est réappliqué à l'identique.
+
+### Remédiation automatique (2026-09-28, build #892)
+
+Montées de version via les propriétés du BOM Spring Boot dans `pom.xml`. Versions effectivement résolues vérifiées dans le rapport OWASP local (`hibernate-core-7.4.11.Final`, `jackson-core/databind-2.21.7`, `jackson-core/databind-3.1.7`).
+
+- **CVE-2026-77874** — `hibernate-core` 7.4.5.Final -> 7.4.11.Final (`hibernate.version`, CVSS 8.6).
+- **CVE-2026-68498, CVE-2026-89407, CVE-2026-89425** — `jackson-core` `com.fasterxml.jackson.core` 2.21.5 -> 2.21.7 (`jackson-2-bom.version`) et `tools.jackson.core` 3.1.5 -> 3.1.7 (`jackson-bom.version`).
+- **CVE-2026-68497, CVE-2026-83557** — `jackson-databind`, mêmes montées 2.21.7 / 3.1.7.
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-28, build #892)
+
+Suppression avec jeton `[PENDING_UPSTREAM_FIX]`, revérifiée par la phase 2 à chaque cycle. **Critère B** : Critère A non vérifié (scope runtime via `spring-boot-starter-security`, vecteur `AV:N`), CVSS strictement inférieur à 9.0, aucune version corrigée sur Maven Central. Suppression scopée au groupId `org.springframework.security`.
+
+- **CVE-2026-47842** — `spring-security-crypto` 7.1.1 (IV nul tout-à-zéro avec `AesBytesEncryptor` en mode CBC, CVSS 7.1).
+- **CVE-2026-47838** — `spring-security-web` 7.1.1 (`SubjectDnX509PrincipalExtractor`, CN X.509 malformé, CVSS 8.1).
+- **À retirer** : automatiquement dès qu'une version corrigée est détectée par la phase 2.
+
+### Validation locale
+
+`owasp-suppressions.xml` : parsing XML validé. `./mvnw org.owasp:dependency-check-maven:check` n'a **pas** pu s'exécuter complètement (clé API NVD absente de l'environnement : `Invalid API Key, length of 0`) ; l'absence des CVE n'est donc pas confirmée localement, seules les versions résolues le sont. La validation complète est reportée au prochain scan Jenkins.
+
+---
+
+## build #884 (OWASP Dependency-Check) — 7 findings npm supprimés, 5 groupes Maven bloqués
+
+### Détection
+
+- **Date de détection** : 2026-09-28 (build Jenkins RHDemo-CI #884, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `braces` 3.0.3, `compression` 1.8.1, `minimatch` 3.1.5, `proxy-addr` 2.0.7, `serialize-javascript` 6.0.2, `source-map-js` 1.2.1, `uri-js` 4.4.1 (npm) ; `hibernate-core` 7.4.5.Final, `jackson-core` / `jackson-databind` (2.21.5 et 3.1.5), `spring-security-crypto` 7.1.1, `spring-security-web` 7.1.1 (maven)
+
+### Remédiation automatique — risque accepté (permanent) (2026-09-28, build #884)
+
+Suppressions `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Critère A** : `npm_dev_only: true` (lookup.json, toutes les copies marquées `dev=true` dans `frontend/package-lock.json`) — paquets atteints uniquement par la chaîne de build `@vue/cli-service`, jamais dans le bundle de production. `npm audit` : « No fix available ». Le Critère A prime sur le score CVSS.
+
+- **CVE-2026-93687** — `braces` 3.0.3 (dépassement de pile via motifs d'accolades imbriqués, CVSS 8.7).
+- **CVE-2026-87776** — `compression` 1.8.1 (CVSS 7.5, DoS sur abandon de connexion).
+- **CVE-2026-27904** — `minimatch` 3.1.5 (ReDoS extglob, CVSS 8.7). Complète la suppression du build #849 (nouvelle instance du package dev-only).
+- **CVE-2026-90711** — `proxy-addr` 2.0.7 (contournement de sous-réseau de confiance, CVSS **9.3**). Supprimable malgré le CVSS ≥ 9.0 car Critère A vérifié ; ce finding avait bloqué à lui seul le traitement des autres CVE aux builds #878/#882.
+- **CVE-2026-34043** — `serialize-javascript` 6.0.2 (DoS CPU, CVSS 7.5). Même justification que le build #849.
+- **CVE-2026-93690** — `uri-js` 4.4.1 (boucle infinie dans `removeDotSegments`, CVSS 8.7).
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-28, build #884)
+
+Suppression avec jeton `[PENDING_UPSTREAM_FIX]`, revérifiée par la phase 2 à chaque cycle. **Critère B** : Critère A non vérifié, CVSS strictement inférieur à 9.0.
+
+- **CVE-2026-93749** — `source-map-js` 1.2.1 (offset de section non validé dans les source maps indexées, DoS, CVSS 8.7). `npm_dev_only: false`, aucun correctif publié.
+- **À retirer** : automatiquement dès qu'une version corrigée est détectée par la phase 2.
+
+### Findings bloqués — intervention humaine requise (2026-09-28, build #884)
+
+Aucune suppression ni montée de version : `fix_status: lookup_failed` (Maven Central) avec CVSS ≥ 7.0 — un échec de recherche n'est jamais masqué par une suppression. Ces findings resteront en échec au build suivant.
+
+- `org.hibernate.orm:hibernate-core` 7.4.5.Final — CVE-2026-77874 (CVSS 8.6).
+- `jackson-core` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5) — CVE-2026-68498 (8.7), CVE-2026-89407 (7.5), CVE-2026-89425 (7.5).
+- `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 et `tools.jackson.core` 3.1.5) — CVE-2026-68497 (8.7), CVE-2026-83557 (8.7).
+- `org.springframework.security:spring-security-crypto` 7.1.1 — CVE-2026-47842 (7.1).
+- `org.springframework.security:spring-security-web` 7.1.1 — CVE-2026-47838 (8.1).
+
+### Validation locale
+
+`owasp-suppressions.xml` : parsing XML validé. `./mvnw org.owasp:dependency-check-maven:check` n'a **pas** pu s'exécuter complètement (clé API NVD absente de l'environnement : `Invalid API Key, length of 0`) ; la validation complète est donc reportée au prochain scan Jenkins.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `braces`, `compression`, `minimatch`, `proxy-addr`, `serialize-javascript` et `uri-js` ne sont plus dans l'arbre ; la suppression npm restante de ce build (`source-map-js`) était déjà levée. Les findings Maven du même build ne sont pas concernés. Suppressions retirées de `owasp-suppressions.xml`.
+
+---
+
+## netty-handler (build #860) — CVE-2026-75595 (CVSS 9.1)
+
+### Détection
+
+- **Date de détection** : 2026-09-10 (build Jenkins RHDemo-CI #860)
+- **Outil** : Trivy (scan image `quay.io/keycloak/keycloak`)
+- **Sévérité** : CRITICAL (CVSS 4.0 : 9.1, vecteur `CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N`)
+- **Composant affecté** : `io.netty:netty-handler` 4.1.136.Final — jar embarqué dans l'image `quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0` (`KEYCLOAK_IMAGE` de `Jenkinsfile-CI`), chemin `opt/keycloak/lib/lib/main/io.netty.netty-handler-4.1.136.Final.jar`, tiré transitivement par Quarkus 3.33.x.
+
+### Description
+
+`io.netty.handler.ssl.SslClientHelloHandler#decode` vérifie le mauvais offset avant de lire l'en-tête de handshake TLS de 4 octets : un `ClientHello` dont l'en-tête de handshake est fragmenté sur plusieurs records provoque une `IndexOutOfBoundsException` et l'appel `select(ctx, null)`, ce qui sélectionne le `SslContext` par défaut au lieu du contexte spécifique au SNI. Dans les déploiements où un `clientAuth=REQUIRE` par SNI est l'unique barrière mTLS, où le `SslContext` par défaut utilise `clientAuth=NONE`/`OPTIONAL`, et où aucune vérification de certificat n'a lieu au niveau applicatif, un attaquant distant non authentifié peut contourner l'exigence de TLS mutuel de la route protégée. Corrigé dans Netty 4.1.137.Final et 4.2.17.Final.
+
+### Remédiation — risque accepté (suppression Trivy documentée) (2026-09-10, build #860)
+
+- **Action** : suppression `CVE-2026-75595` ajoutée dans `rhDemo/.trivyignore.yaml`, ciblée sur `pkg-name: io.netty:netty-handler`, avec jeton `[PENDING_UPSTREAM_FIX]`.
+- **Fichier modifié** : `rhDemo/.trivyignore.yaml`.
+- **Justification (exploitabilité nulle)** : la faille n'est atteignable que si Keycloak/Quarkus termine lui-même le TLS avec un routage per-SNI `clientAuth=REQUIRE` comme seule barrière mTLS. Or dans tous les environnements RHDemo, Keycloak tourne en `start-dev --http-enabled=true`, le TLS est terminé par Nginx / NGF (`--proxy-headers=xforwarded`), le listener HTTPS est explicitement désactivé en stagingkub (`--https-port=-1`), et aucune authentification par certificat client (mTLS) n'est configurée. Le handler vulnérable `io.netty.handler.ssl.SslClientHelloHandler` n'est jamais instancié. La NetworkPolicy Zero Trust restreint par ailleurs l'entrée vers Keycloak au proxy d'ingress et à `rhdemo-app`.
+- **Aucune montée de version possible** : aucune image Keycloak stable ne corrige la CVE au 2026-09-10. La `26.7.3` (dernière stable, 2026-08-31) embarque toujours `netty-handler` 4.1.136.Final. Seule l'image `quay.io/keycloak/keycloak:nightly` (Quarkus 3.39.1) embarque `netty-handler` 4.1.137.Final.
+- **À retirer quand** : Keycloak publie une release stable basée sur Quarkus ≥ 3.39 (`netty-handler` ≥ 4.1.137.Final) — puis monter `KEYCLOAK_IMAGE` et retirer l'entrée de `.trivyignore.yaml`. Revérification automatique via l'étape 0 de fixcve-auto (jeton `[PENDING_UPSTREAM_FIX]`).
+
+### Résolution (2026-11-05)
+
+- **Exception retirée** de `.trivyignore.yaml` : Keycloak 26.8.1 embarque `netty-handler` corrigé (scan Trivy) ; `KEYCLOAK_IMAGE` monté en 26.8.1. Voir « Revue des exceptions Trivy (2026-11-05) ».
+
+---
+
+## build #849 (OWASP Dependency-Check) — 11 findings npm/maven
+
+### Détection
+
+- **Date de détection** : 2026-09-03 (build Jenkins RHDemo-CI #849, stage OWASP Dependency-Check)
+- **Outil** : OWASP Dependency-Check
+- **Composants affectés** : `browserslist` 4.28.1, `fast-uri` 3.1.5 (npm) ; `form-data` 4.0.6, `minimatch` 3.1.5, `serialize-javascript` 6.0.2 (npm) ; `com.fasterxml.jackson.core:jackson-databind` 2.21.5 et `tools.jackson.core:jackson-databind` 3.x, `org.springframework.security:spring-security-crypto` 7.1.1, `org.springframework.security:spring-security-web` 7.1.1 (maven)
+
+### Remédiation automatique (2026-09-03, build #849)
+
+- **Action** : `frontend/node/npm --prefix frontend audit fix --package-lock-only` — montée de version effective (vérifiée via `npm audit`, paquets disparus de l'arbre résolu) :
+  - `browserslist` 4.28.1 → 4.28.8 (≥ 4.28.7) — corrige `CVE-2026-73088`, `GHSA-73wf-gq98-2v4g`, `GHSA-c83g-rgw3-j3cx` (DoS, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`, CVSS 7.5).
+  - `fast-uri` 3.1.5 → 3.1.7 (≥ 3.1.6) — corrige `CVE-2026-75899`, `CVE-2026-75931`, `CVE-2026-75975`, `CVE-2026-76172`, `GHSA-5jgf-p345-68v8`, `GHSA-f65p-4m7j-42xc`, `GHSA-fph4-wmhf-6fwf`, `GHSA-jqff-g426-hqxp` (mauvaise canonicalisation d'URI, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N`, CVSS 7.5).
+  - Montées collatérales sans rapport avec une CVE listée : `electron-to-chromium`, `node-releases`, `update-browserslist-db`, `postcss-selector-parser` (chaîne de build).
+
+### Remédiation automatique — risque accepté (permanent) (2026-09-03, build #849)
+
+- **CVE-2026-27904** — `minimatch` 3.1.5 (ReDoS via extglob `*()` imbriqués, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Suppression `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Justification** : `minimatch` 3.1.5 n'est atteint que via la chaîne de build `@vue/cli-service` (devDependency) → `glob`/`rimraf`, marqué `dev=true` dans `frontend/package-lock.json`, absent de `dependencies` de `frontend/package.json`. `npm audit` rapporte « No fix available » en `package-lock-only` ; la branche 10.x exigerait l'option `--force`, exclue par la politique `fixcve-auto`. Jamais embarqué dans le bundle de production `vue-cli-service build`. **Critère A** (package npm exclusivement dans la chaîne `devDependencies`).
+- **CVE-2026-34043** — `serialize-javascript` 6.0.2 (DoS par épuisement CPU sur objets array-like forgés, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`, CVSS 7.5). Suppression `owasp-suppressions.xml` **sans** jeton `PENDING_UPSTREAM_FIX`. **Justification** : atteint exclusivement via `copy-webpack-plugin` et `css-minimizer-webpack-plugin` (dépendances de `@vue/cli-service`, devDependency), marqué `dev=true` dans `frontend/package-lock.json`. `npm audit` rapporte « No fix available » en `package-lock-only` ; la montée vers 7.0.5+ exigerait un saut majeur des plugins webpack via `--force`, exclue par la politique `fixcve-auto`. Jamais embarqué dans le bundle de production `vue-cli-service build`. **Critère A** (package npm exclusivement dans la chaîne `devDependencies`). **Note** : les builds #844 et #846 avaient échoué et été rollés back en tentant un pin/`overrides` sans effet réel sur l'arbre résolu ; la suppression documentée est la remédiation correcte (phase 2 renvoie désormais `no_fix_available`).
+
+### Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream) (2026-09-03, build #849)
+
+Suppressions `owasp-suppressions.xml` **avec** jeton `[PENDING_UPSTREAM_FIX]` en tête de `<notes>` — revérifiées automatiquement par la phase 2 de `fixcve-auto` à chaque cycle suivant. **Critère B** : aucun critère A vérifié, CVSS strictement inférieure à 9.0.
+
+- **CVE-2026-10143** — `form-data` 4.0.6 (DoS, allocation de ressources sans limite, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Dépendance transitive de **production** via `axios` (donc Critère A « exclusivement devDependencies » non vérifié). Aucune version corrigée publiée sur npm. **Atténuation** : le bundle navigateur produit par `vue-cli-service build` utilise le `FormData` natif du navigateur ; l'adaptateur Node d'`axios`, seul consommateur du package `form-data`, n'y est pas inclus.
+- **CVE-2026-68497** — `jackson-databind` (`com.fasterxml.jackson.core` 2.21.5 **et** `tools.jackson.core` 3.x) — Allocation of Resources Without Limits or Throttling, CWE-770 (DoS, `CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H`, CVSS 8.7). Scope compile/runtime (transitif via `spring-boot-starter-web` / sérialisation JSON), pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central. Suppression scopée aux deux `groupId` de l'artefact `jackson-databind`.
+- **CVE-2026-47842** — `org.springframework.security:spring-security-crypto` 7.1.1 (`AesBytesEncryptor` avec le constructeur à deux arguments, ou un générateur d'IV `null`, et le mode CBC chiffre avec un IV nul tout-à-zéro ; `CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:H`, CVSS 7.1). Scope runtime via `spring-boot-starter-security`, pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central.
+- **CVE-2026-47838** — `org.springframework.security:spring-security-web` 7.1.1 (`SubjectDnX509PrincipalExtractor` traite mal certaines valeurs CN de certificat X.509 malformées et peut lire un mauvais nom d'utilisateur ; `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N`, CVSS 8.1). Scope runtime via `spring-boot-starter-security`, pas `test`/`provided`. Aucune version corrigée publiée sur Maven Central.
+
+- **À retirer** : automatiquement, dès qu'une version corrigée sera détectée par la phase 2 (revérification du jeton `[PENDING_UPSTREAM_FIX]`) — montée de version réelle appliquée et note de clôture ajoutée ici.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). `minimatch` et `serialize-javascript` ne sont plus dans l'arbre ; `form-data` (production, via `axios`) n'est pas concerné. Suppressions retirées de `owasp-suppressions.xml`.
+
+---
+
 ## keycloak-services (build #826) — CVE-2026-18963 (CVSS 9.1)
 
 ### Détection
@@ -137,6 +487,8 @@ Un lot de CVE/GHSA CVSS ≥ 7 a été détecté sur des dépendances npm transit
   - `uuid` GHSA-w5hq-g745-h8pq
 - **CVE-2022-37620 (`html-minifier-terser`)** : faux positif de correspondance CPE (confusion avec le projet non maintenu `html-minifier`) — suppression documentée, package également limité à la chaîne de build.
 - **CVE-2026-65898 (DOMPurify 3.3.2 dans swagger-ui)** : pas de version springdoc-openapi plus récente que 3.0.3 disponible sur Maven Central ; suppression ajoutée à la suite des suppressions DOMPurify déjà existantes (même rationale : Swagger UI protégé par Spring Security, DOMPurify jamais utilisé par `frontend/src`).
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `@vue/cli-service` et sa chaîne webpack ont disparu de `frontend/package-lock.json` (151 paquets, `npm audit` sans alerte). Les suppressions permanentes `serialize-javascript`, `uuid` et `html-minifier-terser` ne sont plus dans l'arbre. Suppressions retirées de `owasp-suppressions.xml`.
 
 ---
 
@@ -459,6 +811,8 @@ Lecture de fichier arbitraire via `sourceMappingURL` lors du traitement d'un fic
 - **Justification** : `postcss:7.0.39` est fixé par la contrainte `^7.0.36` de `@vue/component-compiler-utils:3.3.0`, lui-même dépendance de build de `@vue/cli-service` (`dev=true` dans `package-lock.json` — absent de `dependencies`/`devDependencies` directes de `frontend/package.json`). `npm audit fix --package-lock-only` rapporte `fixAvailable: false` : la mise à jour vers `8.5.12` impliquerait un saut de version majeure (7.x → 8.x) au-delà de la contrainte semver déclarée, nécessitant `--force` — exclu par la politique du skill `fixcve-auto`. Cette instance de `postcss` ne traite que le CSS des composants `.vue` écrits par l'équipe (pipeline `vue-cli-service build`), jamais de CSS externe/non fiable comme le décrit le vecteur d'attaque de la CVE, et n'est jamais embarquée dans le bundle de production (un second `postcss` 8.5.26, non affecté, coexiste au niveau supérieur du graphe pour l'usage de production).
 - **Incident associé** : ce CVE est la cause racine des rollbacks automatiques des builds #760 et #762 (le correctif poussé au build #759 avait traité DOMPurify sans traiter celui-ci — voir `rhDemo/docs/FIXCVE_AUTO.md`) — corrigé manuellement après durcissement du skill `fixcve-auto` (validation locale obligatoire avant push ; cette étape vit désormais dans `.claude/skills/fixcve-auto-apply/SKILL.md` suite à la séparation en 3 phases, voir `rhDemo/docs/FIXCVE_AUTO.md`).
 - **À retirer** : dès que `@vue/component-compiler-utils` (ou sa chaîne de dépendances) embarque une version de `postcss >= 8.5.12`.
+
+- **Résolu le 2026-11-06** (migration Vue CLI vers Vite, voir `MIGRATION_VITE.md`) : `postcss` 7.0.39 (transitif de `@vue/component-compiler-utils`, dépendance de `@vue/cli-service`) n'existe plus ; seul `postcss` 8.5.32 (Vite) reste. Suppressions retirées de `owasp-suppressions.xml`.
 
 ---
 

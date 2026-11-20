@@ -98,6 +98,13 @@ class KeycloakLogoutSuccessHandlerTest {
         }
 
         @Test
+        @DisplayName("doit retourner un Optional vide si /protocol/openid-connect/auth est au tout début")
+        void shouldReturnEmptyIfAuthPathAtIndexZero() {
+            Optional<String> result = handler.deriveLogoutUri("/protocol/openid-connect/auth?param=value");
+            assertThat(result).isEmpty();
+        }
+
+        @Test
         @DisplayName("doit gérer les URIs avec /protocol/openid-connect/auth au milieu")
         void shouldHandleAuthPathInMiddle() {
             String uri = "https://keycloak.example.com/realms/RHDemo/protocol/openid-connect/auth?param=value";
@@ -202,6 +209,16 @@ class KeycloakLogoutSuccessHandlerTest {
             String result = handler.buildBaseUrl(request);
 
             assertThat(result).isEqualTo("http://localhost:9000");
+        }
+
+        @Test
+        @DisplayName("ne doit pas inclure un port 0 (port non résolu)")
+        void shouldNotIncludePortZero() {
+            when(request.getScheme()).thenReturn("http");
+            when(request.getServerName()).thenReturn("localhost");
+            when(request.getServerPort()).thenReturn(0);
+
+            assertThat(handler.buildBaseUrl(request)).isEqualTo("http://localhost");
         }
 
         @ParameterizedTest(name = "ForwardedHeaderFilter résolu: scheme={0}, host={1}, port={2} → {3}")

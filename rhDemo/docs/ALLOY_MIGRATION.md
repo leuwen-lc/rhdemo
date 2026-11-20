@@ -1,6 +1,14 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/observability/alloy-values.yaml
+  - rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-alloy.sh
+---
+
 # Migration Promtail → Grafana Alloy (stagingkub)
 
-**Statut** : ✅ Code migré, cluster pas encore recréé (à faire par l'utilisateur)
+**Statut** : ✅ Migration réalisée — Alloy déployé dans le cluster stagingkub (DaemonSet `alloy`, namespace `loki-stack`)
 **Environnement** : stagingkub (Kubernetes/KinD)
 **Version Alloy** : chart `grafana/alloy` 1.11.0 (Alloy v1.18.0)
 

@@ -1,3 +1,10 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/frontend/src/components/
+---
+
 # 🎯 Guide des attributs data-testid
 
 ## 📋 Vue d'ensemble

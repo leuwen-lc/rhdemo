@@ -1,0 +1,15 @@
+# Contexte de build Docker limité à ce que le Dockerfile copie (liste blanche).
+# Sans ce fichier, tout rhDemo/ est envoyé au daemon (360 Mo en CI : target/, Node et
+# node_modules du frontend), et les répertoires générés de l'hôte arrivent dans le stage builder.
+# À compléter si le Dockerfile copie un nouveau fichier ou répertoire.
+*
+!pom.xml
+!mvnw
+!.mvn/
+!src/
+!frontend/
+
+# Générés par le build (frontend-maven-plugin, npm ci, vite) : refaits dans le stage builder
+frontend/node/
+frontend/node_modules/
+frontend/dist/

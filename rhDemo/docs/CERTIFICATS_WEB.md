@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-23
+sources:
+  - rhDemo/infra/stagingkub/shared-gateway.yaml
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # Certificats TLS pour l'environnement stagingkub
 
 Ce document décrit les deux options de gestion des certificats TLS pour l'environnement Kubernetes stagingkub :
@@ -132,7 +141,7 @@ Ce script :
 - Crée une `HTTPRoute` dans `loki-stack` attachée au `shared-gateway` (namespace `nginx-gateway`) via `kubectl apply` inline
 - Grafana est ainsi exposé via le même certificat `shared-tls-cert` que les autres services
 
-> **Note** : Le fichier `infra/stagingkub/helm/observability/grafana-gateway.yaml` présent dans le dépôt est une **ancienne architecture** (gateway dédié dans `loki-stack` avec `intra-wildcard-tls`). Il n'est plus appliqué par les scripts. L'architecture active utilise le `shared-gateway` décrit ci-dessus.
+> **Note** : l'ancien fichier `grafana-gateway.yaml` (gateway dédié dans `loki-stack`) a été supprimé ; l'architecture active utilise le `shared-gateway` décrit ci-dessus.
 
 #### 4. Déployer l'application
 

@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/scripts/components/
+  - rhDemo/infra/stagingkub/rbac/
+---
+
 # Mise à jour en place de l'infrastructure stagingkub
 
 ## Objectif

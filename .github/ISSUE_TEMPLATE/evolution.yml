@@ -1,0 +1,22 @@
+name: Proposer une évolution
+description: Idée de fonctionnalité, d'amélioration ou de documentation
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Besoin ou problème à résoudre
+    validations:
+      required: true
+  - type: textarea
+    id: proposition
+    attributes:
+      label: Proposition
+      description: Solution envisagée et alternatives étudiées.
+  - type: checkboxes
+    id: principes
+    attributes:
+      label: Principes du projet
+      options:
+        - label: La proposition reste compatible avec les invariants de sécurité et avec le 100 % logiciel libre (voir CONTRIBUTING.md).
+          required: true

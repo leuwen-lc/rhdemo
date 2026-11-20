@@ -1,0 +1,290 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/scripts/
+  - rhDemo/scripts/tests/
+---
+
+# fixcve-auto — plan d'évolutions
+
+> **Bilan au 2026-10-22 : plan essentiellement appliqué, conservé pour l'historique.** Les éléments A, B, C, D, E (hors exécution en CI), I, K, L et M sont réalisés (voir la section 1 et [FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+>
+> **Non appliqué** (aucun n'est abandonné formellement ; vérifié dans le code le 2026-10-22) :
+>
+> | Élément | Constat |
+> | --- | --- |
+> | **F** (`fixcve-ctl`) | Absent de `rhDemo/scripts/` ; les éditions de `state.json` restent manuelles. |
+> | **G** (harmonisation du script de polling) | Non faite : `fixcve-auto-poll.sh` fait toujours près de 1 000 lignes, sans fonction `audit_event` commune. |
+> | **H** (journal simplifié) | Non faite : `fixcve-audit.jsonl` contient 18 types d'événements. |
+> | **J** (publication par branche de validation) | Reporté le 2026-10-09 (modification de `jenkins-casc.yaml`). |
+> | Exécution des tests en CI (section 8) | Décision non prise. |
+
+Plan détaillé issu de la revue complète du 2026-09-28, complété par la revue du 2026-10-09 (section 10, qui ajuste l'ordre de la section 6), à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
+
+**Principe directeur** : simplifier et harmoniser **sans perdre** ce que la mise au point incrémentale a construit (chaque garde-fou existe à cause d'un incident réel) ni le modèle de sécurité contre l'injection de prompt. Chaque étape est donc livrée avec un test qui rejoue l'incident d'origine.
+
+---
+
+## 1. État au 2026-10-09 (après la refonte)
+
+| Élément | État |
+| --- | --- |
+| **A** (environnement épuré, plafonds des phases LLM) | Fait (f048027), puis **sans objet** : la procédure n'invoque plus de LLM. |
+| **B** (commit/push par le script) | **Fait** : application, commit (correctif puis journal) et push par `fixcve-auto-poll.sh` ; le message de commit est construit par `fixcve-apply.py`. |
+| **C** (épinglage de confiance, skills versionnés) | **Fait** : `trusted.sha256` + `fixcve-install.sh --trust` ; skill interactif versionné dans `rhDemo/scripts/fixcve-skills/`. Les skills `fixcve-auto-lookup`/`-apply` ne sont plus utilisés (suppression locale manuelle). |
+| **D** (décisions et recherches déterministes) | **Fait** : `fixcve-resolve.py` (Maven, npm, images, revérification des suppressions temporaires), `fixcve-classify.py` (table de décision). D4 sans objet (aucun LLM ne lit plus de texte externe). |
+| **E** (tests issus des incidents) | **Fait** : `tests/run-all.sh` (hors réseau), fixtures réelles, registre [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md), bac à sable du poller `tests/poll-sandbox.sh`. Exécution en CI : non décidée (section 8). |
+| **K** (indicateur), **L** (avis OSV commun, vérification locale), **M** (normalisation CVE/GHSA) | **Faits** (`fixcve-stats.py`, `fixcve_lib/osv.py`, `verify.py`, alias OSV). Preuve par scan Trivy locale : non faite (Trivy absent de l'hôte), preuve par le build CI. |
+| **J** (publication par branche de validation) | **Reporté** (décision du 2026-10-09 : modification de `jenkins-casc.yaml`). |
+| **F**, **G**, **H**, **I** | F, G, H à faire ; G partiellement (blocage transitoire borné, fonction d'échec d'étape commune) ; I fait avec C (skill `/fixcve` sur les mêmes scripts). |
+
+## 2. Invariants à conserver
+
+Ces propriétés ne doivent régresser à aucune étape ; chacune a déjà servi.
+
+- Séparation en 3 phases à permissions disjointes ; phase 1 (détection) **sans LLM**.
+- Validation de schéma stricte entre chaque phase (`fixcve-validate-json.py`), jamais par un LLM.
+- Clone git isolé, jamais la copie de travail principale ; garde-fou « arbre non propre ».
+- Un push ne peut pas, à lui seul, modifier ce que le bot est autorisé à faire (voir C : c'est le point le plus fragile).
+- Validation d'un correctif par SHA (ancêtre du build), pas par numéro de build.
+- Validation locale avant push, rollback automatique, halte après rollbacks répétés.
+- Anti-boucles : blocage confirmé, no_action, échecs pré-push, hors périmètre jamais tracé en git.
+- Journal d'audit append-only, versionné.
+- Critères A/B objectifs pour toute suppression ; jamais de `--force` npm.
+
+## 3. Faits vérifiés pendant la revue
+
+| Constat | Preuve |
+| --- | --- |
+| Les tokens `JENKINS_TOKEN` et `CODEBERG_TOKEN` étaient visibles du tool Bash de `claude -p` | `printenv` avec valeurs factices, phases 2 et 3 (corrigé par A pour Jenkins et pour la phase 2) |
+| Aucun `timeout` ni plafond de coût sur `claude -p` | lecture du script (corrigé par A) |
+| Le cron, les scripts et les skills viennent de trois sources différentes | cron : copie principale ; scripts, permissions, détecteurs : clone (donc `origin`) ; skills : copie principale via lien symbolique |
+| La politique (critères A/B, règles de lookup) est écrite en 4 endroits et a déjà dérivé | le skill interactif `/fixcve` utilise encore l'API de recherche `rows=5` qui a causé le problème Maven |
+| Le motif « journal, `git add`, `commit`, `push`, état » est copié une quinzaine de fois | `grep` dans `fixcve-auto-poll.sh` |
+| Six mémoires ou compteurs avec des logiques différentes | `consecutive_rollbacks`, `consecutive_prepush_failures`, `consecutive_no_action_pushes`, `blocked_confirmed`, `no_action_confirmed`, `dirty_tree_cycles` |
+| Journal bruyant | 16 types d'événements ; 33 `blocked_needs_human`, dont 7 pour le seul build #886 |
+| Un crash (Jenkins, `detect`, `claude -p`) ou un `git push` en échec ne fait pas avancer l'état | `exit 1` sous `set -e` : nouvel essai, avec appels LLM, toutes les 15 min sans limite (déduit du code, non observé) |
+| Pas de test des scripts avant cette revue | seul le test de A existe |
+
+Résiduels de sécurité connus et **assumés pour l'instant** (déjà documentés dans `FIXCVE_AUTO.md`) : la phase 3 garde `CODEBERG_TOKEN` et `GIT_ASKPASS` dans son environnement tant que `git push` est fait par le modèle ; `Bash(python3:*)` reste un joker complet ; les fichiers de `$HOME` (clé AGE, credentials chiffrés) sont lisibles par l'utilisateur unix du cron ; le champ `title` d'une CVE (texte libre d'origine externe) atteint les phases LLM.
+
+---
+
+## 4. Propositions
+
+Ordre suggéré en section 6. Effort : S (< 2 h), M (une demi-journée), L (plusieurs sessions).
+
+### A. Environnement épuré et plafonds des phases LLM — FAIT (f048027)
+
+Phase 2 sans aucun credential ; phase 3 sans les credentials Jenkins ; `timeout` et `--max-budget-usd` sur les deux. `--max-turns` volontairement écarté (accepté par la CLI mais absent de son aide, donc non garanti). Reste à committer et pousser.
+
+### B. Sortir `git commit` et `git push` de la phase 3 — effort M
+
+- **But** : la phase 3 ne fait que modifier des fichiers ; le script committe et pousse. Plus aucun credential ni droit git pour le modèle (supprime le résiduel de A).
+- **Étapes** :
+  1. Retirer `git add/commit/push/restore` de `fixcve-auto-apply-permissions.json` ; retirer `CODEBERG_*` et `GIT_ASKPASS` de `LLM_SCRUB_APPLY`.
+  2. Après la phase 3, le script lit `git diff --name-only` et **refuse** tout fichier hors liste autorisée (`pom.xml`, `owasp-suppressions.xml`, `.trivyignore.yaml`, `frontend/package*.json`, fichiers d'image listés dans le skill, `SECURITY_ADVISORIES.md`, journal).
+  3. Validation syntaxique (XML, YAML, JSON) puis commit et push déterministes ; message construit par le script à partir de `lookup.json`.
+  4. Résultat déterminé par le diff (`APPLIED` ssi diff non vide et poussé) et non par la ligne finale que le modèle doit écrire.
+- **Supprime** : les événements `claude_invocation_no_result` (3 au journal), la classe « journal non committé » (#882), la dépendance à la consigne « jamais de `Co-Authored-By` ».
+- **Points d'attention** : le message de commit change de main ; le skill garde la rédaction des justifications (dans `SECURITY_ADVISORIES.md`) ; conserver la validation locale `./mvnw dependency-check` avant commit, ce qui la place côté script ou la laisse au modèle avec `Bash(./mvnw:*)`.
+- **Test** : diff contenant un fichier interdit → rejeté et annulé ; diff vide → `NO_ACTION` ; les fixtures des builds #882 et #886.
+
+### C. Épinglage local de confiance — effort M
+
+- **But** : pouvoir **versionner les skills** sans qu'un push puisse modifier le comportement du bot, et exécuter tout depuis un seul arbre.
+- **Principe** : un fichier local `~/.config/rhdemo-fixcve/trusted.sha256` liste les hash des fichiers qui définissent ce que le bot a le droit de faire : skills, fichiers de permissions, scripts de détection, de validation et de lookup. Le script de polling recalcule ces hash à chaque cycle et **refuse d'agir** si l'un diffère, avec une alerte. Une commande `fixcve-install.sh --trust` affiche le diff, demande confirmation, puis met à jour les hash.
+- **Étapes** :
+  1. Décider de l'emplacement versionné des skills (proposé : `rhDemo/scripts/fixcve-skills/`), `.claude/skills` devenant une copie installée par `fixcve-install.sh`.
+  2. Faire lire au script de polling **tout** depuis un seul arbre (le clone, à un commit approuvé) ; le script de polling lui-même reste dans la copie principale (racine de confiance).
+  3. Fichier de hash, vérification, commande d'approbation.
+- **Résout** : la dérive « skill à jour, script pas encore » ; l'absence de sauvegarde et d'historique des skills (aujourd'hui seulement sur cette machine) ; le fait que les permissions du bot soient aujourd'hui lues depuis `origin`.
+- **Test** : modifier un fichier de confiance sans approbation, le cycle refuse ; approuver, le cycle reprend.
+- **Question ouverte** : protection de branche de la forge (revue obligatoire sur ce dossier) — non connue.
+
+### D. Décisions et recherches déterministes — effort L
+
+- **D1. Table de décision** (`fixcve-classify.py`) : à partir de `detected.json` et `lookup.json` (avec `npm_dev_only`, scope Maven, vecteur `AV`), produit pour chaque finding `upgrade`, `suppress_permanent` (critère A), `suppress_temporary` (critère B) ou `blocked`. La phase 3 exécute cette décision au lieu de l'interpréter ; le script vérifie ensuite que le diff correspond.
+- **D2. Lookup Maven** en script (dernière version stable de la même branche mineure, sans pré-release), comme `fixcve-npm-lookup.py`. Garder le garde-fou de cohérence sur la version installée.
+- **D3. Lookup Docker** en script (tags du registre, `docker manifest inspect` pour le digest).
+- **D4. Retirer `title`** (texte libre externe) des fichiers lus par les phases LLM ; ne le garder que dans le journal. Réduit le vecteur d'injection à zéro champ libre.
+- **Résultat attendu** : la phase 2 devient inutile (elle ne lit plus que des listes de versions) ; la phase 3 se réduit à des éditions.
+- **Points d'attention** : l'ordre choisi de la version Maven est un pari (le rapport OWASP ne dit pas quelle version corrige) : c'est la phase B qui tranche. Le cas `fixAvailable: true` de `fixcve-npm-lookup.py` n'a été testé que sur données synthétiques.
+- **Migration incrémentale** : D2 puis D3 (une étape par écosystème, chacune avec son test), D1 en dernier.
+
+### E. Tests issus des incidents réels — effort M
+
+- **Constat** : les archives de cycle (`~/.config/rhdemo-fixcve/cycle/archive`) sont de vraies fixtures, mais hors dépôt.
+- **Étapes** : committer des fixtures réduites sous `rhDemo/scripts/tests/fixtures/` ; un test par incident (tableau en section 7) ; un lanceur `tests/run-all.sh`. Les récits d'incident quittent les commentaires du code (près de la moitié du script de polling) pour un registre `docs/FIXCVE_AUTO_INCIDENTS.md` (incident, cause, garde-fou, test).
+- **Exécution** : voir section 8.
+
+### F. Outil `fixcve-ctl` — effort S à M
+
+- **But** : remplacer les éditions manuelles de `state.json` (une dizaine pendant la revue, toujours sous `flock`).
+- **Commandes** : `status`, `pause`, `resume` (remet `idle` et les compteurs à zéro), `rewind <build>`, `unblock`, `replay-phase2 <build>` et `replay-phase3 <build>` (rejeu sur les fichiers archivés, sans push).
+- **Test** : sur une copie de `state.json`, chaque commande produit l'état attendu ; le verrou est bien pris.
+
+### G. Harmonisation du script de polling — effort M à L
+
+- **Fonctions communes** : `audit_event` (écrit, committe, pousse ; remplace ~15 blocs), `end_cycle` (un seul endroit qui écrit l'état), `source_sha` (3 copies aujourd'hui), `stage_of` (3 reconnaissances de stage) avec table d'ordre du pipeline.
+- **Une seule mémoire « même cause »** : `{clé de cause, sha source, depuis, durée de vie, tentatives}`, qui remplace `blocked_confirmed` et `no_action_confirmed`. Elle intègre le **blocage transitoire** non traité : quand la cause est un `lookup_failed`, fenêtre de 1 h et 3 tentatives au maximum, puis 48 h avec alerte. Sans ce plafond, supprimer le blocage relancerait le cycle en boucle (pousser le journal relance un build).
+- **Bloc de constantes** unique (48 h, 2 rollbacks, 2 échecs pré-push, 8 cycles d'alerte, plafonds LLM).
+- **Retentatives bornées** : un crash de Jenkins, de `detect` ou de `claude -p`, et un `git push` en échec, incrémentent un compteur au lieu de recommencer sans limite.
+- **`notify()` central** (journal seul par défaut) appelé sur `blocked_needs_human`, halte, arbre non propre, validation partielle ; branchable ensuite sur mail ou ntfy.
+- **Découpage** du fichier (~950 lignes) en bibliothèques (`state`, `audit`, `jenkins`, phases A et B). Un portage en Python est possible mais n'est pas nécessaire : le gain vient des fonctions communes et des tests, pas du langage.
+- **Test** : les scénarios de la section 7 sur la machine à états.
+
+### H. Journal simplifié — effort S
+
+- 16 types d'événements réduits à environ 8 : `cycle_failed{phase, raison}` (fusionne `detect_phase_failed`, `lookup_phase_failed`, `claude_invocation_no_result`), `findings_blocked` (**un événement par cycle** avec liste, au lieu d'une ligne par finding), `remediation_applied`, `risk_accepted`, `validation{résultat}` (fusionne succès, partielle, stage propre, rollback), `automation_halted`, `skipped`.
+- Le rendu (`fixcve-audit-render.sh`) est générique : pas de changement. Prévoir la lecture des anciens événements (le fichier est append-only).
+
+### I. Skill interactif `/fixcve` — effort S
+
+- Le faire appeler `fixcve-detect.py` et les scripts de lookup au lieu de refaire la recherche à la main, puis demander la validation. Supprime la copie de la politique (dérive déjà constatée).
+
+---
+
+## 5. Petites dettes repérées
+
+- ~~Le `fixAvailable: true` du lookup npm n'a jamais été exercé sur un cas réel.~~ Exercé au build #914 : dry-run muet, d'où le repli OSV (b0d9924).
+- `fixcve-auto-lookup` : le wrapper Docker et le wrapper OSV n'ont pas de garde de cohérence comparable à celui de Maven ; harmoniser leurs codes de sortie et leur sortie JSON.
+- Le pin de `pending_reverified` des jars embarqués dans une image repose sur une **consigne** du skill (testée une fois) : la rendre déterministe en faisant rejeter par le validateur tout `pending_reverified` dont le paquet correspond à une entrée `.trivyignore.yaml` « embarqué dans ».
+- Vérifier si `Bash(python3:*)` peut être restreint à des scripts précis une fois D en place.
+- Sandbox OS (utilisateur dédié, `bubblewrap`) pour les phases LLM : seul moyen de traiter les résiduels de `$HOME`.
+
+---
+
+## 6. Ordre suggéré
+
+> **Remplacé par la section 10.5**, elle-même réalisée le 2026-10-09 sauf J (voir section 1) (revue du 2026-10-09) ; conservé pour l'historique des dépendances.
+
+1. **A** : committer et pousser (petit, déjà testé).
+2. **E + F** : filet de sécurité et outil de reprise avant de refondre.
+3. **B** : phase 3 sans credential.
+4. **C** : épinglage de confiance, puis versionnement des skills.
+5. **D** : par écosystème (D2, D3), puis D1, D4.
+6. **G**, **H**, **I** : harmonisation, après que les tests couvrent la machine à états.
+
+Dépendances : E avant B, G et D ; C avant de versionner les skills ; D1 après D2 et D3.
+
+## 7. Incidents à rejouer en tests
+
+| Incident | Cause | Fixture ou test attendu |
+| --- | --- | --- |
+| Builds #878 et #882 | un finding ≥ 9 bloquait 19 autres ; `lookup_failed` npm | lookup et détection du #882 → décision par finding |
+| #882 | journal non committé, clone sale, cycles bloqués 9 h | après phase 3, journal committé par le script ; arbre propre |
+| #884 et #886 | API de recherche Maven en `rows=5` | wrapper : version installée absente → code 4 |
+| #890 | rollback à tort : OWASP propre, Trivy en échec | verdict `next_stage` ; stage suspect → rollback |
+| #894 | doublon Trivy (même jar à deux emplacements) | détection : un seul finding par paire |
+| #849 puis #850 | suppressions documentées, rollback si CVE non couverte | cas `keep` et rollback |
+| #718, #734 | rollback d'un bon correctif à cause d'autres CVE | `validation_partial` |
+| #735 à #744, #799 à #802 | boucles de journal | anti-boucles : aucun push au deuxième passage |
+| Tokens visibles du modèle | environnement hérité | test de A (faux et vrai `claude`) |
+| #913 (1er passage) | phase 3 : `cd …; git …` composé, `npm --prefix ../frontend`, chemin absolu → 3 refus, abandon | disparaît avec B (plus de Bash git/npm pour le modèle) ; d'ici là, consigne de répertoire dans le skill |
+| #913 (2e passage) | phase 2 LLM : `previous_note` recopiée hors ASCII → schéma invalide | disparaît avec L (phase 2 sans LLM) |
+| #914 | npm `fixAvailable: true`, dry-run muet → `lookup_failed` | `tests/fixcve-npm-lookup.test.py` (fait) |
+| Renovate #123 / CI #912 | même faille nommée CVE (OSS Index) ou GHSA (Node Audit) ; cache Node Audit en CI | normalisation des identifiants (M) ; parité des scanners (L) |
+
+## 8. Exécution des tests
+
+Décision **reportée** : pour l'instant les tests se lancent à la main.
+
+- **Local** : `rhDemo/scripts/tests/fixcve-run-llm-phase.test.sh` ; option `REAL_CLAUDE=1` pour un essai de bout en bout avec le vrai `claude` (valeurs factices, quelques centimes) — à lancer avant de modifier la façon dont `claude -p` est invoqué. Prévoir un lanceur `run-all.sh` et, éventuellement, un hook git `pre-push` installé par `fixcve-install.sh` (non versionné).
+- **Jenkins** (vérifié) : l'agent `builder` est une image Debian avec `bash`, `git`, `curl`, `jq` ; `python3` n'y est pas installé explicitement. Le test actuel n'a besoin que de `bash` et des outils de base. Les tests suivants demandent `python3` et des fixtures committées. `REAL_CLAUDE=1` reste local.
+- **Deux voies possibles en CI**, à trancher plus tard : une étape dans `Jenkinsfile-CI` (déconseillée : pipeline sensible, déjà long ; une étape `UNSTABLE` n'envoie aucun mail car les blocs `post` ne couvrent que succès et échec) ou un **job dédié** `RHDemo-FixcveTests` (`Jenkinsfile-FixcveTests`, filtre de chemin sur `rhDemo/scripts/**`, déclaré dans JCasC, mail dédié). Un échec de test en CI ne provoque pas de boucle : il tomberait dans un stage hors périmètre, que le bot ignore.
+
+## 9. Reprise
+
+- État du bot : `~/.config/rhdemo-fixcve/state.json` ; toute édition à la main se fait sous le verrou `~/.config/rhdemo-fixcve/poll.lock` (`flock`). Reprise, pause et remise en arrière sont décrites dans [FIXCVE_AUTO.md](FIXCVE_AUTO.md) ; l'outil F les automatisera.
+- Journal des cycles : `poll.log` (local) et `docs/fixcve-audit.md` (versionné).
+- Pour rejouer une phase sans rien pousser, il faut aujourd'hui copier le fichier de cycle archivé dans `.fixcve-cycle/` du clone, sous le verrou, puis lancer `claude -p` avec le fichier de permissions de la phase : F remplacera cette procédure manuelle.
+
+---
+
+## 10. Revue du 2026-10-09 — fiabilité
+
+**Objectif** : qu'un cycle n'échoue plus qu'en face d'une CVE **sans correctif, CVSS ≥ 9 et sans critère A**. Tout autre échec est un défaut de la procédure.
+
+### 10.1 Diagnostic (journal juillet → 9 octobre, 70 builds)
+
+Classement par cycle, approximatif (croisement de `fixcve-audit.jsonl` et des messages de commits revert) :
+
+| Classe | Cycles | Exemples |
+| --- | --- | --- |
+| **Échec conforme à l'objectif** | **2** | #860 (netty 9,8), #895 (bouncycastle, freemarker 9,1 dans l'image Keycloak) |
+| Correctif existant non trouvé (lookup) | ~7 | #812-#823 (tag Keycloak), #884/#886 (Maven `rows=5`), #914 (npm dry-run) |
+| Décision de politique mal prise par le LLM | ~13 | #735-#745 (« tout ou rien » à cause de tomcat 7,5, relevant du critère B), #878/#882 (critère A mal lu) |
+| Mauvais correctif poussé → rollback | 12 rollbacks, 4 haltes | lot incomplet (#734, #748-#753), mauvaise version cible (#819/#821), pin npm sans effet (#845/#847), stage suivant (#890) |
+| Exécution LLM ou environnement | ~6 | `npm` hors PATH (#715), workspace non approuvé (#806), schéma (#894, #913), refus Bash (#913) |
+
+**Lecture** : environ deux tiers des échecs viennent de jugements laissés au LLM sur des questions à réponse exacte (version, critère, application partielle) ; le reste, de recherches incomplètes et d'une validation locale non équivalente au CI. Chaque correction passée a pris la forme d'une consigne de plus dans les skills (340 à 390 lignes, en grande partie des récits d'incident), source des ambiguïtés actuelles.
+
+### 10.2 Règle de partage script / LLM
+
+**Tout ce qui est vérifiable ou relève de la politique est dans un script ; le LLM ne fait que ce qui n'a pas de forme fixe, et ne décide jamais seul.**
+
+| Aujourd'hui (LLM) | Cible |
+| --- | --- |
+| Phase 2 : recherche Maven, Docker, revérification `[PENDING_UPSTREAM_FIX]` | Script (D2, D3, L) ; la phase 2 LLM disparaît, et avec elle la seule surface où un LLM lit du contenu externe |
+| Phase 3 : choix upgrade / critère A / critère B / blocage | Script `fixcve-classify.py` (D1), table de décision testée |
+| Phase 3 : rédaction des `<suppress>` et `.trivyignore.yaml` | Générateur à partir d'un modèle (double inscription CVE + GHSA, portée `groupId` pour un CPE générique) |
+| Phase 3 : montées de version npm, Maven, image | Script : `npm update` puis `npm install`, propriété BOM connue ou `dependencyManagement`, source unique pour les images |
+| Phase 3 : commit et push | Script (B) |
+| — | **LLM restant** : (a) rédaction de la justification dans `SECURITY_ADVISORIES.md`, non bloquante ; (b) **résolveur** pour les seuls findings classés `needs_reasoning` (parent verrouillant une plage, artefact Maven hors BOM) : il produit une proposition JSON validée par schéma, que le script applique ou rejette, sans droit git |
+
+Un cas hors règles devient une proposition, puis une règle et un test : la couverture déterministe croît avec les incidents au lieu des skills.
+
+### 10.3 Découpage cible des étapes
+
+| # | Étape | Mise en œuvre | Échec compté ? |
+| --- | --- | --- | --- |
+| 0 | Préconditions : arbre propre, workspace approuvé, `frontend/node/npm`, clé NVD, docker | script | non (`infra`) |
+| 1 | Détection + **normalisation des identifiants** (alias OSV CVE ↔ GHSA, une clé par faille) | script (M) | si schéma invalide |
+| 2 | Résolution : avis OSV (plage corrigée par branche) ∩ registre (versions publiées) | script (L) | non si transitoire (retentatives bornées) |
+| 3 | Classification : `upgrade`, `suppress_A`, `suppress_B`, `blocked_ge9`, `needs_reasoning`, `transient` | script (D1) | `blocked_ge9` = échec conforme |
+| 4 | Résolveur LLM, uniquement `needs_reasoning` | LLM sans droit git | oui si rejeté |
+| 5 | Application | script (B) | oui |
+| 6 | **Vérification locale avec les vrais scanners** : `npm audit` + `npm ls`, Dependency-Check avec clé NVD, Trivy sur l'image candidate | script, porte bloquante | oui |
+| 7 | **Publication sur branche** `fixcve/<build>` + build CI paramétré, fast-forward si vert ou partiel sans régression | script (J) | oui |
+| 8 | Documentation (modèle, enrichissement LLM facultatif) | script + LLM | non |
+
+### 10.4 Nouvelles propositions
+
+#### J. Publication par branche de validation — effort M
+
+- **But** : plus aucun revert sur la branche principale ; la halte « 2 rollbacks » devient sans objet.
+- **Principe** : le script pousse `fixcve/<build>`, déclenche `RHDemo-CI` paramétré sur cette branche (API Jenkins, credential déjà détenu par le poller), puis fast-forward de la branche principale sur verdict `success`, `partial` ou `next_stage` (logique actuelle de `evaluate_partial_validation()`).
+- **À vérifier** : paramétrage de branche de `RHDemo-CI` ; effet sur l'environnement ephemere partagé ; nettoyage des branches.
+- **Test** : verdicts rejoués sur les fixtures #718, #734, #890.
+
+#### K. Indicateur de taux d'échec — effort S
+
+- Champ `outcome_code` énuméré dans le journal : `blocked_no_fix_ge9`, `lookup_gap`, `policy`, `bad_fix`, `infra`, `tooling`. Les raisons libres (jusqu'à 2 000 caractères) ne sont pas agrégeables.
+- `fixcve-stats.py` : taux d'échec hors `blocked_no_fix_ge9`, par mois. Se combine avec H (journal simplifié).
+
+#### L. Recherche unifiée par l'avis OSV et preuve par scan — effort M à L
+
+- **Source commune** : l'avis OSV donne la version corrigée par branche pour npm et Maven (GHSA) ; le registre confirme seulement la publication. `npm audit` et `maven-metadata.xml` deviennent des contrôles croisés. Amorcé pour npm (b0d9924).
+- **Preuve plutôt que déduction** : un candidat n'est retenu qu'après un scan du résultat montrant la disparition de la CVE (indispensable pour les images, où version de module et tag divergent : #819/#821/#823).
+- **`transient` distinct de `no_fix`** : `lookup_failed` n'aboutit plus jamais à `blocked_needs_human` ; retentatives bornées (fenêtre de G), puis alerte.
+- **Test périodique contre les vraies API** (canari) : détecte les changements de format (`npm view` renvoyant une liste au lieu d'une chaîne, constaté le 2026-10-09 ; `rows=5` de l'ancienne API Maven).
+- **Parité des scanners** CI / Renovate / local : configuration unique dans le `pom.xml` (fait le 2026-10-09 : cache Node Audit coupé, OSS Index seul écart), clé NVD disponible pour la vérification locale (#849, #884, #892 ont poussé sans validation complète).
+
+#### M. Normalisation des identifiants — effort S
+
+- Dès la détection, résoudre les alias (OSV) pour qu'une faille ait une seule clé quel que soit l'analyseur (OSS Index → CVE, Node Audit → GHSA). Remplace à terme la double inscription manuelle (amorcée par `advisory_aliases`) : les générateurs de suppression écrivent toutes les formes connues.
+
+### 10.5 Ordre révisé (remplace la section 6)
+
+1. **E** (fixtures et tests) avec **K** (indicateur) : le filet et la mesure avant de refondre.
+2. **D2, D3 et L** : suppression de la phase 2 LLM.
+3. **D1** (classifieur), **M** et générateurs de suppression.
+4. **B étendu** (application et commit par script) avec la vérification locale complète (clé NVD, Trivy).
+5. **J** (publication par branche).
+6. **C** (versionner les skills avec épinglage ; aujourd'hui leurs évolutions n'ont aucun historique), puis réduire les skills à des consignes courtes, les récits rejoignant le registre d'incidents de E.
+7. **G**, **H**, **I**.
+
+Après 1 à 4, la plupart des classes de 10.1 doivent disparaître par construction ; resteraient les vrais `blocked_no_fix_ge9`, les `needs_reasoning` mal résolus et les pannes d'infrastructure. Le gain sera chiffré en rejouant les fixtures avec K.
+

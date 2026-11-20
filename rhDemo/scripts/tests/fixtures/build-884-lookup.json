@@ -1,0 +1,173 @@
+{
+  "jenkins_build": 884,
+  "findings": [
+    {
+      "finding_id": "CVE-2026-77874",
+      "package_name": "org.hibernate.orm:hibernate-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-68498",
+      "package_name": "com.fasterxml.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-89407",
+      "package_name": "com.fasterxml.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-89425",
+      "package_name": "com.fasterxml.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-68498",
+      "package_name": "tools.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-89407",
+      "package_name": "tools.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-89425",
+      "package_name": "tools.jackson.core:jackson-core",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-68497",
+      "package_name": "com.fasterxml.jackson.core:jackson-databind",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-83557",
+      "package_name": "com.fasterxml.jackson.core:jackson-databind",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-68497",
+      "package_name": "tools.jackson.core:jackson-databind",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-83557",
+      "package_name": "tools.jackson.core:jackson-databind",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-47842",
+      "package_name": "org.springframework.security:spring-security-crypto",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-47838",
+      "package_name": "org.springframework.security:spring-security-web",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "maven_central"
+    },
+    {
+      "finding_id": "CVE-2026-93687",
+      "package_name": "braces",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "CVE-2026-87776",
+      "package_name": "compression",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "CVE-2026-27904",
+      "package_name": "minimatch",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "CVE-2026-90711",
+      "package_name": "proxy-addr",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "CVE-2026-34043",
+      "package_name": "serialize-javascript",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "CVE-2026-93749",
+      "package_name": "source-map-js",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": false
+    },
+    {
+      "finding_id": "CVE-2026-93690",
+      "package_name": "uri-js",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    }
+  ],
+  "pending_reverified": []
+}

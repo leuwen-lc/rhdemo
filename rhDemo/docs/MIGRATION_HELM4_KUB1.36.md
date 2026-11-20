@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/kind-config.yaml
+  - rhDemo/infra/stagingkub/scripts/components/
+---
+
 # Migration Helm 3 → Helm 4 + Kubernetes 1.35 → 1.36 (stagingkub)
 
 **Statut** : ✅ Réalisé — livré en 1.1.10 (30/08/2026).

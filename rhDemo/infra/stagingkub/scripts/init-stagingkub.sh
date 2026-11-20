@@ -210,6 +210,11 @@ echo -e "${YELLOW}▶ Configuration du registry HTTPS dans le nœud KinD...${NC}
 # Copier le certificat CA dans le nœud KinD
 docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
 
+# Mettre à jour ca-certificates du nœud (CVE-2026-111943, CA eMudhra compromises :
+# correctif Debian 13 20250419+deb13u1, voir docs/SECURITE_CA_EMUDHRA_PLAN.md)
+docker exec rhdemo-control-plane sh -c 'apt-get update -qq && apt-get install -y -qq --only-upgrade ca-certificates' > /dev/null 2>&1 \
+  || echo -e "${YELLOW}  ⚠ Mise à jour de ca-certificates du nœud impossible (réseau ?)${NC}"
+
 # Mettre à jour les CA du nœud
 docker exec rhdemo-control-plane update-ca-certificates > /dev/null 2>&1
 

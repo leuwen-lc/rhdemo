@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/resources/application.yml
+  - rhDemo/src/main/resources/application-stagingkub.yml
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/rhdemo-app-deployment.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # 📋 Gestion des paramètres rhDemo dans Kubernetes
 
 ## 🎯 Vue d'ensemble

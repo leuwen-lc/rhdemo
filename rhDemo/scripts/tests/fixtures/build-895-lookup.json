@@ -1,0 +1,22 @@
+{
+  "jenkins_build": 895,
+  "findings": [
+    {
+      "finding_id": "CVE-2026-8763",
+      "package_name": "org.bouncycastle:bcprov-jdk18on",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "docker_registry"
+    },
+    {
+      "finding_id": "CVE-2026-84939",
+      "package_name": "org.freemarker:freemarker",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "docker_registry"
+    }
+  ],
+  "pending_reverified": []
+}

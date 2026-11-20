@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/pgschema.sql
+  - rhDemo/pgdata.sql
+  - rhDemo/src/main/resources/data.sql
+---
+
 # 🗄️ Base de données RHDemo
 
 Ce document explique l'organisation des fichiers SQL pour la base de données PostgreSQL de RHDemo.

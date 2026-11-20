@@ -1,3 +1,14 @@
+---
+statut: actif
+verifie_le: 2026-10-23
+sources:
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/vars/rhDemoLib.groovy
+  - rhDemo/Jenkinsfile-CD
+  - rhDemo/Jenkinsfile-Renovate
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+---
+
 # 🔄 Pipelines CI/CD - RHDemo
 
 Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.
@@ -108,7 +119,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Tests unitaires
 - Analyse OWASP Dependency-Check
 - Build Maven (création du JAR)
-- Analyse SonarQube (optionnel)
+- Analyse SonarQube (optionnel) : SonarQube est démarré au début du stage puis arrêté après la Quality Gate, pour libérer la mémoire du poste (voir `infra/jenkins-docker/README.md`)
 - Quality Gate SonarQube (optionnel)
 
 #### Phase 3 : Docker Build
@@ -558,11 +569,13 @@ Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 | Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy |
 |---------|----------------|----------------|----------------------|---------------------------------------|
 | **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra |
-| **Durée indicative** | ~2 h max | ~30 min max | ~10-15 min | quelques min/composant |
+| **Durée indicative** | ~8 min (timeout 2 h) | ~2 min (timeout 30 min) | ~10-15 min | quelques min/composant |
 | **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) |
 | **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade |
 | **Déclenchement** | SCM (branches d'évolution) | Manuel | Cron | Post-merge PR infra |
 | **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` |
+
+Les durées sont celles d'une exécution normale, sans contention de ressources sur la machine (le projet tourne sur un seul PC). Les valeurs « timeout » de la CI et de la CD sont les garde-fous définis dans `options { timeout(...) }` des Jenkinsfile : elles ne sont atteintes qu'en cas de forte contention ou de blocage, et ne représentent pas la durée habituelle.
 
 ---
 

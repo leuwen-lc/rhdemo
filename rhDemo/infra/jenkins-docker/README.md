@@ -145,7 +145,7 @@ docker info
 | `docker-socket-proxy` | Proxy API Docker filtré (création/arrêt agents uniquement) | 2375 (interne) | docker-compose.yml |
 | `sonarqube` | Analyse qualité du code | 9020 | docker-compose.yml |
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
-| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 | docker-compose.zap.yml |
+| `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 (interne, non publié) | docker-compose.zap.yml |
 | `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
 | agents éphémères | Créés à la demande par Docker Cloud, détruits après le build | - | Docker Cloud (JCasC) |
 
@@ -172,7 +172,7 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
 
 - Image `rhdemo-jenkins-agent:latest` instanciée à la demande par Docker Cloud
 - Créés pour chaque build, détruits immédiatement après
-- Max 2 simultanés (`instanceCapStr: "2"`)
+- Un seul à la fois (`instanceCapStr: "1"`) : les builds de tous les jobs sont sérialisés, les suivants attendent dans la file
 - Contiennent tous les outils de build :
   - JDK 25 (Eclipse Temurin) + Maven 3.9.12
   - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
@@ -276,7 +276,7 @@ jenkins-docker/
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
 - ✅ Controller en mode pilotage (`numExecutors: 0`, `mode: EXCLUSIVE`)
-- ✅ Docker Cloud avec template agent éphémère (label `builder`, max 2 simultanés)
+- ✅ Docker Cloud avec template agent éphémère (label `builder`, un seul à la fois)
 - ✅ Connexion Docker via `tcp://docker-socket-proxy:2375` (pas de socket direct)
 - ✅ Outils (JDK25, Maven3, Git, OWASP Dependency-Check)
 - ✅ Intégrations (SonarQube)
@@ -441,14 +441,19 @@ docker exec "$AGENT" docker ps
 
 ### SonarQube
 
-SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jenkins.
+SonarQube est inclus dans le docker-compose mais **ne tourne que pendant la CI**, pour libérer la mémoire du poste (environ 1,3 Go au repos, davantage pendant une analyse) :
+
+- `start-jenkins.sh` crée les conteneurs `rhdemo-sonarqube` et `rhdemo-sonarqube-db` sans les démarrer (`docker compose up --no-start`), ou les recrée après une montée de version ;
+- `Jenkinsfile-CI` les démarre au début du stage d'analyse (`startSonarQube()` dans `vars/rhDemoLib.groovy` : attente de l'état `UP`, lancement de la migration de base si une nouvelle version l'exige) et les arrête après la Quality Gate (`stopSonarQube()`, appelé aussi dans le `post` global en cas d'échec ou d'interruption). Les deux opérations sont idempotentes ;
+- le démarrage ajoute environ 3 minutes à la CI (mesure du 2026-11-19) ;
+- pour consulter l'interface hors CI : `docker start rhdemo-sonarqube-db rhdemo-sonarqube`, puis `docker stop rhdemo-sonarqube rhdemo-sonarqube-db` (sinon la CI suivante l'arrête).
 
 **Accès à SonarQube :**
 - URL : http://localhost:9020
 - Identifiants par défaut : `admin` / `admin` (changez-les au premier login)
 
 **Configuration initiale :**
-1. Connectez-vous à http://localhost:9020
+1. Démarrez SonarQube (`docker start rhdemo-sonarqube-db rhdemo-sonarqube`, prêt en quelques minutes) et connectez-vous à http://localhost:9020
 2. Changez le mot de passe admin
 3. Allez dans **Administration** → **Security** → **Users**
 4. Créez un token pour Jenkins : **My Account** → **Security** → **Generate Token**
@@ -459,8 +464,10 @@ SonarQube est inclus dans le docker-compose et démarre automatiquement avec Jen
 6. Redémarrez Jenkins : `docker compose restart jenkins`
 
 **Services SonarQube :**
-- `sonarqube` : Serveur SonarQube Community Edition 10
+- `sonarqube` : Serveur SonarQube Community Edition (version : `docker-compose.yml`)
 - `sonarqube-db` : Base de données PostgreSQL 16 dédiée
+
+**Webhook vers Jenkins :** l'étape `waitForQualityGate` attend un appel de SonarQube vers `http://jenkins:8080/sonarqube-webhook/`. Depuis SonarQube 26.10, les webhooks vers une adresse privée sont refusés (`Invalid URL: … site-local …` dans `ce.log`) et la Quality Gate part en timeout alors que l'analyse a réussi. Le service définit donc `SONAR_VALIDATEWEBHOOKS=false` ; le webhook ne vise que le réseau Docker interne.
 
 **Volumes persistants :**
 - `rhdemo-sonarqube-data` : Données SonarQube
@@ -672,7 +679,8 @@ Cette approche offre :
 ```bash
 cd infra/jenkins-docker
 
-# Démarrer ZAP
+# Démarrer ZAP (clé API obligatoire, pas de valeur par défaut)
+export ZAP_API_KEY=$(openssl rand -hex 16)
 docker-compose -f docker-compose.yml \
                -f docker-compose.zap.yml \
                up -d owasp-zap
@@ -681,7 +689,7 @@ docker-compose -f docker-compose.yml \
 docker logs rhdemo-jenkins-zap
 
 # Tester l'API ZAP
-docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=changeme
+docker exec rhdemo-jenkins-zap curl -s http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY}
 ```
 
 **Configuration Selenium :**
@@ -699,15 +707,9 @@ Les rapports sont stockés dans le volume `rhdemo-jenkins-zap-reports` et peuven
 **Arrêt de ZAP :**
 
 ```bash
-# Arrêter ZAP
-docker-compose -f docker-compose.yml \
-               -f docker-compose.zap.yml \
-               stop owasp-zap
-
-# Supprimer le container
-docker-compose -f docker-compose.yml \
-               -f docker-compose.zap.yml \
-               rm -f owasp-zap
+# Arrêter et supprimer le container (sans Compose : pas besoin de ZAP_API_KEY)
+docker stop rhdemo-jenkins-zap
+docker rm rhdemo-jenkins-zap
 ```
 
 **Volumes ZAP :**
@@ -756,18 +758,19 @@ cosign verify --key cosign.pub \
 
 ### Renovate - Automerge des PRs de dépendances
 
-Le pipeline `RHDemo-Renovate` (job JCasC, cron `H 4 * * *`) scanne les dépendances avec Renovate puis merge automatiquement les PRs patch/minor dont la CI passe. Il a besoin de 4 credentials Jenkins dédiés, en plus de `nvd-api-key` et `ossindex-credentials` déjà créés pour `Jenkinsfile-CI`.
+Le pipeline `RHDemo-Renovate` (job JCasC, déclenchement quotidien) scanne les dépendances avec Renovate puis merge automatiquement les PRs patch/minor dont la CI passe. Il a besoin de 5 credentials Jenkins dédiés, en plus de `nvd-api-key`, `kubeconfig-stagingkub-infra-upgrader` et `notification-email` déjà créés pour les autres pipelines.
 
 **Credentials Jenkins à créer** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
 
 | ID | Kind | Contenu | Utilisé par |
 |----|------|---------|-------------|
-| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot `rhdemo-ci-bot` (collaborateur **Write**, pas Admin), scopes `repository` + `issue` | Listing/sync/merge des PRs, commentaires |
-| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate (distinct de `rhdemo-ci-bot`), scopes `repository` + `issue` + `user` | Stage `🔄 Scan Renovate` |
+| `ci-bot-forgejo-token` | Secret text | Token du compte Codeberg bot `cibot-leuwen-lc` (collaborateur **Write**, pas Admin), scopes `repository` + `issue` | Listing/sync/merge des PRs, commentaires |
+| `renovate-forgejo-token` | Secret text | Token du compte bot Renovate (distinct de `cibot-leuwen-lc`), portées `write:repository`, `write:issue`, `read:user` et `read:organization` | Stage `🔄 Scan Renovate` |
 | `renovate-gpg-key` | Secret text | Clé GPG privée dédiée, exportée en base64 (`gpg --export-secret-keys <KEY_ID> \| base64 -w0`) | Signature des commits Renovate |
 | `renovate-github-token` | Secret text | Token GitHub read-only (dépôts publics) | Lookup changelogs/release notes GitHub |
+| `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID) + jeton personnel « Public Repo Read-only » avec date d'expiration | Dates de publication des images (délai avant installation) |
 
-**Pourquoi deux comptes bot distincts et pourquoi `renovate-forgejo-token` ne peut pas être fusionné avec `ci-bot-forgejo-token`** : voir [`docs/RENOVATE_AUTOMERGE_CI.md`](../../docs/RENOVATE_AUTOMERGE_CI.md) (sections 1 et « Credentials Jenkins nécessaires ») — en résumé, séparation propose/merge (deux identités distinctes côté audit Forgejo) et `ci-bot-forgejo-token` échoue avec `Authentication failure` au scan Renovate faute de scope `user`.
+**Pourquoi deux comptes bot distincts et pourquoi `renovate-forgejo-token` ne peut pas être fusionné avec `ci-bot-forgejo-token`** : voir [`docs/RENOVATE_AUTOMERGE_CI.md`](../../docs/RENOVATE_AUTOMERGE_CI.md) (section « Comptes et credentials ») — en résumé, séparation propose/merge (deux identités distinctes côté audit Forgejo) et `ci-bot-forgejo-token` échoue avec `Authentication failure` au scan Renovate faute de scope `user`.
 
 **Sécurité** : `ci-bot-forgejo-token` (accès Write) n'est jamais exposé en variable d'environnement pendant le build Maven/OWASP de la PR — voir section « Sécurité » du même document.
 
@@ -873,7 +876,8 @@ docker volume rm rhdemo-wdm-cache
 1. **`docker-socket-proxy` non démarré** : `docker-compose ps docker-socket-proxy`
 2. **Image agent introuvable** : `docker images rhdemo-jenkins-agent` — construire avec `docker build -f Dockerfile.agent -t rhdemo-jenkins-agent:latest .`
 3. **Docker Cloud mal configuré** : Jenkins > Manage Jenkins > Clouds > docker-local > Test Connection
-4. **Capacité atteinte** : max 2 agents simultanés (`instanceCapStr: "2"`) — attendre qu'un build se termine
+4. **Capacité atteinte** : un seul agent à la fois (`instanceCapStr: "1"`) — normal si un autre build tourne, attendre qu'il se termine (un job Renovate peut durer jusqu'à 2 h)
+5. **Conteneur d'agent orphelin** (attente de quelques dizaines de secondes à quelques minutes alors que rien ne tourne) : l'arrêt de l'agent précédent a échoué (`Failed to stop container … Broken pipe` dans les logs du contrôleur). `docker-socket-proxy` ferme les connexions keep-alive inactives après 10 s, et le plugin Docker réutilise une connexion fermée sans réessayer. Le conteneur occupe alors l'unique place jusqu'au passage du `DockerContainerWatchdog` (`orphaned container found by DockerContainerWatchdog`). Sa période est réduite de 300 s à 30 s par `-Dcom.nirima.jenkins.plugins.docker.DockerContainerWatchdog.recurrenceInSeconds=30` (`JAVA_OPTS` du contrôleur, `Dockerfile.jenkins` et `docker-compose.yml`)
 
 ```bash
 # Vérifier que le proxy répond

@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Jenkinsfile-CD
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+---
+
 # Analyse des problèmes d'accès Jenkins Agent → stagingkub
 
 ## 🔍 Problèmes identifiés et résolus

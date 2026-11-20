@@ -1,8 +1,18 @@
+---
+statut: actif
+verifie_le: 2026-10-29
+sources:
+  - rhDemo/pom.xml
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/owasp-suppressions.xml
+  - rhDemo/scripts/fixcve_lib/verify.py
+---
+
 # OWASP Dependency-Check - Analyse des vulnérabilités
 
 Guide de configuration et d'utilisation de l'analyse de sécurité des dépendances avec OWASP Dependency-Check.
 
-> **⚠️ IMPORTANT** : Le pipeline Jenkins utilise le **plugin Jenkins OWASP Dependency-Check** au lieu du plugin Maven pour une meilleure compatibilité avec CVSS v4.0. Voir [OWASP_JENKINS_PLUGIN.md](OWASP_JENKINS_PLUGIN.md) pour la documentation complète du plugin Jenkins.
+> **⚠️ IMPORTANT** : Le pipeline Jenkins utilise le **plugin Jenkins OWASP Dependency-Check** au lieu du plugin Maven pour une meilleure compatibilité avec CVSS v4.0.
 
 ## Table des matières
 
@@ -43,9 +53,19 @@ Le plugin Maven n'analyse par défaut que les dépendances résolues par Maven (
 
 Le build frontend lui-même utilise `npm ci` (et non `npm install`) via `frontend-maven-plugin` ([pom.xml](../pom.xml)) : `npm ci` installe strictement les versions et hashes d'intégrité verrouillés dans `package-lock.json` et échoue si ce dernier n'est pas synchronisé avec `package.json`, contrairement à `npm install` qui peut re-résoudre silencieusement une dépendance vers une version plus récente non verrouillée.
 
+**Limite connue — alias npm non couverts par le Node Audit Analyzer** : deux dépendances transitives de `frontend/package-lock.json` sont déclarées via la syntaxe d'alias npm (`"@vue/vue-loader-v15": "npm:vue-loader@^15.9.7"` et `"@popperjs/core": "npm:@sxzz/popperjs-es@^2.11.8"`). Le Node Audit Analyzer de Dependency-Check ne sait pas résoudre cette syntaxe (`npm audit doesn't support aliases`, visible dans le log de build) et ignore purement et simplement ces deux paquets — ils ne reçoivent donc aucune vérification CVE via cet analyseur, quel que soit l'état de leurs vulnérabilités réelles. Le RetireJS Analyzer (qui scanne le JS produit, pas les manifestes) offre un filet de sécurité partiel pour `vue-loader`, mais aucun analyseur ne couvre `@sxzz/popperjs-es` par ce biais. Mitigation en place : vérifier ponctuellement ces deux paquets via `npm audit` en dehors de Dependency-Check (l'alias y est correctement résolu), par exemple avant une release.
+
 ### Exécution dans les pipelines
 
 Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-Renovate` l'exécute aussi (`./mvnw org.owasp:dependency-check-maven:check`) pour toute PR Renovate qui touche un manifeste de dépendances (`pom.xml`, `frontend/package.json`, `frontend/package-lock.json`) — voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate). Les PR qui ne touchent aucun de ces fichiers (Jenkinsfile, Helm values, etc.) suivent un chemin de validation direct, hors périmètre OWASP.
+
+`fixcve-auto` relance aussi `dependency-check:check` en local (`-DfailBuildOnCVSS=11`, OSS Index désactivé) pour vérifier un correctif avant push, avec le cache de l'hôte (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
+
+**Différence CI / Renovate depuis l'incident #104/#871 (voir section OSS Index ci-dessous)** : `Jenkinsfile-Renovate` exécute le scan avec `-DossIndexAnalyzerEnabled=false` — seul `Jenkinsfile-CI` interroge OSS Index. Les deux pipelines restent donc couverts par NVD/CPE + Node Audit + RetireJS, mais seul CI peut détecter une CVE qui ne serait visible que via OSS Index. Le rapport du scan Renovate est archivé (`dependency-check-report-pr<N>.html/json`) par PR pour permettre un diagnostic après coup sans dépendre du log de build (tronqué par le `-q` de l'invocation Maven).
+
+**Règle de parité CI / Renovate** : OSS Index est le *seul* écart autorisé entre les deux appels du plugin (argument `-DossIndexAnalyzerEnabled=false` propre à `Jenkinsfile-Renovate`). Toute autre option (seuil, suppressions, cache Node Audit…) vit dans le `pom.xml`, commune aux deux pipelines, pour qu'un blocage Renovate soit reproductible en CI. Le cache local de Node Audit est désactivé (`nodeAuditAnalyzerUseCache=false`) : sa clé dépend du `package-lock.json`, un lockfile inchangé en CI réutilisait des réponses antérieures à la publication d'un avis (constaté build Renovate #123 vs CI #912 : `node-forge`, `webpack-dev-middleware`, `brace-expansion`).
+
+**Suppressions npm : double inscription CVE + GHSA** : OSS Index (CI) nomme une faille par son CVE, Node Audit (Renovate) par son GHSA. Chaque `<suppress>` npm doit donc porter `<cve>` ET `<vulnerabilityName>GHSA-…</vulnerabilityName>` (générée par `fixcve-auto` à partir des alias de l'avis OSV, voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md) « Suppressions »).
 
 ### Limites face aux attaques de type supply-chain (paquets malveillants)
 
@@ -53,11 +73,31 @@ Dependency-Check est un scanner **CVE/NVD** (complété par OSS Index) : il comp
 
 Ce que ce projet a en place contre ce type précis d'attaque :
 
-- **`minimumReleaseAge: 7 days`** ([renovate.json](../renovate.json)) : Renovate n'ouvre pas de PR sur une version publiée depuis moins de 7 jours — fenêtre pendant laquelle ce type d'attaque est généralement détecté et la version retirée de npm.
-- **`osvVulnerabilityAlerts: true`** ([renovate.json](../renovate.json)) : bypass du délai ci-dessus si une advisory de vulnérabilité (y compris malware, via la base OSV/GHSA) existe déjà sur une version que vous avez installée.
+- **`minimumReleaseAge: 7 days`** ([renovate.json](../../renovate.json)) : Renovate n'ouvre pas de PR sur une version publiée depuis moins de 7 jours — fenêtre pendant laquelle ce type d'attaque est généralement détecté et la version retirée de npm.
+- **`osvVulnerabilityAlerts: true`** ([renovate.json](../../renovate.json)) : bypass du délai ci-dessus si une advisory de vulnérabilité (y compris malware, via la base OSV/GHSA) existe déjà sur une version que vous avez installée.
 - **`npm ci`** (voir ci-dessus) : empêche toute résolution silencieuse vers une version non verrouillée dans le lockfile.
 
 Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une protection réelle il faudrait qu'il soit bloquant, ce qui introduirait un 3ᵉ type d'échec de build non reconnu par l'automatisation de remédiation (`fixcve-auto` ne classe les échecs Jenkins qu'en `trivy` ou `owasp` — voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md)), sans bénéfice suffisant pour justifier cette extension aujourd'hui. `npm audit` reste disponible en local : lancer `cd rhDemo/frontend && npm audit` (ou `npm audit --omit=dev` pour se limiter à ce qui est réellement livré dans le bundle, en excluant les dépendances de build/test) de temps en temps — par exemple avant une release, ou en cas de doute suite à une actualité sécurité comme celle-ci.
+
+### OSS Index
+
+**Contexte** : Sonatype a migré OSS Index vers **Sonatype Guide** (28/04/2026), qui remplace l'ancien accès gratuit illimité par un quota de **crédits mensuels** (500 sur le compte gratuit utilisé ici, confirmé via la page usage du compte), même authentifié via `ossindex-credentials`. **1 crédit = 10 requêtes de rapport de composant.** Une fois le quota épuisé, l'API renvoie `402 Payment Required` et l'analyseur se désactive en échouant le build (`failOnError=true`) — constaté en CI le 11/09/2026, quota consommé (4999 requêtes ≈ 500 crédits) en seulement 9 jours au cache par défaut de 24h.
+
+**Le cache est un diff par composant**, pas une purge globale : chaque dépendance (`packageUrl`) a son propre fichier de cache sur disque, expirant sur son propre horodatage (`ossIndexAnalyzerCacheValidForHours`). Un composant en cache valide ne consomme aucun crédit ; seuls les composants absents ou expirés sont re-demandés à l'API. En régime stable, le débit de crédits est environ inversement proportionnel à la durée du cache :
+
+| `ossIndexAnalyzerCacheValidForHours` | Débit mesuré/estimé | Autonomie d'un quota de 500 crédits | Besoin mensuel |
+|---|---|---|---|
+| 24 (défaut) | 55,5 crédits/j (mesuré) | 9 jours | ~1665/mois |
+| **168 (7 jours, retenu)** | **~7,9 crédits/j** | **~63 jours** | **~238/mois** |
+| 720 (30 jours) | ~1,9 crédit/j | ~270 jours | ~56/mois |
+
+**Décision retenue** : `ossIndexAnalyzerCacheValidForHours=168` (7 jours) dans [pom.xml](../pom.xml), qui ramène le besoin mensuel (~238 crédits) confortablement sous le quota (500) pour **un seul pipeline consommateur**, avec une marge pour les nouvelles versions de dépendances introduites par Renovate (chaque nouveau `packageUrl` reste un cache-miss garanti, quel que soit le cache) et les pics ponctuels (`dependency-check:purge`, nouvel agent Jenkins sans cache persistant). En complément, `ossIndexWarnOnlyOnRemoteErrors=true` dégrade un dépassement de quota en simple warning au lieu de faire échouer le build.
+
+**Couverture — corrigé suite à l'incident build RHDemo-Renovate #104 / RHDemo-CI #871 (17/09/2026)** : le NVD CVE Analyzer (clé API dédiée) reste actif pour les CVE Maven par CPE, et Node Audit Analyzer + RetireJS pour le npm — ces analyseurs avaient correctement détecté `qs`, `serialize-javascript`, `DOMPurify` (swagger-ui) et `webpack-dev-server` sur le build du 11/09/2026 malgré la panne OSS Index. **Cette couverture de repli n'est toutefois pas complète** : `GHSA-w27v-7q3p-w38r` sur `svgo:2.8.3` (CVSS 8.2) — un identifiant GHSA sans CVE assigné, sur un paquet sans CPE NVD fiable — a été détecté par OSS Index sur le build Renovate #104 mais était **totalement absent** du rapport CI #871 (même version, même commit, ~4 minutes plus tard, OSS Index désactivé par 402). OSS Index n'est donc pas une simple optimisation de confort : c'est la seule source pour cette catégorie de CVE (GHSA sans CVE, PURL npm/Maven mal couverts par CPE), qui n'est ni rare ni anecdotique côté npm.
+
+**Conséquence** : plutôt que de désactiver OSS Index (perte de détection permanente sur cette catégorie de CVE, contre une perte seulement intermittente aujourd'hui) ou d'augmenter le quota payant, `Jenkinsfile-Renovate` n'interroge plus OSS Index du tout (`-DossIndexAnalyzerEnabled=false`, voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate)) — seul `Jenkinsfile-CI` le fait désormais, ce qui ramène la consommation réelle sous l'estimation "un seul pipeline" ci-dessus et élimine la course au quota entre les deux pipelines. Contrepartie assumée : une CVE OSS-Index-only introduite par une PR Renovate n'est détectée qu'après le merge, par CI, et non par le garde-fou de merge Renovate lui-même.
+
+**À surveiller** : vérifier sur la page usage du compte Sonatype Guide si le quota se recharge mensuellement ou s'il s'agit d'un pool fixe non renouvelé — le calcul ci-dessus suppose un renouvellement mensuel.
 
 ### [pom.xml:309-345](../pom.xml#L309-L345)
 
@@ -255,7 +295,7 @@ echo "owasp-suppressions.xml" >> .gitignore
 
 ### Jenkinsfile - Stage actuel
 
-**[Jenkinsfile:1121-1142](../Jenkinsfile#L1121-L1142)**
+**[Jenkinsfile-CI](../Jenkinsfile-CI)**
 
 ```groovy
 stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
@@ -315,12 +355,22 @@ environment {
 | Première exécution (téléchargement NVD) | 5-10 minutes |
 | Exécutions suivantes (cache local) | 30-60 secondes |
 | Avec clé API NVD | 20-40 secondes |
+| Rattrapage après plusieurs semaines sans mise à jour (clé NVD, `nvdApiDelay` à 8000 ms) | plus de 50 minutes (mesuré le 2026-10-29 sur le cache de l'hôte, non terminé) |
+| Cache copié depuis Jenkins puis scan (fixcve) | ~20 secondes (mesuré le 2026-10-29) |
 
 ### Cache local
 
-Le cache NVD est stocké dans :
-- **Local** : `target/dependency-check-data/`
-- **Jenkins** : `/var/jenkins_home/.m2/repository/`
+Le `dataDirectory` du [pom.xml](../pom.xml) est `${user.home}/.m2/dependency-check-data` ; la base H2 `odc.mv.db` (≈ 260 Mo après compactage) et le cache OSS Index (`oss_cache/`) y vivent. Trois utilisateurs, trois caches :
+
+| Utilisateur | Emplacement | Mis à jour par |
+|-------------|-------------|----------------|
+| `RHDemo-CI` et `RHDemo-Renovate` (agents éphémères) | volume Docker `rhdemo-maven-repository`, monté sur `/home/jenkins/.m2` (`dependency-check-data/` à sa racine) | chaque scan, avec la clé NVD de la CI |
+| Poste du développeur (`./mvnw dependency-check:check`) | `~/.m2/dependency-check-data` | les scans locaux |
+| Vérification de [`fixcve-auto`](FIXCVE_AUTO.md) | `~/.m2/dependency-check-data` (même cache que le poste) | amorcé depuis le volume Jenkins avant chaque scan (voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md#cache-nvd-de-lhôte)) |
+
+Le répertoire `repository/org/owasp/dependency-check-data/` du volume Jenkins est l'ancien emplacement par défaut du plugin : il n'est plus lu.
+
+Un cache resté plusieurs semaines sans scan rattrape l'API NVD page par page, ce qui est long (voir le tableau ci-dessus) : copier la base d'un cache à jour plutôt que laisser le scan rattraper.
 
 ### Optimisations
 
@@ -442,5 +492,4 @@ Consulter le rapport HTML :
 
 ## Voir aussi
 
-- [SECURITY_LEAST_PRIVILEGE.md](SECURITY_LEAST_PRIVILEGE.md) - Principe du moindre privilège
-- [Jenkinsfile](../Jenkinsfile) - Pipeline CI/CD
+- [Jenkinsfile-CI](../Jenkinsfile-CI) - Pipeline CI

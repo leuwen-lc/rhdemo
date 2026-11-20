@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/controller/EmployeController.java
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/repository/EmployeRepository.java
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/repository/EmployeSpecification.java
+  - rhDemo/frontend/src/components/EmployeList.vue
+---
+
 # Documentation - Système de Pagination
 
 ## Vue d'ensemble

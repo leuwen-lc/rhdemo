@@ -1,3 +1,10 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/jenkins-docker/docker-compose.yml
+---
+
 # Migration PostgreSQL 16 → 18 (base SonarQube)
 
 **Symptôme** : après un rebuild (`start-jenkins.sh`), `rhdemo-sonarqube-db` en échec — Renovate

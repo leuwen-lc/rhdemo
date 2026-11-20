@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-11-06
+sources:
+  - rhDemo/pom.xml
+  - rhDemo/frontend/package.json
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+---
+
 # Inventaire des composants open source
 
 > \*\*Convention retenue :\*\* un composant est un projet open source choisi explicitement dans la configuration du dépôt. Les \*\*24 plugins Jenkins directs\*\* sont comptés séparément, car ce sont des extensions installées explicitement. Les dépendances transitives restent des estimations et ne doivent pas être additionnées ligne à ligne, car elles se recouvrent.
@@ -6,7 +15,7 @@
 |-|-|-:|-:|
 |**Back-end Java**|Spring Boot, Spring Security, Spring Data JPA, Spring OAuth2, Spring Actuator, Thymeleaf, Springdoc OpenAPI, Hibernate ORM, PostgreSQL JDBC, H2, Micrometer, JsonPath, jqwik|**13**|120–135|
 |**Bases de données**|PostgreSQL|**1**|5–10|
-|**Front-end JavaScript**|Vue.js, Vue Router, Axios, Element Plus, Element Plus Icons, Vue CLI|**6**|700–760|
+|**Front-end JavaScript**|Vue.js, Vue Router, Axios, Element Plus, Element Plus Icons, Vite|**6**|141–161|
 |**Tests et couverture**|JUnit, AssertJ, Selenium, WebDriverManager, JaCoCo, Firefox ESR|**6**|20–35|
 |**IAM et intégration Keycloak**|Keycloak, Keycloak Admin Client, RESTEasy, Apache HttpClient|**4**|20–40|
 |**Build et runtimes**|Apache Maven, Frontend Maven Plugin, Node.js, npm, Eclipse Temurin / OpenJDK, Maven Wrapper|**6**|20–35|
@@ -25,7 +34,7 @@
 > \*\*Note méthodologique (mise à jour) :\*\* les fourchettes Back-end Java, Front-end JavaScript et Jenkins ci-dessus sont ancrées sur des mesures réelles et non plus des estimations à vue :
 >
 > - Back-end Java : SBOM Trivy de l'image `rhdemo-api:1.1.10-SNAPSHOT-705` → 127 artefacts Maven embarqués dans `app.jar` (dont l'application elle-même et 2 doublons probables liés à un artefact de scan Trivy).
-> - Front-end JavaScript : `rhDemo/frontend/package-lock.json` → 746 paquets npm (arbre complet, y compris l'outillage de build Vue CLI/webpack/babel).
+> - Front-end JavaScript : `rhDemo/frontend/package-lock.json` → 151 paquets npm (arbre complet, y compris l'outillage de build Vite).
 > - Jenkins : `rhDemo/infra/jenkins-docker/plugins.txt` → 24 plugins directs + 83 dépendances transitives verrouillées = 107 entrées au total.
 >
 > L'estimation globale dédoublonnée (950–1 200) applique le même facteur de recouvrement que l'estimation précédente (~15–20 %, essentiellement dû aux paquets système partagés entre les images Docker des catégories Sécurité, Conteneurs/K8s, Services CI/CD et Observabilité) à la nouvelle somme brute des fourchettes (~1 160–1 430), dominée désormais par l'écosystème npm du front-end.

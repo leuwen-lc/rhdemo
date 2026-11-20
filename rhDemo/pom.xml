@@ -5,12 +5,12 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
 	<artifactId>rhdemoAPI</artifactId>
-	<version>1.1.11-SNAPSHOT</version>
+	<version>1.1.11-RELEASE</version>
 	<name>rhdemo</name>
 	<description>demo API appli rh avec Spring Boot</description>
 	<url/>
@@ -30,11 +30,19 @@
 		<java.version>25</java.version>
 		<!-- SpringDoc OpenAPI compatible Spring Boot 4 / Jackson 3 -->
 		<!-- Fix CVE-2026-41240, CVE-2026-41238, CVE-2026-41239, GHSA-39q2-94rc-95cp, CVE-2026-65898 : DOMPurify 3.3.2 -> 3.4.12 (swagger-ui 5.32.11) -->
-		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
+		<springdoc-openapi.version>3.2.0</springdoc-openapi.version>
 		<!-- Fix CVE-2026-53434, CVE-2026-55276, CVE-2026-53404, CVE-2026-66299 : Spring Boot 4.1.0 pin tomcat 11.0.22 -->
 		<tomcat.version>11.0.25</tomcat.version>
 		<!-- Fix CVE-2026-54291 : downgrade SCRAM channel binding sur pgjdbc -->
 		<postgresql.version>42.7.13</postgresql.version>
+		<!-- Fix CVE-2026-77874 : hibernate-core 7.4.5.Final -> 7.4.11.Final -->
+		<hibernate.version>7.4.11.Final</hibernate.version>
+		<!-- Fix CVE-2026-110879 : jackson-databind 2.21.7 -> 2.21.8 -->
+		<jackson-2-bom.version>2.21.8</jackson-2-bom.version>
+		<!-- Fix CVE-2026-110879 : jackson-databind 3.1.7 -> 3.1.8 -->
+		<jackson-bom.version>3.1.8</jackson-bom.version>
+		<!-- Fix CVE-2026-93879 : hibernate-validator 9.1.3.Final -> 9.1.5.Final -->
+		<hibernate-validator.version>9.1.5.Final</hibernate-validator.version>
 	</properties>
 
 	<dependencies>
@@ -127,7 +135,7 @@
 		<dependency>
 			<groupId>net.jqwik</groupId>
 			<artifactId>jqwik</artifactId>
-			<version>1.10.1</version>
+			<version>1.10.2</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -192,7 +200,7 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.15</version>
+				<version>0.8.16</version>
 				<executions>
 					<!-- Prepare agent for unit tests -->
 					<execution>
@@ -273,9 +281,9 @@
                     </goals>
                     <configuration>
                         <!-- renovate: datasource=node-version depName=node -->
-                        <nodeVersion>v24.19.0</nodeVersion>
+                        <nodeVersion>v24.22.3</nodeVersion>
                         <!-- renovate: datasource=npm depName=npm -->
-                        <npmVersion>12.0.2</npmVersion>
+                        <npmVersion>12.2.2</npmVersion>
                     </configuration>
                 </execution>
                 <!-- Install dependencies -->
@@ -327,21 +335,22 @@
 			<plugin>
 				<groupId>org.sonarsource.scanner.maven</groupId>
 				<artifactId>sonar-maven-plugin</artifactId>
-				<version>5.7.0.6970</version>
+				<version>5.8.0.7211</version>
 			</plugin>
 
 			<!-- Plugin OWASP Dependency-Check pour l'analyse des vulnérabilités
 			     Version upgradée à 12.1.9 pour support CVSS v4.0
 
 			     Usage local : ./mvnw org.owasp:dependency-check-maven:check -DnvdApiKey=YOUR_KEY
-			     Usage Jenkins : Exécuté via Maven avec credential nvd-api-key
+			     Usage Jenkins : -s .mvn/ci-settings.xml -DnvdApiServerId=nvd -DossIndexServerId=ossindex
+			                     (secrets via credentials nvd-api-key / ossindex-credentials, jamais en argument)
 			-->
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
 				<version>13.0.0</version>
 				<configuration>
-					<!-- La clé API NVD est passée via -DnvdApiKey en ligne de commande -->
+					<!-- Clé API NVD : en CI via -DnvdApiServerId=nvd (.mvn/ci-settings.xml) ; en local via -DnvdApiKey -->
 					<!-- Échouer le build si des vulnérabilités sont détectées -->
 					<failBuildOnCVSS>7.0</failBuildOnCVSS>
 
@@ -359,7 +368,7 @@
 					<suppressionFile>${project.basedir}/owasp-suppressions.xml</suppressionFile>
 
 					<!-- Configuration NVD (National Vulnerability Database) -->
-					<!-- La clé est passée via -DnvdApiKey en ligne de commande -->
+					<!-- Clé fournie via -DnvdApiServerId=nvd (CI) ou -DnvdApiKey (local) -->
 					<!-- Valeurs augmentées suite à des 503 répétés du NVD lors des resyncs complets -->
 					<nvdMaxRetryCount>10</nvdMaxRetryCount>
 					<nvdApiDelay>8000</nvdApiDelay>
@@ -377,8 +386,22 @@
 					<!-- Désactiver les analyseurs non pertinents pour réduire les warnings -->
 					<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
 
-					<!-- OSS Index : nouvelle URL depuis migration Sonatype (ancienne : ossindex.sonatype.org) -->
-					<ossindexAnalyzerUrl>https://api.guide.sonatype.com</ossindexAnalyzerUrl>
+					<!-- OSS Index : Sonatype a migré vers "Sonatype Guide" (28/04/2026), quota de
+					     crédits mensuel même authentifié (402 Payment Required le 11/09/2026, quota de
+					     500 crédits épuisé en 9 jours au cache par défaut de 24h). Cache remonté à 7
+					     jours pour tenir dans le quota mensuel avec marge (~238 crédits/mois estimés
+					     sur 500 alloués), et échec réseau/quota dégradé en warning pour ne pas casser
+					     le build si le quota est quand même dépassé un mois chargé (pics Renovate).
+					     Détail et calcul : docs/OWASP_DEPENDENCY_CHECK.md#oss-index. -->
+					<ossIndexAnalyzerCacheValidForHours>168</ossIndexAnalyzerCacheValidForHours>
+					<ossIndexWarnOnlyOnRemoteErrors>true</ossIndexWarnOnlyOnRemoteErrors>
+
+					<!-- Node Audit : cache local désactivé. Sa clé dépend du contenu du package-lock.json :
+					     un lockfile inchangé (RHDemo-CI) réutiliserait des réponses antérieures à la
+					     publication d'un avis, alors qu'une PR Renovate (lockfile modifié) interroge
+					     le registre npm à neuf — d'où un blocage Renovate non reproductible en CI.
+					     Pas de quota associé (API npm), contrairement à OSS Index. -->
+					<nodeAuditAnalyzerUseCache>false</nodeAuditAnalyzerUseCache>
 
 					<!-- Inclure les dépendances npm du frontend (Vue.js) dans le scan CVE
 					     Sans ce scanSet, seules les dépendances Maven sont analysées -->
@@ -399,5 +422,52 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- Mutation testing (PIT) — usage occasionnel, hors CI.
+		     Lancement : ./mvnw -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+		     Rapport : target/pit-reports/index.html
+		     Profil non activé par défaut : aucun impact sur build, tests, Sonar ni CI. -->
+		<profile>
+			<id>mutation</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.pitest</groupId>
+						<artifactId>pitest-maven</artifactId>
+						<version>1.30.2</version>
+						<dependencies>
+							<dependency>
+								<groupId>org.pitest</groupId>
+								<artifactId>pitest-junit5-plugin</artifactId>
+								<version>1.2.3</version>
+							</dependency>
+						</dependencies>
+						<configuration>
+							<targetClasses>
+								<param>fr.leuwen.rhdemoAPI.service.*</param>
+								<param>fr.leuwen.rhdemoAPI.dto.*</param>
+								<param>fr.leuwen.rhdemoAPI.springconfig.*</param>
+							</targetClasses>
+							<!-- Tests unitaires uniquement : les *IT (SpringBootTest) sont trop lents -->
+							<targetTests>
+								<param>fr.leuwen.rhdemoAPI.*Test</param>
+							</targetTests>
+							<excludedTestClasses>
+								<param>fr.leuwen.rhdemoAPI.*IT</param>
+							</excludedTestClasses>
+							<threads>2</threads>
+							<outputFormats>
+								<outputFormat>HTML</outputFormat>
+								<outputFormat>XML</outputFormat>
+							</outputFormats>
+							<timestampedReports>false</timestampedReports>
+							<failWhenNoMutations>false</failWhenNoMutations>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>

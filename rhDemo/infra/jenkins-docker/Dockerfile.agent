@@ -1,7 +1,16 @@
-FROM jenkins/inbound-agent:latest-jdk21
+FROM jenkins/inbound-agent:latest-jdk25@sha256:93339a5a2cbab1644a028c7c01fd4c8e165f2d62b39dd51052b11644c39aaccd
 
 # Passer en root pour installer les dépendances
 USER root
+
+# ═══════════════════════════════════════════════════════════════════
+# SÉCURITÉ : ca-certificates à jour (CVE-2026-111943, CA eMudhra compromises)
+# ═══════════════════════════════════════════════════════════════════
+# Version Debian 13 corrigée : 20250419+deb13u1. Couche dédiée et placée en tête :
+# elle évite qu'un cache de couche réutilise un ca-certificates antérieur au correctif.
+# Voir docs/SECURITE_CA_EMUDHRA_PLAN.md
+RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # ═══════════════════════════════════════════════════════════════════
 # INSTALLATION DES DÉPENDANCES SYSTÈME
@@ -47,7 +56,7 @@ RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-c
 # ═══════════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=apache/maven
-ENV MAVEN_VERSION=3.9.16
+ENV MAVEN_VERSION=3.10.0
 ENV MAVEN_HOME=/opt/maven
 
 RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz && \
@@ -99,7 +108,7 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
 # ═══════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=helm/helm
-ENV HELM_VERSION=4.2.4
+ENV HELM_VERSION=4.3.2
 
 RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
     tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
@@ -123,30 +132,22 @@ RUN wget -q https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz && \
 # ═══════════════════════════════════════════════════════════════
 
 # renovate: datasource=github-releases depName=sigstore/cosign
-ENV COSIGN_VERSION=3.1.3
+ENV COSIGN_VERSION=3.1.4
 
 RUN wget -q https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64 -O /usr/local/bin/cosign && \
     chmod +x /usr/local/bin/cosign && \
     cosign version
 
 # ═══════════════════════════════════════════════════════════════════
-# INSTALLATION JDK 25 (Eclipse Temurin - pour builds Maven)
+# JDK 25 (Eclipse Temurin - runtime de l'agent ET builds Maven)
 # ═══════════════════════════════════════════════════════════════════
-# L'image de base fournit JDK 21 pour le runtime de l'agent.
-# JDK 25 est nécessaire pour compiler le projet (migration Java 25).
-
-# renovate: datasource=github-releases depName=adoptium/temurin25-binaries
-ENV TEMURIN_25_VERSION=25.0.4+7
-
-RUN wget -q "https://api.adoptium.net/v3/binary/version/jdk-${TEMURIN_25_VERSION}/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" -O /tmp/temurin-25.tar.gz && \
-    mkdir -p /opt/java/temurin-25 && \
-    tar -xzf /tmp/temurin-25.tar.gz -C /opt/java/temurin-25 --strip-components=1 && \
-    rm /tmp/temurin-25.tar.gz && \
-    /opt/java/temurin-25/bin/java --version
-
-# JAVA_HOME pointe vers JDK 25 pour les builds Maven
-ENV JAVA_HOME=/opt/java/temurin-25
+# L'image de base jenkins/inbound-agent:*-jdk25 fournit Temurin 25 (JDK complet)
+# dans /opt/java/openjdk : pas d'installation supplémentaire.
+ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${PATH}"
+# CVE-2026-114938 (Java4Shell) : désactive l'intrinsèque Base64 AVX-512 vulnérable de C2
+# (Temurin 25.0.5 non corrigé). Lu par le lanceur `java` uniquement. À retirer avec un JDK corrigé.
+ENV JDK_JAVA_OPTIONS="-XX:-UseBASE64Intrinsics"
 
 # ═══════════════════════════════════════════════════════════════════
 # PERMISSIONS DOCKER

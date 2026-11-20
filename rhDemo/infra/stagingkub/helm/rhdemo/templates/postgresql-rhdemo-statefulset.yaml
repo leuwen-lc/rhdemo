@@ -10,6 +10,8 @@ metadata:
 spec:
   serviceName: postgresql-rhdemo
   replicas: 1
+  updateStrategy:
+    {{- toYaml (index .Values "postgresql-rhdemo" "updateStrategy") | nindent 4 }}
   selector:
     matchLabels:
       app: postgresql-rhdemo

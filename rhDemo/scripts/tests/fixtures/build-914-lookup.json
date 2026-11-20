@@ -1,0 +1,49 @@
+{
+  "jenkins_build": 914,
+  "findings": [
+    {
+      "finding_id": "GHSA-6j4f-fj2g-mc7p",
+      "package_name": "brace-expansion",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "GHSA-qhr7-859c-m2p7",
+      "package_name": "brace-expansion",
+      "fix_status": "lookup_failed",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "GHSA-86w9-cpqp-85rv",
+      "package_name": "node-forge",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    },
+    {
+      "finding_id": "GHSA-g84c-rxfj-3j2c",
+      "package_name": "webpack-dev-middleware",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "npm_audit",
+      "npm_dev_only": true
+    }
+  ],
+  "pending_reverified": [
+    {
+      "cve_id": "CVE-2026-93749",
+      "package": "source-map-js",
+      "previous_note": "source-map-js 1.2.1 (offset de section non valide dans les source maps indexees, DoS, CVSS 8.7 < 9.0). npm audit ne proposait aucun correctif",
+      "new_fixed_version": "1.2.2"
+    }
+  ]
+}

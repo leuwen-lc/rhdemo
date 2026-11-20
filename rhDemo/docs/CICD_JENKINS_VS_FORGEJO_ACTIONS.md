@@ -1,3 +1,11 @@
+---
+statut: proposition
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/Jenkinsfile-CI
+  - rhDemo/Jenkinsfile-CD
+---
+
 # Analyse stratégique CI/CD — Jenkins vs Forgejo Actions (Codeberg)
 
 **Date :** 2026-06-09

@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/controller/EmployeController.java
+  - rhDemo/frontend/src/services/api.js
+---
+
 # Normalisation REST de l'API Employé
 
 ## Vue d'ensemble

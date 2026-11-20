@@ -1,3 +1,11 @@
+---
+statut: actif
+verifie_le: 2026-11-20
+sources:
+  - rhDemo/scripts/release.sh
+  - rhDemo/pom.xml
+---
+
 # Procédure standard : PR `evolutions-post-1.1.7` -> `master`, release `1.1.8-RELEASE`, tag, puis retour en `-SNAPSHOT`
 
 Contexte (modifier les versions par remplacement global):
@@ -10,7 +18,7 @@ Contexte (modifier les versions par remplacement global):
 ## Prérequis
 
 - chaine CI/CD complète au vert avec options sonarqube et selenium
-- README.md racine mis à jour en particulier la section changelog pour la nouvelle version
+- CHANGELOG.md racine mis à jour pour la nouvelle version (section « en cours » renommée avec le numéro de version)
 
 ---
 
@@ -37,13 +45,13 @@ Le script effectue dans l'ordre :
 
 1. Vérifie que le répertoire de travail est propre
 2. Bascule sur la branche si nécessaire
-3. `git pull --rebase origin evolutions-post-1.1.7`
+3. `git pull --rebase=merges origin evolutions-post-1.1.7` (conserve un merge de master déjà fait en local)
 4. `git fetch origin && git merge origin/master` (alignement avec master)
 5. Bumpe les 3 `pom.xml` : `1.1.8-SNAPSHOT` → `1.1.8-RELEASE`
 6. Commit `chore(release): passage à la version 1.1.8-RELEASE`
 7. Push
 
-> Si des conflits surviennent à l'étape 4, le script s'arrête avec les instructions pour les résoudre manuellement.
+> Si des conflits surviennent à l'étape 4, le script s'arrête avec les instructions pour les résoudre manuellement. Après `git merge --continue`, relancer le script en entier : l'étape 3 garde le merge résolu et l'étape 4 trouve master déjà fusionné. Pousser la branche avant la relance évite d'avoir à refaire le merge si `origin` a avancé entre-temps.
 
 ---
 

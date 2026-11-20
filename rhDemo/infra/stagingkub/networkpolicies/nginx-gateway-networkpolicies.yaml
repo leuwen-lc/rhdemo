@@ -311,3 +311,34 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
+---
+# ═══════════════════════════════════════════════════════════════
+# Accès API Server pour le hook Helm cert-generator (NGF)
+# ═══════════════════════════════════════════════════════════════
+# Le Job `ngf-nginx-gateway-fabric-cert-generator` (hook pre-install/
+# pre-upgrade du chart) lit puis met à jour les Secrets server-tls et
+# agent-tls via l'API Server. Ses pods ne portent pas le label
+# app.kubernetes.io/name=nginx-gateway-fabric : sans cette policy,
+# default-deny-all les bloque (« dial tcp 10.96.0.1:443: i/o timeout »,
+# upgrade NGF 2.8.0 du 2026-11-06). Le DNS est déjà couvert par allow-dns.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-cert-generator
+  namespace: nginx-gateway
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-gateway
+spec:
+  endpointSelector:
+    matchLabels:
+      job-name: ngf-nginx-gateway-fabric-cert-generator
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

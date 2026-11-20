@@ -1,0 +1,41 @@
+name: Signaler un bug
+description: Un comportement ne correspond pas à ce qui est attendu
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de votre signalement. **Une faille de sécurité ne se signale pas ici** : voir SECURITY.md.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      description: Que se passe-t-il, et qu'attendiez-vous ?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Se connecter avec ...
+        2. Aller sur ...
+        3. Constater ...
+    validations:
+      required: true
+  - type: dropdown
+    id: environnement
+    attributes:
+      label: Environnement
+      options: [dev, ephemere, stagingkub, jenkins-docker]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version ou commit
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux ou captures d'écran
+      render: shell

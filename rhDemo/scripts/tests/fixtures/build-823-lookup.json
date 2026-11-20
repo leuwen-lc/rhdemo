@@ -1,0 +1,13 @@
+{
+  "jenkins_build": 823,
+  "findings": [
+    {
+      "finding_id": "CVE-2026-18963",
+      "fix_status": "no_fix_available",
+      "target_version": null,
+      "target_digest": null,
+      "source_checked": "docker_registry"
+    }
+  ],
+  "pending_reverified": []
+}

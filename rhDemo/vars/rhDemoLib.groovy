@@ -120,6 +120,8 @@ def generateTrivyReport(String image, String reportName) {
         # --skip-java-db-update : Évite la mise à jour de la Java DB
         # --no-progress : Désactive la barre de progression (mieux pour logs CI/CD)
         # --ignorefile : Exclut les CVE documentées comme faux positifs (voir SECURITY_ADVISORIES.md)
+        # --show-suppressed : liste les findings exclus (ExperimentalModifiedFindings du JSON), lus
+        #   par aggregateTrivyResults pour détecter les exclusions devenues inutiles
         TRIVYIGNORE="\${WORKSPACE_DIR}/rhDemo/.trivyignore.yaml"
         IGNOREFILE_OPT=""
         if [ -f "\${TRIVYIGNORE}" ]; then
@@ -137,6 +139,7 @@ def generateTrivyReport(String image, String reportName) {
             --no-progress \\
             --severity CRITICAL,HIGH,MEDIUM \\
             \${IGNOREFILE_OPT} \\
+            --show-suppressed \\
             --format json \\
             --output "\${WORKSPACE_DIR}/trivy-reports/\${NAME}.json" \\
             "\${IMAGE}" > "\${TRIVY_LOG}" 2>&1
@@ -243,6 +246,38 @@ def aggregateTrivyResults() {
                 fi
             done
 
+            # Exclusions obsolètes : entrée de .trivyignore.yaml qui n'a supprimé aucun finding
+            # dans aucune image scannée (correctif embarqué, image retirée...). Non bloquant :
+            # un build UNSTABLE empêcherait la validation de fixcve-auto, qui exige SUCCESS.
+            # Valable ici seulement, où toutes les images sont scannées avec le même fichier
+            # (Jenkinsfile-Renovate n'en scanne qu'une partie). Comparaison par identifiant seul,
+            # comme Trivy : son format YAML ignore `pkg-name` (seuls id, paths, purls, statement et
+            # expired_at sont lus), une entrée exclut donc la CVE dans tous les paquets. Limite : un
+            # finding repassé en LOW, hors du périmètre --severity, fait aussi apparaître son
+            # exclusion comme obsolète.
+            TRIVYIGNORE="rhDemo/.trivyignore.yaml"
+            OBSOLETE_FILE="trivy-reports/trivyignore-obsolete.txt"
+            rm -f "$OBSOLETE_FILE"
+            if [ -f "$TRIVYIGNORE" ]; then
+                MATCHED=$(jq -r '.Results[]?.ExperimentalModifiedFindings[]? | select(.Type=="vulnerability") | .Finding.VulnerabilityID' trivy-reports/*.json 2>/dev/null | sort -u)
+                OBSOLETE=()
+                while IFS='|' read -r ID PKG; do
+                    [ -n "$ID" ] || continue
+                    grep -qxF "$ID" <<< "$MATCHED" && continue
+                    OBSOLETE+=("${ID}${PKG:+ (${PKG})}")
+                done < <(yq '.vulnerabilities[] | .id + "|" + (.["pkg-name"] // "")' "$TRIVYIGNORE")
+                if [ "${#OBSOLETE[@]}" -gt 0 ]; then
+                    printf '%s\\n' "${OBSOLETE[@]}" > "$OBSOLETE_FILE"
+                    echo "⚠️  ${#OBSOLETE[@]} exclusion(s) de .trivyignore.yaml sans effet (plus détectées dans aucune image) :"
+                    printf '   - %s\\n' "${OBSOLETE[@]}"
+                    echo "   À retirer, avec le contournement associé le cas échéant (voir docs/TRIVY_SECURITY_SCAN.md)"
+                    echo ""
+                else
+                    echo "✅ Toutes les exclusions de .trivyignore.yaml sont encore utiles"
+                    echo ""
+                fi
+            fi
+
             printf "   Total CRITICAL : %3d\\n" "$TOTAL_CRITICAL"
             printf "   Total HIGH     : %3d\\n" "$TOTAL_HIGH"
             printf "   Total MEDIUM   : %3d\\n" "$TOTAL_MEDIUM"
@@ -264,6 +299,78 @@ def aggregateTrivyResults() {
     )
 
     return result == 0
+}
+
+/**
+ * Démarre SonarQube et sa base juste avant l'analyse, puis attend qu'il soit prêt (idempotent :
+ * `docker start` sur un conteneur déjà démarré ne fait rien). Les conteneurs sont créés par
+ * infra/jenkins-docker/start-jenkins.sh et arrêtés par stopSonarQube() après la Quality Gate,
+ * pour libérer la mémoire du poste entre deux CI.
+ * Une montée de version de SonarQube (PR Renovate) laisse le serveur en DB_MIGRATION_NEEDED :
+ * la migration est alors lancée par l'API (accessible sans authentification dans cet état).
+ */
+def startSonarQube() {
+    echo "▶ Démarrage de SonarQube (rhdemo-sonarqube-db, rhdemo-sonarqube)..."
+    sh '''#!/bin/bash
+        set -euo pipefail
+        for C in rhdemo-sonarqube-db rhdemo-sonarqube; do
+            if ! docker container inspect "$C" > /dev/null 2>&1; then
+                echo "❌ Conteneur $C absent : lancer infra/jenkins-docker/start-jenkins.sh sur l'hôte"
+                exit 1
+            fi
+        done
+
+        docker start rhdemo-sonarqube-db > /dev/null
+        for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' rhdemo-sonarqube-db)" = "healthy" ] && break
+            if [ "$i" -eq 30 ]; then
+                echo "❌ rhdemo-sonarqube-db pas prête après 60 s"
+                exit 1
+            fi
+            sleep 2
+        done
+
+        docker start rhdemo-sonarqube > /dev/null
+        MIGRATION_LANCEE=false
+        STATUS=INJOIGNABLE
+        # 8 min : démarrage mesuré à 3 min 15 sur le poste (2026-11-19), davantage s'il est chargé
+        for i in $(seq 1 96); do
+            STATUS=$(curl -fs http://sonarqube:9000/api/system/status 2>/dev/null | jq -r '.status' 2>/dev/null || true)
+            STATUS=${STATUS:-INJOIGNABLE}
+            case "$STATUS" in
+                UP)
+                    echo "✅ SonarQube prêt"
+                    exit 0 ;;
+                DB_MIGRATION_NEEDED)
+                    if [ "$MIGRATION_LANCEE" = false ]; then
+                        echo "🔄 Nouvelle version de SonarQube : migration de la base lancée"
+                        curl -fs -X POST http://sonarqube:9000/api/system/migrate_db > /dev/null
+                        MIGRATION_LANCEE=true
+                    fi ;;
+                DB_MIGRATION_RUNNING|STARTING|RESTARTING|INJOIGNABLE) ;;
+                *)
+                    echo "❌ SonarQube dans un état inattendu : $STATUS (voir docker logs rhdemo-sonarqube)"
+                    exit 1 ;;
+            esac
+            sleep 5
+        done
+        echo "❌ SonarQube pas prêt après 8 min (dernier état : $STATUS, voir docker logs rhdemo-sonarqube)"
+        exit 1
+    '''
+}
+
+/**
+ * Arrête SonarQube et sa base pour libérer la mémoire (idempotent : `docker stop` sur un conteneur
+ * arrêté ne fait rien ; un conteneur absent est signalé sans faire échouer le build). Avec la
+ * politique `restart: unless-stopped`, un conteneur arrêté ainsi ne redémarre pas avec Docker.
+ */
+def stopSonarQube() {
+    echo "▶ Arrêt de SonarQube pour libérer la mémoire..."
+    sh '''
+        docker stop rhdemo-sonarqube > /dev/null 2>&1 || echo "⚠️  rhdemo-sonarqube absent ou déjà arrêté"
+        docker stop rhdemo-sonarqube-db > /dev/null 2>&1 || echo "⚠️  rhdemo-sonarqube-db absent ou déjà arrêté"
+        echo "✅ SonarQube arrêté"
+    '''
 }
 
 /**

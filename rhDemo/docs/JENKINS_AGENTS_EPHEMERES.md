@@ -1,3 +1,11 @@
+---
+statut: historique
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/Dockerfile.agent
+---
+
 # Agents Jenkins Éphémères — Étude d'Impact et Plan de Migration
 
 ## Contexte et objectif
@@ -228,9 +236,11 @@ clouds:
               user: "jenkins"
           instanceCapStr: "3"
           # L'agent est détruit dès que le build est terminé
-          removeVolumes: false   # conserver les volumes de cache
+          removeVolumes: true    # supprime les volumes anonymes de l'agent (les volumes nommés de cache sont conservés)
           pullStrategy: PULL_NEVER  # l'image est construite localement
 ```
+
+> **Note `removeVolumes`** : l'image `jenkins/inbound-agent` déclare `VOLUME /home/jenkins/agent` et `VOLUME /home/jenkins/.jenkins`. Docker crée donc 2 volumes anonymes par agent (workspace complet + cache des jars remoting, jusqu'à ~500 Mo). Avec `removeVolumes: false`, ils s'accumulent à chaque build (≈1000 volumes / 115 Go en un mois, constaté le 2026-10-09, jusqu'à saturer le disque et bloquer l'Elasticsearch de SonarQube). `docker rm -v` ne supprime que les volumes anonymes : les volumes nommés `rhdemo-maven-repository`, `rhdemo-trivy-cache` et `rhdemo-wdm-cache` sont préservés.
 
 > **Note `PULL_NEVER`** : L'image `rhdemo-jenkins-agent:latest` est construite localement par `docker-compose build`. Le Docker Cloud ne doit pas tenter de la télécharger depuis un registry externe.
 

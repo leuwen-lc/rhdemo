@@ -33,7 +33,7 @@ persistence:
 # Ingress (désactivé - utilisation de Gateway API)
 ###########################################
 # NOTE: Depuis la migration vers NGINX Gateway Fabric, on utilise
-# Gateway + HTTPRoute au lieu de Ingress. Voir grafana-gateway.yaml
+# Gateway + HTTPRoute au lieu de Ingress. La HTTPRoute est créée par install-or-upgrade-grafana.sh
 ingress:
   enabled: false
 

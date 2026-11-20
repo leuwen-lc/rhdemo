@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/secrets/secrets-rhdemo.yml
+  - rhDemo/secrets/secrets-ephemere.yml
+  - rhDemo/secrets/secrets-stagingkub.yml
+---
+
 # Installation et configuration de SOPS/AGE
 
 Guide complet pour installer et configurer SOPS (Secrets OPerationS) avec AGE pour chiffrer/déchiffrer les secrets du projet rhDemo.
@@ -481,7 +490,7 @@ git push
 
 ## Intégration CI/CD (Jenkins)
 
-Dans le [Jenkinsfile](../Jenkinsfile), SOPS est utilisé pour déchiffrer les secrets :
+Dans le [Jenkinsfile-CI](../Jenkinsfile-CI), SOPS est utilisé pour déchiffrer les secrets :
 
 ```groovy
 stage('🔓 Déchiffrement SOPS des secrets') {
@@ -545,6 +554,4 @@ stage('🔓 Déchiffrement SOPS des secrets') {
 
 ## Voir aussi
 
-- [SECURITY_LEAST_PRIVILEGE.md](SECURITY_LEAST_PRIVILEGE.md) - Principe du moindre privilège
-- [REFACTOR_SECRETS_NAMING.md](REFACTOR_SECRETS_NAMING.md) - Nomenclature des secrets
-- [ENVIRONMENTS.md](ENVIRONMENTS.md) - Environnements rhDemo
+- [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) - Environnements rhDemo

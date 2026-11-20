@@ -2,14 +2,13 @@
 # Dockerfile pour l'application RHDemo API
 # Image de base : Eclipse Temurin 25 LTS (OpenJDK)
 # Build multi-stage pour optimiser la taille de l'image finale
-# Version Java : 25.0.2+10-LTS (Temurin)
 # ═══════════════════════════════════════════════════════════════════
 
 # ───────────────────────────────────────────────────────────────────
 # STAGE 1 : BUILD
 # Construction de l'application avec Maven et Java 25
 # ───────────────────────────────────────────────────────────────────
-FROM maven:3.9-eclipse-temurin-25-noble AS builder
+FROM maven:3.10.0-eclipse-temurin-25-noble@sha256:8bc26436417b39cd3fbac4150d63df1fa6f8262b713c765c99f4d8075d79bcb8 AS builder
 
 LABEL stage=builder
 
@@ -22,15 +21,22 @@ COPY mvnw .
 
 # Télécharger les dépendances (layer séparé pour le cache)
 # Cette étape est mise en cache si pom.xml ne change pas
-RUN ./mvnw dependency:go-offline -B
+# -q : n'affiche que les erreurs (sinon liste de tous les plugins et dépendances résolus)
+RUN ./mvnw dependency:go-offline -B -q
 
 # Copier le code source backend et frontend
 COPY src ./src
 COPY frontend ./frontend
 
+# npm : ni annonce de nouvelle version ni lignes « notice » (le plugin Maven les affiche en
+# [ERROR] car npm les écrit sur stderr) ; avertissements et erreurs restent affichés
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_LOGLEVEL=warn
+
 # Compiler et packager l'application (skip tests pour accélérer le build)
 # Les tests sont exécutés séparément dans le pipeline Jenkins
-RUN ./mvnw clean package -DskipTests -B
+# -ntp : pas de lignes Downloading/Downloaded pour les artefacts absents du cache
+RUN ./mvnw clean package -DskipTests -B -ntp
 
 # Vérifier que le JAR a bien été créé
 RUN ls -lh /build/target/*.jar
@@ -39,7 +45,7 @@ RUN ls -lh /build/target/*.jar
 # STAGE 2 : RUNTIME
 # Image finale légère avec uniquement le JRE 25 et l'application
 # ───────────────────────────────────────────────────────────────────
-FROM eclipse-temurin:25.0.3_9-jre-noble
+FROM eclipse-temurin:25.0.5_8-jre-noble@sha256:e3b6f7887a50f20d8f07abf279d8a81a5953fb398a9555bd9edd56b9bd15968c
 
 # Arguments de build (optionnels, fournis par Jenkins)
 ARG BUILD_DATE
@@ -75,10 +81,13 @@ COPY --from=builder --chown=spring:spring /build/target/*.jar app.jar
 # UseG1GC : Garbage Collector G1 (default, production-ready)
 # Alternative : UseZGC pour faible latence (production-ready en Java 25)
 # +ExitOnOutOfMemoryError : Arrêter proprement en cas d'OOM
+# -UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell, intrinsèque Base64 AVX-512
+#   de C2), Temurin 25.0.5 non corrigé ; à retirer avec un JDK corrigé
 ENV JAVA_OPTS="-XX:+UseContainerSupport \
                -XX:MaxRAMPercentage=75.0 \
                -XX:+UseG1GC \
                -XX:+ExitOnOutOfMemoryError \
+               -XX:-UseBASE64Intrinsics \
                -Djava.security.egd=file:/dev/./urandom"
 
 # ───────────────────────────────────────────────────────────────────

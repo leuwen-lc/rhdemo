@@ -1,0 +1,64 @@
+{
+  "jenkins_build": 914,
+  "stage": "owasp",
+  "findings": [
+    {
+      "finding_id": "GHSA-6j4f-fj2g-mc7p",
+      "source": "owasp",
+      "ecosystem": "npm",
+      "image": "rhdemo-app",
+      "package_name": "brace-expansion",
+      "installed_version": "1.1.18",
+      "cvss": 7.5,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "fixed_version_hint": null,
+      "fixed_versions": [],
+      "title": "### Summary `parseCommaParts()` can exhaust the native stack and crash the process. There are two distinct ways to trigger it, both reachable from a single untrusted pattern string. This is the parsin"
+    },
+    {
+      "finding_id": "GHSA-qhr7-859c-m2p7",
+      "source": "owasp",
+      "ecosystem": "npm",
+      "image": "rhdemo-app",
+      "package_name": "brace-expansion",
+      "installed_version": "1.1.18",
+      "cvss": 7.5,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "fixed_version_hint": null,
+      "fixed_versions": [],
+      "title": "### Summary `expand_()` recurses once per level of brace *nesting*. Deeply nested input exhausts the native stack and crashes the process. This is distinct from CVE-2026-14257 / GHSA-mh99-v99m-4gvg, w"
+    },
+    {
+      "finding_id": "GHSA-86w9-cpqp-85rv",
+      "source": "owasp",
+      "ecosystem": "npm",
+      "image": "rhdemo-app",
+      "package_name": "node-forge",
+      "installed_version": "1.4.0",
+      "cvss": 7.5,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N",
+      "fixed_version_hint": null,
+      "fixed_versions": [],
+      "title": "node-forge through 1.4.0 fails to validate element count in nested DigestAlgorithm sequences during RSA PKCS#1 v1.5 signature verification. Attackers can embed garbage bytes inside the DigestAlgorithm",
+      "advisory_aliases": [
+        "GHSA-ppp5-5v6c-4jwp"
+      ]
+    },
+    {
+      "finding_id": "GHSA-g84c-rxfj-3j2c",
+      "source": "owasp",
+      "ecosystem": "npm",
+      "image": "rhdemo-app",
+      "package_name": "webpack-dev-middleware",
+      "installed_version": "5.3.4",
+      "cvss": 7.4,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:N/A:N",
+      "fixed_version_hint": null,
+      "fixed_versions": [],
+      "title": "> [!IMPORTANT] > CVE-2026-76844 was assigned and published for this issue by VulnCheck on 2026-08-24 without prior coordination with the webpack maintainers or the OpenJS Foundation, which holds the C",
+      "advisory_aliases": [
+        "GHSA-wr3j-pwj9-hqq6"
+      ]
+    }
+  ]
+}

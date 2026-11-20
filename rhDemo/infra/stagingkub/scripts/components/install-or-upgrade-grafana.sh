@@ -5,7 +5,7 @@ set -e
 # Installation ou mise à jour en place de Grafana
 # ═══════════════════════════════════════════════════════════════
 # Idempotent (helm upgrade --install) : release Helm + HTTPRoute +
-# datasource Prometheus + redémarrage + dashboards.
+# dashboards.
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +36,12 @@ echo -e "${YELLOW}▶ Installation/mise à jour de Grafana ${GRAFANA_VERSION}...
 GRAFANA_PASSWORD=$(grep "^adminPassword:" "${VALUES_DIR}/grafana-values.yaml" | awk '{print $2}' | tr -d '"')
 if [ -z "$GRAFANA_PASSWORD" ] || [ "$GRAFANA_PASSWORD" = '""' ]; then
     echo -e "${RED}❌ Le mot de passe Grafana n'est pas configuré dans ${VALUES_DIR}/grafana-values.yaml${NC}"
+    exit 1
+fi
+# Mot de passe faible refusé : 16 caractères minimum.
+# Générer une valeur avec : openssl rand -base64 24
+if [ "${#GRAFANA_PASSWORD}" -lt 16 ]; then
+    echo -e "${RED}❌ Mot de passe Grafana trop faible dans ${VALUES_DIR}/grafana-values.yaml (16 caractères minimum, générer avec : openssl rand -base64 24)${NC}"
     exit 1
 fi
 
@@ -91,30 +97,9 @@ spec:
       port: 80
 EOF
 
-# Datasource Prometheus — idempotente
-cat <<EOF | kubectl apply -n "${LOKI_NS}" -f - >/dev/null 2>&1
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-datasource-prometheus
-  namespace: ${LOKI_NS}
-  labels:
-    grafana_datasource: "1"
-data:
-  prometheus-datasource.yaml: |
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
-        isDefault: false
-        editable: true
-        jsonData:
-          timeInterval: 30s
-EOF
-
-kubectl rollout restart deployment/grafana -n "${LOKI_NS}" >/dev/null 2>&1
+# Les datasources (Loki, Prometheus) sont déclarées dans grafana-values.yaml
+# (source unique) ; l'ancienne ConfigMap est supprimée si elle subsiste.
+kubectl delete configmap grafana-datasource-prometheus -n "${LOKI_NS}" --ignore-not-found >/dev/null
 kubectl rollout status deployment/grafana -n "${LOKI_NS}" --timeout=2m
 
 "${SCRIPT_DIR}/../deploy-grafana-dashboard.sh" all

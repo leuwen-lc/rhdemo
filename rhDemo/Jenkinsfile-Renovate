@@ -9,10 +9,14 @@
  * ouvertes sur la branche evolutions-post-1.1.10 :
  *   1. Scan Renovate (image officielle renovate/renovate, commits signés GPG)
  *   2. Liste les PRs Renovate ouvertes via l'API Forgejo
+ *   2 bis. PR d'image Docker : chaque digest ajouté doit être le digest actuel de
+ *      son tag sur Docker Hub, publié depuis au moins IMAGE_MIN_AGE_HOURS
  *   3. Pour chaque PR : si la branche est en retard sur la base, merge de la
  *      base + push (évite qu'un correctif déjà mergé sur la base fasse
  *      échouer la CI pour une raison sans rapport avec la PR)
- *   4. Build Maven + tests + OWASP Dependency-Check
+ *   4. Validation selon les fichiers modifiés : Maven + tests + OWASP
+ *      Dependency-Check, ou Trivy sur l'image épinglée, ou dry-run Kubernetes
+ *      + Trivy sur les images du chart (composant d'infra stagingkub)
  *   5. CI verte  -> merge automatique via l'API Forgejo + commentaire
  *      CI rouge  -> commentaire d'échec, PR conservée ouverte
  *
@@ -49,6 +53,25 @@ pipeline {
         REPO            = 'leuwen-lc/rhdemo'
         BASE_BRANCH     = 'evolutions-post-1.1.10'
         RENOVATE_IMAGE  = 'renovate/renovate:43.288.0'
+        // Âge minimal d'un digest d'image avant merge, compté depuis sa publication sur
+        // Docker Hub (docs/RENOVATE_AUTOMERGE_CI.md, section « Délai des images Docker »).
+        // Les nouvelles versions attendent en plus le minimumReleaseAge de renovate.json,
+        // appliqué par Renovate lui-même.
+        IMAGE_MIN_AGE_HOURS = '48'
+
+        // Notification email d'échec uniquement — SMTP configuré en JCasC
+        // (unclassified.mailer, credential smtp-infomaniak-credentials), même
+        // mécanisme que Jenkinsfile-CI. Pas de mail de succès ici : un succès
+        // avec merge déclenche RHDemo-CI sur la base, qui envoie son propre
+        // mail ; un succès sans PR à merger est le cas normal (rien à
+        // signaler). Un échec, lui, ne déclenche rien en aval — sans ce mail,
+        // il serait indiscernable d'un "Renovate n'a rien eu à faire". Adresse
+        // sourcée depuis un credential Jenkins dédié (Secret text
+        // "notification-email") plutôt qu'en clair : dépôt public, une adresse
+        // mail personnelle en clair dans le code (sans bénéfice, contrairement
+        // à security.txt) alimente le harvesting de spam. Credential à créer
+        // manuellement, cf. jenkins-casc.yaml section CREDENTIALS.
+        NOTIFICATION_EMAIL = credentials('notification-email')
     }
 
     stages {
@@ -68,15 +91,28 @@ pipeline {
                 withCredentials([
                     string(credentialsId: 'renovate-forgejo-token', variable: 'RENOVATE_TOKEN'),
                     string(credentialsId: 'renovate-gpg-key', variable: 'RENOVATE_GPG_KEY'),
-                    string(credentialsId: 'renovate-github-token', variable: 'GITHUB_COM_TOKEN')
+                    string(credentialsId: 'renovate-github-token', variable: 'GITHUB_COM_TOKEN'),
+                    usernamePassword(credentialsId: 'dockerhub-renovate-readonly',
+                                     usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_TOKEN')
                 ]) {
+                    // Docker Hub authentifié (docs/RENOVATE_AUTOMERGE_CI.md, « Délai des images
+                    // Docker ») : en anonyme, l'API hub.docker.com refuse la pagination au-delà de
+                    // 1 000 tags et Renovate perd la date de publication des grosses images (nginx,
+                    // maven, postgres...), donc leur minimumReleaseAge. Cette API n'accepte qu'un
+                    // jeton Bearer temporaire, obtenu à chaque passage à partir du jeton personnel
+                    // (lecture seule, dépôts publics) ; le registre docker.io accepte login + jeton.
+                    // Échec de connexion (jeton expiré ou révoqué) : build en échec, donc mail,
+                    // plutôt qu'un passage sans dates qui bloquerait les images en silence.
+                    // set +x : le jeton temporaire n'est pas masqué par Jenkins, il ne doit pas
+                    // apparaître dans la trace du shell ; il ne transite que par l'environnement.
+                    //
                     // Image officielle Renovate en conteneur frère (via docker-socket-proxy),
                     // comme pour ephemere. Clé GPG passée en base64 via variable d'environnement
                     // (pas de bind-mount : un chemin de l'agent Jenkins n'existe pas forcément
                     // sur l'hôte Docker réel — piège classique Docker-outside-of-Docker déjà
                     // rencontré côté ephemere, où les secrets sont copiés via "docker cp").
                     // Token dédié (pas ci-bot-forgejo-token) : l'initialisation de Renovate a besoin
-                    // d'un scope "user" en plus de repository+issue, sans quoi elle échoue avec
+                    // de la portée read:user en plus de repository+issue, sans quoi elle échoue avec
                     // "Authentication failure" avant même de lister les dépôts.
                     // Script d'import GPG repris de l'ancien workflow Forgejo Actions (supprimé).
                     // GNUPGHOME="${HOME}/.gnupg" (pas un chemin custom type /tmp/gnupg) : Renovate
@@ -85,8 +121,29 @@ pipeline {
                     // défaut ($HOME/.gnupg) — la clé doit donc être importée à cet emplacement par
                     // défaut précisément, sans quoi git commit échoue avec "gpg: No secret key".
                     sh '''
+                        set +x
+                        DOCKERHUB_JWT=$(jq -n --arg u "$DOCKERHUB_USER" --arg p "$DOCKERHUB_TOKEN" '{identifier:$u, secret:$p}' |
+                            curl -sf --max-time 30 -X POST -H 'Content-Type: application/json' -d @- https://hub.docker.com/v2/auth/token |
+                            jq -r '.access_token // empty')
+                        if [ -z "$DOCKERHUB_JWT" ]; then
+                            echo "Connexion à Docker Hub impossible (credential dockerhub-renovate-readonly expiré ou révoqué ?)"
+                            exit 1
+                        fi
+                        RENOVATE_HOST_RULES=$(jq -nc --arg t "$DOCKERHUB_JWT" --arg u "$DOCKERHUB_USER" --arg p "$DOCKERHUB_TOKEN" '[
+                            {matchHost: "hub.docker.com", token: $t},
+                            {hostType: "docker", matchHost: "docker.io", username: $u, password: $p}
+                        ]')
+                        export RENOVATE_HOST_RULES
+                        # Seule commande que les postUpgradeTasks de renovate.json peuvent lancer :
+                        # vendoring des CRDs Gateway API à chaque montée de NGF. Option globale,
+                        # fixée ici et non dans renovate.json. Expression ancrée, version limitée à
+                        # des chiffres : le paramètre vient d'un tag de release GitHub, aucune
+                        # injection possible (Renovate lance d'ailleurs la commande sans shell).
+                        # [.] plutôt qu'un antislash : chaîne Groovy, puis JSON, puis regex.
+                        export RENOVATE_ALLOWED_COMMANDS='["^bash rhDemo/infra/stagingkub/scripts/vendor-gateway-api-crds[.]sh [0-9]+[.][0-9]+[.][0-9]+$"]'
                         docker run --rm -i \
-                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN \
+                          -e RENOVATE_GPG_KEY -e GITHUB_COM_TOKEN -e RENOVATE_TOKEN -e RENOVATE_HOST_RULES \
+                          -e RENOVATE_ALLOWED_COMMANDS \
                           -e RENOVATE_PLATFORM=forgejo \
                           -e RENOVATE_ENDPOINT=https://codeberg.org \
                           -e RENOVATE_REPOSITORIES="${REPO}" \
@@ -112,10 +169,10 @@ RENOVATE_SCAN_EOF
 
         stage('📋 Lister les PRs Renovate') {
             steps {
-                // ci-bot-forgejo-token : compte Codeberg dédié "rhdemo-ci-bot" (collaborateur
+                // ci-bot-forgejo-token : compte Codeberg dédié "cibot-leuwen-lc" (collaborateur
                 // write-only sur le repo), distinct du compte personnel et du bot Renovate
                 // (renovate-forgejo-token) — merges/comments/sync attribués à cette identité,
-                // pas à un compte humain. Voir docs/RENOVATE_AUTOMERGE_CI.md section 1.
+                // pas à un compte humain. Voir docs/RENOVATE_AUTOMERGE_CI.md, « Comptes et credentials ».
                 withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
                     script {
                         def httpCode = sh(
@@ -196,6 +253,125 @@ RENOVATE_SCAN_EOF
                         // juste après) — indispensable pour pouvoir revenir ici en cas de conflit.
                         def prTipSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                         sh "git fetch origin ${BASE_BRANCH}"
+
+                        // ── Délai des nouvelles versions (statut renovate/stability-days) ───────
+                        // Détail : docs/RENOVATE_AUTOMERGE_CI.md, « Délai des nouvelles versions ».
+                        // Renovate n'applique minimumReleaseAge qu'en créant ou en mettant à jour une
+                        // branche : une PR ouverte avant une règle de délai, ou dont Renovate n'a plus
+                        // mis la branche à jour, peut contenir une version trop récente. Renovate
+                        // publie l'état du délai sur chaque commit qu'il pousse : on exige « success »
+                        // sur son dernier commit (les merges de synchronisation de ce job n'en ont
+                        // pas, d'où --no-merges). Exception : une PR qui ne change que des digests
+                        // d'image. Renovate n'a pas de date pour eux, son statut reste « pending »
+                        // indéfiniment ; le contrôle des 48 h ci-dessous les couvre.
+                        def digestOnly = withEnv(["PR_TIP=${prTipSha}"]) {
+                            sh(
+                                script: '''#!/bin/bash
+                                    # Lignes retirées et ajoutées, digests effacés : identiques si et
+                                    # seulement si la PR ne change que des digests.
+                                    D=$(git diff -U0 "origin/${BASE_BRANCH}...${PR_TIP}" | grep -E '^[-+]' | grep -vE '^([+][+][+]|---) ')
+                                    grep -qE '@sha256:[0-9a-f]{64}' <<< "$D" || exit 1
+                                    S=$(sed -E 's/@sha256:[0-9a-f]{64}//g' <<< "$D")
+                                    diff -q <(grep '^-' <<< "$S" | cut -c2- | sort) <(grep '^[+]' <<< "$S" | cut -c2- | sort) >/dev/null
+                                ''',
+                                returnStatus: true
+                            ) == 0
+                        }
+                        if (digestOnly) {
+                            echo "   délai Renovate : PR de digest seul, couverte par le contrôle des ${IMAGE_MIN_AGE_HOURS} h"
+                        } else {
+                            def renovateSha = sh(
+                                script: "git log --no-merges --format=%H -1 origin/${BASE_BRANCH}..${prTipSha}",
+                                returnStdout: true
+                            ).trim()
+                            def stability = withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
+                                withEnv(["R_SHA=${renovateSha}"]) {
+                                    sh(
+                                        script: '''#!/bin/bash
+                                            set +x
+                                            [ -n "$R_SHA" ] || { echo absent; exit 0; }
+                                            curl -sf --max-time 20 -H "Authorization: token ${FORGEJO_TOKEN}" \
+                                                 "${FORGEJO_API}/repos/${REPO}/commits/${R_SHA}/status" |
+                                              jq -r '[.statuses[]? | select(.context == "renovate/stability-days") | .status] | first // "absent"' ||
+                                              echo erreur
+                                        ''',
+                                        returnStdout: true
+                                    ).trim()
+                                }
+                            }
+                            if (stability != 'success') {
+                                def hint = stability == 'absent'
+                                    ? " (PR antérieure à la règle de délai : cocher la case de rebase de la PR pour que Renovate la reprenne)"
+                                    : ''
+                                echo "⏳ PR #${prNumber} : délai Renovate non confirmé (statut renovate/stability-days : ${stability})${hint} — PR ignorée pour ce passage"
+                                return
+                            }
+                            echo "   délai Renovate : renovate/stability-days = success"
+                        }
+
+                        // ── Délai des images Docker ─────────────────────────────────────────────
+                        // Détail : docs/RENOVATE_AUTOMERGE_CI.md, section « Délai des images Docker ».
+                        // Renovate applique lui-même minimumReleaseAge aux nouvelles versions (dates
+                        // fournies par Docker Hub authentifié, stage Scan), mais ne retarde jamais une
+                        // mise à jour de digest (tag republié). Ce contrôle, sans état, s'en charge :
+                        // chaque référence image:tag@sha256 ajoutée par la PR doit être, sur Docker Hub,
+                        // le digest actuel de son tag, publié depuis au moins IMAGE_MIN_AGE_HOURS
+                        // (tag_last_pushed, date fixée par Docker Hub et non par l'éditeur).
+                        // Sortie par référence : OK, ATTENTE (trop récente, ou tag republié depuis :
+                        // Renovate mettra la PR à jour), ERREUR (API injoignable, tag inconnu) ou
+                        // REFUS (registre hors Docker Hub, sans date de publication).
+                        def imageCheck = withEnv(["PR_TIP=${prTipSha}"]) {
+                            sh(
+                                script: '''#!/bin/bash
+                                    set -u
+                                    NOW=$(date -u +%s)
+                                    git diff "origin/${BASE_BRANCH}...${PR_TIP}" | grep -E '^[+]' | grep -vE '^[+][+][+]' |
+                                      grep -oE '[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' | sort -u |
+                                      while IFS= read -r REF; do
+                                        [[ "$REF" =~ ^(.+):([A-Za-z0-9._-]+)@(sha256:[0-9a-f]{64})$ ]] || continue
+                                        NAME=${BASH_REMATCH[1]}; TAG=${BASH_REMATCH[2]}; DIGEST=${BASH_REMATCH[3]}
+                                        HOST=${NAME%%/*}
+                                        if [[ "$NAME" == */* && ( "$HOST" == *.* || "$HOST" == localhost ) ]]; then
+                                            case "$HOST" in
+                                                docker.io|index.docker.io|registry-1.docker.io) NAME=${NAME#*/} ;;
+                                                *) echo "REFUS|${REF}|registre ${HOST} hors Docker Hub, sans date de publication"; continue ;;
+                                            esac
+                                        fi
+                                        [[ "$NAME" == */* ]] || NAME="library/${NAME}"
+                                        if ! J=$(curl -sf --max-time 20 "https://hub.docker.com/v2/repositories/${NAME}/tags/${TAG}"); then
+                                            echo "ERREUR|${REF}|API Docker Hub injoignable ou tag inconnu"; continue
+                                        fi
+                                        HUB_DIGEST=$(jq -r '.digest // empty' <<< "$J")
+                                        PUSHED=$(jq -r '.tag_last_pushed // empty' <<< "$J")
+                                        if [ "$HUB_DIGEST" != "$DIGEST" ]; then
+                                            echo "ATTENTE|${REF}|tag republié depuis (digest actuel ${HUB_DIGEST:7:12}), Renovate mettra la PR à jour"; continue
+                                        fi
+                                        if ! P=$(date -u -d "$PUSHED" +%s 2>/dev/null); then
+                                            echo "ERREUR|${REF}|date de publication illisible (${PUSHED})"; continue
+                                        fi
+                                        AGE=$(( (NOW - P) / 3600 ))
+                                        if [ "$AGE" -lt "$IMAGE_MIN_AGE_HOURS" ]; then
+                                            echo "ATTENTE|${REF}|publié le ${PUSHED:0:16} UTC, il y a ${AGE} h (minimum ${IMAGE_MIN_AGE_HOURS} h)"
+                                        else
+                                            echo "OK|${REF}|publié il y a ${AGE} h"
+                                        fi
+                                      done
+                                    exit 0
+                                ''',
+                                returnStdout: true
+                            ).trim()
+                        }
+                        def imageLines = imageCheck ? imageCheck.split('\n') as List : []
+                        imageLines.each { echo "   image ${it.replace('|', ' : ')}" }
+                        if (imageLines.any { it.startsWith('REFUS|') }) {
+                            echo "❌ PR #${prNumber} : image hors Docker Hub, délai invérifiable — merge refusé"
+                            failures << prNumber
+                            return
+                        }
+                        if (imageLines.any { !it.startsWith('OK|') }) {
+                            echo "⏳ PR #${prNumber} : délai des images non écoulé ou invérifiable — PR ignorée pour ce passage"
+                            return
+                        }
 
                         // Une branche Renovate non rebasée depuis longtemps peut hériter
                         // d'un correctif de sécurité déjà mergé sur la base (ex: CVE fixée
@@ -363,6 +539,44 @@ RENOVATE_SCAN_EOF
                             echo "→ PR #${prNumber} : chemin retenu = Maven + OWASP Dependency-Check (manifeste de dépendances modifié : ${matchedFiles.join(', ')})"
                         }
 
+                        // Scan Trivy d'une liste d'images, seuil CRITICAL bloquant et .trivyignore.yaml
+                        // identiques à RHDemo-CI. Partagé par le chemin « image épinglée » et le chemin
+                        // « composant d'infra ». Rapports archivés par PR (sinon écrasés par la suivante).
+                        // Renvoie 0 si aucune CRITICAL non ignorée, 1 sinon.
+                        def scanImagesWithTrivy = { List images ->
+                            sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
+                            sh '''
+                                TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
+                                mkdir -p "${TRIVY_CACHE_DIR}"
+                                export TRIVY_CACHE_DIR
+                                trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
+                            '''
+                            // Noms de rapport calculés avant le lancement (dédoublonnage séquentiel),
+                            // puis scans en parallèle comme dans Jenkinsfile-CI : generateTrivyReport
+                            // copie le cache partagé dans un répertoire propre à chaque scan.
+                            def usedNames = []
+                            def scanStages = [:]
+                            images.each { image ->
+                                def baseName = (image =~ /([^\/:@]+)(:[^\/@]*)?(@sha256:[a-f0-9]+)?$/)[0][1]
+                                def reportName = baseName
+                                def n = 2
+                                while (reportName in usedNames) {
+                                    reportName = "${baseName}-${n}".toString()
+                                    n++
+                                }
+                                usedNames << reportName
+                                echo "→ Scan Trivy : ${image} (rapport ${reportName})"
+                                scanStages["Scan ${reportName}".toString()] = {
+                                    lib.generateTrivyReport(image, reportName)
+                                }
+                            }
+                            parallel(scanStages + [failFast: false])
+                            def ok = lib.aggregateTrivyResults()
+                            sh "rm -rf trivy-reports-pr${prNumber} && cp -r trivy-reports trivy-reports-pr${prNumber}"
+                            archiveArtifacts artifacts: "trivy-reports-pr${prNumber}/**", allowEmptyArchive: true
+                            return ok ? 0 : 1
+                        }
+
                         def ciStatus
                         if (isInfraComponentPr) {
                             def componentFile = changedFiles.split('\n').find {
@@ -396,10 +610,37 @@ RENOVATE_SCAN_EOF
 
                                         SCRIPT="''' + componentFile + '''"
                                         chmod +x "$SCRIPT"
-                                        HELM_DRY_RUN=true "$SCRIPT"
+                                        # CHART_IMAGES_FILE : le préflight RBAC du script y écrit les
+                                        # images rendues par le chart (cf. rbac-preflight-check.sh).
+                                        rm -f "$WORKSPACE/chart-images.txt"
+                                        CHART_IMAGES_FILE="$WORKSPACE/chart-images.txt" HELM_DRY_RUN=true "$SCRIPT"
                                     ''',
                                     returnStatus: true
                                 )
+                            }
+
+                            // Scan Trivy des images que la nouvelle version du chart déploierait (mêmes
+                            // seuils que RHDemo-CI, qui ne scanne que l'applicatif — cf.
+                            // docs/TRIVY_SECURITY_SCAN.md, « Périmètre du scan »). Fail-closed : un
+                            // chart dont aucune image n'a pu être listée est refusé. kind-config.yaml
+                            // seul (kindest/node, reconstruction complète) n'a pas de script composant
+                            // et n'arrive jamais ici avec ciStatus == 0.
+                            if (ciStatus == 0) {
+                                def chartImages = fileExists('chart-images.txt') ?
+                                    sh(script: "grep -vE '^[[:space:]]*\$' chart-images.txt | sort -u || true", returnStdout: true).trim() : ''
+                                if (!chartImages) {
+                                    echo "ERREUR: aucune image listée pour le chart de ${env.RENOVATE_TARGET_COMPONENT} (rendu helm template en échec ?) — validation refusée"
+                                    ciStatus = 1
+                                } else {
+                                    def invalid = chartImages.split('\n').findAll { !(it ==~ /[a-zA-Z0-9.\/_-]+(:[a-zA-Z0-9._-]+)?(@sha256:[a-f0-9]{64})?/) }
+                                    if (invalid) {
+                                        echo "ERREUR: référence(s) d'image inattendue(s) rendue(s) par le chart : ${invalid.join(', ')} — validation refusée"
+                                        ciStatus = 1
+                                    } else {
+                                        echo "Images rendues par le chart ${env.RENOVATE_TARGET_COMPONENT} : ${chartImages.replaceAll('\n', ', ')}"
+                                        ciStatus = scanImagesWithTrivy(chartImages.split('\n') as List)
+                                    }
+                                }
                             }
                         } else if (isPinnedImagePr) {
                             // Extraction de l'image ajoutée par le diff (motif repo:tag@sha256:digest),
@@ -408,7 +649,7 @@ RENOVATE_SCAN_EOF
                             def changedImages = sh(
                                 script: """
                                     git diff origin/${BASE_BRANCH}...HEAD -- ${pinnedImageFiles.join(' ')} \
-                                      | grep -E '^\\+' | grep -v '^\\+\\+\\+' \
+                                      | grep -E '^\\+' | grep -vE '^\\+\\+\\+' \
                                       | grep -oE '"[a-zA-Z0-9./_-]+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]+"' \
                                       | tr -d '"' | sort -u
                                 """,
@@ -420,22 +661,7 @@ RENOVATE_SCAN_EOF
                                 ciStatus = 1
                             } else {
                                 echo "Image(s) à scanner : ${changedImages.replaceAll('\n', ', ')}"
-
-                                sh 'rm -rf trivy-reports && mkdir -p trivy-reports'
-                                sh '''
-                                    TRIVY_CACHE_DIR="/home/jenkins/.cache/trivy"
-                                    mkdir -p "${TRIVY_CACHE_DIR}"
-                                    export TRIVY_CACHE_DIR
-                                    trivy image --download-db-only 2>&1 | grep -E "(Downloading|DB Repository)" || true
-                                '''
-
-                                changedImages.split('\n').each { image ->
-                                    def reportName = (image =~ /([^\/:]+):[^:]+$/)[0][1]
-                                    echo "→ Scan Trivy : ${image} (rapport ${reportName})"
-                                    lib.generateTrivyReport(image, reportName)
-                                }
-
-                                ciStatus = lib.aggregateTrivyResults() ? 0 : 1
+                                ciStatus = scanImagesWithTrivy(changedImages.split('\n') as List)
                             }
                         } else if (isOutOfMavenScopePr) {
                             // Aucun manifeste de dépendances touché : rien à construire ni à scanner,
@@ -449,12 +675,9 @@ RENOVATE_SCAN_EOF
                             // moment-là, un paquet compromis (attaque supply-chain) pourrait l'exfiltrer
                             // (ex: appel réseau sortant depuis un plugin/test malveillant) et obtenir un
                             // accès en écriture au dépôt — Jenkins masque les secrets dans ses logs mais
-                            // ne bloque pas une exfiltration réseau. Seuls NVD_API_KEY et les credentials
-                            // OSSIndex (accès en lecture seule à des bases de vulnérabilités publiques)
-                            // sont exposés ici.
+                            // ne bloque pas une exfiltration réseau. Seul NVD_API_KEY est exposé ici.
                             ciStatus = withCredentials([
-                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
-                                usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
+                                string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
                             ]) {
                                 sh(
                                     script: '''
@@ -465,11 +688,34 @@ RENOVATE_SCAN_EOF
                                         # "junit" plus bas, indépendants de la verbosité console).
                                         ./mvnw -q clean compile -DskipTests
                                         ./mvnw -q verify
-                                        ./mvnw -q org.owasp:dependency-check-maven:check -DnvdApiKey=${NVD_API_KEY} -DossindexAnalyzerUsername=${OSSINDEX_USER} -DossindexAnalyzerPassword=${OSSINDEX_PASSWORD}
+                                        # Secret NVD via .mvn/ci-settings.xml (server id "nvd" <- $NVD_API_KEY),
+                                        # jamais en ligne de commande (visible dans `ps` ; le debug Maven peut
+                                        # exposer -DnvdApiKey, cf. GHSA-qqhq-8r2c-c3f5).
+                                        # OSS Index désactivé ici volontairement (-DossIndexAnalyzerEnabled=false) :
+                                        # son quota mensuel Sonatype Guide (500 crédits) est partagé avec RHDemo-CI,
+                                        # qui scanne un arbre de dépendances quasi identique. Le faire tourner sur
+                                        # les deux pipelines double la consommation et rend le résultat non
+                                        # déterministe selon lequel des deux épuise le quota en premier (incident
+                                        # constaté : build RHDemo-Renovate #104 vs RHDemo-CI #871, quota épuisé
+                                        # entre les deux runs à ~4 min d'écart, CVE GHSA-w27v-7q3p-w38r sur svgo
+                                        # vue par l'un et pas par l'autre). RHDemo-CI reste seul responsable de la
+                                        # détection des CVE couvertes uniquement par OSS Index (GHSA sans CPE NVD).
+                                        # Voir docs/OWASP_DEPENDENCY_CHECK.md#oss-index.
+                                        ./mvnw -q -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexAnalyzerEnabled=false
                                     ''',
                                     returnStatus: true
                                 )
                             }
+
+                            // Rapport archivé pour diagnostic (build #104 n'avait laissé qu'une ligne de
+                            // console tronquée par le -q ci-dessus, sans rapport exploitable après coup).
+                            // Renommage par numéro de PR : plusieurs PR passent par ce chemin dans la même
+                            // exécution et écraseraient sinon le rapport de la précédente. allowEmptyArchive :
+                            // le rapport peut manquer si mvnw a échoué avant le goal dependency-check (ex:
+                            // échec de compilation/tests).
+                            sh "cp rhDemo/target/dependency-check-report.html rhDemo/target/dependency-check-report-pr${prNumber}.html || true"
+                            sh "cp rhDemo/target/dependency-check-report.json rhDemo/target/dependency-check-report-pr${prNumber}.json || true"
+                            archiveArtifacts artifacts: "rhDemo/target/dependency-check-report-pr${prNumber}.*", allowEmptyArchive: true
                         }
 
                         withCredentials([string(credentialsId: 'ci-bot-forgejo-token', variable: 'FORGEJO_TOKEN')]) {
@@ -606,6 +852,9 @@ RENOVATE_SCAN_EOF
                         // le rapport météo/"aucun build récent n'a échoué" — un PR non traitée
                         // passerait alors inaperçue sur le tableau de bord du job.
                         currentBuild.result = 'FAILURE'
+                        // Repris dans le mail d'échec (post { failure {} }) : la variable locale
+                        // "failures" ne survit pas au-delà de ce bloc script.
+                        env.FAILED_PRS = failures.join(', ')
                         echo "❌ ${failures.size()} PR(s) en échec : ${failures.join(', ')}"
                     }
                 }
@@ -624,6 +873,25 @@ RENOVATE_SCAN_EOF
             }
             sh "git checkout ${env.BASE_BRANCH} || true"
             cleanWs()
+        }
+        failure {
+            script {
+                // Seul cas notifié par mail (cf. commentaire NOTIFICATION_EMAIL) : couvre aussi
+                // bien une exception du pipeline (scan Renovate, listing des PRs...) qu'un
+                // currentBuild.result = 'FAILURE' explicite pour une ou plusieurs PR en échec
+                // (env.FAILED_PRS, absent dans le premier cas).
+                echo "❌ Pipeline Renovate échoué !"
+                def prDetail = env.FAILED_PRS ? "\n\nPR(s) en échec : ${env.FAILED_PRS}" : ''
+                // Best-effort, comme dans Jenkinsfile-CI : une panne SMTP ne doit pas masquer
+                // l'échec réel du pipeline (déjà visible dans le résultat du build).
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-Renovate #${env.BUILD_NUMBER} : échec",
+                             body: "Le pipeline RHDemo-Renovate #${env.BUILD_NUMBER} a échoué.${prDetail}\n\nConsultez les logs : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
         }
     }
 }

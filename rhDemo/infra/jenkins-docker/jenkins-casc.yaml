@@ -46,17 +46,25 @@ jenkins:
               network: "rhdemo-jenkins-network"
               extraGroupsString: "984"
               environmentsString: |
-                JAVA_HOME=/opt/java/temurin-25
+                JAVA_HOME=/opt/java/openjdk
                 MAVEN_HOME=/opt/maven
-                PATH=/opt/java/temurin-25/bin:/opt/maven/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+                PATH=/opt/java/openjdk/bin:/opt/maven/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             remoteFs: "/home/jenkins/agent"
             connector:
               jnlp:
                 jenkinsUrl: "http://jenkins:8080/"
             retentionStrategy:
               idleMinutes: 5
-            instanceCapStr: "2"
-            removeVolumes: false
+            # 1 : un seul build à la fois, tous jobs confondus (CI, CD, Renovate,
+            # Stagingkub-Upgrade-Deploy). Évite qu'une CI démarre pendant une série de
+            # merges Renovate, que CD et Upgrade-Deploy touchent stagingkub en même temps,
+            # et la pression mémoire de deux pipelines lourds côte à côte. Pas de blocage
+            # mutuel : les déclenchements entre jobs sont en « wait: false ».
+            instanceCapStr: "1"
+            # true : supprime à la destruction de l'agent les 2 volumes anonymes créés par
+            # les VOLUME de jenkins/inbound-agent (/home/jenkins/agent, /home/jenkins/.jenkins).
+            # Les volumes nommés (cache Maven, Trivy, Selenium) ne sont jamais supprimés par docker rm -v.
+            removeVolumes: true
             pullStrategy: PULL_NEVER
 
   # ────────────────────────────────────────────────────────────────
@@ -95,11 +103,11 @@ jenkins:
 # CONFIGURATION DES OUTILS (JDK, Maven, etc.)
 # ═══════════════════════════════════════════════════════════════════
 tool:
-  # JDK 25 (Eclipse Temurin, installé dans l'image Docker)
+  # JDK 25 (Eclipse Temurin, fourni par l'image de base jenkins/inbound-agent:*-jdk25)
   jdk:
     installations:
       - name: "JDK25"
-        home: "/opt/java/temurin-25"
+        home: "/opt/java/openjdk"
   
   # Maven (déjà installé dans l'image Docker)
   maven:
@@ -129,6 +137,7 @@ tool:
 #     pour permettre la persistance entre les redémarrages
 #
 # Liste des credentials à créer manuellement :
+# (renouvellement : rhDemo/scripts/rotate-secrets.py, inventaire rhDemo/secrets/inventory.yaml)
 #
 # 1. sops-age-key (Secret file)
 #    - Type: Secret file
@@ -158,12 +167,12 @@ tool:
 # 5. ci-bot-forgejo-token
 #    - Type: Secret text
 #    - ID: ci-bot-forgejo-token
-#    - Secret: token du compte Codeberg dédié "rhdemo-ci-bot" (PAS le compte personnel
+#    - Secret: token du compte Codeberg dédié "cibot-leuwen-lc" (PAS le compte personnel
 #      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope
 #      "issue" est nécessaire pour les commentaires de PR (endpoint issues/comments),
 #      "repository" seul ne suffit pas.
 #    - Prérequis avant de générer le token :
-#        1. Créer le compte "rhdemo-ci-bot" sur https://codeberg.org
+#        1. Créer le compte "cibot-leuwen-lc" sur https://codeberg.org
 #        2. L'ajouter comme collaborateur du repo leuwen-lc/rhdemo avec la permission
 #           "Write" (pas "Admin") : Settings > Collaborators
 #        3. Se connecter avec ce compte et générer le token sur
@@ -184,34 +193,36 @@ tool:
 # 6. renovate-gpg-key (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-gpg-key
-#    - Secret: clé GPG privée exportée en base64 (même valeur que le secret Codeberg Actions
-#      RENOVATE_GPG_KEY), utilisée pour signer les commits Renovate
+#    - Secret: clé GPG privée exportée en base64, utilisée pour signer les commits Renovate ;
+#      générée et publiée sur le compte bot par rotate-secrets.py renovate-gpg-key
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
 # 7. renovate-github-token (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-github-token
 #    - Secret: token GitHub read-only (repos publics), pour les lookups de changelogs/release
-#      notes des dépendances hébergées sur GitHub (même valeur que le secret Codeberg Actions
-#      RENOVATE_GH_TOKEN)
+#      notes des dépendances hébergées sur GitHub
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
 # 8. renovate-forgejo-token (Secret text)
 #    - Type: Secret text
 #    - ID: renovate-forgejo-token
-#    - Secret: même valeur que l'ancien secret Codeberg Actions RENOVATE_TOKEN (token dédié à
-#      Renovate lui-même, distinct de ci-bot-forgejo-token)
-#    - Pourquoi un token séparé : ci-bot-forgejo-token (scopes repository+issue) ne suffit pas pour
+#    - Secret: token du compte bot renovate-leuwen-lc (distinct de ci-bot-forgejo-token),
+#      portées write:repository, write:issue, read:user, read:organization ; créé par
+#      rotate-secrets.py renovate-forgejo-token
+#    - Pourquoi un token séparé : ci-bot-forgejo-token (repository+issue) ne suffit pas pour
 #      l'initialisation de Renovate côté forgejo, qui échoue avec "Authentication failure" sans
-#      un scope "user" supplémentaire — observé en pratique lors du rapatriement depuis Codeberg
-#      Actions. Réutiliser le token existant qui fonctionnait déjà pour Renovate évite d'avoir à
-#      déterminer/régénérer le scope exact requis.
+#      portée "user" — observé lors du rapatriement depuis Codeberg Actions. La lecture suffit
+#      (read:user, confirmé au renouvellement du 2026-11-17).
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate" (variable RENOVATE_TOKEN)
 #
 # 9. smtp-infomaniak-credentials
 #    - Type: Username with password
 #    - ID: smtp-infomaniak-credentials
-#    - Username: lcpro@etik.com
+#    - Username: adresse mail Infomaniak dédiée aux notifications CI (même valeur que
+#      JENKINS_NOTIFICATION_EMAIL dans .env, cf. unclassified.location.adminAddress plus
+#      bas, et que le credential notification-email #10 ci-dessous) — pas de valeur en
+#      clair ici : dépôt public, cf. #10 pour le rationale complet.
 #    - Password: mot de passe IMAP/SMTP de l'adresse mail Infomaniak — géré et mis à jour
 #      manuellement par l'utilisateur dans Jenkins UI, jamais stocké dans ce dépôt
 #    - Usage: notification email de succès/échec de RHDemo-CI (step emailext, plugin email-ext)
@@ -224,6 +235,30 @@ tool:
 #      une configuration entièrement manuelle via Manage Jenkins > System > Extended E-mail
 #      Notification (host mail.infomaniak.com:465 SSL, credential ci-dessus) — JCasC ne gérant
 #      pas ce bloc, il ne l'écrase pas non plus au redémarrage.
+#
+# 10. notification-email (Secret text)
+#    - Type: Secret text
+#    - ID: notification-email
+#    - Secret: la même adresse mail que smtp-infomaniak-credentials (Username ci-dessus) et
+#      que JENKINS_NOTIFICATION_EMAIL (.env, cf. adminAddress plus bas) — les trois doivent
+#      rester synchronisés manuellement, Infomaniak rejette l'envoi si le "From" (adminAddress,
+#      faute de "from:" explicite dans les emailext) ne correspond pas au compte SMTP authentifié.
+#    - Usage: destinataire ("to:") des emailext de Jenkinsfile-CI/CD/Renovate/Stagingkub-Upgrade-Deploy
+#      (variable NOTIFICATION_EMAIL). Pourquoi un credential plutôt qu'un littéral dans ces
+#      fichiers : dépôt public, une adresse mail personnelle en clair dans le code n'a aucun
+#      bénéfice (contrairement à security.txt, exposition volontaire pour un contact sécurité)
+#      et alimente le harvesting de spam.
+#
+# 11. dockerhub-renovate-readonly
+#    - Type: Username with password
+#    - ID: dockerhub-renovate-readonly
+#    - Username: identifiant Docker Hub (Docker ID, pas l'adresse e-mail) ; Password : jeton
+#      personnel de portée "Public Repo Read-only", avec date d'expiration
+#      (hub.docker.com > Account settings > Personal access tokens)
+#    - Pourquoi : en anonyme, l'API hub.docker.com refuse la pagination au-delà de 1 000 tags,
+#      Renovate perd alors la date de publication des grosses images et leur délai minimal.
+#      Échec de connexion (jeton expiré) : le stage "Scan Renovate" échoue, donc mail.
+#    - Usage: RHDemo-Renovate, stage "Scan Renovate" (RENOVATE_HOST_RULES)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -244,15 +279,18 @@ unclassified:
 
   # Configuration Location
   # adminAddress doit correspondre au compte SMTP authentifié (smtp-infomaniak-credentials,
-  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Stagingkub-Upgrade-Deploy) n'a pas de
-  # "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
+  # voir plus haut) : emailext (Jenkinsfile-CI/CD/Renovate/Stagingkub-Upgrade-Deploy) n'a pas
+  # de "from:" explicite et retombe sur cette adresse comme expéditeur par défaut. Un mismatch
   # avec le compte authentifié fait rejeter l'envoi par Infomaniak (observé en pratique :
   # un override manuel via l'UI avait corrigé cette valeur, mais un redémarrage Jenkins a
   # réappliqué ce fichier JCasC et donc écrasé silencieusement l'override, cassant les
   # notifications email de tous les pipelines pendant plusieurs jours sans erreur visible).
+  # Valeur interpolée depuis JENKINS_NOTIFICATION_EMAIL (.env, gitignored) plutôt qu'en clair
+  # ici : dépôt public, cf. credential #10 (notification-email) ci-dessus pour le rationale —
+  # les deux doivent être maintenus à la même adresse manuellement.
   location:
     url: "http://jenkins:8080/"
-    adminAddress: "lcpro@etik.com"
+    adminAddress: "${JENKINS_NOTIFICATION_EMAIL}"
 
 # ═══════════════════════════════════════════════════════════════════
 # JOBS - Pipelines RHDemo
@@ -342,6 +380,8 @@ jobs:
             scmpoll_spec('H/5 * * * *')
             ignorePostCommitHooks(false)
           }
+          // Build quotidien à 5h00 (en plus du polling SCM)
+          cron('0 5 * * *')
         }
       }
 
@@ -482,8 +522,10 @@ jobs:
 
         triggers {
           // Scan Renovate désormais inclus dans ce job (plus de dépendance à Codeberg
-          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate
-          cron('H 3 * * *')
+          // Actions) — plus besoin de marge d'attente, reprend l'horaire historique de Renovate.
+          // Décalé de 3h à 6h : Codeberg est régulièrement indisponible vers 3h du matin,
+          // ce qui fait échouer le pipeline (checkout/API Forgejo) avant même de commencer.
+          cron('0 6 * * *')
         }
       }
 

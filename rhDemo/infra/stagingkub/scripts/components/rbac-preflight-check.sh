@@ -20,9 +20,34 @@
 # `helm upgrade --install` qui suit, pour rendre le manifeste identique.
 # ═══════════════════════════════════════════════════════════════
 
+# Liste des images (mode validation Jenkinsfile-Renovate) : si CHART_IMAGES_FILE
+# est défini, les images rendues par ce même `helm template` y sont ajoutées
+# (une par ligne) pour le scan Trivy pré-merge. Champs `image:` sous forme de
+# chaîne ou d'objet {repository, tag, digest} (ex. NginxProxy de NGF) ; une
+# image passée uniquement en argument de conteneur (ex. config-reloader de
+# prometheus-operator) n'est pas vue. Rendu en échec : rien n'est écrit, et
+# Jenkins refuse la PR sur liste vide (fail-closed).
+record_chart_images() {
+    local release="$1" namespace="$2" chart="$3"
+    shift 3
+    helm template "$release" "$chart" --namespace "$namespace" "$@" 2>/dev/null \
+        | yq -o=json '.' \
+        | jq -r '.. | objects | select(has("image")) | .image
+                 | if type == "string" then .
+                   elif type == "object" and has("repository") then
+                     .repository + (if .tag then ":" + (.tag | tostring) else "" end)
+                                 + (if .digest then "@" + .digest else "" end)
+                   else empty end' \
+        >> "$CHART_IMAGES_FILE" || true
+}
+
 rbac_preflight_check() {
     local release="$1" namespace="$2" chart="$3"
     shift 3
+
+    if [ -n "${CHART_IMAGES_FILE:-}" ]; then
+        record_chart_images "$release" "$namespace" "$chart" "$@"
+    fi
 
     local manifest
     manifest="$(mktemp)"

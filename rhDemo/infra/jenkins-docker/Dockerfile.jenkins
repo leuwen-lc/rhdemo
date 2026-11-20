@@ -1,4 +1,4 @@
-FROM jenkins/jenkins:2.568.1-lts-jdk21
+FROM jenkins/jenkins:2.580.2-lts-jdk25@sha256:415ab90d4e3b25148f7191bc04f455a20817d6c4c3b0a98f6c6b0da4877f7081
 
 # ═══════════════════════════════════════════════════════════════════
 # JENKINS CONTROLLER (master) - PILOTAGE UNIQUEMENT
@@ -17,7 +17,12 @@ FROM jenkins/jenkins:2.568.1-lts-jdk21
 # ═══════════════════════════════════════════════════════════════════
 
 # Désactiver le wizard de setup initial
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+# -XX:-UseBASE64Intrinsics : contournement CVE-2026-114938 (Java4Shell), à retirer avec un JDK corrigé
+# -D...DockerContainerWatchdog.recurrenceInSeconds=30 : nettoyage des conteneurs d'agents orphelins
+#   toutes les 30 s au lieu de 300. Un arrêt d'agent échoue parfois (« Broken pipe » : connexion
+#   keep-alive fermée par docker-socket-proxy après 10 s d'inactivité) ; le conteneur occupe alors
+#   l'unique place (instanceCap 1) et le build suivant attend « waiting for available executor ».
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -XX:-UseBASE64Intrinsics -Dcom.nirima.jenkins.plugins.docker.DockerContainerWatchdog.recurrenceInSeconds=30"
 
 # Liste des plugins à installer automatiquement
 COPY plugins.txt /usr/share/jenkins/ref/plugins.txt
@@ -32,6 +37,15 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 COPY jenkins-casc.yaml /var/jenkins_home/casc_configs/jenkins.yaml
 
 ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+
+# ═══════════════════════════════════════════════════════════════════
+# SÉCURITÉ : ca-certificates à jour (CVE-2026-111943, CA eMudhra compromises)
+# ═══════════════════════════════════════════════════════════════════
+# Version Debian 13 corrigée : 20250419+deb13u1. Voir docs/SECURITE_CA_EMUDHRA_PLAN.md
+USER root
+RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+USER jenkins
 
 # ═══════════════════════════════════════════════════════════════════
 # CONFIGURATION FINALE

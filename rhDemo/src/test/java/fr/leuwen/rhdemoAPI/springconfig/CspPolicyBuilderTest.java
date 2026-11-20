@@ -6,6 +6,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +41,8 @@ class CspPolicyBuilderTest {
         "https://keycloak.ephemere.local/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.ephemere.local",
         "http://localhost:8080/realms/rhdemo/protocol/openid-connect/auth, http://localhost:8080",
         "http://keycloak.example.com:80/realms/rhdemo/protocol/openid-connect/auth, http://keycloak.example.com",
-        "https://keycloak.example.com:443/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.example.com"
+        "https://keycloak.example.com:443/realms/rhdemo/protocol/openid-connect/auth, https://keycloak.example.com",
+        "http://keycloak.example.com:0/realms/rhdemo/protocol/openid-connect/auth, http://keycloak.example.com"
     })
     @DisplayName("doit extraire correctement l'URL de base avec différents ports")
     void extractKeycloakBaseUrl_WithVariousPorts(String inputUri, String expectedUrl) {
@@ -152,5 +155,21 @@ class CspPolicyBuilderTest {
         CookieCsrfTokenRepository repository = builderWith("", true).createCsrfTokenRepository();
 
         assertThat(repository).isNotNull();
+    }
+
+    @ParameterizedTest(name = "cookieSecureFlag={0}")
+    @ValueSource(booleans = {true, false})
+    @DisplayName("le cookie XSRF-TOKEN doit porter SameSite=Strict et le flag Secure piloté par la configuration")
+    void createCsrfTokenRepository_CookieAttributes(boolean secure) {
+        CookieCsrfTokenRepository repository = builderWith("", secure).createCsrfTokenRepository();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        repository.saveToken(repository.generateToken(request), request, response);
+
+        jakarta.servlet.http.Cookie cookie = response.getCookie("XSRF-TOKEN");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie.getAttribute("SameSite")).isEqualTo("Strict");
+        assertThat(cookie.getSecure()).isEqualTo(secure);
     }
 }

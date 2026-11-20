@@ -59,7 +59,7 @@ cd /home/leno-vo/git/repository/rhDemo
 
 ## 📊 Couverture de code
 
-Pour un rapport de couverture avec JaCoCo, voir [TESTS_SECURITY_COVERAGE.md](../../../TESTS_SECURITY_COVERAGE.md).
+Pour un rapport de couverture avec JaCoCo, voir [TESTS_SECURITE_COUVERTURE.md](../../../../../../../docs/TESTS_SECURITE_COUVERTURE.md).
 
 ## 🔧 Configuration
 

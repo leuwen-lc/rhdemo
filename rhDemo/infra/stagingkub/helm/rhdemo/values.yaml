@@ -12,12 +12,12 @@ global:
   images:
     # renovate: datasource=docker depName=postgres
     postgres: "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
-    # renovate: datasource=docker depName=quay.io/keycloak/keycloak
-    keycloak: "quay.io/keycloak/keycloak:26.7.2@sha256:c2a17fe407e892196d0b7cf9cef54e60952d6c372a9205f661a9efa0911463b0"
+    # renovate: datasource=docker depName=keycloak/keycloak
+    keycloak: "keycloak/keycloak:26.8.1@sha256:3f3c5f8e03c614774b4bd9173b88391fefa4153bfc010d8012d59ad825377332"
     # renovate: datasource=docker depName=busybox
-    busybox: "busybox:1.38@sha256:1cfa4e2b09e127b9c4ed43578d3f3c18e7d44ea47b9ea98475c0cbe9086525f8"
-    # renovate: datasource=docker depName=quay.io/prometheuscommunity/postgres-exporter
-    postgresExporter: "quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e"
+    busybox: "busybox:1.38@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4"
+    # renovate: datasource=docker depName=prometheuscommunity/postgres-exporter
+    postgresExporter: "prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e"
   imagePullPolicy: IfNotPresent
 
 # ═══════════════════════════════════════════════════════════════
@@ -38,6 +38,14 @@ postgresqlBackup:
 # ═══════════════════════════════════════════════════════════════
 postgresql-rhdemo:
   enabled: true
+
+  # Stratégie de mise à jour déclarée explicitement (valeur par défaut de
+  # Kubernetes) pour que Helm en soit propriétaire : un changement ultérieur
+  # (ex. OnDelete) s'appliquera proprement en server-side apply.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
 
   database:
     name: rhdemo
@@ -85,6 +93,14 @@ postgresql-rhdemo:
 postgresql-keycloak:
   enabled: true
 
+  # Stratégie de mise à jour déclarée explicitement (valeur par défaut de
+  # Kubernetes) pour que Helm en soit propriétaire : un changement ultérieur
+  # (ex. OnDelete) s'appliquera proprement en server-side apply.
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
   database:
     name: keycloak
     user: keycloak
@@ -119,6 +135,17 @@ keycloak:
   enabled: true
 
   replicaCount: 1
+
+  # Stratégie de déploiement : Recreate, car une montée de version migre le
+  # schéma de la base. En RollingUpdate, l'ancien et le nouveau pod coexistent
+  # sur la même base ; depuis Keycloak 26.8 le nouveau pod détecte un
+  # split-brain JGroups et reste non Ready, ce qui bloque le déploiement.
+  strategy: Recreate
+
+  # Cache Infinispan : local (instance unique, pas de clustering JGroups ni de
+  # découverte JDBC_PING). Passer à "ispn" impose replicaCount > 1 ET l'ouverture
+  # des ports JGroups (7800, 57800) entre pods Keycloak dans la NetworkPolicy.
+  cache: local
 
   admin:
     user: admin
@@ -184,6 +211,17 @@ rhdemo:
     pullPolicy: IfNotPresent
 
   replicaCount: 1
+
+  # Stratégie de déploiement déclarée explicitement pour que Helm en soit
+  # propriétaire (un passage ultérieur en Recreate s'appliquera proprement en
+  # server-side apply). maxUnavailable 0 : le nouveau pod doit être Ready avant
+  # l'arrêt de l'ancien (pas de coupure). Suppose un schéma de base compatible
+  # entre deux versions successives de l'application.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
 
   springProfile: stagingkub
   serverPort: 9000
@@ -260,7 +298,7 @@ rhdemo:
     failureThreshold: 3
 
 # ═══════════════════════════════════════════════════════════════
-# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.4.0)
+# Gateway API - Exposition HTTPS (NGINX Gateway Fabric 2.6.0)
 # ═══════════════════════════════════════════════════════════════
 # Utilise le shared-gateway créé par init-stagingkub.sh.
 # Les HTTPRoutes s'attachent au Gateway partagé via parentRefs cross-namespace.
@@ -351,7 +389,7 @@ gateway:
     busyBuffersSize: "256k"
 
 # ═══════════════════════════════════════════════════════════════
-# NGINX Gateway Fabric 2.4.0 (référence)
+# NGINX Gateway Fabric 2.6.0 (référence)
 # ═══════════════════════════════════════════════════════════════
 # NGF est installé par init-stagingkub.sh dans le namespace nginx-gateway.
 # Cette section documente la configuration utilisée (non appliquée par Helm).
@@ -375,7 +413,7 @@ nginx-gateway-fabric:
 #   2. Chaque flux légitime est explicitement autorisé
 #   3. L'accès Internet est bloqué (sauf DNS)
 #
-# Voir: docs/NETWORK_SECURITY_POLICY.md pour les détails des flux
+# Voir: docs/SECURITE_NETWORK_POLICY.md pour les détails des flux
 # ═══════════════════════════════════════════════════════════════
 networkPolicies:
   # Activer/désactiver toutes les NetworkPolicies

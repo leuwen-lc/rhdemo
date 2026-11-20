@@ -1,3 +1,12 @@
+---
+statut: actif
+verifie_le: 2026-10-22
+sources:
+  - rhDemo/infra/stagingkub/helm/rhdemo/templates/postgresql-backup-cronjob.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+  - rhDemo/infra/stagingkub/kind-config.yaml
+---
+
 # Backups PostgreSQL avec CronJobs
 
 ## 📋 Vue d'ensemble

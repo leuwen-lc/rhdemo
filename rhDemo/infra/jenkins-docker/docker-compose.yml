@@ -65,8 +65,12 @@ services:
       # Persistance des données Jenkins
       - jenkins_home:/var/jenkins_home
 
-      # Configuration as Code (JCasC)
-      - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml:ro
+      # Configuration as Code (JCasC) : montage du DOSSIER, pas du fichier seul.
+      # Un montage de fichier reste attaché à l'inode présent au démarrage : après un
+      # sed -i (release.sh) ou un git checkout, le conteneur verrait l'ancien contenu.
+      # Prise en compte d'une modification : Manage Jenkins → Configuration as Code →
+      # « Reload existing configuration » (ou redémarrage du conteneur).
+      - ./casc:/var/jenkins_home/casc_configs:ro
 
     environment:
       # Désactiver le setup wizard

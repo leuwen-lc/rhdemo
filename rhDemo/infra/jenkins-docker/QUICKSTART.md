@@ -94,7 +94,8 @@ cosign generate-key-pair
 # Arrêter
 docker compose stop
 
-# Relancer après modification de jenkins-casc.yaml
+# Après modification de casc/jenkins-casc.yaml : Manage Jenkins → Configuration as Code
+# → « Reload existing configuration », ou à défaut :
 docker compose restart jenkins
 
 # Reset complet (perte de données)

@@ -90,7 +90,7 @@ Pour élargir le périmètre, modifier `targetClasses` dans le profil. Un périm
 ## Pistes d'évolution
 
 - Job Jenkins dédié, hebdomadaire ou nocturne, publiant le rapport HTML. Le déclencheur `cron` de
-  [jenkins-casc.yaml](../infra/jenkins-docker/jenkins-casc.yaml) montre comment le planifier.
+  [jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) montre comment le planifier.
 - Seuil `mutationThreshold` une fois la base stabilisée.
 - Analyse incrémentale avec `withHistory` pour réduire la durée.
 - Équivalent frontend : Stryker Mutator, pertinent seulement s'il existe des tests unitaires Vue.

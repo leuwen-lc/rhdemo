@@ -240,7 +240,7 @@ jenkins-docker/
 ├── Dockerfile.jenkins          # Image controller (pilotage uniquement)
 ├── Dockerfile.agent            # Image agent (tous les outils de build)
 ├── plugins.txt                 # Liste des plugins à installer
-├── jenkins-casc.yaml          # Configuration as Code (JCasC)
+├── casc/jenkins-casc.yaml     # Configuration as Code (JCasC), dossier monté dans le conteneur
 ├── .env.example               # Template des variables d'environnement
 ├── .env                       # Vos variables (à créer, non commité)
 ├── start-jenkins.sh           # Script de démarrage
@@ -282,11 +282,11 @@ Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Intégrations (SonarQube)
 - ✅ Jobs pipeline (CI + CD)
 
-Pour modifier la configuration :
-```bash
-nano jenkins-casc.yaml
-docker-compose restart jenkins
-```
+Pour modifier la configuration, éditer `casc/jenkins-casc.yaml` puis, dans Jenkins,
+Manage Jenkins → Configuration as Code → « Reload existing configuration » (ou
+`docker compose restart jenkins`). Le dossier `casc/` est monté en entier, et non le
+fichier seul : un montage de fichier garde l'ancien contenu après un `sed -i` ou un
+`git checkout`, jusqu'au redémarrage du conteneur.
 ### Configuration de SOPS et des credentials dans Jenkins
 
 (Obligatoire pour pouvoir lancer le pipeline Jenkinsfile-CI)

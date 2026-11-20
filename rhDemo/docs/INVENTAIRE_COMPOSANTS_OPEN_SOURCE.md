@@ -4,7 +4,7 @@ verifie_le: 2026-11-06
 sources:
   - rhDemo/pom.xml
   - rhDemo/frontend/package.json
-  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
 ---
 
 # Inventaire des composants open source

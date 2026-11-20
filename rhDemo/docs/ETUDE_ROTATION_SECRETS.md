@@ -2,7 +2,7 @@
 statut: proposition
 verifie_le: 2026-11-17
 sources:
-  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
   - rhDemo/infra/jenkins-docker/QUICKSTART.md
   - rhDemo/Jenkinsfile-CI
   - rhDemo/Jenkinsfile-CD

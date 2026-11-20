@@ -6,7 +6,7 @@ sources:
   - rhDemo/vars/rhDemoLib.groovy
   - rhDemo/Jenkinsfile-CD
   - rhDemo/Jenkinsfile-Renovate
-  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
 ---
 
 # 🔄 Pipelines CI/CD - RHDemo
@@ -525,7 +525,7 @@ Après build #98 :
 
 #### Option A : Configuration automatique (JCasC - Recommandé)
 
-Le fichier [infra/jenkins-docker/jenkins-casc.yaml](../infra/jenkins-docker/jenkins-casc.yaml) configure **automatiquement** les deux pipelines au démarrage de Jenkins.
+Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) configure **automatiquement** les deux pipelines au démarrage de Jenkins.
 
 **Avantages** :
 - ✅ Configuration versionnée dans Git

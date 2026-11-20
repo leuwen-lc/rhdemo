@@ -4,7 +4,7 @@ verifie_le: 2026-11-06
 sources:
   - rhDemo/Jenkinsfile-Renovate
   - renovate.json
-  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
 ---
 
 # Mises à jour Renovate validées et mergées par Jenkins
@@ -19,7 +19,7 @@ Pistes écartées : faire remonter les statuts CI vers Forgejo (un passage de pl
 
 ## Déroulement d'un passage
 
-Le job est déclaré dans [`jenkins-casc.yaml`](../infra/jenkins-docker/jenkins-casc.yaml) (job `RHDemo-Renovate`, déclenchement `cron` quotidien, `scriptPath` vers `Jenkinsfile-Renovate`). Ses builds ne se chevauchent pas (`disableConcurrentBuilds`), et Jenkins n'exécute qu'un agent à la fois.
+Le job est déclaré dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) (job `RHDemo-Renovate`, déclenchement `cron` quotidien, `scriptPath` vers `Jenkinsfile-Renovate`). Ses builds ne se chevauchent pas (`disableConcurrentBuilds`), et Jenkins n'exécute qu'un agent à la fois.
 
 1. **Scan Renovate** : Renovate tourne dans son image officielle et ouvre ou met à jour ses PR (voir [Exécution de Renovate](#exécution-de-renovate-dans-jenkins)).
 2. **Liste des PR** : PR ouvertes dont la branche contient `renovate`, qui ciblent `BASE_BRANCH` et dont la branche vit dans le dépôt lui-même, jamais dans un fork.

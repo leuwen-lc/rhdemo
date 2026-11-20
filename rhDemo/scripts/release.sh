@@ -48,7 +48,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 RHDEMO_DIR="${REPO_ROOT}/rhDemo"
 MVNW="${RHDEMO_DIR}/mvnw"
-JENKINS_CASC="${REPO_ROOT}/rhDemo/infra/jenkins-docker/jenkins-casc.yaml"
+JENKINS_CASC="${REPO_ROOT}/rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml"
 JENKINSFILE_RENOVATE="${REPO_ROOT}/rhDemo/Jenkinsfile-Renovate"
 RENOVATE_JSON="${REPO_ROOT}/renovate.json"
 
@@ -351,7 +351,7 @@ cmd_post_merge() {
 
     step "5/5 — Commit et push"
     commit_poms_and_push "chore: retour à ${next_snapshot} après ${release_version}" "master" \
-        "rhDemo/infra/jenkins-docker/jenkins-casc.yaml" \
+        "rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml" \
         "rhDemo/Jenkinsfile-Renovate" \
         "renovate.json"
 
@@ -368,6 +368,10 @@ cmd_post_merge() {
     echo ""
     echo -e "     ${BLUE}git checkout -b ${evolution_branch}${NC}"
     echo -e "     ${BLUE}git push origin ${evolution_branch}${NC}"
+    echo ""
+    echo -e "${BOLD}Puis recharger la configuration Jenkins (nouvelle branche des jobs) :${NC}"
+    echo "     Manage Jenkins → Configuration as Code → « Reload existing configuration »"
+    echo "     puis Build Now sur RHDemo-CI (cf. GIT-PROCEDURE-RELEASE.md)"
     echo ""
 }
 

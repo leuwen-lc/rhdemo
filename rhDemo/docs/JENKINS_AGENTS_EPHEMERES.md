@@ -2,7 +2,7 @@
 statut: historique
 verifie_le: 2026-10-22
 sources:
-  - rhDemo/infra/jenkins-docker/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
   - rhDemo/infra/jenkins-docker/Dockerfile.agent
 ---
 

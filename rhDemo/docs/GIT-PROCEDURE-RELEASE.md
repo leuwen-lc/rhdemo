@@ -107,6 +107,11 @@ Le script effectue dans l'ordre :
 > tourné sur la nouvelle branche — les polls suivants concluent alors « aucun changement » même après
 > des merges Renovate. Lancer un **Build Now** manuel sur `RHDemo-CI` une fois l'étape 5 faite.
 
+> ⚠️ Le Jenkins en cours d'exécution ne voit pas seul la nouvelle branche des jobs : recharger la
+> configuration (Manage Jenkins → Configuration as Code → « Reload existing configuration ») avant
+> le **Build Now** ci-dessus. Le dossier `infra/jenkins-docker/casc/` est monté en entier pour que
+> le fichier modifié soit visible du conteneur.
+
 ---
 
 ## 5) Créer la branche d'évolution suivante

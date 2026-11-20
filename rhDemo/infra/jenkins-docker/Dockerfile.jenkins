@@ -34,9 +34,10 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 # ═══════════════════════════════════════════════════════════════════
 
 # Copier la configuration JCasC
-COPY jenkins-casc.yaml /var/jenkins_home/casc_configs/jenkins.yaml
+# (docker-compose.yml monte en plus ./casc par-dessus ce dossier, en lecture seule)
+COPY casc/jenkins-casc.yaml /var/jenkins_home/casc_configs/jenkins-casc.yaml
 
-ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
 
 # ═══════════════════════════════════════════════════════════════════
 # SÉCURITÉ : ca-certificates à jour (CVE-2026-111943, CA eMudhra compromises)

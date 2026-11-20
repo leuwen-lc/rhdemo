@@ -157,6 +157,43 @@ Conséquences sur l'étude :
 - **`secret_id` AppRole** : le plugin ne le renouvelle pas et ouvre une session à chaque lecture. Une durée de validité courte impose donc de remplacer régulièrement le credential Jenkins, tâche à confier à `rotate-secrets.py` (§8).
 - **Mémoire** : le risque du §8 est levé.
 
+### 7.2 Guide de reprise : acquis et points à traiter par étape
+
+Ce guide permet de reprendre les étapes 1 à 5 sans refaire le prototype. **Acquis** : vérifié à l'étape 0, réutilisable tel quel. **À traiter** : non couvert par le prototype, à concevoir ou tester pendant l'étape.
+
+**Socle commun (étape 1)**
+
+- Acquis, serveur : `bao server -config=…` avec un bloc `storage "raft"` (`path`, `node_id`), `api_addr` et `cluster_addr`, `disable_mlock = true`. Le bloc `audit "file"` déclaré dans le fichier HCL est actif dès le démarrage (`bao audit list`). L'image tourne avec l'uid 100 et le gid 1000, qui doivent pouvoir écrire dans les répertoires de données et de journaux.
+- Acquis, initialisation : `bao operator init -key-shares=1 -key-threshold=1 -format=json`, puis `bao operator unseal <clé>`. La clé de déverrouillage et le token root vont dans KeePassXC. En administration locale, utiliser `docker exec -e BAO_ADDR=… -e BAO_TOKEN=… <conteneur> bao …`.
+- Acquis, AppRole Jenkins : `auth enable approle`, rôle avec `token_policies`, `token_ttl` et `secret_id_ttl`, politique `read` sur `kv/data/jenkins/*` (KV v2 monté sur `kv/` : le chemin de la politique contient `data/`).
+- Acquis, plugin Jenkins par JCasC : credential `vaultAppRoleCredential` (`path: approle`, `roleId`, `secretId`), credential `vaultStringCredentialImpl` (`path`, `vaultKey`, `engineVersion: 2`) qui garde l'identifiant de l'ancien credential, et bloc `unclassified.hashicorpVault.configuration` (`vaultUrl`, `vaultCredentialId`, `engineVersion: 2`). Ajouter `hashicorp-vault-plugin` épinglé dans `infra/jenkins-docker/plugins.txt`.
+- À traiter, TLS : le prototype tournait en HTTP. Il faut un certificat signé par l'autorité locale, sur le modèle de `init-registry-certs.sh`, avec dans le SAN les noms utilisés par Jenkins, les agents et le cluster. Les agents font déjà confiance au registry par un fichier monté (`jenkins-casc.yaml`, `mountsString`) ; cosign recevra `BAO_CACERT` ou `SSL_CERT_FILE`. Le **contrôleur** Jenkins, lui, ne fait aujourd'hui confiance à aucune autorité locale. Or c'est probablement lui qui exécute les lectures du plugin (à confirmer) : il faut alors ajouter l'autorité au truststore Java dans `Dockerfile.jenkins`. Ne pas utiliser l'option du plugin qui désactive la vérification TLS.
+- À traiter, réseaux : rattacher OpenBao à `rhdemo-jenkins-network` dans le `docker-compose.yml` et, pour l'étape 3, au réseau `kind`, comme `kind-registry` (raccordement non persistant, à ajouter dans `repair-cluster-after-restart.sh`).
+- À traiter, déverrouillage par KeePassXC (Secret Service, `secret-tool lookup`) : rien n'a été testé. Le conteneur redémarre scellé (`restart: unless-stopped`).
+- À traiter, `rotate-secrets.py` : nouvelle cible `{kind: openbao, path: …, key: …}` dans `secrets/inventory.yaml`, et un module dans `scripts/rotation_lib/` qui écrit par l'API KV v2 (`POST /v1/kv/data/<chemin>`). Ajouter le `secret_id` AppRole à l'inventaire avec une cible `jenkins`.
+
+**Étape 2 (Cosign)**
+
+- Acquis : une clé Transit `type=ecdsa-p256`, non exportable par défaut, sur un montage dédié (`cosign-transit`). Politique de signature : `update` sur `cosign-transit/sign/cosign` **et** `cosign-transit/sign/cosign/*` (cosign appelle `sign/cosign/sha2-256`), `read` sur `cosign-transit/keys/cosign`. Variables : `BAO_ADDR`, `BAO_TOKEN`, `TRANSIT_SECRET_ENGINE_PATH=cosign-transit`. Clé `openbao://cosign`, mêmes options que l'actuel `Jenkinsfile-CI`. Clé publique par `cosign public-key --key openbao://cosign`.
+- À traiter, token de signature : le plugin Jenkins ne transmet pas son token OpenBao au pipeline. Le stage de signature doit donc obtenir lui-même un token court : un second AppRole « cosign » dont `role_id` et `secret_id` sont dans un credential Jenkins, connexion par `curl` sur `/v1/auth/approle/login` dans l'agent, puis `BAO_TOKEN` exporté pour cosign seulement. Non testé, mais il s'agit d'appels d'API standards.
+- À traiter, vérification dans la CD : `Jenkinsfile-CD` lit une seule clé publique (credential fichier `cosign-public-key`) et `cosign verify` n'accepte qu'un `--key`. Tant que des images signées par l'ancienne clé restent déployables, il faut essayer successivement l'ancienne et la nouvelle clé. Même logique à chaque rotation de la clé Transit.
+
+**Étape 3 (ESO)**
+
+- Acquis : OpenBao, rattaché au réseau `kind`, joint l'API du cluster à `https://<cluster>-control-plane:6443`, avec l'autorité extraite du kubeconfig.
+- À traiter, authentification Kubernetes : OpenBao, hors du cluster, ne dispose pas du token monté dans un pod. Deux options : un token permanent de relecture (`token_reviewer_jwt`), ou l'utilisation du JWT du client (ESO), qui demande `system:auth-delegator` sur le compte d'ESO. Non testé.
+- À traiter, flux ESO vers OpenBao : NetworkPolicy de sortie vers l'IP du conteneur OpenBao sur le réseau `kind`. Il faut une IP fixe (`docker network connect --ip`) et une règle `ipBlock`. Avec Cilium, `ipBlock` ne fonctionne pas vers l'hôte (`infra/stagingkub/networkpolicies/README.md`), mais OpenBao est un conteneur distinct : à tester. Il faut aussi vérifier la résolution DNS du nom du conteneur depuis les pods (sinon, utiliser l'IP) et l'accord du nom avec le SAN du certificat.
+- À traiter : installer ESO sur le modèle de `infra/stagingkub/scripts/components/install-or-upgrade-*.sh`, image épinglée par digest. Remplacer les `kubectl create secret` de `init-stagingkub.sh` (Secrets `rhdemo-db-secret`, `keycloak-db-secret`, `keycloak-admin-secret`, `rhdemo-app-secrets` ; `shared-tls-cert` relève de l'étape 5).
+
+**Étape 4 (PostgreSQL)**
+
+- À traiter, **point d'architecture** : avec l'option A (§4.1), OpenBao est hors du cluster et ne peut pas joindre un Service ClusterIP PostgreSQL. Il faudrait exposer PostgreSQL (NodePort sur le réseau `kind`, NetworkPolicy d'entrée limitée à l'IP d'OpenBao), ce qui ouvre un flux entrant vers la base. Comparer avec une rotation pilotée depuis le cluster avant de lancer l'étape. Rien n'a été testé (le plugin `postgresql-database-plugin` est bien présent dans l'image).
+
+**Étape 5 (option)**
+
+- Acquis, moteur kubernetes : `kubernetes/config` (`kubernetes_host`, `kubernetes_ca_cert`, `service_account_jwt`, `disable_local_ca_jwt=true`), rôle avec `service_account_name` et `allowed_kubernetes_namespaces`, demande par `kubernetes/creds/<rôle>` avec `kubernetes_namespace` et `ttl`. Compte d'OpenBao limité à `create` sur `serviceaccounts/token` avec `resourceNames` restreint au compte visé.
+- À traiter : le prototype fournissait à OpenBao un JWT d'une heure. En exploitation, son compte a besoin d'un token durable (Secret `kubernetes.io/service-account-token`), stocké dans OpenBao. Côté Jenkins, le kubeconfig doit être construit au moment du build à partir du token obtenu.
+
 ---
 
 ## 8. Risques et points ouverts
@@ -165,6 +202,7 @@ Conséquences sur l'étude :
 - **Sauvegarde** : instantané Raft régulier, à restaurer pour test au moins une fois ; sans la clé de déverrouillage, il ne sert à rien.
 - **Bootstrap** : le `secret_id` AppRole de Jenkins devient le secret le plus sensible de Jenkins. Il faut lui donner une durée courte et le renouveler par `rotate-secrets.py`.
 - **Mémoire** : levé, moins de 30 Mo mesurés à l'étape 0 (§7.1).
+- **Accès d'OpenBao à PostgreSQL** : hors du cluster, OpenBao ne joint pas les bases sans exposer PostgreSQL. Décision d'architecture à prendre avant l'étape 4 (§7.2).
 - **Plugin Jenkins** : six avis de sécurité depuis 2022 (tous corrigés), dont une exposition de credentials Vault de portée système en 2025. Garder le plugin à jour.
 - **Complexité pédagogique** : bénéfice réel pour une preuve de concept DevSecOps (secrets dynamiques, signature sans clé extractible, audit), mais la documentation d'exploitation (déverrouillage, sauvegarde, restauration) devient indispensable.
 

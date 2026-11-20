@@ -271,3 +271,7 @@ Le plan d'évolutions de fixcve-auto, essentiellement appliqué, est renommé `F
 ## [2026-11-20] ingest | ETUDE_OPENBAO : résultats du prototype (étape 0)
 
 Prototype jetable (OpenBao 2.7.2, Jenkins et KinD jetables, supprimés ensuite) : cosign 3.1.4 des agents signe par Transit (`openbao://` et `hashivault://`, montage non standard), le plugin Jenkins HashiCorp Vault fonctionne avec OpenBao (AppRole, KV v2, `withCredentials` inchangé), le moteur kubernetes est intégré mais ses tokens ne sont pas révocables avant expiration, mémoire inférieure à 30 Mo. Points *à vérifier* levés, nouveau §7.1, décision de continuer. L'étude reste au statut `proposition`.
+
+## [2026-11-20] ingest | ETUDE_OPENBAO : guide de reprise des étapes 1 à 5
+
+Nouveau §7.2 pour reprendre l'étude sans le contexte du prototype. Il liste par étape les acquis vérifiés (configuration du serveur, initialisation, AppRole, symboles JCasC du plugin, politique Transit de cosign, moteur kubernetes) et les points non couverts : TLS et confiance du contrôleur Jenkins, token de signature cosign obtenu par le pipeline, double clé publique dans la CD, authentification Kubernetes et flux réseau d'ESO, accès d'OpenBao à PostgreSQL hors du cluster (point d'architecture, ajouté au §8), token durable du moteur kubernetes.

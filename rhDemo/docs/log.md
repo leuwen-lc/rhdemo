@@ -283,3 +283,7 @@ Nouveau §7.2 pour reprendre l'étude sans le contexte du prototype. Il liste pa
 ## [2026-11-20] ingest | ETUDE_OPENBAO : credentials de fixcve-auto
 
 L'étude omettait `~/.config/rhdemo-fixcve/credentials.sops.yaml` (tokens Jenkins et Codeberg, clé NVD), déchiffré par le cron de fixcve-auto avec la clé AGE : sans le migrer, la clé AGE ne peut pas être abandonnée. Ajouts : ligne dans les §1 et §2, identité AppRole `fixcve` au §4.2, impact au §6, nouvelle étape 1 bis (0,5 jour, lecture par `curl`, liaison du `secret_id` à l'adresse locale à vérifier) aux §7 et §7.2, précision au §9. Sources du frontmatter complétées par les scripts fixcve. L'étude reste au statut `proposition`.
+
+## [2026-11-20] ingest | ETUDE_OPENBAO : déverrouillage par age -p
+
+Le Secret Service de KeePassXC n'est pas utilisable sur le poste (service D-Bus déjà fourni par le trousseau GNOME, KeePassXC en snap). Mode recommandé du §5 remplacé : clé de déverrouillage chiffrée par `age -p` dans un fichier dédié, transmise à l'API `sys/unseal` par l'entrée standard. Nouveau §5.1 (alternatives comparées, règles : phrase de passe forte, usage et sauvegarde séparés, token root exclu, secours par saisie masquée). §7 et §7.2 alignés ; l'acquis `bao operator unseal <clé>` signale que la clé passée en argument est visible dans `ps`. L'étude reste au statut `proposition`.

@@ -108,11 +108,31 @@ Au démarrage, OpenBao est **scellé** : il ne peut rien déchiffrer tant qu'on 
 
 | Mode | Fonctionnement | Évaluation pour RHDemo |
 | --- | --- | --- |
-| **Shamir, clé saisie** (recommandé) | Une part, seuil 1, gardée dans KeePassXC avec une copie papier. Déverrouillage par un script lancé après le démarrage du poste, qui lit la clé via le Secret Service de KeePassXC, avec confirmation | Une action par démarrage, intégrable à `repair-cluster-after-restart.sh`. La clé n'est jamais sur le disque en clair. |
+| **Shamir, clé chiffrée par phrase de passe** (recommandé) | Une part, seuil 1. Pour l'usage courant, la clé est chiffrée par `age -p` dans un fichier dédié du poste (`~/.config/openbao/unseal.age`). Un script lancé après le démarrage déchiffre ce fichier (phrase de passe saisie dans le terminal) et transmet la clé à l'API `sys/unseal` par l'entrée standard | Une action par démarrage, intégrable à `repair-cluster-after-restart.sh`. La clé n'est jamais sur le disque en clair ni dans les arguments d'une commande. La sécurité repose sur la force de la phrase de passe (§5.1). |
 | Seal static | La clé est dans la configuration, donc sur le disque | Équivaut à la clé AGE actuelle sur le disque ; ne protège que contre le vol d'une sauvegarde. La documentation demande d'en évaluer soigneusement l'usage. |
 | Seal KMS ou Transit | Clé confiée à un KMS externe ou à un autre OpenBao | Pas de KMS disponible sur un poste unique. |
 
 **Racine de confiance** : la clé de déverrouillage remplace la clé AGE. Sa perte rend les données irrécupérables, y compris les instantanés Raft (`bao operator raft snapshot save`), qui restent chiffrés. Il faut donc deux copies hors du poste : KeePassXC synchronisé et papier.
+
+### 5.1 Choix du mode de saisie
+
+Le Secret Service de KeePassXC, envisagé au départ, n'est pas utilisable sur le poste : le service D-Bus est déjà fourni par le trousseau GNOME, et KeePassXC est installé en snap. Alternatives examinées :
+
+| Option | Évaluation |
+| --- | --- |
+| **`age -p`** (retenu) | Fichier dédié à la seule clé de déverrouillage, chiffré par phrase de passe (scrypt), intégrité vérifiée. `age` est déjà installé (utilisé par SOPS) : seul l'outil reste après le retrait de la clé AGE, qui ne sert pas ici. `age` lit la phrase de passe sur le terminal, l'entrée standard reste libre pour le pipe. |
+| `keepassxc.cli` sur la base personnelle | Fonctionne sans Secret Service, mais expose au script une base qui contient beaucoup d'autres secrets. Le snap n'accède pas aux dossiers cachés du home. |
+| Base kdbx dédiée à la clé | Équivalente à `age -p` (Argon2 au lieu de scrypt). Seul apport : un second facteur (fichier clé, YubiKey), au prix de `keepassxc.cli` et de l'interface `raw-usb` du snap. À reconsidérer si un second facteur est voulu. |
+| `gpg -c` | Équivalent, mais dérivation de clé moins robuste et phrase mémorisée par gpg-agent sauf `--no-symkey-cache`. |
+| Trousseau GNOME (`secret-tool`) | Écarté : déverrouillé à l'ouverture de session, la clé serait lisible sans confirmation par tout processus de l'utilisateur. |
+| Clé scellée par le TPM (`systemd-creds --with-key=tpm2`) | Écarté : déverrouillage automatique, équivalent au seal static face à une compromission locale. |
+
+Règles :
+
+- **Phrase de passe forte** (au moins 6 mots tirés au hasard) : le fichier chiffré est sur le même disque que les données d'OpenBao, donc exposé à des essais hors ligne en cas de vol du disque ou d'une sauvegarde.
+- **Usage et sauvegarde séparés** : `unseal.age` sert au déverrouillage courant ; les copies de secours (KeePassXC personnel synchronisé, papier) ne sont jamais lues par le script.
+- **Token root exclu** de ce fichier : il est révoqué après l'installation et régénéré au besoin par `bao operator generate-root`, qui demande la clé de déverrouillage.
+- **Secours** : `bao operator unseal` sans argument demande la clé en saisie masquée, à coller depuis KeePassXC.
 
 ---
 
@@ -134,7 +154,7 @@ Chaque étape est réversible et utilisable seule. Les credentials Jenkins et le
 | Étape | Contenu | Critère de sortie | Effort |
 | --- | --- | --- | --- |
 | 0 ✅ | Prototype jetable : OpenBao en conteneur, tests des points *à vérifier* (plugin Jenkins, cosign `openbao://` avec la version des agents, moteur kubernetes), mesure mémoire | Décision de continuer ou d'abandonner, consignée dans cette étude : **continuer** (§7.1) | 0,5 jour, fait le 2026-11-20 |
-| 1 | OpenBao dans `jenkins-docker` (Raft, TLS, audit), procédure de déverrouillage via KeePassXC, KV v2 ; migration des secrets des pipelines Renovate et des notifications ; cible `openbao` dans `rotate-secrets.py` | Un cycle CI et Renovate vert sans les credentials migrés, lectures visibles dans le journal d'audit | 1,5 jour |
+| 1 | OpenBao dans `jenkins-docker` (Raft, TLS, audit), procédure de déverrouillage par `age -p` (§5.1), KV v2 ; migration des secrets des pipelines Renovate et des notifications ; cible `openbao` dans `rotate-secrets.py` | Un cycle CI et Renovate vert sans les credentials migrés, lectures visibles dans le journal d'audit | 1,5 jour |
 | 1 bis | Credentials de fixcve-auto dans `kv/fixcve/*`, AppRole `fixcve` ; poller et script d'installation adaptés ; cible `openbao` à la place de `sops` pour `fixcve-forgejo-token` dans l'inventaire, procédure manuelle de `jenkins-claude-account` mise à jour | Un cycle fixcve-auto complet sans `credentials.sops.yaml` ; lectures visibles dans le journal d'audit. Dernière condition, avec l'étape 3, pour abandonner la clé AGE | 0,5 jour |
 | 2 | Cosign par Transit : signature `openbao://cosign` dans `Jenkinsfile-CI`, clé publique exportée pour `Jenkinsfile-CD` ; ancienne clé publique conservée tant que des images signées avec elle restent déployables | CD vert sur une image signée par Transit, credentials `cosign-private-key` et `cosign-password` supprimés | 1 jour |
 | 3 | ESO dans stagingkub, `ExternalSecret` à la place des `kubectl create secret` de `init-stagingkub.sh` ; NetworkPolicy de sortie d'ESO vers OpenBao | Recréation complète de stagingkub sans `secrets-stagingkub.yml` | 1 jour |
@@ -173,12 +193,12 @@ Ce guide permet de reprendre les étapes 1 à 5 sans refaire le prototype. **Acq
 **Socle commun (étape 1)**
 
 - Acquis, serveur : `bao server -config=…` avec un bloc `storage "raft"` (`path`, `node_id`), `api_addr` et `cluster_addr`, `disable_mlock = true`. Le bloc `audit "file"` déclaré dans le fichier HCL est actif dès le démarrage (`bao audit list`). L'image tourne avec l'uid 100 et le gid 1000, qui doivent pouvoir écrire dans les répertoires de données et de journaux.
-- Acquis, initialisation : `bao operator init -key-shares=1 -key-threshold=1 -format=json`, puis `bao operator unseal <clé>`. La clé de déverrouillage et le token root vont dans KeePassXC. En administration locale, utiliser `docker exec -e BAO_ADDR=… -e BAO_TOKEN=… <conteneur> bao …`.
+- Acquis, initialisation : `bao operator init -key-shares=1 -key-threshold=1 -format=json`, puis `bao operator unseal <clé>` (en exploitation, ne pas passer la clé en argument, visible dans `ps` : voir le point « déverrouillage » ci-dessous). La clé de déverrouillage et le token root vont dans KeePassXC, la clé est en plus chiffrée par `age -p` pour l'usage courant (§5.1). En administration locale, utiliser `docker exec -e BAO_ADDR=… -e BAO_TOKEN=… <conteneur> bao …`.
 - Acquis, AppRole Jenkins : `auth enable approle`, rôle avec `token_policies`, `token_ttl` et `secret_id_ttl`, politique `read` sur `kv/data/jenkins/*` (KV v2 monté sur `kv/` : le chemin de la politique contient `data/`).
 - Acquis, plugin Jenkins par JCasC : credential `vaultAppRoleCredential` (`path: approle`, `roleId`, `secretId`), credential `vaultStringCredentialImpl` (`path`, `vaultKey`, `engineVersion: 2`) qui garde l'identifiant de l'ancien credential, et bloc `unclassified.hashicorpVault.configuration` (`vaultUrl`, `vaultCredentialId`, `engineVersion: 2`). Ajouter `hashicorp-vault-plugin` épinglé dans `infra/jenkins-docker/plugins.txt`.
 - À traiter, TLS : le prototype tournait en HTTP. Il faut un certificat signé par l'autorité locale, sur le modèle de `init-registry-certs.sh`, avec dans le SAN les noms utilisés par Jenkins, les agents et le cluster. Les agents font déjà confiance au registry par un fichier monté (`jenkins-casc.yaml`, `mountsString`) ; cosign recevra `BAO_CACERT` ou `SSL_CERT_FILE`. Le **contrôleur** Jenkins, lui, ne fait aujourd'hui confiance à aucune autorité locale. Or c'est probablement lui qui exécute les lectures du plugin (à confirmer) : il faut alors ajouter l'autorité au truststore Java dans `Dockerfile.jenkins`. Ne pas utiliser l'option du plugin qui désactive la vérification TLS.
 - À traiter, réseaux : rattacher OpenBao à `rhdemo-jenkins-network` dans le `docker-compose.yml` et, pour l'étape 3, au réseau `kind`, comme `kind-registry` (raccordement non persistant, à ajouter dans `repair-cluster-after-restart.sh`).
-- À traiter, déverrouillage par KeePassXC (Secret Service, `secret-tool lookup`) : rien n'a été testé. Le conteneur redémarre scellé (`restart: unless-stopped`).
+- À traiter, déverrouillage (§5.1) : chiffrement unique par `age -p -o ~/.config/openbao/unseal.age`, puis à chaque démarrage `age -d … | jq -Rc '{key: .}' | curl --cacert … -X PUT --data @- https://127.0.0.1:8200/v1/sys/unseal`. Rien n'a été testé : vérifier qu'aucun saut de ligne final ne s'ajoute à la clé, et que le script s'arrête sans rien afficher si la phrase de passe est fausse. Le conteneur redémarre scellé (`restart: unless-stopped`).
 - À traiter, `rotate-secrets.py` : nouvelle cible `{kind: openbao, path: …, key: …}` dans `secrets/inventory.yaml`, et un module dans `scripts/rotation_lib/` qui écrit par l'API KV v2 (`POST /v1/kv/data/<chemin>`). Ajouter le `secret_id` AppRole à l'inventaire avec une cible `jenkins`.
 
 **Étape 1 bis (fixcve-auto)**

@@ -11,6 +11,8 @@ sources:
   - rhDemo/Jenkinsfile-CI
   - rhDemo/Jenkinsfile-CD
   - rhDemo/infra/jenkins-docker/Dockerfile.agent
+  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve-install.sh
 ---
 
 # Étude : OpenBao comme gestionnaire de secrets de RHDemo
@@ -29,6 +31,7 @@ sources:
 | --- | --- | --- |
 | Secrets applicatifs stagingkub (#15) | `secrets/secrets-stagingkub.yml` chiffré par SOPS dans Git, déchiffré par `init-stagingkub.sh` qui crée les Secrets Kubernetes (`kubectl create secret`) une seule fois | Rotation = modifier le fichier, relancer à la main la création des Secrets et les pods. L'historique chiffré est public : une fuite de la clé AGE le déchiffre en entier. |
 | Credentials Jenkins (#2, #3, #4, #7, #8, #9, #12, #14) | Saisis dans l'interface, stockés chiffrés dans `jenkins_home` | Aucune trace des lectures : une fuite via un build compromis passe inaperçue. |
+| Credentials de fixcve-auto (#5, #11, clé NVD) | `~/.config/rhdemo-fixcve/credentials.sops.yaml`, hors Git, déchiffré par `fixcve-auto-poll.sh` à chaque passage du cron avec la clé AGE personnelle | Le cron dispose d'une clé AGE qui déchiffre **tous** les fichiers SOPS, historique Git compris, pour lire trois secrets. Aucune trace des lectures. |
 | Clé Cosign (#2) | Clé privée et mot de passe en credentials Jenkins, signature dans `Jenkinsfile-CI`, vérification par la clé publique dans `Jenkinsfile-CD` | La clé est extractible par tout build qui obtient le credential ; sa rotation impose de re-signer les images. |
 | Kubeconfigs Jenkins (#8, #9) | Tokens de compte de service sans expiration | Fenêtre d'exploitation illimitée en cas de fuite non détectée. |
 
@@ -45,7 +48,8 @@ Numéros : inventaire de [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) 
 | 13 | Session Claude | Aucun | Nul. |
 | 2 | Clé Cosign | Moteur **Transit** : la clé privée est créée et utilisée dans OpenBao, jamais exportée ; cosign signe par `openbao://<clé>` | **Fort** : la clé ne peut plus être volée, seulement utilisée tant qu'un accès est valide. Rotation par nouvelle version de clé. |
 | 15 | Secrets applicatifs stagingkub | KV synchronisé vers les Secrets Kubernetes par External Secrets Operator (ESO) ; mots de passe PostgreSQL gérés par le moteur **database** (rôles statiques renouvelés par OpenBao) | **Fort** : plus de secret dans Git, rotation automatique des mots de passe des bases. |
-| 1 | Clé AGE | Devient inutile une fois SOPS retiré | **Fort** : règle le constat du §1.3 de l'étude de rotation (historique public déchiffrable). La racine de confiance passe à la clé de déverrouillage (§5). |
+| 5, 11, NVD | Credentials de fixcve-auto | KV `kv/fixcve/*`, lu par le poller avec un AppRole dédié (étape 1 bis) | **Moyen** : le cron ne lit plus que ses trois secrets au lieu de détenir la clé AGE, lectures auditées, `secret_id` révocable. Le fichier n'étant pas dans Git, le défaut de l'historique public ne le concerne pas. |
+| 1 | Clé AGE | Devient inutile une fois SOPS retiré, y compris pour `credentials.sops.yaml` de fixcve-auto (étape 1 bis) | **Fort** : règle le constat du §1.3 de l'étude de rotation (historique public déchiffrable). La racine de confiance passe à la clé de déverrouillage (§5). |
 | 8, 9 | Kubeconfigs Jenkins | Moteur **kubernetes** (intégré, vérifié à l'étape 0) : token de compte de service à durée courte, émis à la demande. Ces tokens ne sont pas révocables avant expiration (§7.1) | Moyen : plus de token permanent dans Jenkins, mais une durée courte s'obtient aussi par `kubectl create token --duration`. |
 | 18 | Clés TLS | Moteur **PKI** : certificats à courte durée | Moyen, optionnel. |
 | Tous | — | **Audit device** : chaque lecture et écriture journalisée (identité, chemin, date, jamais la valeur) | **Fort** : en rotation d'urgence, savoir quels secrets ont été lus et par qui, donc quoi renouveler en premier. |
@@ -91,6 +95,7 @@ Configuration de l'option A :
 | Jenkins (pipelines) | **AppRole** : `role_id` et `secret_id` dans un credential « Vault App Role » du plugin (le seul secret restant dans Jenkins), qui ouvre une session à chaque lecture | Lecture des chemins KV des pipelines, `sign` sur la clé Transit Cosign |
 | ESO (stagingkub) | **Kubernetes** : OpenBao valide le token du compte de service d'ESO auprès de l'API du cluster | Lecture de `kv/stagingkub/*` et des identifiants database |
 | Administrateur | Utilisateur dédié, token de courte durée | Écriture KV, gestion des rôles ; le token root est révoqué après l'installation (`bao operator generate-root` pour le régénérer) |
+| fixcve-auto (poller du cron) | **AppRole** `fixcve` : `role_id` et `secret_id` dans `~/.config/rhdemo-fixcve/` (mode 600), connexion par `curl` | Lecture de `kv/data/fixcve/*` uniquement |
 | `rotate-secrets.py` | Token administrateur demandé au lancement | Écriture des chemins des secrets qu'il renouvelle |
 
 Dans le namespace `rhdemo-stagingkub`, rien ne change : les pods lisent toujours des Secrets Kubernetes, créés par ESO au lieu d'un script. Le Default Deny reste intact. Seul le contrôleur ESO, dans son propre namespace, reçoit une règle de sortie vers OpenBao.
@@ -115,6 +120,7 @@ Au démarrage, OpenBao est **scellé** : il ne peut rien déchiffrer tant qu'on 
 
 - **Invariant de sécurité** (CLAUDE.md) : « Secrets : jamais en clair dans Git, uniquement chiffrés par SOPS » deviendrait « référencés dans OpenBao, ou chiffrés par SOPS pendant la transition ». Entrée à ajouter dans `DECISIONS.md`.
 - **SOPS** : retiré par étapes, fichier par fichier. `SOPS_SETUP.md` passe en historique à la fin de la migration. Les anciens fichiers chiffrés restent dans l'historique Git : leurs valeurs doivent avoir changé avant que la clé AGE soit abandonnée (même règle que le §1.3 de l'étude de rotation).
+- **fixcve-auto** : `fixcve-auto-poll.sh` lit ses credentials dans OpenBao au lieu de `sops -d`, `fixcve-install.sh` les écrit dans le KV ; `FIXCVE_AUTO.md` est à mettre à jour. Tant que cette migration n'est pas faite, la clé AGE ne peut pas être abandonnée.
 - **`rotate-secrets.py`** : conservé pour les secrets exposés sur Internet ; nouvelle cible `{kind: openbao, path: …}` dans l'inventaire, à la place des credentials Jenkins migrés.
 - **Étude de rotation** : les phases 2 (Kubernetes, Cosign, stagingkub) et 4 (tokens à durée limitée) seraient remplacées par les étapes 2 à 4 ci-dessous.
 - **Pipelines** : changement minimal. Un credential Jenkins de type « Vault Secret Text » portant le même identifiant remplace l'ancien, et les blocs `withCredentials` existants restent inchangés (vérifié à l'étape 0). `withVault` reste possible pour les lectures groupées. `PIPELINES_CI_CD.md` est à mettre à jour.
@@ -129,12 +135,15 @@ Chaque étape est réversible et utilisable seule. Les credentials Jenkins et le
 | --- | --- | --- | --- |
 | 0 ✅ | Prototype jetable : OpenBao en conteneur, tests des points *à vérifier* (plugin Jenkins, cosign `openbao://` avec la version des agents, moteur kubernetes), mesure mémoire | Décision de continuer ou d'abandonner, consignée dans cette étude : **continuer** (§7.1) | 0,5 jour, fait le 2026-11-20 |
 | 1 | OpenBao dans `jenkins-docker` (Raft, TLS, audit), procédure de déverrouillage via KeePassXC, KV v2 ; migration des secrets des pipelines Renovate et des notifications ; cible `openbao` dans `rotate-secrets.py` | Un cycle CI et Renovate vert sans les credentials migrés, lectures visibles dans le journal d'audit | 1,5 jour |
+| 1 bis | Credentials de fixcve-auto dans `kv/fixcve/*`, AppRole `fixcve` ; poller et script d'installation adaptés ; cible `openbao` à la place de `sops` pour `fixcve-forgejo-token` dans l'inventaire, procédure manuelle de `jenkins-claude-account` mise à jour | Un cycle fixcve-auto complet sans `credentials.sops.yaml` ; lectures visibles dans le journal d'audit. Dernière condition, avec l'étape 3, pour abandonner la clé AGE | 0,5 jour |
 | 2 | Cosign par Transit : signature `openbao://cosign` dans `Jenkinsfile-CI`, clé publique exportée pour `Jenkinsfile-CD` ; ancienne clé publique conservée tant que des images signées avec elle restent déployables | CD vert sur une image signée par Transit, credentials `cosign-private-key` et `cosign-password` supprimés | 1 jour |
 | 3 | ESO dans stagingkub, `ExternalSecret` à la place des `kubectl create secret` de `init-stagingkub.sh` ; NetworkPolicy de sortie d'ESO vers OpenBao | Recréation complète de stagingkub sans `secrets-stagingkub.yml` | 1 jour |
 | 4 | Rôles statiques PostgreSQL (bases rhdemo et Keycloak) ; redémarrage des pods à chaque renouvellement (Reloader ou `rollout restart`, car Spring Boot et Keycloak lisent le mot de passe au démarrage) | Mot de passe renouvelé par OpenBao, application et Keycloak reconnectés sans intervention | 1 jour |
 | 5 (option) | PKI pour les certificats internes, tokens Kubernetes à courte durée | — | 1 jour |
 
-Total : environ 5 jours, étape 0 comprise (4,5 jours restants).
+Total : environ 5,5 jours, étape 0 comprise (5 jours restants).
+
+L'étape 1 bis ne dépend que de l'étape 1 et peut être faite à tout moment après elle. Elle est peu urgente (le fichier n'est pas dans Git) mais nécessaire pour retirer SOPS et la clé AGE.
 
 ### 7.1 Résultats de l'étape 0 (2026-11-20)
 
@@ -172,6 +181,13 @@ Ce guide permet de reprendre les étapes 1 à 5 sans refaire le prototype. **Acq
 - À traiter, déverrouillage par KeePassXC (Secret Service, `secret-tool lookup`) : rien n'a été testé. Le conteneur redémarre scellé (`restart: unless-stopped`).
 - À traiter, `rotate-secrets.py` : nouvelle cible `{kind: openbao, path: …, key: …}` dans `secrets/inventory.yaml`, et un module dans `scripts/rotation_lib/` qui écrit par l'API KV v2 (`POST /v1/kv/data/<chemin>`). Ajouter le `secret_id` AppRole à l'inventaire avec une cible `jenkins`.
 
+**Étape 1 bis (fixcve-auto)**
+
+- Acquis : AppRole et KV v2 (socle de l'étape 1). Le poller n'a pas besoin du client `bao` : `curl` (déjà requis) suffit pour `POST /v1/auth/approle/login` puis `GET /v1/kv/data/fixcve/<secret>`. Les valeurs restent en mémoire, comme avec `sops -d`.
+- À traiter, OpenBao scellé ou injoignable : le poller écrit une ligne dans `poll.log` et saute le passage, comme pour un Jenkins injoignable. Pas de dépendance nouvelle en pratique : OpenBao tourne dans `jenkins-docker`, sans lequel fixcve-auto n'a rien à faire.
+- À traiter, secret de départ : `role_id` et `secret_id` restent sur le disque, lisibles par l'utilisateur du cron, comme la clé AGE aujourd'hui, mais avec une portée limitée à `kv/fixcve/*` et révocables. Lier le `secret_id` à l'adresse locale (`secret_id_bound_cidrs`, `token_bound_cidrs`) le rendrait inutilisable hors du poste. À vérifier : selon le proxy de Docker, OpenBao voit `127.0.0.1` ou l'adresse de la passerelle du réseau Docker.
+- À traiter : `curl --cacert` avec l'autorité locale (TLS de l'étape 1) ; renouvellement du `secret_id` par `rotate-secrets.py` (même sujet que pour Jenkins, §7.1). Le skill interactif `/fixcve` n'est pas concerné : il reçoit `JENKINS_USER` et `JENKINS_TOKEN` en variables d'environnement et ne lit pas ce fichier.
+
 **Étape 2 (Cosign)**
 
 - Acquis : une clé Transit `type=ecdsa-p256`, non exportable par défaut, sur un montage dédié (`cosign-transit`). Politique de signature : `update` sur `cosign-transit/sign/cosign` **et** `cosign-transit/sign/cosign/*` (cosign appelle `sign/cosign/sha2-256`), `read` sur `cosign-transit/keys/cosign`. Variables : `BAO_ADDR`, `BAO_TOKEN`, `TRANSIT_SECRET_ENGINE_PATH=cosign-transit`. Clé `openbao://cosign`, mêmes options que l'actuel `Jenkinsfile-CI`. Clé publique par `cosign public-key --key openbao://cosign`.
@@ -208,7 +224,7 @@ Ce guide permet de reprendre les étapes 1 à 5 sans refaire le prototype. **Acq
 
 ## 9. Recommandation
 
-L'étape 0 est concluante (§7.1) : **continuer**. Faire l'étape 1, prérequis, puis enchaîner les étapes 2 (Cosign) et 3 (ESO), qui apportent le plus. Ne pas poursuivre la phase 2 de l'étude de rotation pour Cosign et les secrets stagingkub tant que cette décision n'est pas prise, pour ne pas coder deux fois.
+L'étape 0 est concluante (§7.1) : **continuer**. Faire l'étape 1, prérequis, puis enchaîner les étapes 2 (Cosign) et 3 (ESO), qui apportent le plus. L'étape 1 bis (fixcve-auto) peut attendre, mais la clé AGE ne disparaît qu'une fois les étapes 1 bis et 3 terminées. Ne pas poursuivre la phase 2 de l'étude de rotation pour Cosign et les secrets stagingkub tant que cette décision n'est pas prise, pour ne pas coder deux fois.
 
 ## Sources
 

@@ -202,6 +202,11 @@ cleanup() {
         kill ${PORT_FORWARD_PID} 2>/dev/null || true
         echo -e "${GREEN}✓ Port-forward arrêté${NC}"
     fi
+    # Configuration temporaire : contient les secrets en clair
+    if [ -n "${TEMP_CONFIG:-}" ] && [ -f "${TEMP_CONFIG}" ]; then
+        shred -u "${TEMP_CONFIG}" 2>/dev/null || rm -f "${TEMP_CONFIG}"
+        echo -e "${GREEN}✓ Configuration temporaire supprimée${NC}"
+    fi
 }
 trap cleanup EXIT
 
@@ -234,6 +239,12 @@ mkdir -p "${INIT_KEYCLOAK_DIR}/target"
 
 # Déterminer les emails et noms basés sur les usernames
 # Par défaut, on utilise le username comme base pour l'email
+# Valeur YAML entre apostrophes (une apostrophe interne est doublée) : un mot de passe
+# contenant #, : ou ! reste lu tel quel.
+yaml_quote() { local v="${1//\'/\'\'}"; printf "'%s'" "${v}"; }
+
+# Fichier lisible par l'utilisateur seul, supprimé par cleanup()
+( umask 077; : > "${TEMP_CONFIG}" )
 cat > "${TEMP_CONFIG}" <<EOF
 # Configuration temporaire pour initialisation Keycloak stagingkub
 # Générée automatiquement à partir des secrets de l'environnement
@@ -243,7 +254,7 @@ keycloak:
   admin:
     realm: master
     username: ${KEYCLOAK_ADMIN_USER}
-    password: ${KEYCLOAK_ADMIN_PASSWORD}
+    password: $(yaml_quote "${KEYCLOAK_ADMIN_PASSWORD}")
 
   realm:
     name: RHDemo
@@ -263,7 +274,7 @@ keycloak:
   client:
     client-id: RHDemo
     name: RHDemo
-    secret: ${KEYCLOAK_CLIENT_SECRET}
+    secret: $(yaml_quote "${KEYCLOAK_CLIENT_SECRET}")
     root-url: https://rhdemo-stagingkub.intra.leuwen-lc.fr/
     base-url: ''
     admin-url: ''
@@ -278,7 +289,7 @@ keycloak:
 
   users:
     - username: ${TEST_USER_ADMIN}
-      password: ${TEST_PWD_ADMIN}
+      password: $(yaml_quote "${TEST_PWD_ADMIN}")
       email: ${TEST_USER_ADMIN}@leuwen.fr
       first-name: Admin
       last-name: ${TEST_USER_ADMIN^}
@@ -286,7 +297,7 @@ keycloak:
         - ROLE_admin
 
     - username: ${TEST_USER_CONSULT}
-      password: ${TEST_PWD_CONSULT}
+      password: $(yaml_quote "${TEST_PWD_CONSULT}")
       email: ${TEST_USER_CONSULT}@leuwen.fr
       first-name: Consult
       last-name: ${TEST_USER_CONSULT^}
@@ -294,7 +305,7 @@ keycloak:
         - ROLE_consult
 
     - username: ${TEST_USER_MAJ}
-      password: ${TEST_PWD_MAJ}
+      password: $(yaml_quote "${TEST_PWD_MAJ}")
       email: ${TEST_USER_MAJ}@leuwen.fr
       first-name: MAJ
       last-name: ${TEST_USER_MAJ^}

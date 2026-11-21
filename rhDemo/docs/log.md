@@ -287,3 +287,11 @@ L'étude omettait `~/.config/rhdemo-fixcve/credentials.sops.yaml` (tokens Jenkin
 ## [2026-11-20] ingest | ETUDE_OPENBAO : déverrouillage par age -p
 
 Le Secret Service de KeePassXC n'est pas utilisable sur le poste (service D-Bus déjà fourni par le trousseau GNOME, KeePassXC en snap). Mode recommandé du §5 remplacé : clé de déverrouillage chiffrée par `age -p` dans un fichier dédié, transmise à l'API `sys/unseal` par l'entrée standard. Nouveau §5.1 (alternatives comparées, règles : phrase de passe forte, usage et sauvegarde séparés, token root exclu, secours par saisie masquée). §7 et §7.2 alignés ; l'acquis `bao operator unseal <clé>` signale que la clé passée en argument est visible dans `ps`. L'étude reste au statut `proposition`.
+
+## [2026-11-21] ingest | ETUDE_OPENBAO : déverrouillage manuel, rotation PostgreSQL sans moteur database
+
+Déverrouillage retenu : clé gardée dans KeePassXC et collée à la main dans `bao operator unseal` lancé sans argument ; `age -p` devient une alternative écartée (§5.1). §5 complété : pas de déverrouillage automatique sans affaiblir la protection, et une mise à jour Renovate de l'image ne scelle pas OpenBao (conteneur recréé seulement au `docker compose up` manuel). PostgreSQL : moteur database abandonné pour ne pas exposer la base ; rotation à la demande par `rotate-secrets.py` (KV, synchronisation ESO forcée, `ALTER ROLE` par `kubectl exec`, `rollout restart`). Verdict, §2 (#15), §3, §4.2, §7, §7.2 (étape 4) et §8 alignés. L'étude reste au statut `proposition`.
+
+## [2026-11-21] ingest | ETUDE_OPENBAO : autorité locale et certificats TLS
+
+L'étude supposait une « autorité locale du registry » inexistante : tous les certificats sont auto-signés (registry pour 10 ans). Ajouts : ligne TLS au §1, ligne #18 détaillée au §2, nouveau §4.3 (autorité locale créée dès l'étape 1 avec racine hors ligne, certificat d'OpenBao émis hors d'OpenBao ; à l'étape 5, intermédiaire dans le moteur PKI, `shared-tls-cert` par cert-manager à durée courte, registry pour un an, ephemere inchangé ; distribution de l'autorité). §4.1, §7 (étape 5 portée à 2 jours, total 6,5 jours), §7.2 et §8 alignés. Sources du frontmatter complétées. L'étude reste au statut `proposition`.

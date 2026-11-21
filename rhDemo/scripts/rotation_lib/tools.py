@@ -2,9 +2,11 @@
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+import time
 
 from .common import RotationError
 
@@ -88,6 +90,41 @@ def kubectl(*args, stdin=None, timeout=300):
         err = proc.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
         raise RotationError(f"kubectl {args[0]} {args[1] if len(args) > 1 else ''} : échec ({err[0][:200]})")
     return proc.stdout.decode("utf-8")
+
+
+
+class PortForward:
+    """`kubectl port-forward` vers un port local libre choisi par kubectl, arrêté par close()."""
+
+    def __init__(self, namespace, target, remote_port, timeout=30):
+        self.proc = subprocess.Popen(
+            ["kubectl", "port-forward", "--address", "127.0.0.1", "-n", namespace, target, f":{remote_port}"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.port = None
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            line = self.proc.stdout.readline()
+            if not line:
+                break
+            m = re.search(r"127\.0\.0\.1:(\d+)", line)
+            if m:
+                self.port = int(m.group(1))
+                return
+        err = (self.proc.stderr.read() if self.proc.poll() is not None else "").strip().splitlines()[-1:] or [""]
+        self.close()
+        raise RotationError(f"kubectl port-forward {target} : échec ({err[0][:200]})")
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.port}"
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
 
 
 # --- fichier AppRole local (fixcve-auto : ~/.config/rhdemo-fixcve/openbao-approle.json) ----

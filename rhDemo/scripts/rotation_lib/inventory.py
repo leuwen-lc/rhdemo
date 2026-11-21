@@ -21,6 +21,11 @@ METHOD_KEYS = {
     "openbao-approle": {"role"},
     "postgres-password": {"kv_path", "kv_key", "namespace", "pod", "db_user", "database",
                           "external_secrets", "k8s_secret", "restart"},
+    "keycloak-client-secret": {"kv_path", "kv_key", "realm", "client_id", "namespace",
+                               "external_secrets", "k8s_secret", "k8s_key", "restart"},
+    "keycloak-admin": {"kv_path", "kv_key", "user_key", "realm", "namespace", "external_secrets",
+                       "k8s_secret"},
+    "keycloak-users": {"kv_path", "realm", "users"},
     "planned": {"phase"},
 }
 NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}

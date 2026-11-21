@@ -67,7 +67,7 @@ Depuis `rhDemo/infra/jenkins-docker/` :
 8. fixcve-auto (étape 1 bis) : `./openbao-migrate.py fixcve`, puis `./fixcve-install.sh --trust` (scripts modifiés). Après un cycle réussi, supprimer `~/.config/rhdemo-fixcve/credentials.sops.yaml`.
 9. Cosign (étape 2) : `openbao/configure-openbao.sh cosign` (écrit la clé publique dans `certs/cosign/cosign-transit.pub`), créer le credential **Secret file** `cosign-public-key-transit` avec ce fichier (un Secret text tient sur une ligne et casserait le PEM), puis `./openbao-migrate.py cosign-approle`. Après une CD verte sur une image signée par Transit, supprimer `cosign-private-key` et `cosign-password` ; garder `cosign-public-key` tant que des images signées par l'ancienne clé restent déployables.
 10. stagingkub (étape 3) : `./openbao-migrate.py stagingkub` (copie depuis `secrets-stagingkub.yml`), puis `infra/stagingkub/scripts/init-stagingkub.sh` ou, sur un cluster existant, `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. Appliquer aussi `infra/stagingkub/rbac/jenkins-role.yaml` (lecture des `ExternalSecret` par la CD).
-11. Renouveler les valeurs copiées depuis SOPS, présentes chiffrées dans l'historique Git public (étape 4) : `./rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db`, et la procédure manuelle de `stagingkub-app-secrets`.
+11. Renouveler les valeurs copiées depuis SOPS, présentes chiffrées dans l'historique Git public (étape 4) : `./rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db stagingkub-oidc-client stagingkub-keycloak-admin stagingkub-test-users` (`--dry-run` d'abord pour contrôler l'accès).
 12. `openbao/configure-openbao.sh revoke-root`.
 
 ## Déverrouillage
@@ -89,9 +89,13 @@ Tout passe par `rotate-secrets.py` (inventaire `secrets/inventory.yaml`) :
 | Tokens Codeberg, clé GPG Renovate | `rotate-secrets.py <id>` | nouvelle valeur écrite dans `kv/jenkins/…` ou `kv/fixcve/codeberg` |
 | `secret_id` AppRole (Jenkins, Cosign, fixcve) | `rotate-secrets.py openbao-approle-jenkins` (etc.) | nouveau `secret_id` vérifié par une connexion, propagé, anciens détruits ; validité 100 jours, période 90 jours |
 | Mots de passe PostgreSQL de stagingkub | `rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db` | KV, synchronisation ESO forcée, `ALTER ROLE` dans le pod (mot de passe sur l'entrée standard de `psql`), redémarrage des pods ; retour arrière automatique si l'`ALTER ROLE` échoue |
+| Secret du client OIDC `RHDemo` | `rotate-secrets.py stagingkub-oidc-client` | KV, synchronisation ESO forcée (le Secret est un fichier généré par gabarit), valeur imposée dans Keycloak par l'API d'administration, redémarrage de `rhdemo-app` ; retour arrière dans Keycloak et le KV en cas d'échec |
+| Administrateur Keycloak, utilisateurs de test | `rotate-secrets.py stagingkub-keycloak-admin stagingkub-test-users` | KV d'abord, puis API Keycloak et connexion de vérification avec la nouvelle valeur ; sinon retour à l'ancienne des deux côtés. `KEYCLOAK_ADMIN_PASSWORD` ne servant qu'au premier démarrage, le changer dans OpenBao seul ne suffirait pas. Utilisateurs de test : 12 caractères saisissables (lettres, chiffres, `-_.!@%+=?`), longueur réglable dans l'inventaire |
 | Clé Cosign | procédure manuelle de `cosign-key` | nouvelle version de la clé Transit, nouvelle clé publique dans `cosign-public-key-transit` |
 
 `rotate-secrets.py --check` signale un `secret_id` dont la période est dépassée, avant son expiration.
+
+Les rotations Keycloak passent par un `kubectl port-forward` vers le pod Keycloak (comme `init-keycloak-stagingkub.sh`), avec les identifiants d'administration lus dans `kv/stagingkub/keycloak`. Aucune valeur n'est saisie, et aucune ne passe en argument de commande. Les nouvelles valeurs se relisent dans OpenBao (`bao kv get`).
 
 ## Sauvegarde et restauration
 
@@ -129,8 +133,13 @@ Vérifié le 2026-11-21 sur le vrai cluster stagingkub (installation de l'étape
 - NetworkPolicy de sortie d'ESO vers l'IP fixe d'OpenBao (`ipBlock`) fonctionnelle avec Cilium ;
 - les 4 Secrets recréés par ESO, avec ESO pour propriétaire, aux valeurs identiques aux anciennes (gabarit de `rhdemo-app-secrets` compris) ; pods applicatifs inchangés.
 
+Vérifié le 2026-11-21 par les pipelines de la branche :
+
+- `RHDemo-CI` verte : secrets d'ephemere générés à chaque build (sans SOPS), image signée par la clé Transit (`openbao://cosign`, AppRole `jenkins-cosign`) ;
+- `RHDemo-CD` verte : signature vérifiée avec `cosign-public-key-transit` (repli sur l'ancienne clé non sollicité), `ExternalSecret` prêts.
+
 À valider au premier déploiement :
 
 - entrée du webhook d'ESO depuis l'API Server (`allow-apiserver-to-webhook`) : sollicitée seulement à la création ou modification d'un `ExternalSecret`/`SecretStore`, passée sans erreur à l'installation ;
 - rotation PostgreSQL sur le vrai cluster (authentification locale de `psql` dans le pod) ;
-- signature d'une vraie image par la CI et vérification par la CD avec deux clés.
+- rotations Keycloak sur le vrai cluster (seul le port-forward et l'accès aux realms `master` et `RHDemo` ont été vérifiés).

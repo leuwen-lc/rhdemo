@@ -201,8 +201,8 @@ def cmd_stagingkub(ctx):
     })
     ob.kv_put("stagingkub-tests/users", {k: str(v) for k, v in (rh.get("test") or {}).items()})
     log("  ✓ écrit. Ces valeurs figurent (chiffrées) dans l'historique Git public : les renouveler")
-    log("    une fois ESO en place (rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db,")
-    log("    procédure manuelle de stagingkub-app-secrets).")
+    log("    une fois ESO en place (rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db")
+    log("    stagingkub-oidc-client stagingkub-keycloak-admin stagingkub-test-users).")
 
 
 def sops_decrypt(path):

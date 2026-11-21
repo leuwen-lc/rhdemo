@@ -26,6 +26,25 @@ def new_password():
     return secrets.token_urlsafe(32)
 
 
+# Ponctuation sans risque dans un scalaire YAML non quoté (init-keycloak-stagingkub.sh), un
+# argument shell ou une URL de formulaire : ni guillemet, ni antislash, ni $, #, :, espace.
+SIMPLE_PUNCTUATION = "-_.!@%+=?"
+
+
+def simple_password(length=12, punctuation=SIMPLE_PUNCTUATION):
+    """Mot de passe court et saisissable (utilisateurs de test) : commence par une lettre,
+    au moins une minuscule, une majuscule, un chiffre et un signe de ponctuation."""
+    import string
+    if length < 8:
+        raise RotationError("longueur de mot de passe inférieure à 8")
+    alphabet = string.ascii_letters + string.digits + punctuation
+    while True:
+        pw = secrets.choice(string.ascii_letters) + "".join(secrets.choice(alphabet) for _ in range(length - 1))
+        if (any(c.islower() for c in pw) and any(c.isupper() for c in pw)
+                and any(c.isdigit() for c in pw) and any(c in punctuation for c in pw)):
+            return pw
+
+
 def stamp():
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 

@@ -8,10 +8,11 @@ import base64
 import os
 import time
 
-from .common import RotationError, log, new_password, stamp, warn
+from .common import SIMPLE_PUNCTUATION, RotationError, log, new_password, simple_password, stamp, warn
 from .forgejo import Forgejo
 from .smtp import smtp_login
 from .jenkins import Jenkins
+from .keycloak import Keycloak
 from .openbao import OpenBao
 from . import tools
 
@@ -27,6 +28,8 @@ class Context:
         self._jenkins = None
         self._forgejo = None
         self._openbao = None
+        self._keycloak = None
+        self._port_forward = None
         self.smtp_check = smtp_login
 
     @property
@@ -59,7 +62,24 @@ class Context:
             self._openbao = client
         return self._openbao
 
+    def keycloak(self):
+        """Session d'administration Keycloak de stagingkub : identifiants lus dans OpenBao,
+        accès par port-forward (arrêté par close())."""
+        if self._keycloak is None:
+            cfg = self.services["keycloak"]
+            creds = self.openbao().kv_read(cfg["admin_kv_path"])
+            self._port_forward = tools.PortForward(cfg["namespace"], cfg["target"], cfg.get("port", 8080))
+            client = Keycloak(self._port_forward.url, creds["admin_user"], creds["admin_password"],
+                              cfg.get("admin_realm", "master"))
+            client.token()
+            self._keycloak = client
+        return self._keycloak
+
     def close(self):
+        if self._port_forward is not None:
+            self._port_forward.close()
+            self._port_forward = None
+            self._keycloak = None
         if self._openbao is not None:
             try:
                 self._openbao.revoke_self()
@@ -300,19 +320,22 @@ def rotate_openbao_approle(ctx, entry):
 
 
 def _secret_value(namespace, name, key):
-    out = tools.kubectl("get", "secret", name, "-n", namespace, "-o", f"jsonpath={{.data.{key}}}")
+    jkey = key.replace(".", "\\.")
+    out = tools.kubectl("get", "secret", name, "-n", namespace, "-o", f"jsonpath={{.data.{jkey}}}")
     return base64.b64decode(out.strip()).decode("utf-8") if out.strip() else ""
 
 
 def _force_sync(r, wait_value, timeout=90, poll=3):
-    """Force la synchronisation ESO et attend que le Secret porte la nouvelle valeur."""
+    """Force la synchronisation ESO et attend que le Secret porte la nouvelle valeur
+    (égalité, ou présence dans un fichier généré par gabarit si k8s_match: contains)."""
     ns = r["namespace"]
     for es in r["external_secrets"]:
         tools.kubectl("annotate", "externalsecret", es, "-n", ns, f"force-sync={time.time_ns()}",
                       "--overwrite")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if _secret_value(ns, r["k8s_secret"], r.get("k8s_key", "password")) == wait_value:
+        current = _secret_value(ns, r["k8s_secret"], r.get("k8s_key", "password"))
+        if current == wait_value or (r.get("k8s_match") == "contains" and wait_value in current):
             return
         time.sleep(poll)
     raise RotationError(f"ESO : Secret {r['k8s_secret']} non synchronisé après {timeout} s")
@@ -360,8 +383,22 @@ def rotate_postgres_password(ctx, entry):
         revert("échec avant ou pendant ALTER ROLE")
         raise
     log("  ✓ mot de passe changé dans OpenBao, le Secret et PostgreSQL")
+    failed = _restart(ns, r["restart"])
+    if failed:
+        raise RotationError(f"mot de passe changé, mais redémarrage à terminer à la main : {', '.join(failed)}")
+    return f"mot de passe {r['db_user']} renouvelé, {', '.join(r['restart'])} redémarrés"
+
+
+def _kv_value(ob, path, key):
+    value = (ob.kv_read(path) or {}).get(key)
+    if value is None:
+        raise RotationError(f"OpenBao : kv/{path} ({key}) absent")
+    return value
+
+
+def _restart(ns, targets):
     failed = []
-    for target in r["restart"]:
+    for target in targets:
         try:
             tools.kubectl("rollout", "restart", target, "-n", ns)
             tools.kubectl("rollout", "status", target, "-n", ns, "--timeout=300s", timeout=330)
@@ -369,9 +406,144 @@ def rotate_postgres_password(ctx, entry):
         except RotationError as exc:
             failed.append(target)
             warn(f"{target} : {exc}")
+    return failed
+
+
+def rotate_keycloak_client_secret(ctx, entry):
+    """Secret du client OIDC : KV, synchronisation ESO forcée, valeur imposée dans Keycloak,
+    redémarrage de l'application. Retour arrière (Keycloak puis KV) en cas d'échec."""
+    r = entry["rotation"]
+    ob = ctx.openbao()
+    ns = r["namespace"]
+    old = _kv_value(ob, r["kv_path"], r["kv_key"])
+    for es in r["external_secrets"]:
+        tools.kubectl("get", "externalsecret", es, "-n", ns)
+    kc = ctx.keycloak()
+    if kc.client_secret(r["realm"], r["client_id"]) != old:
+        warn(f"le secret du client {r['client_id']} diffère déjà de kv/{r['kv_path']} : "
+             "la rotation réaligne les deux")
+    log(f"  kv/{r['kv_path']} {r['kv_key']} → ESO ({', '.join(r['external_secrets'])}) → "
+        f"client {r['client_id']} ({r['realm']}) → redémarrage {', '.join(r['restart'])}")
+    if ctx.dry_run:
+        return None
+    new = new_password()
+
+    ob.kv_set(r["kv_path"], r["kv_key"], new)
+    try:
+        _force_sync(r, new)
+        kc.set_client_secret(r["realm"], r["client_id"], new)
+    except RotationError:
+        warn("échec : retour à l'ancien secret dans Keycloak et OpenBao")
+        for step in (lambda: kc.set_client_secret(r["realm"], r["client_id"], old),
+                     lambda: ob.kv_set(r["kv_path"], r["kv_key"], old),
+                     lambda: _force_sync(r, old)):
+            try:
+                step()
+            except RotationError as exc:
+                warn(f"retour arrière incomplet ({exc}) : comparer kv/{r['kv_path']} et le client {r['client_id']}")
+        raise
+    log("  ✓ secret changé dans OpenBao, le Secret et Keycloak")
+    failed = _restart(ns, r["restart"])
     if failed:
-        raise RotationError(f"mot de passe changé, mais redémarrage à terminer à la main : {', '.join(failed)}")
-    return f"mot de passe {r['db_user']} renouvelé, {', '.join(r['restart'])} redémarrés"
+        raise RotationError(f"secret changé, mais redémarrage à terminer à la main : {', '.join(failed)}")
+    return f"secret du client {r['client_id']} renouvelé, {', '.join(r['restart'])} redémarrés"
+
+
+def _rotate_keycloak_password(ctx, kc, realm, username, kv_path, kv_key, old, generate=new_password):
+    """Un mot de passe Keycloak : KV d'abord (OpenBao garde toujours une valeur connue),
+    puis Keycloak, puis connexion de vérification. Sinon retour à l'ancien des deux côtés."""
+    ob = ctx.openbao()
+    new = generate()
+    is_admin = realm == kc.admin_realm and username.lower() == kc.admin_user.lower()
+    ob.kv_set(kv_path, kv_key, new)
+    changed = False
+    try:
+        kc.set_password(realm, username, new)
+        changed = True
+        if is_admin:
+            kc.admin_password = new   # jetons suivants, retour arrière compris
+        if not kc.check_login(realm, username, new):
+            warn(f"{username} : mot de passe accepté, mais une action requise est en attente dans Keycloak")
+    except RotationError:
+        warn(f"{username} : échec, retour à l'ancien mot de passe")
+        try:
+            if changed:
+                kc.set_password(realm, username, old)
+                if is_admin:
+                    kc.admin_password = old
+        except RotationError as exc:
+            warn(f"Keycloak : retour arrière impossible ({exc}) : mot de passe de {username} à "
+                 f"redéfinir dans la console, la nouvelle valeur reste dans kv/{kv_path}")
+            raise
+        try:
+            ob.kv_set(kv_path, kv_key, old)
+        except RotationError as exc:
+            warn(f"retour arrière incomplet ({exc}) : comparer kv/{kv_path} ({kv_key}) et Keycloak")
+        raise
+    return new
+
+
+def rotate_keycloak_admin(ctx, entry):
+    """Administrateur Keycloak : KEYCLOAK_ADMIN_PASSWORD ne sert qu'au premier démarrage, le
+    mot de passe est donc changé par l'API, puis le Secret resynchronisé pour rester cohérent."""
+    r = entry["rotation"]
+    ob = ctx.openbao()
+    creds = ob.kv_read(r["kv_path"]) or {}
+    user, old = creds.get(r["user_key"]), creds.get(r["kv_key"])
+    if not user or old is None:
+        raise RotationError(f"OpenBao : kv/{r['kv_path']} ({r['user_key']}, {r['kv_key']}) absent")
+    for es in r["external_secrets"]:
+        tools.kubectl("get", "externalsecret", es, "-n", r["namespace"])
+    kc = ctx.keycloak()          # connexion avec l'ancien mot de passe : valeur du KV vérifiée
+    log(f"  kv/{r['kv_path']} {r['kv_key']} → Keycloak {user} ({r['realm']}) → ESO "
+        f"({', '.join(r['external_secrets'])})")
+    if ctx.dry_run:
+        return None
+    new = _rotate_keycloak_password(ctx, kc, r["realm"], user, r["kv_path"], r["kv_key"], old)
+    log(f"  ✓ mot de passe de {user} changé dans OpenBao et Keycloak")
+    try:
+        _force_sync(r, new)
+    except RotationError as exc:
+        warn(f"{exc} : le Secret se resynchronisera seul (refreshInterval)")
+        return f"mot de passe {user} renouvelé, Secret non encore resynchronisé"
+    return f"mot de passe {user} renouvelé"
+
+
+def rotate_keycloak_users(ctx, entry):
+    """Utilisateurs de test : un mot de passe par utilisateur, chacun vérifié par une connexion."""
+    r = entry["rotation"]
+    ob = ctx.openbao()
+    data = ob.kv_read(r["kv_path"]) or {}
+    users = []
+    for u in r["users"]:
+        name, old = data.get(u["user_key"]), data.get(u["password_key"])
+        if not name or old is None:
+            raise RotationError(f"OpenBao : kv/{r['kv_path']} ({u['user_key']}, {u['password_key']}) absent")
+        users.append((name, u["password_key"], old))
+    kc = ctx.keycloak()
+    for name, _, _ in users:
+        kc.user_id(r["realm"], name)
+    spec = r.get("password") or {}
+    length = int(spec.get("length", 12))
+    punctuation = spec.get("punctuation", SIMPLE_PUNCTUATION)
+
+    def generate():
+        return simple_password(length, punctuation)
+
+    generate()   # paramètres invalides détectés avant toute modification
+    log(f"  kv/{r['kv_path']} → Keycloak ({r['realm']}) : {', '.join(n for n, _, _ in users)} "
+        f"({length} caractères)")
+    if ctx.dry_run:
+        return None
+    done = []
+    for name, key, old in users:
+        try:
+            _rotate_keycloak_password(ctx, kc, r["realm"], name, r["kv_path"], key, old, generate)
+        except RotationError as exc:
+            raise RotationError(f"{exc} (déjà renouvelés : {', '.join(done) or 'aucun'})") from None
+        done.append(name)
+        log(f"  ✓ {name}")
+    return f"mots de passe renouvelés : {', '.join(done)}"
 
 
 METHODS = {
@@ -380,4 +552,7 @@ METHODS = {
     "manual-value": rotate_manual_value,
     "openbao-approle": rotate_openbao_approle,
     "postgres-password": rotate_postgres_password,
+    "keycloak-client-secret": rotate_keycloak_client_secret,
+    "keycloak-admin": rotate_keycloak_admin,
+    "keycloak-users": rotate_keycloak_users,
 }

@@ -231,7 +231,8 @@ pipeline {
 
                     # 24 octets aléatoires en hexadécimal, préfixés d'une lettre : aucun caractère à
                     # échapper (YAML non quoté, JDBC, variables Compose), jamais lu comme un nombre.
-                    gen() { printf 'p%s' "$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"; }
+                    # Aucun antislash dans ce script : Groovy interprète les échappements des chaînes à triples apostrophes.
+                    gen() { printf 'p%s' "$(od -An -N24 -tx1 /dev/urandom | tr -dc '0-9a-f')"; }
 
                     umask 077
                     {
@@ -257,9 +258,8 @@ pipeline {
 
                     # Contrôle sans afficher les valeurs
                     . ${SECRETS_ENV_VARS}
-                    for v in RHDEMO_DATASOURCE_PASSWORD_PG KEYCLOAK_DB_PASSWORD KEYCLOAK_ADMIN_PASSWORD \
-                             RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET RHDEMO_TEST_PWD_USER_MAJ; do
-                        eval "val=\${$v}"
+                    for v in RHDEMO_DATASOURCE_PASSWORD_PG KEYCLOAK_DB_PASSWORD KEYCLOAK_ADMIN_PASSWORD RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET RHDEMO_TEST_PWD_USER_MAJ; do
+                        val=$(printenv "$v" || true)
                         [ ${#val} -eq 49 ] || { echo "❌ Génération de $v en échec"; exit 1; }
                     done
                     echo "✅ Secrets ephemere générés dans ${SECRETS_ENV_VARS} (valeurs non affichées)"

@@ -43,6 +43,10 @@ Pour le détail de mise en œuvre, suivre les liens vers les documents thématiq
 
 Mise en œuvre : [SOPS_SETUP.md](SOPS_SETUP.md).
 
+## Pourquoi OpenBao en plus de SOPS ?
+
+SOPS laisse dans l'historique Git public des fichiers que la clé AGE, si elle fuit, déchiffre en entier, et ne trace aucune lecture. OpenBao (fork libre de Vault) garde les secrets internes hors de Git, journalise chaque lecture, signe les images sans clé extractible (Transit) et sert les secrets de stagingkub par External Secrets Operator. Il tourne dans `jenkins-docker`, hors du cluster souvent recréé. Son coût : un déverrouillage manuel après chaque redémarrage (clé dans KeePassXC, aucune automatisation sans affaiblir la protection). Les mots de passe PostgreSQL sont renouvelés par `rotate-secrets.py` plutôt que par le moteur database, pour ne pas exposer les bases hors du cluster. SOPS reste pour ephemere pendant la transition. Étude : [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) ; exploitation : [OPENBAO.md](OPENBAO.md).
+
 ## Pourquoi Maven pour le frontend ?
 
 - Build unique backend + frontend

@@ -295,3 +295,15 @@ Déverrouillage retenu : clé gardée dans KeePassXC et collée à la main dans 
 ## [2026-11-21] ingest | ETUDE_OPENBAO : autorité locale et certificats TLS
 
 L'étude supposait une « autorité locale du registry » inexistante : tous les certificats sont auto-signés (registry pour 10 ans). Ajouts : ligne TLS au §1, ligne #18 détaillée au §2, nouveau §4.3 (autorité locale créée dès l'étape 1 avec racine hors ligne, certificat d'OpenBao émis hors d'OpenBao ; à l'étape 5, intermédiaire dans le moteur PKI, `shared-tls-cert` par cert-manager à durée courte, registry pour un an, ephemere inchangé ; distribution de l'autorité). §4.1, §7 (étape 5 portée à 2 jours, total 6,5 jours), §7.2 et §8 alignés. Sources du frontmatter complétées. L'étude reste au statut `proposition`.
+
+## [2026-11-21] ingest | OPENBAO : étapes 1 à 4 codées (branche evolution_openbao)
+
+Nouveau `OPENBAO.md` (actif) : architecture, installation dans l'ordre, déverrouillage, rotation, sauvegarde, retour arrière, points vérifiés sur un OpenBao et un Jenkins jetables et points à valider au premier déploiement (ESO, NetworkPolicy Cilium vers OpenBao, rotation PostgreSQL réelle). Code : conteneur OpenBao et autorité locale dans `infra/jenkins-docker/openbao/`, plugin Jenkins et truststore, `openbao-migrate.py`, cibles et méthodes OpenBao de `rotate-secrets.py`, signature Cosign par Transit dans la CI et double clé dans la CD, ESO dans stagingkub (la CD ne déchiffre plus `secrets-stagingkub.yml`), lecture des credentials de fixcve-auto par AppRole. Mis à jour : statut d'`ETUDE_OPENBAO.md`, `DECISIONS.md` (« Pourquoi OpenBao en plus de SOPS »), `PIPELINES_CI_CD.md`, `FIXCVE_AUTO.md`, invariant Secrets de `CLAUDE.md`, `index.md`.
+
+## [2026-11-21] ingest | Ephemere : secrets générés à chaque build, plus de SOPS
+
+`Jenkinsfile-CI` ne déchiffre plus `secrets-ephemere.yml` : le stage « Génération Secrets ephemere » tire des valeurs aléatoires (environnement jetable) et écrit le même fichier de variables. Le credential `sops-age-key` n'est plus utilisé par aucun pipeline. Mis à jour : `OPENBAO.md` (section Ephemere, retour arrière), `PIPELINES_CI_CD.md`, `QUICKSTART.md` de Jenkins, `secrets/README-SECRETS-SEPARATION.md`, `inventory.yaml` (#16), commentaire JCasC, invariant Secrets de `CLAUDE.md`. `secrets-ephemere.yml` reste dans le dépôt jusqu'à l'abandon de SOPS.
+
+## [2026-11-21] ingest | OPENBAO : Name Constraints sur l'autorité locale
+
+`init-local-ca.sh` ajoute des *Name Constraints* critiques à la racine et à l'intermédiaire (noms internes et plages privées seulement) : une clé d'autorité volée ne permet plus d'émettre un certificat accepté pour un nom externe. Vérifié avec OpenSSL, Java et Go (certificats internes acceptés, `codeberg.org`, nom imposteur et IP publique refusés). `OPENBAO.md` complété (architecture, installation, points vérifiés).

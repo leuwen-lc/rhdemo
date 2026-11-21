@@ -57,6 +57,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) | actif | Flux réseau légitimes et NetworkPolicies Zero Trust |
 | [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) | actif | RBAC du ServiceAccount Jenkins (moindre privilège) |
 | [SOPS_SETUP.md](SOPS_SETUP.md) | actif | Installation et usage de SOPS/AGE pour les secrets |
+| [OPENBAO.md](OPENBAO.md) | actif | Exploitation d'OpenBao : installation, déverrouillage, migration, rotation, retour arrière ; points à valider au premier déploiement |
 | [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md) | actif | Certificats TLS stagingkub : auto-signés ou Let's Encrypt |
 | [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) | actif | Scan des dépendances Maven et npm, seuils de blocage |
 | [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md) | actif | Scan des images Docker avec Trivy |
@@ -132,7 +133,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
 | [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API (périodique et d'urgence) ; phase 1 implémentée (`scripts/rotate-secrets.py`) |
-| [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) | proposition | OpenBao comme gestionnaire de secrets : apport par secret, compatibilités, déverrouillage, plan par étapes (dont credentials de fixcve-auto) ; étape 0 (prototype) concluante |
+| [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) | proposition | OpenBao comme gestionnaire de secrets : apport par secret, compatibilités, déverrouillage, plan par étapes (dont credentials de fixcve-auto) ; étape 0 concluante, étapes 1 à 4 codées sur la branche `evolution_openbao` |
 
 ---
 

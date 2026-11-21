@@ -167,7 +167,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 
 ⚠️ **Écart CI / local** : le rescan local n'interroge pas OSS Index (quota partagé avec `RHDemo-CI`) ; une faille connue d'OSS Index seul n'est vue que par le build CI (phase B).
 
-⚠️ **Credentials** : `~/.config/rhdemo-fixcve/` (tokens chiffrés SOPS, clé NVD optionnelle) reste lisible par l'utilisateur unix du cron ; aucun confinement réseau ou noyau (microVM, bubblewrap) à ce jour.
+⚠️ **Credentials** : tokens et clé NVD dans OpenBao (`kv/fixcve/*`), lus à chaque passage par l'AppRole `fixcve` dont le fichier `~/.config/rhdemo-fixcve/openbao-approle.json` (mode 600) reste lisible par l'utilisateur unix du cron ; portée limitée à ces trois secrets, lectures auditées, `secret_id` révocable ([OPENBAO.md](OPENBAO.md)). Avant migration : `credentials.sops.yaml`, déchiffré par la clé AGE. Aucun confinement réseau ou noyau (microVM, bubblewrap) à ce jour.
 
 ---
 
@@ -181,7 +181,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
   2. L'ajouter comme collaborateur **Write** (pas Admin) de `leuwen-lc/rhdemo`.
   3. Générer un token à scope écriture restreint à `rhdemo`.
   4. Si la branche est protégée, l'ajouter à la liste autorisée en push.
-- **Clé AGE personnelle** (`~/.config/sops/age/keys.txt`), voir [SOPS_SETUP.md](SOPS_SETUP.md).
+- **OpenBao** déverrouillé et alimenté (`openbao-migrate.py fixcve`, voir [OPENBAO.md](OPENBAO.md)) ; à défaut, pendant la transition, **clé AGE personnelle** (`~/.config/sops/age/keys.txt`, voir [SOPS_SETUP.md](SOPS_SETUP.md)). OpenBao scellé : le passage est sauté (ligne dans `poll.log`), comme pour un Jenkins injoignable.
 - **Clé API NVD** (optionnelle, recommandée) : rescan Dependency-Check local complet. Sans clé, aucun scan local n'est lancé. La clé est la même que celle de la CI (credential Jenkins `nvd-api-key`) : le NVD limite le débit par clé, il n'y a pas de quota mensuel, et l'amorçage du cache évite que fixcve consomme des requêtes pour rattraper la base.
 
 ### 2. Script d'installation

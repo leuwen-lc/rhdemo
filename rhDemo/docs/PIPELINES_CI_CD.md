@@ -77,7 +77,7 @@ Enchaînement CI → CD :
 │                   (Déploiement Continu)                         │
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Préparation                                                  │
-│    ├─ Déchiffrement des secrets SOPS                           │
+│    ├─ Secrets : ESO depuis OpenBao (rien dans Jenkins)         │
 │    └─ Vérification de l'image dans le registry                 │
 │                                                                 │
 │ 2. Configuration Kubernetes                                     │
@@ -111,7 +111,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 #### Phase 1 : Préparation
 - Checkout du code source
 - Lecture de la version Maven
-- Déchiffrement des secrets SOPS
+- Génération des secrets d'ephemere (valeurs aléatoires à chaque build, jamais stockées)
 - Configuration Keycloak
 
 #### Phase 2 : Build et Tests
@@ -201,15 +201,15 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 - Détermination de la version de l'image à déployer :
   - **Avec paramètre `IMAGE_TAG`** : Utilise le tag spécifié (ex: `1.1.0-SNAPSHOT-95`)
   - **Sans paramètre** : Utilise le tag `latest` (dernière image validée par CI)
-- Déchiffrement des secrets SOPS
-- Extraction des secrets applicatifs
+- Secrets applicatifs : plus déchiffrés par le pipeline, créés dans le namespace par External Secrets Operator depuis OpenBao ([OPENBAO.md](OPENBAO.md))
 
 #### Phase 2 : Configuration Kubernetes
 - Configuration de l'accès au cluster KinD
 - Vérification du nom du registry : **DOIT être `kind-registry`** (sinon échec du pipeline)
 - Connexion automatique du registry au réseau `kind` avec alias DNS `kind-registry`
 - Vérification de l'image dans le registry
-- Mise à jour des secrets Kubernetes
+- Vérification de la signature Cosign : clé publique Transit (`cosign-public-key-transit`), puis ancienne clé (`cosign-public-key`)
+- Vérification que les `ExternalSecret` sont synchronisés (lecture seule, aucun secret ne transite par Jenkins)
 
 #### Phase 3 : Déploiement
 - Déploiement Helm sur stagingkub
@@ -541,7 +541,10 @@ exactes.
 
 | ID Credential | Type | Usage |
 |---------------|------|-------|
-| `sops-age-key` | Secret file | Déchiffrement des secrets SOPS |
+| `sops-age-key` | Secret file | Plus utilisé par les pipelines (ephemere : secrets générés à chaque build) ; à supprimer à l'abandon de SOPS |
+| `openbao-approle` | Vault App Role | Plugin HashiCorp Vault : lecture de `kv/jenkins/*` ([OPENBAO.md](OPENBAO.md)) |
+| `openbao-cosign-approle` | Username with password | RHDemo-CI : signature Cosign par la clé Transit d'OpenBao |
+| `cosign-public-key-transit`, `cosign-public-key` | Secret file | RHDemo-CD : vérification de signature (nouvelle, puis ancienne clé) |
 | `kubeconfig-stagingkub` | Secret file | RHDemo-CD (`jenkins-deployer`) |
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | RHDemo-Stagingkub-Upgrade-Deploy (`jenkins-infra-upgrader`) |
 | Token API Forgejo + clé GPG | — | RHDemo-Renovate (rebase/merge/commentaires, commits signés) |

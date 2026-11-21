@@ -58,6 +58,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) | actif | Flux réseau légitimes et NetworkPolicies Zero Trust |
 | [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) | actif | RBAC du ServiceAccount Jenkins (moindre privilège) |
 | [OPENBAO.md](OPENBAO.md) | actif | Exploitation d'OpenBao : installation à blanc, alimentation initiale des secrets, déverrouillage, rotation, jeton root ponctuel |
+| [ROTATION_SECRETS.md](ROTATION_SECRETS.md) | actif | Secrets au quotidien : tâches récurrentes, usage de `rotate-secrets.py`, rotation d'urgence, où retrouver un mot de passe (Keycloak, Grafana, profils de l'application) |
 | [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md) | actif | Certificats TLS stagingkub : auto-signés ou Let's Encrypt |
 | [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) | actif | Scan des dépendances Maven et npm, seuils de blocage |
 | [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md) | actif | Scan des images Docker avec Trivy |
@@ -134,7 +135,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [IMPACT_CLEAN_ARCHITECTURE.md](IMPACT_CLEAN_ARCHITECTURE.md) | proposition | Analyse d'impact d'une migration vers la Clean Architecture |
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
-| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API (périodique et d'urgence) ; phase 1 implémentée (`scripts/rotate-secrets.py`) |
+| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), restent kubeconfigs automatisés, mode urgence et rappel périodique |
 
 ---
 

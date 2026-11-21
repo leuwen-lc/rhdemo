@@ -26,6 +26,8 @@ METHOD_KEYS = {
     "keycloak-admin": {"kv_path", "kv_key", "user_key", "realm", "namespace", "external_secrets",
                        "k8s_secret"},
     "keycloak-users": {"kv_path", "realm", "users"},
+    "grafana-admin": {"kv_path", "kv_key", "user_key", "namespace", "external_secrets", "k8s_secret",
+                      "k8s_key", "restart", "service"},
     "planned": {"phase"},
 }
 NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}

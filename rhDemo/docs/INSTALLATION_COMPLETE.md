@@ -88,13 +88,13 @@ Certificats de la Gateway (auto-signés par défaut, Let's Encrypt possible) : [
 
 1. Lancer le job `RHDemo-CD` (sans paramètre : dernier build CI validé). Il vérifie la signature de l'image et la synchronisation des secrets, puis déploie le chart Helm.
 2. Une seule fois, Keycloak démarré : `rhDemo/infra/stagingkub/scripts/init-keycloak-stagingkub.sh` (realm, client OIDC, utilisateurs de test) : [README-INIT-KEYCLOAK.md](../infra/stagingkub/scripts/README-INIT-KEYCLOAK.md).
-3. Application : https://rhdemo-stagingkub.intra.leuwen-lc.fr, avec un utilisateur de test (identifiants dans OpenBao, `kv/stagingkub-tests/users`).
+3. Application : https://rhdemo-stagingkub.intra.leuwen-lc.fr, avec un utilisateur de test (identifiants dans OpenBao : [ROTATION_SECRETS.md](ROTATION_SECRETS.md), « Retrouver un secret »).
 
 Paramétrage de l'application dans le cluster : [PARAMETRAGE-APPLICATIF-AVEC-KUB.md](PARAMETRAGE-APPLICATIF-AVEC-KUB.md).
 
 ## 7. Observabilité (facultatif)
 
-Créer `grafana-values.yaml` depuis son modèle (mot de passe administrateur), puis `rhDemo/infra/stagingkub/scripts/install-observability.sh` (Prometheus, Loki, Alloy, Grafana) : [OBSERVABILITY_STACK_INTEGRATION.md](OBSERVABILITY_STACK_INTEGRATION.md). Le CD suivant active les ServiceMonitors de l'application.
+`rhDemo/scripts/openbao-setup.py observability` (mot de passe administrateur de Grafana, généré dans OpenBao), puis `rhDemo/infra/stagingkub/scripts/components/install-external-secrets.sh` (il crée le Secret `grafana-admin`), puis `rhDemo/infra/stagingkub/scripts/install-observability.sh` (Prometheus, Loki, Alloy, Grafana) : [OBSERVABILITY_STACK_INTEGRATION.md](OBSERVABILITY_STACK_INTEGRATION.md). Le CD suivant active les ServiceMonitors de l'application.
 
 ## 8. Renovate et mise à jour en place (facultatif)
 
@@ -109,7 +109,7 @@ Remédiation automatique des CVE détectées par la CI : comptes dédiés (Jenki
 ## 10. Fin d'installation
 
 - Révoquer le jeton root d'OpenBao : `rhDemo/infra/jenkins-docker/openbao/configure-openbao.sh revoke-root`. L'administration courante passe par l'utilisateur `admin` ; un jeton root se recrée au besoin (`generate-root`, voir [OPENBAO.md](OPENBAO.md)).
-- Inventaire et renouvellement des secrets : `rhDemo/scripts/rotate-secrets.py --check` ([ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md), inventaire `rhDemo/secrets/inventory.yaml`).
+- Tâches récurrentes sur les secrets (`rotate-secrets.py --check`, `secret_id` AppRole à renouveler avant 100 jours, certificat d'OpenBao annuel) et identifiants de connexion : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
 
 ## Après chaque redémarrage de la machine
 

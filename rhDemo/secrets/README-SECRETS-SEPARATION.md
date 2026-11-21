@@ -23,12 +23,13 @@ Pipelines et outils (Jenkins, Renovate, fixcve-auto) : secrets dans OpenBao éga
 ## 📝 Bonnes pratiques
 
 1. **Ne jamais** commiter un secret en clair, ni le passer en argument de commande (visible dans `ps`) : entrée standard ou variable d'environnement.
-2. Renouveler par `rotate-secrets.py` (`--check` signale les secrets à renouveler).
+2. Renouveler par `rotate-secrets.py` (`--check` signale les secrets à renouveler) : [ROTATION_SECRETS.md](../docs/ROTATION_SECRETS.md).
 3. Garder `inventory.yaml` à jour à chaque ajout de secret.
 
 ## 🔗 Références
 
 - [OpenBao : installation, déverrouillage, rotation](../docs/OPENBAO.md)
+- [Secrets au quotidien : tâches récurrentes, rotation d'urgence, accès](../docs/ROTATION_SECRETS.md)
 - [Pipeline CI (Jenkinsfile-CI)](../Jenkinsfile-CI)
 - [Pipeline CD (Jenkinsfile-CD)](../Jenkinsfile-CD)
 - [Environnements](../infra/ENVIRONMENTS.md)

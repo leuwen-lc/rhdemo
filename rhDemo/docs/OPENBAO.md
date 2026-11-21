@@ -33,7 +33,7 @@ Mise en œuvre de [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), qui en donne les raisons
 | Autorité locale | `infra/jenkins-docker/certs/ca/` (non versionné) | Racine hors ligne (clé chiffrée, rangée dans KeePassXC), intermédiaire qui signe le certificat d'OpenBao (1 an). *Name Constraints* sur les deux : seuls `openbao`, `localhost`, `kind-registry`, `intra.leuwen-lc.fr` (et sous-domaines), `127.0.0.0/8` et `172.16.0.0/12` peuvent être signés |
 | Configuration | `openbao/configure-openbao.sh` et `openbao/policies/` | Moteurs, politiques, AppRole, utilisateur `admin`, authentification Kubernetes |
 | Jenkins | plugin `hashicorp-vault-plugin`, bloc `unclassified.hashicorpVault` de `jenkins-casc.yaml` | Credentials « Vault » qui pointent vers `kv/jenkins/<id>` : les pipelines les lisent par `withCredentials` comme des credentials ordinaires |
-| stagingkub | External Secrets Operator (namespace `external-secrets`), `infra/stagingkub/external-secrets/` | Crée les 4 Secrets applicatifs depuis `kv/stagingkub/*` |
+| stagingkub | External Secrets Operator (namespace `external-secrets`), `infra/stagingkub/external-secrets/` | Crée les 4 Secrets applicatifs depuis `kv/stagingkub/*` (rôle `eso-stagingkub`) et le Secret `grafana-admin` de `loki-stack` depuis `kv/observability/grafana` (rôle `eso-observability`, limité à `kv/observability/*`) |
 | Poste | `openbao-setup.py`, `rotate-secrets.py`, `fixcve-auto-poll.sh` | Alimentation initiale, rotation, lecture des secrets de fixcve-auto |
 
 Données (KV v2 monté sur `kv/`) :
@@ -45,6 +45,7 @@ Données (KV v2 monté sur `kv/`) :
 | `kv/stagingkub/rhdemo` | `db_password`, `oidc_client_secret` | ESO (rôle Kubernetes `eso-stagingkub`) |
 | `kv/stagingkub/keycloak` | `db_password`, `admin_user`, `admin_password` | ESO |
 | `kv/stagingkub-tests/users` | utilisateurs de test Keycloak | `init-keycloak-stagingkub.sh` (admin) |
+| `kv/observability/grafana` | `admin_user`, `admin_password` de Grafana | ESO de `loki-stack` (rôle Kubernetes `eso-observability`) |
 | Transit `cosign-transit/keys/cosign` | clé de signature ECDSA P-256, non exportable | stage de signature (AppRole `jenkins-cosign`) |
 
 Identités et droits : un fichier de politique par identité dans `infra/jenkins-docker/openbao/policies/`. Le jeton root est révoqué après l'installation ; l'administration passe par l'utilisateur `admin` (jeton d'une heure).
@@ -67,7 +68,7 @@ Depuis `rhDemo/infra/jenkins-docker/` :
    - Critère : un cycle `RHDemo-Renovate` vert, lectures visibles dans le journal d'audit.
 8. Cosign : `openbao/configure-openbao.sh cosign` (écrit la clé publique dans `certs/cosign/cosign-transit.pub`), créer le credential **Secret file** `cosign-public-key-transit` avec ce fichier (un Secret text tient sur une ligne et casserait le PEM), puis `./openbao-setup.py cosign-approle`.
 9. fixcve-auto : `./openbao-setup.py fixcve` (token Jenkins du compte `claude` demandé, token Codeberg émis, clé NVD facultative, fichier AppRole créé), puis `./fixcve-install.sh` et `./fixcve-install.sh --trust` ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
-10. stagingkub : `./openbao-setup.py stagingkub` **avant le premier déploiement** (PostgreSQL ne prend son mot de passe qu'à l'initialisation de sa base, Keycloak son administrateur au premier démarrage). Les valeurs sont générées, jamais saisies. Puis `infra/stagingkub/scripts/init-stagingkub.sh` (authentification Kubernetes d'OpenBao, ESO, `ExternalSecret`), le premier déploiement, et `init-keycloak-stagingkub.sh`. Sur un cluster existant : `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. La CD lit les `ExternalSecret` grâce à `infra/stagingkub/rbac/jenkins-role.yaml`.
+10. stagingkub : `./openbao-setup.py stagingkub` **avant le premier déploiement** (PostgreSQL ne prend son mot de passe qu'à l'initialisation de sa base, Keycloak son administrateur au premier démarrage). Les valeurs sont générées, jamais saisies. Puis `infra/stagingkub/scripts/init-stagingkub.sh` (authentification Kubernetes d'OpenBao, ESO, `ExternalSecret`), le premier déploiement, et `init-keycloak-stagingkub.sh`. Sur un cluster existant : `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. La CD lit les `ExternalSecret` grâce à `infra/stagingkub/rbac/jenkins-role.yaml`. Pour l'observabilité, `./openbao-setup.py observability` (admin de Grafana) avant `install-external-secrets.sh`, qui crée aussi le Secret `grafana-admin` de `loki-stack`.
 11. `openbao/configure-openbao.sh revoke-root`.
 
 Toutes les commandes de `openbao-setup.py` sont idempotentes : une valeur déjà présente dans OpenBao n'est jamais écrasée (la renouveler : `rotate-secrets.py`).
@@ -84,7 +85,7 @@ La clé n'est jamais passée en argument (visible dans `ps`). `repair-cluster-af
 
 ## Rotation
 
-Tout passe par `rotate-secrets.py` (inventaire `secrets/inventory.yaml`) :
+Tout passe par `rotate-secrets.py` (inventaire `secrets/inventory.yaml`). Tâches récurrentes, usage du script, rotation d'urgence et accès aux secrets : [ROTATION_SECRETS.md](ROTATION_SECRETS.md). Ce que fait chaque méthode automatisée :
 
 | Secret | Commande | Effet |
 | --- | --- | --- |
@@ -93,6 +94,7 @@ Tout passe par `rotate-secrets.py` (inventaire `secrets/inventory.yaml`) :
 | Mots de passe PostgreSQL de stagingkub | `rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db` | KV, synchronisation ESO forcée, `ALTER ROLE` dans le pod (mot de passe sur l'entrée standard de `psql`), redémarrage des pods ; retour arrière automatique si l'`ALTER ROLE` échoue |
 | Secret du client OIDC `RHDemo` | `rotate-secrets.py stagingkub-oidc-client` | KV, synchronisation ESO forcée (le Secret est un fichier généré par gabarit), valeur imposée dans Keycloak par l'API d'administration, redémarrage de `rhdemo-app` ; retour arrière dans Keycloak et le KV en cas d'échec |
 | Administrateur Keycloak, utilisateurs de test | `rotate-secrets.py stagingkub-keycloak-admin stagingkub-test-users` | KV d'abord, puis API Keycloak et connexion de vérification avec la nouvelle valeur ; sinon retour à l'ancienne des deux côtés. `KEYCLOAK_ADMIN_PASSWORD` ne servant qu'au premier démarrage, le changer dans OpenBao seul ne suffirait pas. Utilisateurs de test : 12 caractères saisissables (lettres, chiffres, `-_.!@%+=?`), longueur réglable dans l'inventaire |
+| Admin de Grafana | `rotate-secrets.py grafana-admin` | KV, synchronisation ESO forcée, redémarrage de Grafana (sans stockage persistant, il reprend le mot de passe du Secret), connexion de vérification par son API ; retour à l'ancien mot de passe en cas d'échec |
 | Clé Cosign | procédure manuelle de `cosign-key` | nouvelle version de la clé Transit, nouvelle clé publique dans `cosign-public-key-transit` ; les images signées avant la rotation ne sont plus déployables (relancer la CI) |
 
 `rotate-secrets.py --check` signale un `secret_id` dont la période est dépassée, avant son expiration.

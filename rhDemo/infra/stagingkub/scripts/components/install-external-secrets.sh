@@ -12,7 +12,8 @@ set -euo pipefail
 # montée de version proposée par Renovate s'applique en relançant ce script.
 #
 # Prérequis : OpenBao démarré, déverrouillé, configuré (configure-openbao.sh base
-# puis kubernetes) et alimenté (openbao-setup.py stagingkub).
+# puis kubernetes) et alimenté (openbao-setup.py stagingkub, et observability pour
+# l'admin de Grafana dans loki-stack).
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +27,7 @@ source "${JENKINS_DOCKER_DIR}/openbao/lib.sh"
 ESO_VERSION="2.15.0"
 ESO_NAMESPACE="external-secrets"
 APP_NAMESPACE="rhdemo-stagingkub"
+OBS_NAMESPACE="loki-stack"
 CA_FILE="${JENKINS_DOCKER_DIR}/certs/ca/root-ca.crt"
 TARGET_SECRETS="rhdemo-db-secret keycloak-db-secret keycloak-admin-secret rhdemo-app-secrets"
 
@@ -96,3 +98,18 @@ if [ -n "${failed}" ]; then
     exit 1
 fi
 echo -e "${GREEN}✅ Secrets applicatifs synchronisés depuis OpenBao${NC}"
+
+# ─── 5. Observabilité : admin de Grafana (loki-stack) ───
+# Namespace créé ici s'il manque (install-observability.sh vient après) ; même création
+# simple que install-or-upgrade-grafana.sh. Un échec n'arrête pas l'installation :
+# seul Grafana en dépend, et son script vérifie la présence du Secret.
+echo -e "${YELLOW}▶ SecretStore openbao (${OBS_NAMESPACE}, admin de Grafana)...${NC}"
+kubectl create namespace "${OBS_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl create configmap openbao-ca -n "${OBS_NAMESPACE}" --from-file=ca.crt="${CA_FILE}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+sed "s/__OPENBAO_IP__/${OPENBAO_IP}/g" "${ESO_DIR}/observability.yaml" | kubectl apply -f -
+if kubectl wait externalsecret grafana-admin -n "${OBS_NAMESPACE}" --for=condition=Ready --timeout=60s >/dev/null 2>&1; then
+    echo -e "${GREEN}  ✓ grafana-admin${NC}"
+else
+    echo -e "${YELLOW}  ⚠ grafana-admin non synchronisé : kv/observability/grafana absent ? (rhDemo/scripts/openbao-setup.py observability)${NC}"
+fi

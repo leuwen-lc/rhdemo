@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -I
-"""Renouvellement des secrets RHDemo (docs/ETUDE_ROTATION_SECRETS.md, phase 1).
+"""Renouvellement des secrets RHDemo (docs/ROTATION_SECRETS.md, étude : docs/ETUDE_ROTATION_SECRETS.md).
 
 Exécuté sur le poste, jamais dans Jenkins (il doit pouvoir réparer un Jenkins compromis).
 Inventaire : secrets/inventory.yaml. Journal local : ~/.config/rhdemo-rotation/journal.jsonl.

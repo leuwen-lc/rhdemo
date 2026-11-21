@@ -274,7 +274,7 @@ spec:
 # Le conteneur sidecar grafana-sc-dashboard (chart grafana/grafana) liste
 # et watch les ConfigMaps/Secrets labellisés grafana_dashboard=1 via l'API
 # Kubernetes pour peupler /tmp/dashboards (emptyDir, persistence désactivée
-# — voir grafana-values.yaml.template). Même contrainte Cilium que pour
+# — voir grafana-values.yaml). Même contrainte Cilium que pour
 # Alloy ci-dessus : l'API Server est vu comme l'entité "host", une
 # NetworkPolicy standard ne suffit pas.
 # ═══════════════════════════════════════════════════════════════

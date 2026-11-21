@@ -326,3 +326,13 @@ Branche `evolutions_openbao_postmigration`. Valeurs héritées de SOPS renouvel�
 
 Nouveau guide `INSTALLATION_COMPLETE.md` : séquence d'installation de toute la chaîne (dev, Jenkins et registry, OpenBao, CI et ephemere, stagingkub, CD et Keycloak, observabilité, Renovate, fixcve-auto, fin d'installation, routine après redémarrage), qui renvoie à la documentation de chaque composant. Il explicite deux dépendances d'ordre : l'autorité locale d'OpenBao avant le premier démarrage de Jenkins, et la réémission du certificat d'OpenBao après la création du cluster KinD. La section « Utiliser le projet » du `README.md` racine y renvoie désormais ; note ajoutée dans le `QUICKSTART.md` de Jenkins.
 
+## [2026-11-21] ingest | ROTATION_SECRETS : guide d'exploitation, étude de rotation mise à jour
+
+Nouveau guide `ROTATION_SECRETS.md` : tâches récurrentes (déverrouillage, `--check` en cron, `secret_id` AppRole avant 100 jours, certificat d'OpenBao annuel, intermédiaire à 5 ans, GPG et token SonarQube), usage de `rotate-secrets.py`, ordre de rotation d'urgence, lecture d'une valeur dans OpenBao et tableau des identifiants (Keycloak, profils de l'application, Grafana, Jenkins, ephemere). Renvoie à `OPENBAO.md` pour le détail des rotations.
+
+`ETUDE_ROTATION_SECRETS.md` mis à jour pour OpenBao (stockage, Cosign par Transit sans re-signature, stagingkub réalisé, AGE sans objet, nouveaux secrets #20 à #24) ; reste `proposition` : kubeconfigs à automatiser, mode `--emergency`, rappel par cron, tokens Codeberg restreints au dépôt. Kubeconfigs (#8, #9) passés de `planned` à une procédure manuelle dans l'inventaire.
+
+## [2026-11-21] ingest | OPENBAO : mot de passe admin de Grafana dans OpenBao
+
+Le mot de passe admin de Grafana passe du fichier local `grafana-values.yaml` (ignoré par Git, donc absent du checkout Jenkins : les pipelines Renovate et Upgrade-Deploy de Grafana ne pouvaient pas aboutir) à OpenBao (`kv/observability/grafana`). ESO le recopie dans le Secret `grafana-admin` de `loki-stack` (`external-secrets/observability.yaml`, rôle OpenBao `eso-observability` limité à `kv/observability/*`), lu par Grafana via `admin.existingSecret`. `grafana-values.yaml` devient versionné, le modèle disparaît. Nouvelle commande `openbao-setup.py observability`, rotation automatisée `rotate-secrets.py grafana-admin` (synchronisation, redémarrage, connexion de vérification, retour arrière). Mis à jour : `OPENBAO.md`, `ROTATION_SECRETS.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `INSTALLATION_COMPLETE.md`, `ETUDE_ROTATION_SECRETS.md`. Les mots de passe de `.env` (Jenkins, base SonarQube) restent hors d'OpenBao par choix (démarrage de Jenkins sans dépendre d'OpenBao).
+

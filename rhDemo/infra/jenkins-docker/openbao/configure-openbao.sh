@@ -12,6 +12,7 @@
 #   ./configure-openbao.sh cosign          étape 2 : moteur Transit et clé Cosign non
 #                                          exportable, AppRole jenkins-cosign
 #   ./configure-openbao.sh kubernetes      étape 3 : authentification Kubernetes pour ESO
+#                                          (rhdemo-stagingkub et loki-stack)
 #   ./configure-openbao.sh secret-id ROLE  émet un secret_id pour l'AppRole ROLE et affiche
 #                                          role_id + secret_id une seule fois
 #   ./configure-openbao.sh revoke-root     révoque le jeton root saisi (fin d'installation)
@@ -202,7 +203,13 @@ cmd_kubernetes() {
         bound_service_account_names=eso-openbao \
         bound_service_account_namespaces=rhdemo-stagingkub \
         token_policies=eso-stagingkub token_ttl="${TOKEN_TTL}" token_max_ttl="${TOKEN_TTL}" >/dev/null
-    echo "  ✓ kubernetes/ configuré, rôle eso-stagingkub (compte eso-openbao de rhdemo-stagingkub)"
+    write_policy eso-observability
+    bao write auth/kubernetes/role/eso-observability \
+        bound_service_account_names=eso-openbao \
+        bound_service_account_namespaces=loki-stack \
+        token_policies=eso-observability token_ttl="${TOKEN_TTL}" token_max_ttl="${TOKEN_TTL}" >/dev/null
+    echo "  ✓ kubernetes/ configuré, rôles eso-stagingkub (compte eso-openbao de rhdemo-stagingkub)"
+    echo "    et eso-observability (compte eso-openbao de loki-stack)"
 }
 
 cmd_secret_id() {
@@ -276,5 +283,5 @@ case "${1:-}" in
     secret-id) shift; cmd_secret_id "$@" ;;
     revoke-root) cmd_revoke_root ;;
     generate-root) cmd_generate_root ;;
-    *) sed -n '2,26p' "$0"; exit 2 ;;
+    *) sed -n '2,25p' "$0"; exit 2 ;;
 esac

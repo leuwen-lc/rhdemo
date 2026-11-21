@@ -8,7 +8,7 @@ import base64
 import os
 import time
 
-from .common import SIMPLE_PUNCTUATION, RotationError, log, new_password, simple_password, stamp, warn
+from .common import SIMPLE_PUNCTUATION, RotationError, http, log, new_password, simple_password, stamp, warn
 from .forgejo import Forgejo
 from .smtp import smtp_login
 from .jenkins import Jenkins
@@ -539,6 +539,57 @@ def rotate_keycloak_users(ctx, entry):
     return f"mots de passe renouvelés : {', '.join(done)}"
 
 
+def _grafana_login(r, user, password):
+    """Connexion à l'API de Grafana (port-forward vers son Service) avec ces identifiants."""
+    pf = tools.PortForward(r["namespace"], r["service"], r.get("port", 80))
+    try:
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        status, _ = http("GET", f"{pf.url}/api/user", {"Authorization": f"Basic {token}"})
+    finally:
+        pf.close()
+    if status != 200:
+        raise RotationError(f"Grafana : connexion de {user} refusée ({status})")
+
+
+def rotate_grafana_admin(ctx, entry):
+    """Admin de Grafana : KV, synchronisation ESO forcée, redémarrage (sans stockage persistant,
+    Grafana reprend le mot de passe du Secret à chaque démarrage), connexion de vérification.
+    Retour à l'ancien mot de passe en cas d'échec."""
+    r = entry["rotation"]
+    ob = ctx.openbao()
+    ns = r["namespace"]
+    data = ob.kv_read(r["kv_path"]) or {}
+    user, old = data.get(r["user_key"]), data.get(r["kv_key"])
+    if not user or old is None:
+        raise RotationError(f"OpenBao : kv/{r['kv_path']} ({r['user_key']}, {r['kv_key']}) absent")
+    for es in r["external_secrets"]:
+        tools.kubectl("get", "externalsecret", es, "-n", ns)
+    for target in r["restart"]:
+        tools.kubectl("get", target, "-n", ns)
+    log(f"  kv/{r['kv_path']} {r['kv_key']} → ESO ({', '.join(r['external_secrets'])}) → "
+        f"redémarrage {', '.join(r['restart'])} → connexion de {user}")
+    if ctx.dry_run:
+        return None
+    new = new_password()
+    ob.kv_set(r["kv_path"], r["kv_key"], new)
+    try:
+        _force_sync(r, new)
+        failed = _restart(ns, r["restart"])
+        if failed:
+            raise RotationError(f"redémarrage en échec : {', '.join(failed)}")
+        _grafana_login(r, user, new)
+    except RotationError:
+        warn("échec : retour à l'ancien mot de passe dans OpenBao, resynchronisation et redémarrage")
+        try:
+            ob.kv_set(r["kv_path"], r["kv_key"], old)
+            _force_sync(r, old)
+            _restart(ns, r["restart"])
+        except RotationError as exc:
+            warn(f"retour arrière incomplet ({exc}) : comparer kv/{r['kv_path']} et le Secret {r['k8s_secret']}")
+        raise
+    return f"mot de passe {user} de Grafana renouvelé"
+
+
 METHODS = {
     "forgejo-token": rotate_forgejo_token,
     "forgejo-gpg": rotate_forgejo_gpg,
@@ -548,4 +599,5 @@ METHODS = {
     "keycloak-client-secret": rotate_keycloak_client_secret,
     "keycloak-admin": rotate_keycloak_admin,
     "keycloak-users": rotate_keycloak_users,
+    "grafana-admin": rotate_grafana_admin,
 }

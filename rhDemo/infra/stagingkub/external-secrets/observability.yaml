@@ -1,0 +1,84 @@
+# ═══════════════════════════════════════════════════════════════
+# Accès d'ESO à OpenBao pour loki-stack : mot de passe admin de Grafana (docs/OPENBAO.md)
+# ═══════════════════════════════════════════════════════════════
+# Appliqué par scripts/components/install-external-secrets.sh (remplacement de
+# __OPENBAO_IP__, ConfigMap openbao-ca), comme secretstore.yaml pour rhdemo-stagingkub.
+#
+# Rôle OpenBao eso-observability : lecture de kv/observability/* seulement, distinct de
+# eso-stagingkub (une compromission de loki-stack ne donne pas les secrets applicatifs).
+# Données : kv/observability/grafana (admin_user, admin_password), créées par
+# openbao-setup.py observability, renouvelées par rotate-secrets.py grafana-admin.
+# Grafana lit le Secret grafana-admin (admin.existingSecret de grafana-values.yaml).
+# ═══════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso-openbao
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/part-of: rhdemo-secrets
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: eso-openbao-auth-delegator-loki-stack
+  labels:
+    app.kubernetes.io/part-of: rhdemo-secrets
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: eso-openbao
+    namespace: loki-stack
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: openbao
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  provider:
+    vault:
+      server: "https://__OPENBAO_IP__:8200"
+      path: kv
+      version: v2
+      caProvider:
+        type: ConfigMap
+        name: openbao-ca
+        key: ca.crt
+      auth:
+        kubernetes:
+          mountPath: kubernetes
+          role: eso-observability
+          serviceAccountRef:
+            name: eso-openbao
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-admin
+  namespace: loki-stack
+  labels:
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: SecretStore
+    name: openbao
+  target:
+    name: grafana-admin
+    creationPolicy: Owner
+  data:
+    - secretKey: admin-user
+      remoteRef:
+        key: observability/grafana
+        property: admin_user
+    - secretKey: admin-password
+      remoteRef:
+        key: observability/grafana
+        property: admin_password

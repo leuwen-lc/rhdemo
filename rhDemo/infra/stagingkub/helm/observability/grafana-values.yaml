@@ -1,16 +1,18 @@
 # Configuration Grafana
 # Chart: grafana/grafana v8.x
-# Date: 2025-12-31
+# Versionné : aucun secret ici.
 
 ###########################################
-# Admin (À CONFIGURER AVANT INSTALLATION)
+# Admin : Secret grafana-admin créé par External Secrets Operator depuis OpenBao
+# (kv/observability/grafana ; infra/stagingkub/external-secrets/observability.yaml).
+# Création : rhDemo/scripts/openbao-setup.py observability ; rotation :
+# rotate-secrets.py grafana-admin. Sans stockage persistant, Grafana reprend ce mot de
+# passe à chaque démarrage (un changement fait dans l'interface est écrasé).
 ###########################################
-adminUser: admin
-# ⚠️ SÉCURITÉ: Copier grafana-values.yaml.template en grafana-values.yaml
-# Définir un mot de passe fort avant installation
-# adminPassword doit être défini avec un mot de passe sécurisé
-# Exemple: openssl rand -base64 32
-adminPassword: ""  # TODO: Renseigner un mot de passe fort
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
 
 ###########################################
 # Resources

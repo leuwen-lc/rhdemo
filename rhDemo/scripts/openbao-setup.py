@@ -22,6 +22,8 @@ Usage :
   openbao-setup.py fixcve-nvd             ajoute ou remplace la clé API NVD (kv/fixcve/nvd)
   openbao-setup.py stagingkub             génère les secrets de stagingkub (kv/stagingkub/*,
                                           kv/stagingkub-tests/users), avant init-stagingkub.sh
+  openbao-setup.py observability          génère l'admin de Grafana (kv/observability/grafana),
+                                          avant install-observability.sh
 Options : --dry-run (lectures seulement), --inventory.
 """
 import argparse
@@ -246,10 +248,23 @@ def cmd_stagingkub(ctx):
     log("  Ensuite : infra/stagingkub/scripts/init-stagingkub.sh (ESO recopie ces valeurs dans le cluster).")
 
 
+def cmd_observability(ctx):
+    """Admin de Grafana, recopié dans le Secret grafana-admin de loki-stack par ESO."""
+    ob = ctx.openbao()
+    log("── observabilité : génération de kv/observability/grafana")
+    if ctx.dry_run:
+        return
+    if _missing(ob, "observability/grafana", "admin_password"):
+        ob.kv_put("observability/grafana", {"admin_user": "admin", "admin_password": new_password()})
+        log("  ✓ kv/observability/grafana généré")
+    log("  Ensuite : infra/stagingkub/scripts/components/install-external-secrets.sh (Secret grafana-admin),")
+    log("  puis install-observability.sh ou install-or-upgrade-grafana.sh.")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command", choices=["jenkins-approle", "cosign-approle", "jenkins", "fixcve", "fixcve-nvd",
-                                       "stagingkub"])
+                                       "stagingkub", "observability"])
     p.add_argument("ids", nargs="*")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--inventory", default=inv_mod.DEFAULT_PATH)
@@ -269,6 +284,8 @@ def main(argv=None):
                 cmd_fixcve(ctx)
             elif args.command == "fixcve-nvd":
                 cmd_fixcve_nvd(ctx)
+            elif args.command == "observability":
+                cmd_observability(ctx)
             else:
                 cmd_stagingkub(ctx)
         finally:

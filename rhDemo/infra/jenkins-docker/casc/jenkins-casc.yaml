@@ -179,7 +179,7 @@ tool:
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
 #
 # 5. ci-bot-forgejo-token [OpenBao]
-#    - Type: Secret text (avant migration) / Vault Secret Text Credential (kv/jenkins/ci-bot-forgejo-token)
+#    - Type: Vault Secret Text Credential (kv/jenkins/ci-bot-forgejo-token)
 #    - ID: ci-bot-forgejo-token
 #    - Secret: token du compte Codeberg dédié "cibot-leuwen-lc" (PAS le compte personnel
 #      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope

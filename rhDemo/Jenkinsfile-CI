@@ -131,8 +131,6 @@ pipeline {
                 // via optional:file:./secrets/secrets-rhdemo.yml et causent une erreur YAML (0x0)
                 sh '''
                     rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
                     rm -f rhDemoInitKeycloak/src/main/resources/application-ephemere.yml 2>/dev/null || true
                     echo "✅ Résidus de secrets workspace nettoyés"
                 '''

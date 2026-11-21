@@ -116,8 +116,6 @@ pipeline {
                 // Cible uniquement les fichiers générés par les anciennes versions du pipeline
                 sh '''
                     rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
                     echo "✅ Résidus de secrets workspace nettoyés"
                 '''
             }

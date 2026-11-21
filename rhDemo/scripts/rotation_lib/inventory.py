@@ -10,7 +10,7 @@ DEFAULT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 LEVELS = ("C", "H", "M")
 EXPOSURES = ("internet", "lan", "local")
 EXPOSURE_ORDER = {e: i for i, e in enumerate(EXPOSURES)}
-TARGET_KEYS = {"jenkins": {"credential", "type"}, "sops": {"file", "key"},
+TARGET_KEYS = {"jenkins": {"credential", "type"},
                "openbao": {"path", "key"}, "approle-file": {"file"}}
 JENKINS_TYPES = ("string", "username-password", "file", "vault-approle")
 METHOD_KEYS = {

@@ -113,7 +113,7 @@ pipeline {
                 checkout scm
 
                 // Purge des résidus de l'ancienne convention (fichiers générés dans le workspace)
-                // Cible uniquement les fichiers générés, PAS les fichiers SOPS chiffrés versionnés
+                // Cible uniquement les fichiers générés par les anciennes versions du pipeline
                 sh '''
                     rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
                     rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
@@ -406,39 +406,22 @@ pipeline {
                     }
                     echo "   Image ref: ${env.VERIFY_IMAGE_REF}"
 
-                    // Clé publique de la clé Transit OpenBao d'abord, puis l'ancienne clé fichier,
-                    // gardée tant que des images signées avec elle restent déployables
-                    // (ETUDE_OPENBAO.md §7.2 étape 2, docs/OPENBAO.md). Un credential absent est ignoré.
-                    def verified = null
-                    for (credId in ['cosign-public-key-transit', 'cosign-public-key']) {
-                        try {
-                            withCredentials([file(credentialsId: credId, variable: 'COSIGN_PUB_KEY')]) {
-                                def rc = sh(returnStatus: true, script: '''
-                                    SSL_CERT_FILE=/etc/ssl/certs/registry.crt cosign verify --key "$COSIGN_PUB_KEY" \
-                                        --insecure-ignore-tlog=true "$VERIFY_IMAGE_REF"
-                                ''')
-                                if (rc == 0) {
-                                    verified = credId
-                                }
-                            }
-                        } catch (InterruptedException ie) {
-                            throw ie   // build interrompu : ne pas l'avaler
-                        } catch (Exception e) {
-                            // Credential absent (seule exception possible ici : sh returnStatus ne lève pas)
-                            echo "ℹ️  Credential ${credId} indisponible, ignoré : ${e.message}"
+                    // Clé publique de la clé Transit OpenBao (docs/OPENBAO.md). Après une rotation de
+                    // la clé Transit, les images signées avec l'ancienne version ne sont plus déployables.
+                    withCredentials([file(credentialsId: 'cosign-public-key-transit', variable: 'COSIGN_PUB_KEY')]) {
+                        def rc = sh(returnStatus: true, script: '''
+                            SSL_CERT_FILE=/etc/ssl/certs/registry.crt cosign verify --key "$COSIGN_PUB_KEY" \
+                                --insecure-ignore-tlog=true "$VERIFY_IMAGE_REF"
+                        ''')
+                        if (rc == 0) {
+                            echo "✅ Signature valide - l'image a été signée par le pipeline CI"
+                        } else {
+                            echo "❌ ERREUR: Signature invalide ou absente !"
+                            echo "   L'image n'a pas été signée par le pipeline CI, a été modifiée après signature,"
+                            echo "   ou a été signée avant la dernière rotation de la clé Transit."
+                            echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
+                            error('Vérification de signature Cosign échouée')
                         }
-                        if (verified) {
-                            break
-                        }
-                    }
-                    if (verified) {
-                        echo "✅ Signature valide (clé ${verified}) - l'image a été signée par le pipeline CI"
-                    } else {
-                        echo "❌ ERREUR: Signature invalide ou absente !"
-                        echo "   L'image n'a pas été signée par le pipeline CI, a été modifiée après signature,"
-                        echo "   ou aucune clé publique connue (cosign-public-key-transit, cosign-public-key) ne correspond."
-                        echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
-                        error('Vérification de signature Cosign échouée')
                     }
                 }
             }

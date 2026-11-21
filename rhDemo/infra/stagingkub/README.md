@@ -82,10 +82,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    brew install kind
    ```
 
-5. **SOPS** (pour le déchiffrement des secrets)
-   ```bash
-   sops --version
-   ```
+5. **OpenBao** démarré, déverrouillé et alimenté (`rhDemo/scripts/openbao-setup.py stagingkub`, voir [OPENBAO.md](../../docs/OPENBAO.md))
 
 ### Configuration système (Cilium)
 
@@ -235,7 +232,7 @@ Ce script :
 - ✅ Installe **Cilium 1.20** (CNI avec kube-proxy replacement)
 - ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
-- ✅ Crée les secrets Kubernetes (depuis SOPS)
+- ✅ Installe External Secrets Operator, qui crée les secrets Kubernetes depuis OpenBao
 - ✅ Configure le RBAC pour Jenkins : `jenkins-deployer` (déploiement applicatif) **et** `jenkins-infra-upgrader` (mise à jour en place de l'infra, ServiceAccount dédié) — génère les deux kubeconfigs correspondants dans `jenkins-kubeconfig/`
 - ✅ Génère les certificats SSL
 - ✅ Ajoute les entrées DNS à `/etc/hosts`
@@ -275,9 +272,9 @@ kubectl get ns rhdemo-stagingkub
 4. Lancer le build
 
 Le pipeline exécutera automatiquement :
-- Déchiffrement des secrets SOPS et configuration de l'accès Kubernetes (kubeconfig RBAC)
+- Configuration de l'accès Kubernetes (kubeconfig RBAC)
 - Vérification de l'image dans le registry et de sa signature (Cosign)
-- Mise à jour des secrets Kubernetes
+- Vérification que les secrets Kubernetes sont synchronisés par ESO
 - Déploiement Helm (`imagePullPolicy=Always` pour les tags SNAPSHOT, ServiceMonitors activés si Prometheus Operator est présent)
 - Redémarrage forcé des pods, attente de disponibilité, health checks et état du déploiement
 
@@ -382,23 +379,12 @@ Le détail complet (headers de sécurité COOP/CORP/COEP/HSTS par route, règle 
 
 ### Secrets
 
-Les secrets sont gérés de deux manières :
+Tous les secrets de stagingkub vivent dans OpenBao (`kv/stagingkub/*`). External Secrets Operator les recopie dans les Secrets Kubernetes `rhdemo-db-secret`, `rhdemo-app-secrets` (fichier `secrets-rhdemo.yml` monté par l'application), `keycloak-admin-secret` et `keycloak-db-secret`. Aucun secret ne transite par Jenkins.
 
-1. **Secrets d'infrastructure** (DB passwords, Keycloak admin) : Créés par `init-stagingkub.sh` depuis SOPS
-2. **Secrets applicatifs** (Keycloak client secret, etc.) : Montés depuis `secrets-rhdemo.yml`
+- Création initiale (valeurs générées) : `rhDemo/scripts/openbao-setup.py stagingkub`, avant le premier déploiement.
+- Renouvellement : `rhDemo/scripts/rotate-secrets.py` (`--list` pour les identifiants), qui met à jour OpenBao, force la synchronisation ESO, applique la valeur côté PostgreSQL ou Keycloak et redémarre les pods.
 
-Pour mettre à jour les secrets :
-
-```bash
-# Mettre à jour secrets-rhdemo.yml
-kubectl create secret generic rhdemo-app-secrets \
-  --from-file=secrets-rhdemo.yml=../../secrets/secrets-rhdemo.yml \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Redémarrer le pod pour charger les nouveaux secrets
-kubectl rollout restart deployment/rhdemo-app -n rhdemo-stagingkub
-```
+Détail : [OPENBAO.md](../../docs/OPENBAO.md).
 
 ---
 

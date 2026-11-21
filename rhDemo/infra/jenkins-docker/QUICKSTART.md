@@ -33,9 +33,8 @@ Jenkins est accessible sur **http://localhost:8080**.
 |----|------|-----------------|
 | `jenkins-sonar-token` | Secret text | `docker start rhdemo-sonarqube-db rhdemo-sonarqube` (SonarQube est arrêté hors CI), puis http://localhost:9020 → My Account → Security → Generate Token |
 | `nvd-api-key` | Secret text | https://nvd.nist.gov/developers/request-an-api-key |
-| `cosign-private-key` | Secret file | Fichier `cosign.key` généré ci-dessous (pipeline CI) |
-| `cosign-password` | Secret text | Mot de passe saisi lors de la génération Cosign (pipeline CI) |
-| `cosign-public-key` | Secret file | Fichier `cosign.pub` généré ci-dessous (pipeline CD) |
+| `openbao-cosign-approle` | Username with password | Créé par `rhDemo/scripts/openbao-setup.py cosign-approle` (signature par la clé Transit d'OpenBao, pipeline CI) |
+| `cosign-public-key-transit` | Secret file | Fichier `certs/cosign/cosign-transit.pub` écrit par `openbao/configure-openbao.sh cosign` (pipeline CD) |
 
 ### Optionnels
 
@@ -72,14 +71,6 @@ Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus
 
 - **ephemere** : rien à créer, `Jenkinsfile-CI` génère des valeurs aléatoires à chaque build.
 - **OpenBao** (Renovate, notifications, Cosign, stagingkub) : suivre `rhDemo/docs/OPENBAO.md`.
-
-### Clés Cosign (à générer une seule fois)
-
-```bash
-cosign generate-key-pair
-# → cosign.key  (clé privée — ne pas commiter)
-# → cosign.pub  (clé publique)
-```
 
 ---
 

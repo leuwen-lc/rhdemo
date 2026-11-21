@@ -20,7 +20,7 @@ echo "   Path: $EPHEMERE_PATH"
 # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
 set +x
 
-# Source les secrets SOPS
+# Source les secrets générés par Jenkinsfile-CI (stage « Génération Secrets ephemere »)
 if [ -f "rhDemo/secrets/env-vars.sh" ]; then
     . rhDemo/secrets/env-vars.sh
 else

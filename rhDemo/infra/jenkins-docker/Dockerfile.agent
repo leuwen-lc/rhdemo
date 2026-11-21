@@ -66,17 +66,6 @@ RUN wget https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries
     ln -s ${MAVEN_HOME}/bin/mvn /usr/local/bin/mvn
 
 # ═══════════════════════════════════════════════════════════════════
-# INSTALLATION SOPS (pour déchiffrement secrets)
-# ═══════════════════════════════════════════════════════════════════
-
-# renovate: datasource=github-releases depName=getsops/sops
-ENV SOPS_VERSION=3.13.3
-
-RUN wget -q https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64 -O /usr/local/bin/sops && \
-    chmod +x /usr/local/bin/sops && \
-    sops --version
-
-# ═══════════════════════════════════════════════════════════════════
 # INSTALLATION YQ (pour parser YAML)
 # ═══════════════════════════════════════════════════════════════════
 

@@ -219,11 +219,10 @@ pipeline {
 
         stage('🔐 Génération Secrets ephemere') {
             steps {
-                // Environnement jetable, recréé à chaque build : des valeurs aléatoires remplacent
-                // l'ancien fichier secrets-ephemere.yml chiffré par SOPS (docs/OPENBAO.md). Une
-                // fuite (log, artefact) ne vaut que pour un environnement déjà détruit.
-                // Mêmes variables qu'avant : Docker Compose, rhDemoInitKeycloak, Selenium et ZAP
-                // lisent toujours ${SECRETS_ENV_VARS}.
+                // Environnement jetable, recréé à chaque build : valeurs aléatoires, jamais
+                // stockées (docs/OPENBAO.md). Une fuite (log, artefact) ne vaut que pour un
+                // environnement déjà détruit. Docker Compose, rhDemoInitKeycloak, Selenium et ZAP
+                // lisent ${SECRETS_ENV_VARS}.
                 sh '''
                     set +x
                     mkdir -p ${SECRETS_TMP_DIR}
@@ -1363,7 +1362,7 @@ YMLEOF
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig
-                        # Username chargé depuis secrets-ephemere.yml (pas de valeur en dur)
+                        # Identifiants générés par le stage « Génération Secrets ephemere » (pas de valeur en dur)
                         TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 

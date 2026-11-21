@@ -15,6 +15,8 @@
 #   ./configure-openbao.sh secret-id ROLE  émet un secret_id pour l'AppRole ROLE et affiche
 #                                          role_id + secret_id une seule fois
 #   ./configure-openbao.sh revoke-root     révoque le jeton root saisi (fin d'installation)
+#   ./configure-openbao.sh generate-root   recrée un jeton root à partir de la clé de
+#                                          déverrouillage (opération ponctuelle, à révoquer)
 #
 # Idempotent sauf « init ». Le jeton (root, ou admin pour secret-id/cosign/kubernetes)
 # est demandé en saisie masquée et passé au conteneur par variable d'environnement,
@@ -138,7 +140,7 @@ cmd_base() {
 ✅ Configuration de base terminée.
    - secret_id du contrôleur Jenkins : ./configure-openbao.sh secret-id jenkins
    - secret_id de fixcve-auto       : ./configure-openbao.sh secret-id fixcve
-   - migration des secrets          : rhDemo/scripts/openbao-migrate.py (docs/OPENBAO.md)
+   - alimentation des secrets       : rhDemo/scripts/openbao-setup.py (docs/OPENBAO.md)
    - en fin d'installation          : ./configure-openbao.sh revoke-root
 EOF
 }
@@ -178,7 +180,7 @@ cmd_cosign() {
     echo "Ensuite :"
     echo "  1. Jenkins : credential « Secret file » cosign-public-key-transit avec ce fichier"
     echo "     (après une rotation de la clé Transit, relancer cette commande et remplacer le fichier) ;"
-    echo "  2. rhDemo/scripts/openbao-migrate.py cosign-approle (credential openbao-cosign-approle)."
+    echo "  2. rhDemo/scripts/openbao-setup.py cosign-approle (credential openbao-cosign-approle)."
 }
 
 cmd_kubernetes() {
@@ -221,7 +223,49 @@ cmd_revoke_root() {
     ask_token "Jeton root à révoquer"
     bao token lookup -format=json | grep -q '"root"' || { echo "❌ Ce n'est pas un jeton root"; exit 1; }
     bao token revoke -self
-    echo "✅ Jeton root révoqué. Le régénérer au besoin : bao operator generate-root (clé de déverrouillage)."
+    echo "✅ Jeton root révoqué. Le régénérer au besoin : ./configure-openbao.sh generate-root (clé de déverrouillage)."
+}
+
+cmd_generate_root() {
+    # bao operator generate-root sans jeton : la clé de déverrouillage suffit (une seule part).
+    # L'OTP n'apparaît ni à l'écran ni en argument (-otp visible dans ps) : le jeton encodé
+    # est déchiffré ici, par XOR avec l'OTP (même calcul que « generate-root -decode »).
+    local status init nonce otp key enc token
+    require_unsealed
+    status="$(docker exec "${OPENBAO_CONTAINER}" bao operator generate-root -status -format=json </dev/null)"
+    if printf '%s' "${status}" | grep -q '"started": *true'; then
+        echo "⚠ Une génération de jeton root était en cours : annulée."
+        docker exec "${OPENBAO_CONTAINER}" bao operator generate-root -cancel </dev/null >/dev/null
+    fi
+    init="$(docker exec "${OPENBAO_CONTAINER}" bao operator generate-root -init -format=json </dev/null)"
+    nonce="$(printf '%s' "${init}" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["nonce"])')"
+    otp="$(printf '%s' "${init}" | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["otp"])')"
+    unset init
+    read -r -s -p "Clé de déverrouillage (Unseal Key 1, KeePassXC) : " key; echo
+    if ! enc="$(printf '%s' "${key}" | docker exec -i "${OPENBAO_CONTAINER}" \
+            bao operator generate-root -format=json -nonce="${nonce}" - \
+            | python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(d.get("encoded_token") or d.get("encoded_root_token") or "")' 2>/dev/null)" \
+            || [ -z "${enc}" ]; then
+        unset key otp
+        docker exec "${OPENBAO_CONTAINER}" bao operator generate-root -cancel </dev/null >/dev/null 2>&1 || true
+        echo "❌ Clé refusée : génération annulée"; exit 1
+    fi
+    unset key
+    token="$(ENC="${enc}" OTP="${otp}" python3 -I -c '
+import base64, os
+enc, otp = os.environ["ENC"], os.environ["OTP"].encode()
+raw = base64.b64decode(enc + "=" * (-len(enc) % 4))
+if len(raw) != len(otp):
+    raise SystemExit("longueur inattendue")
+print(bytes(a ^ b for a, b in zip(raw, otp)).decode())')"
+    unset enc otp
+    BAO_TOKEN="${token}" bao token lookup -format=json | grep -q '"root"' \
+        || { echo "❌ Jeton obtenu invalide"; exit 1; }
+    echo
+    echo "Jeton root (affiché une seule fois, ne pas le stocker) :"
+    echo "  ${token}"
+    echo
+    echo "Après l'opération : ./configure-openbao.sh revoke-root"
 }
 
 case "${1:-}" in
@@ -231,5 +275,6 @@ case "${1:-}" in
     kubernetes) cmd_kubernetes ;;
     secret-id) shift; cmd_secret_id "$@" ;;
     revoke-root) cmd_revoke_root ;;
-    *) sed -n '2,24p' "$0"; exit 2 ;;
+    generate-root) cmd_generate_root ;;
+    *) sed -n '2,26p' "$0"; exit 2 ;;
 esac

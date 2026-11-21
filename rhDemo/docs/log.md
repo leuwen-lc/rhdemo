@@ -311,3 +311,13 @@ Nouveau `OPENBAO.md` (actif) : architecture, installation dans l'ordre, déverro
 ## [2026-11-21] ingest | OPENBAO : CI et CD vertes, rotation scriptée des secrets Keycloak
 
 `RHDemo-CI` et `RHDemo-CD` vertes sur la branche : secrets d'ephemere générés, signature par la clé Transit, vérification par la CD, `ExternalSecret` prêts. La procédure manuelle `stagingkub-app-secrets` est remplacée par trois méthodes de `rotate-secrets.py` (`keycloak-client-secret`, `keycloak-admin`, `keycloak-users`), qui passent par l'API d'administration de Keycloak (`rotation_lib/keycloak.py`) ; l'ancienne procédure était inexacte (`init-keycloak` ne modifie pas un utilisateur existant, `KEYCLOAK_ADMIN_PASSWORD` ne sert qu'au premier démarrage). `rhDemoInitKeycloak` n'écrit plus le secret du client dans ses logs. `OPENBAO.md` et `inventory.yaml` mis à jour.
+
+## [2026-11-21] restructure | OPENBAO : fin de la migration, abandon de SOPS
+
+Branche `evolutions_openbao_postmigration`. Valeurs héritées de SOPS renouvelées (rotations PostgreSQL et Keycloak validées sur le vrai cluster), puis tout ce qui ne servait qu'à la migration est retiré :
+- fichiers `secrets-ephemere.yml`, `secrets-stagingkub.yml` et `secrets-env.yml.template` supprimés ; SOPS retiré de `Dockerfile.agent`, de `rotation_lib` (cible `sops`), de `fixcve-auto-poll.sh` et de `fixcve-install.sh` ; entrée `sops-age-key` retirée de l'inventaire ;
+- `openbao-migrate.py` devient `openbao-setup.py` : `stagingkub` génère les valeurs, `fixcve` demande le token Jenkins et émet le token Codeberg, nouvelle commande `fixcve-nvd` ; idempotent ;
+- `Jenkinsfile-CD` ne vérifie plus qu'avec `cosign-public-key-transit` (plus d'image signée par l'ancienne clé à redéployer) ;
+- `configure-openbao.sh generate-root` : jeton root ponctuel depuis la clé de déverrouillage, OTP jamais affiché ni passé en argument.
+
+`OPENBAO.md` réécrit pour une installation à blanc. `SOPS_SETUP.md` et `ETUDE_OPENBAO.md` reclassés `historique`. Mis à jour : `DECISIONS.md`, `PIPELINES_CI_CD.md`, `FIXCVE_AUTO.md`, `PARAMETRAGE-APPLICATIF-AVEC-KUB.md`, `INVENTAIRE_COMPOSANTS_OPEN_SOURCE.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `RENOVATE_AUTOMERGE_CI.md`, README de `secrets/`, `jenkins-docker` (README, QUICKSTART), `stagingkub` (README, README-INIT-KEYCLOAK), `infra/dev/README.md`, `ENVIRONMENTS.md`.

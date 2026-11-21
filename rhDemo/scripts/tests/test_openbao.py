@@ -1,5 +1,5 @@
 """Tests de l'intégration OpenBao (rotation_lib/openbao.py, méthodes openbao-approle et
-postgres-password, openbao-migrate.py) : faux OpenBao HTTP local, kubectl simulé.
+postgres-password, openbao-setup.py) : faux OpenBao HTTP local, kubectl simulé.
 Aucun accès réseau, aucun cluster."""
 import base64
 import importlib.util
@@ -292,9 +292,9 @@ class PostgresRotationTest(Base):
         self.assertFalse([c for c in fake.calls if c[0][0] == "rollout"])
 
 
-def load_migrate():
-    spec = importlib.util.spec_from_file_location("openbao_migrate",
-                                                  os.path.join(helpers.SCRIPTS, "openbao-migrate.py"))
+def load_setup():
+    spec = importlib.util.spec_from_file_location("openbao_setup",
+                                                  os.path.join(helpers.SCRIPTS, "openbao-setup.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -332,7 +332,7 @@ class MigrateTest(unittest.TestCase):
            "</org.jenkinsci.plugins.plaincredentials.impl.StringCredentialsImpl>")
 
     def setUp(self):
-        self.m = load_migrate()
+        self.m = load_setup()
 
     def test_xml_reference_openbao(self):
         root = ET.fromstring(self.m.vault_credential_xml("a&b", "string", "desc <x>"))
@@ -364,9 +364,73 @@ class MigrateTest(unittest.TestCase):
             self.m.replace_credential(jk, "notification-email", xml, "VaultStringCredentialImpl")
         self.assertEqual(jk.creds["notification-email"], self.OLD)
 
-    def test_perimetre_etape_1(self):
+    def test_perimetre_jenkins(self):
         self.assertNotIn("smtp-infomaniak-credentials", self.m.JENKINS_CREDENTIALS)
         self.assertIn("notification-email", self.m.JENKINS_CREDENTIALS)
+
+
+class SetupStagingkubTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.inv = {**inv_mod.load(), "services": self.inv["services"]}
+        self.m = load_setup()
+
+    def test_generation_complete(self):
+        self.m.cmd_stagingkub(self.ctx())
+        rh, kc = self.st.kv["stagingkub/rhdemo"][-1], self.st.kv["stagingkub/keycloak"][-1]
+        users = self.st.kv["stagingkub-tests/users"][-1]
+        self.assertEqual(set(rh), {"db_password", "oidc_client_secret"})
+        self.assertEqual(kc["admin_user"], "admin")
+        self.assertGreaterEqual(len(kc["admin_password"]), 40)
+        self.assertNotEqual(rh["db_password"], kc["db_password"])
+        self.assertEqual(users["iduseradmin"], "rhdemo-admin")
+        self.assertEqual(len(users["pwduserconsult"]), 12)
+
+    def test_valeurs_existantes_conservees(self):
+        self.admin().kv_put("stagingkub/rhdemo", {"db_password": "garde", "oidc_client_secret": "garde2"})
+        self.m.cmd_stagingkub(self.ctx())
+        self.assertEqual(len(self.st.kv["stagingkub/rhdemo"]), 1)
+        self.assertIn("stagingkub/keycloak", self.st.kv)
+
+    def test_dry_run(self):
+        self.m.cmd_stagingkub(self.ctx(dry_run=True))
+        self.assertNotIn("stagingkub/rhdemo", self.st.kv)
+
+
+class SetupFixcveTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.m = load_setup()
+        self.m.FIXCVE_DIR = os.path.join(self.tmp, "fixcve")
+
+    def ctx_with(self, secrets):
+        return rotations.Context(self.inv, StubPrompter(secrets), Journal(os.path.join(self.tmp, "j.jsonl")))
+
+    def test_valeurs_presentes_seul_approle_cree(self):
+        ob = self.admin()
+        ob.kv_put("fixcve/jenkins", {"user": "claude", "token": "t"})
+        ob.kv_put("fixcve/codeberg", {"user": "bot", "token": "c"})
+        self.m.cmd_fixcve(self.ctx())
+        data = tools.approle_file_read(os.path.join(self.m.FIXCVE_DIR, "openbao-approle.json"))
+        ob.approle_login(data["role_id"], data["secret_id"])
+        self.assertEqual(len(self.st.kv["fixcve/jenkins"]), 1)       # rien d'écrasé
+        self.m.cmd_fixcve(self.ctx())                                 # relance : fichier conservé
+        self.assertEqual(tools.approle_file_read(os.path.join(self.m.FIXCVE_DIR, "openbao-approle.json")), data)
+
+    def test_token_jenkins_demande(self):
+        self.admin().kv_put("fixcve/codeberg", {"user": "bot", "token": "c"})
+        self.m.cmd_fixcve(self.ctx_with({"text": "", "value:fixcve-jenkins": "tok"}))
+        self.assertEqual(self.st.kv["fixcve/jenkins"][-1], {"user": "claude", "token": "tok"})
+
+    def test_codeberg_vide_considere_absent(self):
+        self.assertTrue(self.m._missing(self.admin().kv_put("fixcve/codeberg", {"user": "bot", "token": ""})
+                                        or self.admin(), "fixcve/codeberg", "token"))
+
+    def test_cle_nvd_format(self):
+        with self.assertRaisesRegex(RotationError, "format"):
+            self.m.cmd_fixcve_nvd(self.ctx_with({"value:fixcve-nvd": "pas une clé !"}))
+        self.m.cmd_fixcve_nvd(self.ctx_with({"value:fixcve-nvd": "abcd1234-abcd-1234-abcd-1234abcd5678"}))
+        self.assertEqual(self.st.kv["fixcve/nvd"][-1]["api_key"], "abcd1234-abcd-1234-abcd-1234abcd5678")
 
 
 class InventoryOpenBaoTest(unittest.TestCase):

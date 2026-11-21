@@ -14,7 +14,7 @@
 #   - Cluster Kubernetes stagingkub démarré
 #   - Keycloak déployé et accessible
 #   - OpenBao démarré et déverrouillé (infra/jenkins-docker/openbao/unseal.sh),
-#     alimenté par openbao-migrate.py stagingkub (docs/OPENBAO.md)
+#     alimenté par openbao-setup.py stagingkub (docs/OPENBAO.md)
 #   - Maven installé
 # ════════════════════════════════════════════════════════════════
 

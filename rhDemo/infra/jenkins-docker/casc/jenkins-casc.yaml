@@ -135,37 +135,29 @@ tool:
 # ═══════════════════════════════════════════════════════════════════
 # CREDENTIALS
 # ⚠️  Les credentials sont gérés manuellement dans Jenkins UI (ou par
-#     rhDemo/scripts/openbao-migrate.py), jamais par JCasC : une section credentials
+#     rhDemo/scripts/openbao-setup.py), jamais par JCasC : une section credentials
 #     ici remplacerait tous ceux du domaine global à chaque rechargement.
 #
 # OpenBao (docs/OPENBAO.md) : les credentials marqués [OpenBao] sont des références
 # (plugin HashiCorp Vault, même identifiant) vers kv/jenkins/<id>, créées par
-# openbao-migrate.py jenkins. Les pipelines les lisent toujours par withCredentials /
+# openbao-setup.py jenkins. Les pipelines les lisent toujours par withCredentials /
 # credentials(), sans changement. Valeurs renouvelées dans OpenBao par rotate-secrets.py.
 #
 # 0a. openbao-approle (Vault App Role Credential) — seul secret d'accès à OpenBao
-#    - Créé et renouvelé par openbao-migrate.py jenkins-approle / rotate-secrets.py
+#    - Créé et renouvelé par openbao-setup.py jenkins-approle / rotate-secrets.py
 #      openbao-approle-jenkins (secret_id de 100 jours, période de rotation 90 jours)
 #    - Utilisé par le plugin (unclassified.hashicorpVault plus bas)
 #
 # 0b. openbao-cosign-approle (Username with password : role_id / secret_id)
 #    - AppRole jenkins-cosign : signature Cosign par Transit (Jenkinsfile-CI)
-#    - Créé par openbao-migrate.py cosign-approle, renouvelé par rotate-secrets.py
+#    - Créé par openbao-setup.py cosign-approle, renouvelé par rotate-secrets.py
 #      openbao-approle-cosign
 #
-# 0c. cosign-public-key-transit (Secret file) : clé publique de la clé Transit
-#    (configure-openbao.sh cosign l'affiche). cosign-public-key garde l'ancienne clé tant
-#    que des images signées avec elle restent déployables (Jenkinsfile-CD essaie les deux).
+# 0c. cosign-public-key-transit (Secret file) : clé publique de la clé Transit, vérifiée
+#    par Jenkinsfile-CD (configure-openbao.sh cosign l'écrit dans certs/cosign/cosign-transit.pub)
 #
 # Liste des credentials à créer manuellement :
 # (renouvellement : rhDemo/scripts/rotate-secrets.py, inventaire rhDemo/secrets/inventory.yaml)
-#
-# 1. sops-age-key (Secret file) — PLUS UTILISÉ par les pipelines (ephemere : secrets générés à
-#    chaque build par Jenkinsfile-CI ; stagingkub : OpenBao + ESO). À supprimer à l'abandon de SOPS.
-#    - Type: Secret file
-#    - ID: sops-age-key
-#    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
-#    - Description: SOPS AGE Private Key for decrypting secrets
 #
 # 2. jenkins-sonar-token (Secret text - optionnel)
 #    - Type: Secret text
@@ -378,7 +370,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolution_openbao')
+                branches('*/evolutions_openbao_postmigration')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -466,7 +458,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolution_openbao')
+                branches('*/evolutions_openbao_postmigration')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -603,7 +595,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolution_openbao')
+                branches('*/evolutions_openbao_postmigration')
                 extensions {
                   cloneOptions {
                     shallow(false)

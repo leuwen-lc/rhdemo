@@ -104,11 +104,9 @@ def check_targets(ctx, entry):
     for t in entry.get("targets", []):
         if t["kind"] == "jenkins":
             ctx.jenkins().read(t["credential"], t["type"])
-        elif t["kind"] == "sops":
-            tools.sops_get(os.path.expanduser(t["file"]), t["key"])
         elif t["kind"] == "openbao":
             if ctx.openbao().kv_read(t["path"], missing_ok=True) is None:
-                raise RotationError(f"OpenBao : kv/{t['path']} absent (migration faite ? scripts/openbao-migrate.py)")
+                raise RotationError(f"OpenBao : kv/{t['path']} absent (scripts/openbao-setup.py)")
         elif t["kind"] == "approle-file":
             tools.approle_file_read(os.path.expanduser(t["file"]))
         else:
@@ -124,9 +122,6 @@ def propagate(ctx, entry, value):
             if t["kind"] == "jenkins":
                 ctx.jenkins().update(t["credential"], t["type"], value)
                 updated.append(f"Jenkins {t['credential']}")
-            elif t["kind"] == "sops":
-                tools.sops_set(os.path.expanduser(t["file"]), t["key"], value)
-                updated.append(f"SOPS {t['file']} {t['key']}")
             elif t["kind"] == "openbao":
                 ctx.openbao().kv_set(t["path"], t["key"], value)
                 updated.append(f"OpenBao kv/{t['path']} {t['key']}")
@@ -144,8 +139,6 @@ def propagate(ctx, entry, value):
 def _target_text(t):
     if t["kind"] == "jenkins":
         return f"Jenkins {t['credential']}"
-    if t["kind"] == "sops":
-        return f"SOPS {t['file']} {t['key']}"
     if t["kind"] == "openbao":
         return f"OpenBao kv/{t['path']} {t['key']}"
     return f"fichier AppRole {t['file']}"

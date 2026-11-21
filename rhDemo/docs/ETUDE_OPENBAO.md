@@ -1,6 +1,6 @@
 ---
-statut: proposition
-verifie_le: 2026-11-20
+statut: historique
+verifie_le: 2026-11-21
 sources:
   - rhDemo/docs/ETUDE_ROTATION_SECRETS.md
   - rhDemo/secrets/inventory.yaml
@@ -16,6 +16,8 @@ sources:
   - rhDemo/infra/jenkins-docker/init-registry-certs.sh
   - rhDemo/docs/CERTIFICATS_WEB.md
 ---
+
+> **Historique** : étude mise en œuvre (étapes 1 à 4) et migration depuis SOPS terminée en novembre 2026. État courant et exploitation : [OPENBAO.md](OPENBAO.md).
 
 # Étude : OpenBao comme gestionnaire de secrets de RHDemo
 

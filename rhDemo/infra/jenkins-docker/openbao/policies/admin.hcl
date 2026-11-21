@@ -1,6 +1,6 @@
 # Administrateur (utilisateur userpass « admin », jeton d'une heure) : remplace le
 # jeton root, révoqué après l'installation. Utilisé par configure-openbao.sh,
-# rotate-secrets.py et openbao-migrate.py. Pas d'accès à sys/raw ni au déscellement.
+# rotate-secrets.py et openbao-setup.py. Pas d'accès à sys/raw ni au déscellement.
 
 # Secrets KV (lecture, écriture, métadonnées, versions)
 path "kv/*" {

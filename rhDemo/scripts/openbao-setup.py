@@ -1,46 +1,47 @@
 #!/usr/bin/env -S python3 -I
-"""Migration des secrets vers OpenBao (docs/OPENBAO.md, ETUDE_OPENBAO.md §7).
+"""Alimentation initiale d'OpenBao (docs/OPENBAO.md, installation) : credentials Jenkins,
+fixcve-auto, secrets de stagingkub.
 
 Exécuté sur le poste, comme rotate-secrets.py. Mot de passe de l'utilisateur admin d'OpenBao
-et mot de passe admin Jenkins demandés au lancement ; aucune valeur affichée ni écrite sur
-le disque (sauf le fichier AppRole de fixcve-auto, mode 600).
+(et admin Jenkins pour les commandes Jenkins) demandé au lancement ; aucune valeur affichée
+ni écrite sur le disque (sauf le fichier AppRole de fixcve-auto, mode 600). Idempotent : une
+valeur déjà présente dans OpenBao n'est jamais écrasée (la renouveler : rotate-secrets.py).
 
 Usage :
-  openbao-migrate.py jenkins-approle        étape 1 : crée ou renouvelle le credential Jenkins
-                                            « openbao-approle » (AppRole jenkins)
-  openbao-migrate.py jenkins [ID...]        étape 1 : secrets des pipelines Renovate et des
-                                            notifications → kv/jenkins/<ID>, puis credential
-                                            Jenkins remplacé par une référence OpenBao (même ID)
-  openbao-migrate.py fixcve                 étape 1 bis : credentials.sops.yaml → kv/fixcve/*,
-                                            fichier AppRole ~/.config/rhdemo-fixcve/openbao-approle.json
-  openbao-migrate.py cosign-approle         étape 2 : credential Jenkins « openbao-cosign-approle »
-  openbao-migrate.py stagingkub             étape 3 : secrets-stagingkub.yml (SOPS) → kv/stagingkub/*
-                                            et kv/stagingkub-tests/users
+  openbao-setup.py jenkins-approle        crée ou renouvelle le credential Jenkins
+                                          « openbao-approle » (AppRole jenkins)
+  openbao-setup.py cosign-approle         crée ou renouvelle le credential Jenkins
+                                          « openbao-cosign-approle » (AppRole jenkins-cosign)
+  openbao-setup.py jenkins [ID...]        secrets des pipelines Renovate et des notifications :
+                                          valeur dans kv/jenkins/<ID> (demandée, ou token/clé
+                                          émis directement sur Codeberg), credential Jenkins
+                                          référence OpenBao du même ID (créé ou remplacé)
+  openbao-setup.py fixcve                 kv/fixcve/{jenkins,codeberg,nvd} (token Jenkins demandé,
+                                          token Codeberg émis), fichier AppRole
+                                          ~/.config/rhdemo-fixcve/openbao-approle.json
+  openbao-setup.py fixcve-nvd             ajoute ou remplace la clé API NVD (kv/fixcve/nvd)
+  openbao-setup.py stagingkub             génère les secrets de stagingkub (kv/stagingkub/*,
+                                          kv/stagingkub-tests/users), avant init-stagingkub.sh
 Options : --dry-run (lectures seulement), --inventory.
-
-Les tokens Codeberg et la clé GPG ne sont pas recopiés (leur valeur n'est lisible que par
-Jenkins) : ils sont renouvelés directement vers OpenBao par les méthodes de rotate-secrets.py.
 """
 import argparse
 import os
-import subprocess
+import re
 import sys
 import xml.sax.saxutils as su
-
-import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from rotation_lib import inventory as inv_mod  # noqa: E402
 from rotation_lib import tools  # noqa: E402
-from rotation_lib.common import Journal, Prompter, RotationError, log, warn  # noqa: E402
+from rotation_lib.common import (Journal, Prompter, RotationError, log, new_password,  # noqa: E402
+                                 simple_password, warn)
 from rotation_lib.rotations import METHODS, Context  # noqa: E402
 
-RHDEMO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 VAULT_PKG = "com.datapipe.jenkins.vault.credentials"
 FIXCVE_DIR = os.path.expanduser("~/.config/rhdemo-fixcve")
 
-# Credentials Jenkins migrés à l'étape 1 : id -> (type, description). Les valeurs vont dans
+# Credentials Jenkins lus par les pipelines via OpenBao : id -> (type, description). Les valeurs vont dans
 # kv/jenkins/<id> (clé « value », ou « username »/« password »).
 JENKINS_CREDENTIALS = {
     "ci-bot-forgejo-token": ("string", "Token Codeberg du bot CI (OpenBao)"),
@@ -116,7 +117,7 @@ def cmd_jenkins_approle(ctx, role="jenkins", cred_id="openbao-approle", vault_ty
     for acc in ob.secret_id_accessors(role):
         if acc != accessor:
             ob.destroy_secret_id(role, acc)
-    ctx.journal.append(f"openbao-approle-{role}", "rotated", f"credential Jenkins {cred_id} créé par openbao-migrate.py")
+    ctx.journal.append(f"openbao-approle-{role}", "rotated", f"credential Jenkins {cred_id} créé par openbao-setup.py")
     log(f"  ✓ {cred_id} prêt, anciens secret_id détruits")
 
 
@@ -124,7 +125,7 @@ def cmd_jenkins(ctx, ids):
     ob, jk = ctx.openbao(), ctx.jenkins()
     for cred_id in ids or list(JENKINS_CREDENTIALS):
         if cred_id not in JENKINS_CREDENTIALS:
-            raise RotationError(f"{cred_id} : hors du périmètre de l'étape 1 ({', '.join(JENKINS_CREDENTIALS)})")
+            raise RotationError(f"{cred_id} : credential non géré ({', '.join(JENKINS_CREDENTIALS)})")
         kind, description = JENKINS_CREDENTIALS[cred_id]
         path = f"jenkins/{cred_id}"
         log(f"\n── {cred_id} → kv/{path}")
@@ -141,7 +142,7 @@ def cmd_jenkins(ctx, ids):
                 # directement vers OpenBao (cible openbao de l'inventaire).
                 ob.kv_put(path, {"value": ""})
                 detail = METHODS[entry["rotation"]["method"]](ctx, entry)
-                ctx.journal.append(cred_id, "rotated", f"migration OpenBao : {detail}")
+                ctx.journal.append(cred_id, "rotated", f"création dans OpenBao : {detail}")
             elif kind == "username-password":
                 user = ctx.prompter.text(f"Nom d'utilisateur de {cred_id}")
                 pw = ctx.prompter.secret(f"value:{cred_id}", f"Mot de passe ou jeton de {cred_id}")
@@ -154,68 +155,101 @@ def cmd_jenkins(ctx, ids):
         log(f"  ✓ credential Jenkins {cred_id} → OpenBao")
 
 
+def _missing(ob, path, key):
+    """Vrai si kv/<path> n'a pas de valeur pour `key` (absent, ou laissé vide par un échec)."""
+    data = ob.kv_read(path, missing_ok=True) or {}
+    if data.get(key):
+        log(f"  kv/{path} déjà présent : conservé (renouvellement : rotate-secrets.py)")
+        return False
+    return True
+
+
 def cmd_fixcve(ctx):
     ob = ctx.openbao()
-    creds = os.path.join(FIXCVE_DIR, "credentials.sops.yaml")
     approle_path = os.path.join(FIXCVE_DIR, "openbao-approle.json")
-    log("── fixcve-auto : credentials.sops.yaml → kv/fixcve/{jenkins,codeberg,nvd}")
+    log("── fixcve-auto : kv/fixcve/{jenkins,codeberg,nvd}, fichier AppRole")
     if ctx.dry_run:
         return
-    data = yaml.safe_load(sops_decrypt(creds))
-    ob.kv_put("fixcve/jenkins", {"user": data["jenkins"]["user"], "token": data["jenkins"]["token"]})
-    ob.kv_put("fixcve/codeberg", {"user": data["codeberg"]["user"], "token": data["codeberg"]["token"]})
-    nvd = (data.get("nvd") or {}).get("api_key")
-    if nvd:
-        ob.kv_put("fixcve/nvd", {"api_key": nvd})
-    role_id = ob.role_id("fixcve")
-    secret_id, accessor = ob.new_secret_id("fixcve")
-    try:
-        ob.approle_login(role_id, secret_id)
-        os.makedirs(FIXCVE_DIR, mode=0o700, exist_ok=True)
-        tools.approle_file_write(approle_path, role_id, secret_id)
-    except (RotationError, OSError):
-        ob.destroy_secret_id("fixcve", accessor)
-        raise
-    ctx.journal.append("openbao-approle-fixcve", "rotated", "fichier AppRole créé par openbao-migrate.py")
-    log(f"  ✓ kv/fixcve/* écrit{'' if nvd else ' (pas de clé NVD)'}, {approle_path} créé (mode 600)")
-    log("  Ensuite : rhDemo/scripts/fixcve-install.sh --trust (scripts modifiés), puis vérifier un")
-    log("  cycle ; credentials.sops.yaml peut être supprimé après un cycle réussi (docs/OPENBAO.md).")
+    if _missing(ob, "fixcve/jenkins", "token"):
+        # Token API du compte Jenkins dédié : créé à la main dans Jenkins (FIXCVE_AUTO.md §3)
+        user = ctx.prompter.text("Utilisateur Jenkins de fixcve-auto [claude]") or "claude"
+        token = ctx.prompter.secret("value:fixcve-jenkins", f"Token API Jenkins de {user}")
+        ob.kv_put("fixcve/jenkins", {"user": user, "token": token})
+        log("  ✓ kv/fixcve/jenkins écrit")
+    if _missing(ob, "fixcve/codeberg", "token"):
+        entry = inv_mod.by_id(ctx.inv, "fixcve-forgejo-token")
+        # Token émis directement sur Codeberg vers kv/fixcve/codeberg (cible de l'inventaire)
+        ob.kv_put("fixcve/codeberg", {"user": entry["rotation"]["account"], "token": ""})
+        detail = METHODS[entry["rotation"]["method"]](ctx, entry)
+        ctx.journal.append(entry["id"], "rotated", f"création dans OpenBao : {detail}")
+        log("  ✓ kv/fixcve/codeberg écrit")
+    if ob.kv_read("fixcve/nvd", missing_ok=True) is None and \
+            ctx.prompter.confirm("Enregistrer une clé API NVD (vérification locale Dependency-Check) ?"):
+        cmd_fixcve_nvd(ctx)
+    if os.path.exists(approle_path):
+        log(f"  {approle_path} déjà présent : conservé (renouvellement : rotate-secrets.py openbao-approle-fixcve)")
+    else:
+        role_id = ob.role_id("fixcve")
+        secret_id, accessor = ob.new_secret_id("fixcve")
+        try:
+            ob.approle_login(role_id, secret_id)
+            os.makedirs(FIXCVE_DIR, mode=0o700, exist_ok=True)
+            tools.approle_file_write(approle_path, role_id, secret_id)
+        except (RotationError, OSError):
+            ob.destroy_secret_id("fixcve", accessor)
+            raise
+        ctx.journal.append("openbao-approle-fixcve", "rotated", "fichier AppRole créé par openbao-setup.py")
+        log(f"  ✓ {approle_path} créé (mode 600)")
+    log("  Ensuite : rhDemo/scripts/fixcve-install.sh (provisionnement, --trust).")
+
+
+def cmd_fixcve_nvd(ctx):
+    ob = ctx.openbao()
+    log("── clé API NVD → kv/fixcve/nvd (https://nvd.nist.gov/developers/request-an-api-key)")
+    if ctx.dry_run:
+        return
+    key = ctx.prompter.secret("value:fixcve-nvd", "Clé API NVD")
+    if not re.fullmatch(r"[A-Za-z0-9-]{20,64}", key):
+        raise RotationError("format de clé NVD inattendu")
+    ob.kv_put("fixcve/nvd", {"api_key": key})
+    log("  ✓ kv/fixcve/nvd écrit")
+
+
+# Utilisateurs de test de stagingkub (realm RHDemo), créés par init-keycloak-stagingkub.sh
+TEST_USERS = {"admin": "rhdemo-admin", "maj": "rhdemo-maj", "consult": "rhdemo-consult"}
 
 
 def cmd_stagingkub(ctx):
+    """Valeurs générées, jamais saisies. À lancer avant le premier déploiement : PostgreSQL ne
+    prend son mot de passe qu'à l'initialisation de sa base, Keycloak son admin au premier
+    démarrage."""
     ob = ctx.openbao()
-    src = os.path.join(RHDEMO, "secrets", "secrets-stagingkub.yml")
-    log("── stagingkub : secrets-stagingkub.yml → kv/stagingkub/{rhdemo,keycloak}, kv/stagingkub-tests/users")
+    entry = inv_mod.by_id(ctx.inv, "stagingkub-test-users")
+    length = int((entry["rotation"].get("password") or {}).get("length", 12))
+    log("── stagingkub : génération de kv/stagingkub/{rhdemo,keycloak}, kv/stagingkub-tests/users")
     if ctx.dry_run:
         return
-    d = yaml.safe_load(sops_decrypt(src))
-    rh, kc = d["rhdemo"], d["keycloak"]
-    ob.kv_put("stagingkub/rhdemo", {
-        "db_password": rh["datasource"]["password"]["pg"],
-        "oidc_client_secret": rh["client"]["registration"]["keycloak"]["client"]["secret"],
-    })
-    ob.kv_put("stagingkub/keycloak", {
-        "db_password": kc["db"]["password"],
-        "admin_user": kc["admin"].get("user") or "admin",
-        "admin_password": kc["admin"]["password"],
-    })
-    ob.kv_put("stagingkub-tests/users", {k: str(v) for k, v in (rh.get("test") or {}).items()})
-    log("  ✓ écrit. Ces valeurs figurent (chiffrées) dans l'historique Git public : les renouveler")
-    log("    une fois ESO en place (rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db")
-    log("    stagingkub-oidc-client stagingkub-keycloak-admin stagingkub-test-users).")
-
-
-def sops_decrypt(path):
-    proc = subprocess.run(["sops", "decrypt", path], capture_output=True, check=False,
-                          env={**os.environ, "SOPS_AGE_KEY_FILE": tools.AGE_KEY_FILE})
-    if proc.returncode != 0:
-        raise RotationError(f"SOPS : déchiffrement de {path} impossible")
-    return proc.stdout.decode("utf-8")
+    if _missing(ob, "stagingkub/rhdemo", "db_password"):
+        ob.kv_put("stagingkub/rhdemo", {"db_password": new_password(), "oidc_client_secret": new_password()})
+        log("  ✓ kv/stagingkub/rhdemo généré")
+    if _missing(ob, "stagingkub/keycloak", "admin_password"):
+        ob.kv_put("stagingkub/keycloak", {"db_password": new_password(), "admin_user": "admin",
+                                          "admin_password": new_password()})
+        log("  ✓ kv/stagingkub/keycloak généré")
+    if _missing(ob, "stagingkub-tests/users", "pwduseradmin"):
+        users = {}
+        for role, name in TEST_USERS.items():
+            users[f"iduser{role}"] = name
+            users[f"pwduser{role}"] = simple_password(length)
+        ob.kv_put("stagingkub-tests/users", users)
+        log("  ✓ kv/stagingkub-tests/users généré")
+    log("  Ensuite : infra/stagingkub/scripts/init-stagingkub.sh (ESO recopie ces valeurs dans le cluster).")
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("command", choices=["jenkins-approle", "jenkins", "fixcve", "cosign-approle", "stagingkub"])
+    p.add_argument("command", choices=["jenkins-approle", "cosign-approle", "jenkins", "fixcve", "fixcve-nvd",
+                                       "stagingkub"])
     p.add_argument("ids", nargs="*")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--inventory", default=inv_mod.DEFAULT_PATH)
@@ -233,6 +267,8 @@ def main(argv=None):
                 cmd_jenkins(ctx, args.ids)
             elif args.command == "fixcve":
                 cmd_fixcve(ctx)
+            elif args.command == "fixcve-nvd":
+                cmd_fixcve_nvd(ctx)
             else:
                 cmd_stagingkub(ctx)
         finally:

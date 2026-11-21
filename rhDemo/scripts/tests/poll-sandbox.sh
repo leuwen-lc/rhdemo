@@ -42,7 +42,6 @@ mkdir -p "${SB}/state"
 { echo "# commit sandbox"; (cd "${SB}/clone" && find rhDemo/scripts -path '*/tests' -prune -o -path '*/__pycache__' -prune -o -type f \
     \( -name 'fixcve-*' -o -path 'rhDemo/scripts/fixcve_lib/*' \) -print | LC_ALL=C sort | xargs sha256sum); } > "${SB}/state/trusted.sha256"
 echo '{"jenkins":{"user":"u","token":"t"},"codeberg":{"user":"u","token":"t"}}' > "${SB}/state/creds.json"
-touch "${SB}/state/credentials.sops.yaml"
 jq -n --argjson n "${LAST_PROCESSED}" \
   '{last_processed_build:$n,status:"idle",pending:null,consecutive_rollbacks:0,consecutive_prepush_failures:0,blocked_confirmed:null,no_action_confirmed:null,consecutive_no_action_pushes:0}' \
   > "${SB}/state/state.json"

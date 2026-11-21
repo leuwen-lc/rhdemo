@@ -59,7 +59,7 @@ docker info
 │                                    │  • Docker CLI + Docker Compose (socket hôte) │ │
 │                                    │  • Node.js/npm (build frontend)              │ │
 │                                    │  • Firefox ESR + Xvfb (Selenium headless)    │ │
-│                                    │  • SOPS, yq (secrets & YAML)                 │ │
+│                                    │  • yq (parsing YAML)                         │ │
 │                                    │  • Trivy, kubectl, Helm, Cosign              │ │
 │                                    └──────────────────────────────────────────────┘ │
 │                                                                                     │
@@ -177,7 +177,7 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
   - JDK 25 (Eclipse Temurin) + Maven 3.9.12
   - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
   - Firefox ESR + Xvfb (tests Selenium headless)
-  - SOPS, yq (secrets et parsing YAML)
+  - yq (parsing YAML)
   - Trivy (scan CVE images Docker)
   - kubectl, Helm (déploiement Kubernetes)
   - Cosign (signature d'images)
@@ -287,7 +287,7 @@ Manage Jenkins → Configuration as Code → « Reload existing configuration »
 `docker compose restart jenkins`). Le dossier `casc/` est monté en entier, et non le
 fichier seul : un montage de fichier garde l'ancien contenu après un `sed -i` ou un
 `git checkout`, jusqu'au redémarrage du conteneur.
-### Configuration de SOPS et des credentials dans Jenkins
+### Configuration des credentials dans Jenkins
 
 (Obligatoire pour pouvoir lancer le pipeline Jenkinsfile-CI)
 Voir le fichier [QUICKSTART.md](QUICKSTART.md) pour la liste complète des credentials à créer.
@@ -718,30 +718,22 @@ docker rm rhdemo-jenkins-zap
 
 ### Cosign - Signature d'images Docker
 
-Cosign est installé sur l'agent Jenkins. Il signe l'image Docker produite par le pipeline CI et le pipeline CD vérifie cette signature avant tout déploiement.
+Cosign est installé sur l'agent Jenkins. Il signe l'image Docker produite par le pipeline CI et le pipeline CD vérifie cette signature avant tout déploiement. La clé privée est une clé Transit d'OpenBao, non exportable : elle ne quitte jamais OpenBao.
 
 **Flux :**
 ```text
-CI  → cosign sign   --key cosign-private-key  → signature stockée dans le registry
-CD  → cosign verify --key cosign-public-key   → rejet si image non signée ou altérée
+CI  → cosign sign   --key openbao://cosign              → signature stockée dans le registry
+CD  → cosign verify --key cosign-public-key-transit    → rejet si image non signée ou altérée
 ```
 
-**Génération de la paire de clés (une seule fois sur l'hôte) :**
+**Mise en place** : `openbao/configure-openbao.sh cosign` crée la clé et écrit sa clé publique dans `certs/cosign/cosign-transit.pub`, puis `rhDemo/scripts/openbao-setup.py cosign-approle` crée l'accès de la CI ([OPENBAO.md](../../docs/OPENBAO.md)).
 
-```bash
-cosign generate-key-pair
-# Saisir et confirmer un mot de passe
-# → cosign.key  (clé privée — NE PAS commiter)
-# → cosign.pub  (clé publique)
-```
+**Credentials Jenkins** (Manage Jenkins → Manage Credentials → (global)) :
 
-**Credentials Jenkins à créer** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
-
-| ID                      | Kind         | Contenu                              | Utilisé par |
-|-------------------------|--------------|--------------------------------------|-------------|
-| `cosign-private-key`    | Secret file  | Fichier `cosign.key`                 | CI          |
-| `cosign-password`       | Secret text  | Mot de passe saisi lors de la génération | CI      |
-| `cosign-public-key`     | Secret file  | Fichier `cosign.pub`                 | CD          |
+| ID                          | Kind                   | Contenu                                   | Utilisé par |
+|-----------------------------|------------------------|-------------------------------------------|-------------|
+| `openbao-cosign-approle`    | Username with password | role_id / secret_id de l'AppRole `jenkins-cosign` (créé par `openbao-setup.py`) | CI |
+| `cosign-public-key-transit` | Secret file            | Fichier `certs/cosign/cosign-transit.pub` | CD          |
 
 **Paramètre pipeline :**
 - CI : le paramètre `SIGN_IMAGE` (booléen, défaut `true`) active/désactive la signature
@@ -751,7 +743,7 @@ cosign generate-key-pair
 
 ```bash
 # Vérifier manuellement depuis l'hôte
-cosign verify --key cosign.pub \
+cosign verify --key certs/cosign/cosign-transit.pub \
     --insecure-ignore-tlog=true \
     kind-registry:5000/rhdemo-api:<TAG>@<DIGEST>
 ```

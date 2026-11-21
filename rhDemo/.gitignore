@@ -19,9 +19,8 @@ secrets/secrets-rhdemo.yml
 secrets/*-temp.yml
 secrets/*-decrypted.yml
 secrets/env-vars.sh
-# Autoriser le template et les secrets chiffrés pour CI/CD
+# Autoriser le template (dev)
 !secrets/secrets-rhdemo.yml.template
-!secrets/secrets-ephemere.yml
 # Ignorer les backups
 secrets/*.backup
 
@@ -60,5 +59,3 @@ build/
 .vscode/
 /replacegit.txt
 
-# Fichiers secrets déchiffrés (stagingkub)
-secrets/secrets-stagingkub-decrypted.yml

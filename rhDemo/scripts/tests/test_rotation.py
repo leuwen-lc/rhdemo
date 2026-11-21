@@ -1,5 +1,5 @@
 """Tests de rotate-secrets.py : faux Codeberg, faux Jenkins et faux Infomaniak en local,
-vrais gpg, sops et age sur des clés jetables. Aucun accès réseau."""
+vrais gpg sur des clés jetables. Aucun accès réseau."""
 import base64
 import copy
 import datetime
@@ -437,40 +437,16 @@ class GpgRotationTest(Base):
             self.assertEqual(ok.returncode, 0, ok.stderr)
 
 
-@unittest.skipUnless(shutil.which("sops") and shutil.which("age-keygen"), "sops/age absents")
-class SopsTest(unittest.TestCase):
-    def test_set_get(self):
-        tmp = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, tmp, True)
-        key = os.path.join(tmp, "keys.txt")
-        subprocess.run(["age-keygen", "-o", key], capture_output=True, check=True)
-        recipient = subprocess.run(["age-keygen", "-y", key], capture_output=True, check=True).stdout.decode().strip()
-        plain = os.path.join(tmp, "p.yaml")
-        enc = os.path.join(tmp, "c.sops.yaml")
-        with open(plain, "w") as fh:
-            fh.write("codeberg:\n  user: bot\n  token: old\n")
-        with open(enc, "wb") as fh:
-            subprocess.run(["sops", "--encrypt", "--age", recipient, plain], stdout=fh, check=True)
-        old = tools.AGE_KEY_FILE
-        tools.AGE_KEY_FILE = key
-        try:
-            tools.sops_set(enc, '["codeberg"]["token"]', "new-\"value\"")
-            self.assertEqual(tools.sops_get(enc, '["codeberg"]["token"]'), 'new-"value"')
-            self.assertEqual(tools.sops_get(enc, '["codeberg"]["user"]'), "bot")
-            with open(enc) as fh:
-                self.assertNotIn("new-", fh.read())
-        finally:
-            tools.AGE_KEY_FILE = old
-
-
 class InventoryTest(unittest.TestCase):
     def test_inventaire_du_depot_valide(self):
         inv = inv_mod.load()
         ids = [e["id"] for e in inv["secrets"]]
         self.assertEqual(len(ids), len(set(ids)))
         nums = {e["num"] for e in inv["secrets"]}
-        for n in [str(i) for i in range(1, 19)] + ["6b"]:   # #19 (token API Infomaniak) retiré
+        # #1 (clé AGE de SOPS, abandonnée) et #19 (token API Infomaniak) retirés
+        for n in [str(i) for i in range(2, 19)] + ["6b"]:
             self.assertIn(n, nums, f"secret #{n} de l'étude absent de l'inventaire")
+        self.assertNotIn("1", nums)
 
     def test_validation_detecte_les_erreurs(self):
         inv = inv_mod.load()

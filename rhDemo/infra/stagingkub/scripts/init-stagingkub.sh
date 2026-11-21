@@ -316,7 +316,7 @@ echo -e "${GREEN}✅ Namespace créé avec labels Helm et PSA warn/audit restric
 # Plus de secrets-stagingkub.yml déchiffré ici : ESO crée rhdemo-db-secret,
 # keycloak-db-secret, keycloak-admin-secret et rhdemo-app-secrets depuis
 # kv/stagingkub/* d'OpenBao. Prérequis : OpenBao démarré et déverrouillé
-# (infra/jenkins-docker/openbao/unseal.sh), alimenté (openbao-migrate.py stagingkub).
+# (infra/jenkins-docker/openbao/unseal.sh), alimenté (openbao-setup.py stagingkub).
 # L'authentification Kubernetes d'OpenBao est (re)configurée pour CE cluster :
 # l'autorité du cluster change à chaque recréation.
 echo -e "${YELLOW}▶ Secrets applicatifs (OpenBao + ESO)...${NC}"

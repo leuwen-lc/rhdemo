@@ -1,4 +1,4 @@
-"""Outils locaux : SOPS (valeur passée sur l'entrée standard) et GPG (trousseau temporaire)."""
+"""Outils locaux : GPG (trousseau temporaire), kubectl, port-forward, fichier AppRole."""
 import contextlib
 import json
 import os
@@ -9,32 +9,6 @@ import tempfile
 import time
 
 from .common import RotationError
-
-AGE_KEY_FILE = os.path.expanduser(os.environ.get("SOPS_AGE_KEY_FILE", "~/.config/sops/age/keys.txt"))
-
-
-def _sops_env():
-    return {**os.environ, "SOPS_AGE_KEY_FILE": AGE_KEY_FILE}
-
-
-def sops_get(path, key_path):
-    """Valeur d'une clé d'un fichier SOPS, `key_path` au format SOPS : ["a"]["b"]."""
-    proc = subprocess.run(["sops", "decrypt", "--extract", key_path, path], capture_output=True,
-                          env=_sops_env(), check=False)
-    if proc.returncode != 0:
-        raise RotationError(f"SOPS : lecture de {key_path} dans {path} impossible")
-    return proc.stdout.decode("utf-8")
-
-
-def sops_set(path, key_path, value):
-    proc = subprocess.run(["sops", "set", "--value-stdin", path, key_path],
-                          input=json.dumps(value).encode("utf-8"), capture_output=True,
-                          env=_sops_env(), check=False)
-    if proc.returncode != 0:
-        raise RotationError(f"SOPS : écriture de {key_path} dans {path} impossible")
-    if sops_get(path, key_path) != value:
-        raise RotationError(f"SOPS : relecture de {key_path} dans {path} incohérente")
-
 
 @contextlib.contextmanager
 def gpg_home():

@@ -208,7 +208,7 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 - Vérification du nom du registry : **DOIT être `kind-registry`** (sinon échec du pipeline)
 - Connexion automatique du registry au réseau `kind` avec alias DNS `kind-registry`
 - Vérification de l'image dans le registry
-- Vérification de la signature Cosign : clé publique Transit (`cosign-public-key-transit`), puis ancienne clé (`cosign-public-key`)
+- Vérification de la signature Cosign avec la clé publique Transit (`cosign-public-key-transit`)
 - Vérification que les `ExternalSecret` sont synchronisés (lecture seule, aucun secret ne transite par Jenkins)
 
 #### Phase 3 : Déploiement
@@ -541,10 +541,9 @@ exactes.
 
 | ID Credential | Type | Usage |
 |---------------|------|-------|
-| `sops-age-key` | Secret file | Plus utilisé par les pipelines (ephemere : secrets générés à chaque build) ; à supprimer à l'abandon de SOPS |
 | `openbao-approle` | Vault App Role | Plugin HashiCorp Vault : lecture de `kv/jenkins/*` ([OPENBAO.md](OPENBAO.md)) |
 | `openbao-cosign-approle` | Username with password | RHDemo-CI : signature Cosign par la clé Transit d'OpenBao |
-| `cosign-public-key-transit`, `cosign-public-key` | Secret file | RHDemo-CD : vérification de signature (nouvelle, puis ancienne clé) |
+| `cosign-public-key-transit` | Secret file | RHDemo-CD : vérification de signature |
 | `kubeconfig-stagingkub` | Secret file | RHDemo-CD (`jenkins-deployer`) |
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | RHDemo-Stagingkub-Upgrade-Deploy (`jenkins-infra-upgrader`) |
 | Token API Forgejo + clé GPG | — | RHDemo-Renovate (rebase/merge/commentaires, commits signés) |

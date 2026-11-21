@@ -29,7 +29,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [README.md](../../README.md) | actif | Présentation du projet et feuille de route |
 | [CHANGELOG.md](../../CHANGELOG.md) | actif | Historique des versions, de la plus récente à la plus ancienne |
 | [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) | actif | Comparaison des environnements dev, ephemere, stagingkub et Jenkins |
-| [DECISIONS.md](DECISIONS.md) | actif | Raisons des choix techniques structurants (BFF, Keycloak, SOPS, KinD, RBAC, NetworkPolicies) |
+| [DECISIONS.md](DECISIONS.md) | actif | Raisons des choix techniques structurants (BFF, Keycloak, OpenBao, KinD, RBAC, NetworkPolicies) |
 | [infra/dev/README.md](../infra/dev/README.md) | actif | Développement local avec PostgreSQL et Keycloak via Docker Compose |
 | [infra/ephemere/README.md](../infra/ephemere/README.md) | actif | Environnement CI jetable en Docker Compose (Selenium, ZAP) |
 | [infra/stagingkub/README.md](../infra/stagingkub/README.md) | actif | Environnement Kubernetes KinD : installation, déploiement, dépannage |
@@ -56,12 +56,11 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CSRF_GUIDE.md](CSRF_GUIDE.md) | actif | Protection CSRF (cookie, Spring Security, Vue.js) |
 | [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) | actif | Flux réseau légitimes et NetworkPolicies Zero Trust |
 | [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) | actif | RBAC du ServiceAccount Jenkins (moindre privilège) |
-| [SOPS_SETUP.md](SOPS_SETUP.md) | actif | Installation et usage de SOPS/AGE pour les secrets |
-| [OPENBAO.md](OPENBAO.md) | actif | Exploitation d'OpenBao : installation, déverrouillage, migration, rotation, retour arrière ; points à valider au premier déploiement |
+| [OPENBAO.md](OPENBAO.md) | actif | Exploitation d'OpenBao : installation à blanc, alimentation initiale des secrets, déverrouillage, rotation, jeton root ponctuel |
 | [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md) | actif | Certificats TLS stagingkub : auto-signés ou Let's Encrypt |
 | [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) | actif | Scan des dépendances Maven et npm, seuils de blocage |
 | [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md) | actif | Scan des images Docker avec Trivy |
-| [secrets/README-SECRETS-SEPARATION.md](../secrets/README-SECRETS-SEPARATION.md) | actif | Séparation des secrets entre ephemere et stagingkub |
+| [secrets/README-SECRETS-SEPARATION.md](../secrets/README-SECRETS-SEPARATION.md) | actif | Secrets par environnement (ephemere, stagingkub, dev) et inventaire |
 | [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) | journal | Avis de sécurité et remédiations (alimenté par fixcve-auto) |
 | [SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md](SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md) | journal | Revue de sécurité du 2026-04-24 et remédiations |
 | [SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md](SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md) | journal | Audit de sécurité du 2026-05-22 (score 58/100) et remédiations |
@@ -115,6 +114,8 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) | historique | Mise à jour en place de l'infrastructure stagingkub |
 | [ALLOY_MIGRATION.md](ALLOY_MIGRATION.md) | historique | Remplacement de Promtail par Grafana Alloy |
 | [PAKETO-DOCKERFILE-MIGRATION.md](PAKETO-DOCKERFILE-MIGRATION.md) | historique | Abandon de Paketo pour un Dockerfile classique |
+| [SOPS_SETUP.md](SOPS_SETUP.md) | historique | Ancienne gestion des secrets par SOPS/AGE, remplacée par OpenBao |
+| [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) | historique | Étude d'OpenBao comme gestionnaire de secrets (apport par secret, déverrouillage, plan par étapes), mise en œuvre en novembre 2026 |
 | [SONAQUBE_MIGRATION_PG18.md](SONAQUBE_MIGRATION_PG18.md) | historique | Migration de la base SonarQube vers PostgreSQL 18 |
 | [JENKINS_AGENTS_EPHEMERES.md](JENKINS_AGENTS_EPHEMERES.md) | historique | Étude et plan de passage aux agents Jenkins éphémères |
 | [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) | historique | Analyse des problèmes d'accès Jenkins vers stagingkub |
@@ -133,7 +134,6 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
 | [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API (périodique et d'urgence) ; phase 1 implémentée (`scripts/rotate-secrets.py`) |
-| [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) | proposition | OpenBao comme gestionnaire de secrets : apport par secret, compatibilités, déverrouillage, plan par étapes (dont credentials de fixcve-auto) ; étape 0 concluante, étapes 1 à 4 codées sur la branche `evolution_openbao` |
 
 ---
 

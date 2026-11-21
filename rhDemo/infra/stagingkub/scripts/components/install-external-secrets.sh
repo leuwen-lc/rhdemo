@@ -12,7 +12,7 @@ set -euo pipefail
 # montée de version proposée par Renovate s'applique en relançant ce script.
 #
 # Prérequis : OpenBao démarré, déverrouillé, configuré (configure-openbao.sh base
-# puis kubernetes) et alimenté (openbao-migrate.py stagingkub).
+# puis kubernetes) et alimenté (openbao-setup.py stagingkub).
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -92,7 +92,7 @@ for s in ${TARGET_SECRETS}; do
 done
 if [ -n "${failed}" ]; then
     echo -e "${RED}❌ ExternalSecret non synchronisé(s) :${failed}${NC}"
-    echo -e "${YELLOW}   OpenBao déverrouillé ? configure-openbao.sh kubernetes fait ? openbao-migrate.py stagingkub fait ?${NC}"
+    echo -e "${YELLOW}   OpenBao déverrouillé ? configure-openbao.sh kubernetes fait ? openbao-setup.py stagingkub fait ?${NC}"
     exit 1
 fi
 echo -e "${GREEN}✅ Secrets applicatifs synchronisés depuis OpenBao${NC}"

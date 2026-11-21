@@ -67,7 +67,7 @@ def cmd_check(inv, journal, today=None):
 
 def cmd_preflight(ctx):
     ok = True
-    for tool in ("sops", "gpg", "gpgconf", "kubectl"):
+    for tool in ("gpg", "gpgconf", "kubectl"):
         if not shutil.which(tool):
             warn(f"outil absent : {tool}")
             ok = False

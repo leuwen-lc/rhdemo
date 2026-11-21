@@ -112,7 +112,7 @@ docker exec -i rhdemo-dev-db psql -U dbrhdemo -d dbrhdemo < pgdata.sql
     - Le client secret Keycloack défini en étape 3 
 - Saisissez un mot de passe quelconque pour la base de données H2 (tests d'intégration Spring uniquement)
 
-NB : le fichier secrets-rhdemo.yml contenant des secrets à usage uniquement local, il est dans le .gitignore contrairement au fichier secrets-ephemere.yml utilisé pour le déploiement mais qui est chiffré avec SOPS.
+NB : le fichier secrets-rhdemo.yml contenant des secrets à usage uniquement local, il est dans le .gitignore. Les autres environnements n'utilisent pas de fichier : secrets générés à chaque build pour ephemere, OpenBao pour stagingkub.
 
 ### 6.Démarrer l'application rhDemo
 

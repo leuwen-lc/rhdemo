@@ -43,6 +43,7 @@ jenkins:
                 type=volume,source=rhdemo-trivy-cache,destination=/home/jenkins/.cache/trivy
                 type=volume,source=rhdemo-wdm-cache,destination=/home/jenkins/.cache/selenium
                 type=bind,source=${REPOSITORY_PATH}/rhDemo/infra/jenkins-docker/certs/registry/registry.crt,destination=/etc/ssl/certs/registry.crt,readonly
+                type=bind,source=${REPOSITORY_PATH}/rhDemo/infra/jenkins-docker/certs/ca/root-ca.crt,destination=/etc/ssl/certs/rhdemo-root-ca.crt,readonly
               network: "rhdemo-jenkins-network"
               extraGroupsString: "984"
               environmentsString: |
@@ -133,13 +134,34 @@ tool:
 
 # ═══════════════════════════════════════════════════════════════════
 # CREDENTIALS
-# ⚠️  Les credentials sont gérés manuellement dans Jenkins UI
-#     pour permettre la persistance entre les redémarrages
+# ⚠️  Les credentials sont gérés manuellement dans Jenkins UI (ou par
+#     rhDemo/scripts/openbao-migrate.py), jamais par JCasC : une section credentials
+#     ici remplacerait tous ceux du domaine global à chaque rechargement.
+#
+# OpenBao (docs/OPENBAO.md) : les credentials marqués [OpenBao] sont des références
+# (plugin HashiCorp Vault, même identifiant) vers kv/jenkins/<id>, créées par
+# openbao-migrate.py jenkins. Les pipelines les lisent toujours par withCredentials /
+# credentials(), sans changement. Valeurs renouvelées dans OpenBao par rotate-secrets.py.
+#
+# 0a. openbao-approle (Vault App Role Credential) — seul secret d'accès à OpenBao
+#    - Créé et renouvelé par openbao-migrate.py jenkins-approle / rotate-secrets.py
+#      openbao-approle-jenkins (secret_id de 100 jours, période de rotation 90 jours)
+#    - Utilisé par le plugin (unclassified.hashicorpVault plus bas)
+#
+# 0b. openbao-cosign-approle (Username with password : role_id / secret_id)
+#    - AppRole jenkins-cosign : signature Cosign par Transit (Jenkinsfile-CI)
+#    - Créé par openbao-migrate.py cosign-approle, renouvelé par rotate-secrets.py
+#      openbao-approle-cosign
+#
+# 0c. cosign-public-key-transit (Secret file) : clé publique de la clé Transit
+#    (configure-openbao.sh cosign l'affiche). cosign-public-key garde l'ancienne clé tant
+#    que des images signées avec elle restent déployables (Jenkinsfile-CD essaie les deux).
 #
 # Liste des credentials à créer manuellement :
 # (renouvellement : rhDemo/scripts/rotate-secrets.py, inventaire rhDemo/secrets/inventory.yaml)
 #
-# 1. sops-age-key (Secret file)
+# 1. sops-age-key (Secret file) — PLUS UTILISÉ par les pipelines (ephemere : secrets générés à
+#    chaque build par Jenkinsfile-CI ; stagingkub : OpenBao + ESO). À supprimer à l'abandon de SOPS.
 #    - Type: Secret file
 #    - ID: sops-age-key
 #    - File: Votre fichier de clé AGE privée (~/.config/sops/age/keys.txt)
@@ -164,8 +186,8 @@ tool:
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
 #    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
 #
-# 5. ci-bot-forgejo-token
-#    - Type: Secret text
+# 5. ci-bot-forgejo-token [OpenBao]
+#    - Type: Secret text (avant migration) / Vault Secret Text Credential (kv/jenkins/ci-bot-forgejo-token)
 #    - ID: ci-bot-forgejo-token
 #    - Secret: token du compte Codeberg dédié "cibot-leuwen-lc" (PAS le compte personnel
 #      leuwen-lc), scopes "repository" + "issue" (read/write, pas d'accès admin) — le scope
@@ -190,21 +212,21 @@ tool:
 #    - Usage: RHDemo-Renovate — liste/synchronise/merge les PRs Renovate + commentaires
 #    - Distinct du token utilisé par /fixcve-auto (isolation des responsabilités)
 #
-# 6. renovate-gpg-key (Secret text)
+# 6. renovate-gpg-key (Secret text) [OpenBao]
 #    - Type: Secret text
 #    - ID: renovate-gpg-key
 #    - Secret: clé GPG privée exportée en base64, utilisée pour signer les commits Renovate ;
 #      générée et publiée sur le compte bot par rotate-secrets.py renovate-gpg-key
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
-# 7. renovate-github-token (Secret text)
+# 7. renovate-github-token (Secret text) [OpenBao]
 #    - Type: Secret text
 #    - ID: renovate-github-token
 #    - Secret: token GitHub read-only (repos publics), pour les lookups de changelogs/release
 #      notes des dépendances hébergées sur GitHub
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate"
 #
-# 8. renovate-forgejo-token (Secret text)
+# 8. renovate-forgejo-token (Secret text) [OpenBao]
 #    - Type: Secret text
 #    - ID: renovate-forgejo-token
 #    - Secret: token du compte bot renovate-leuwen-lc (distinct de ci-bot-forgejo-token),
@@ -236,7 +258,7 @@ tool:
 #      Notification (host mail.infomaniak.com:465 SSL, credential ci-dessus) — JCasC ne gérant
 #      pas ce bloc, il ne l'écrase pas non plus au redémarrage.
 #
-# 10. notification-email (Secret text)
+# 10. notification-email (Secret text) [OpenBao]
 #    - Type: Secret text
 #    - ID: notification-email
 #    - Secret: la même adresse mail que smtp-infomaniak-credentials (Username ci-dessus) et
@@ -249,7 +271,7 @@ tool:
 #      bénéfice (contrairement à security.txt, exposition volontaire pour un contact sécurité)
 #      et alimente le harvesting de spam.
 #
-# 11. dockerhub-renovate-readonly
+# 11. dockerhub-renovate-readonly [OpenBao]
 #    - Type: Username with password
 #    - ID: dockerhub-renovate-readonly
 #    - Username: identifiant Docker Hub (Docker ID, pas l'adresse e-mail) ; Password : jeton
@@ -265,6 +287,17 @@ tool:
 # CONFIGURATION GLOBALE
 # ═══════════════════════════════════════════════════════════════════
 unclassified:
+  # OpenBao (plugin HashiCorp Vault) : AppRole « jenkins », lecture de kv/jenkins/* seulement.
+  # TLS vérifié par la racine locale importée dans le truststore Java (Dockerfile.jenkins) ;
+  # ne jamais activer skipSslVerification.
+  hashicorpVault:
+    configuration:
+      vaultUrl: "https://openbao:8200"
+      vaultCredentialId: "openbao-approle"
+      engineVersion: 2
+      skipSslVerification: false
+      timeout: 30
+
   # Configuration SonarQube
   sonarGlobalConfiguration:
     installations:
@@ -345,7 +378,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.11')
+                branches('*/evolution_openbao')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -433,7 +466,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.11')
+                branches('*/evolution_openbao')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -467,6 +500,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   # PIPELINE RENOVATE - Validation et automerge des PRs Renovate
   # ─────────────────────────────────────────────────────────────────
+  # Reste sur evolutions-post-1.1.11 pendant le développement d'OpenBao : BASE_BRANCH de
+  # Jenkinsfile-Renovate et baseBranchPatterns de renovate.json visent cette branche. Les
+  # jobs CI, CD et Upgrade-Deploy construisent evolution_openbao (docs/OPENBAO.md).
   - script: |
       pipelineJob('RHDemo-Renovate') {
         displayName('RHDemo - Renovate Automerge')
@@ -567,7 +603,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions-post-1.1.11')
+                branches('*/evolution_openbao')
                 extensions {
                   cloneOptions {
                     shallow(false)

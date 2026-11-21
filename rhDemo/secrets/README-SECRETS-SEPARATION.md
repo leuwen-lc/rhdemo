@@ -8,15 +8,17 @@ Les environnements `ephemere` (Docker Compose) et `stagingkub` (Kubernetes) util
 
 | Fichier | Environnement | Utilisation | Chiffrement |
 |---------|---------------|-------------|-------------|
-| `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
-| `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Environnement permanent Kubernetes | SOPS/Age |
+| `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | **Plus utilisé** : valeurs générées aléatoirement à chaque build par `Jenkinsfile-CI` ; fichier à supprimer après validation (docs/OPENBAO.md) | SOPS/Age |
+| `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Transition : source unique de `openbao-migrate.py stagingkub`, puis supprimé ; les secrets vivent dans OpenBao (`kv/stagingkub/*`), synchronisés par ESO | SOPS/Age |
 | `secrets-rhdemo.yml` | **local** | Test local | Non chiffré, non commité |
 
 ## 🔐 Gestion des secrets
 
 ### Pour l'environnement ephemere (Docker Compose)
 
-**Fichier source**: `secrets/secrets-ephemere.yml`
+**Depuis la branche `evolution_openbao`** : plus de fichier. Le stage « Génération Secrets ephemere » de `Jenkinsfile-CI` tire des valeurs aléatoires à chaque build (environnement jetable). La suite de cette section décrit l'ancien fonctionnement, jusqu'à la suppression du fichier.
+
+**Fichier source (ancien)**: `secrets/secrets-ephemere.yml`
 
 **Utilisé par**:
 - `Jenkinsfile` (pipeline monolithique)

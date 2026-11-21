@@ -287,39 +287,6 @@ fi
 # Pas besoin de ConfigMaps manuels comme avec nginx-ingress
 echo -e "${GREEN}✅ Headers X-Forwarded-* configurés automatiquement par NGF${NC}"
 
-# Charger les secrets depuis SOPS si disponibles
-echo -e "${YELLOW}▶ Chargement des secrets...${NC}"
-SECRETS_FILE="$RHDEMO_ROOT/secrets/secrets-stagingkub.yml"
-SECRETS_DECRYPTED="/tmp/secrets-stagingkub-decrypted.yml"
-
-if [ -f "$SECRETS_FILE" ]; then
-    # Déchiffrer les secrets avec SOPS
-    if command -v sops &> /dev/null; then
-        echo -e "${YELLOW}Déchiffrement des secrets avec SOPS...${NC}"
-        sops -d "$SECRETS_FILE" > "$SECRETS_DECRYPTED"
-
-        # Extraire les mots de passe depuis le fichier déchiffré avec yq (version apt)
-        RHDEMO_DB_PASSWORD=$(yq -r '.rhdemo.datasource.password.pg' "$SECRETS_DECRYPTED")
-        KEYCLOAK_DB_PASSWORD=$(yq -r '.keycloak.db.password' "$SECRETS_DECRYPTED")
-        KEYCLOAK_ADMIN_PASSWORD=$(yq -r '.keycloak.admin.password // "admin"' "$SECRETS_DECRYPTED")
-
-        rm "$SECRETS_DECRYPTED"
-        echo -e "${GREEN}✅ Secrets déchiffrés${NC}"
-    else
-        echo -e "${YELLOW}⚠️  SOPS non disponible, utilisation de mots de passe par défaut${NC}"
-        RHDEMO_DB_PASSWORD="changeme"
-        KEYCLOAK_DB_PASSWORD="changeme"
-        KEYCLOAK_ADMIN_PASSWORD="admin"
-    fi
-else
-    echo -e "${YELLOW}⚠️  Fichier de secrets non trouvé, utilisation de mots de passe par défaut${NC}"
-    RHDEMO_DB_PASSWORD="changeme"
-    KEYCLOAK_DB_PASSWORD="changeme"
-    KEYCLOAK_ADMIN_PASSWORD="admin"
-fi
-
-
-
 # Créer le namespace si nécessaire avec les labels Helm et Pod Security Admission
 echo -e "${YELLOW}▶ Création du namespace rhdemo-stagingkub...${NC}"
 cat <<EOF | kubectl apply -f -
@@ -343,47 +310,19 @@ metadata:
 EOF
 echo -e "${GREEN}✅ Namespace créé avec labels Helm et PSA warn/audit restricted${NC}"
 
-# Créer les secrets Kubernetes
-echo -e "${YELLOW}▶ Création des secrets Kubernetes...${NC}"
-
-# Secret pour rhdemo-db
-kubectl create secret generic rhdemo-db-secret \
-  --from-literal=password="$RHDEMO_DB_PASSWORD" \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Secret pour keycloak-db
-kubectl create secret generic keycloak-db-secret \
-  --from-literal=password="$KEYCLOAK_DB_PASSWORD" \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Secret pour keycloak admin
-kubectl create secret generic keycloak-admin-secret \
-  --from-literal=password="$KEYCLOAK_ADMIN_PASSWORD" \
-  --namespace rhdemo-stagingkub \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-echo -e "${GREEN}✅ Secrets créés${NC}"
-
-# Créer le secret pour secrets-rhdemo.yml (sera mis à jour par Jenkins)
-echo -e "${YELLOW}▶ Création du secret pour secrets-rhdemo.yml...${NC}"
-SECRETS_RHDEMO_FILE="$RHDEMO_ROOT/secrets/secrets-rhdemo.yml"
-if [ -f "$SECRETS_RHDEMO_FILE" ]; then
-    kubectl create secret generic rhdemo-app-secrets \
-      --from-file=secrets-rhdemo.yml="$SECRETS_RHDEMO_FILE" \
-      --namespace rhdemo-stagingkub \
-      --dry-run=client -o yaml | kubectl apply -f -
-    echo -e "${GREEN}✅ Secret secrets-rhdemo.yml créé${NC}"
-else
-    echo -e "${YELLOW}⚠️  Fichier secrets-rhdemo.yml non trouvé, création d'un secret vide${NC}"
-    echo "# Placeholder" > /tmp/secrets-rhdemo.yml
-    kubectl create secret generic rhdemo-app-secrets \
-      --from-file=secrets-rhdemo.yml=/tmp/secrets-rhdemo.yml \
-      --namespace rhdemo-stagingkub \
-      --dry-run=client -o yaml | kubectl apply -f -
-    rm /tmp/secrets-rhdemo.yml
-fi
+# ═══════════════════════════════════════════════════════════════
+# Secrets applicatifs : OpenBao + External Secrets Operator (docs/OPENBAO.md)
+# ═══════════════════════════════════════════════════════════════
+# Plus de secrets-stagingkub.yml déchiffré ici : ESO crée rhdemo-db-secret,
+# keycloak-db-secret, keycloak-admin-secret et rhdemo-app-secrets depuis
+# kv/stagingkub/* d'OpenBao. Prérequis : OpenBao démarré et déverrouillé
+# (infra/jenkins-docker/openbao/unseal.sh), alimenté (openbao-migrate.py stagingkub).
+# L'authentification Kubernetes d'OpenBao est (re)configurée pour CE cluster :
+# l'autorité du cluster change à chaque recréation.
+echo -e "${YELLOW}▶ Secrets applicatifs (OpenBao + ESO)...${NC}"
+OPENBAO_DIR="$(cd "$STAGINGKUB_DIR/../jenkins-docker/openbao" && pwd)"
+"$OPENBAO_DIR/configure-openbao.sh" kubernetes
+"${SCRIPT_DIR}/components/install-external-secrets.sh"
 
 # ═══════════════════════════════════════════════════════════════
 # CONFIGURATION RBAC POUR JENKINS (accès limité au namespace)

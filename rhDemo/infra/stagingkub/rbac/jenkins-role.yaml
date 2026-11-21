@@ -45,6 +45,12 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 
+  # ExternalSecrets (ESO, docs/OPENBAO.md) : lecture de leur état par Jenkinsfile-CD.
+  # Les Secrets applicatifs sont écrits par ESO depuis OpenBao, plus par Jenkins.
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets", "secretstores"]
+    verbs: ["get", "list", "watch"]
+
   # PersistentVolumeClaims : Helm gère les PVC via StatefulSets
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]

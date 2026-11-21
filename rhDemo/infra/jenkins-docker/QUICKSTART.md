@@ -31,7 +31,6 @@ Jenkins est accessible sur **http://localhost:8080**.
 
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|
-| `sops-age-key` | Secret file | Clé age pour déchiffrer `secrets-ephemere.yml` — voir `rhDemo/docs/SOPS_SETUP.md` |
 | `jenkins-sonar-token` | Secret text | `docker start rhdemo-sonarqube-db rhdemo-sonarqube` (SonarQube est arrêté hors CI), puis http://localhost:9020 → My Account → Security → Generate Token |
 | `nvd-api-key` | Secret text | https://nvd.nist.gov/developers/request-an-api-key |
 | `cosign-private-key` | Secret file | Fichier `cosign.key` généré ci-dessous (pipeline CI) |
@@ -69,11 +68,10 @@ Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus
 
 > Détail de l'étude et du RBAC : `docs/STAGINGKUB_REBUILD_PIPELINE.md` et `infra/stagingkub/rbac/README.md`.
 
-### Secrets SOPS (environnement ephemere)
+### Secrets
 
-1. Installez SOPS et créez une clé age (voir `rhDemo/docs/SOPS_SETUP.md`)
-2. Créez `secrets-ephemere.yml` depuis le template `secrets-ephemere.yml.template`
-3. Chiffrez-le avec SOPS
+- **ephemere** : rien à créer, `Jenkinsfile-CI` génère des valeurs aléatoires à chaque build.
+- **OpenBao** (Renovate, notifications, Cosign, stagingkub) : suivre `rhDemo/docs/OPENBAO.md`.
 
 ### Clés Cosign (à générer une seule fois)
 

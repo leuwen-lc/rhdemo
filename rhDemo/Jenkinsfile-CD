@@ -47,14 +47,9 @@ pipeline {
         K8S_CONTEXT = 'kind-rhdemo'
         CLUSTER_NAME = 'rhdemo'
 
-        // Fichiers de secrets SOPS (stagingkub utilise ses propres secrets, différents de staging Docker Compose)
-        SECRETS_FILE = 'rhDemo/secrets/secrets-stagingkub.yml'
-        // Répertoire isolé hors workspace pour les secrets déchiffrés (sécurité)
-        // Préfixe "-cd-" pour éviter collision si CI et CD tournent en parallèle sur le même agent
-        SECRETS_TMP_DIR   = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}"
-        SECRETS_DECRYPTED = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/secrets-decrypted.yml"
-        SECRETS_ENV_VARS  = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/env-vars.sh"
-        SECRETS_RHDEMO    = "/tmp/rhdemo-secrets-cd-${BUILD_NUMBER}/secrets-rhdemo.yml"
+        // Secrets applicatifs : écrits dans le namespace par External Secrets Operator depuis
+        // OpenBao (kv/stagingkub/*), plus par ce pipeline (docs/OPENBAO.md, étape 3).
+        EXTERNAL_SECRETS = 'rhdemo-db-secret keycloak-db-secret keycloak-admin-secret rhdemo-app-secrets'
 
         // URLs
         APP_URL = 'https://rhdemo-stagingkub.intra.leuwen-lc.fr'
@@ -172,117 +167,6 @@ pipeline {
 
                     echo "✅ Version de l'image à déployer: ${env.DEPLOY_IMAGE_TAG}"
                 }
-            }
-        }
-
-        stage('🔓 Déchiffrement Secrets SOPS') {
-            steps {
-                script {
-                    echo '▶ Vérification SOPS et YQ...'
-                }
-                sh '''
-                    sops --version
-                    yq --version
-                '''
-
-                script {
-                    echo '▶ Déchiffrement du fichier de secrets...'
-                }
-
-                // Utiliser le credential sops-age-key de manière sécurisée
-                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
-                    sh '''
-                        # Créer le répertoire temporaire isolé hors workspace (permissions strictes)
-                        mkdir -p ${SECRETS_TMP_DIR}
-                        chmod 700 ${SECRETS_TMP_DIR}
-
-                        # Déchiffrer le fichier de secrets
-                        echo "Déchiffrement de ${SECRETS_FILE}..."
-                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
-                        chmod 600 ${SECRETS_DECRYPTED}
-
-                        # Vérifier que le fichier a été déchiffré
-                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
-                            echo "❌ Échec du déchiffrement"
-                            exit 1
-                        fi
-
-                        echo "✅ Secrets déchiffrés avec succès"
-
-                        # Extraire les valeurs pour les variables d'environnement
-                        # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets dans les logs
-                        set +x
-
-                        # Exporter les secrets comme variables d'environnement pour les stages suivants
-                        {
-                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
-                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
-                            echo "{ set +x; } 2>/dev/null"
-                            echo ""
-
-                            echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
-
-                            # Mots de passe Keycloak pour environnement staging
-                            echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
-                            echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
-                            echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // \"admin\"' ${SECRETS_DECRYPTED})"
-                        } > ${SECRETS_ENV_VARS} 2>&1
-                        chmod 600 ${SECRETS_ENV_VARS}
-
-                        # Réactiver l'écho des commandes
-                        set -x
-
-                        echo "✅ Variables d'environnement préparées dans ${SECRETS_ENV_VARS}"
-                    '''
-                }
-            }
-            post {
-                always {
-                    script {
-                        // Supprimer le fichier déchiffré pour la sécurité
-                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
-                    }
-                }
-            }
-        }
-
-        stage('🔐 Extraction secrets rhDemo') {
-            steps {
-                script {
-                    echo '▶ Création du fichier secrets-rhdemo.yml pour rhDemo...'
-                }
-
-                sh '''
-                    # SÉCURITÉ: Désactiver l'écho des commandes
-                    set +x
-
-                    # Source les secrets (depuis /tmp, hors workspace)
-                    . ${SECRETS_ENV_VARS}
-
-                    # Créer le fichier secrets-rhdemo.yml (dans /tmp, hors workspace)
-                    cat > ${SECRETS_RHDEMO} <<EOF
-
-rhdemo:
-  datasource:
-    password:
-      pg: ${RHDEMO_DATASOURCE_PASSWORD_PG}
-      h2: ${RHDEMO_DATASOURCE_PASSWORD_H2}
-  client:
-    registration:
-      keycloak:
-        client:
-          secret: ${RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET}
-EOF
-
-                    chmod 600 ${SECRETS_RHDEMO}
-
-                    # Réactiver l'écho
-                    set -x
-
-                    echo "✅ Fichier ${SECRETS_RHDEMO} créé hors workspace"
-                '''
             }
         }
 
@@ -502,54 +386,60 @@ EOF
                     }
                 }
 
-                withCredentials([file(credentialsId: 'cosign-public-key', variable: 'COSIGN_PUB_KEY')]) {
-                    sh """
-                        # Configuration du certificat CA pour HTTPS
+                script {
+                    // Digest de l'image (Copy Artifact de la CI, sinon registry)
+                    env.VERIFY_IMAGE_REF = sh(returnStdout: true, script: """
                         REGISTRY_CERT="/etc/ssl/certs/registry.crt"
-
-                        # Utiliser le digest fourni par Copy Artifact si disponible (plus sécurisé)
-                        # Sinon, le récupérer depuis le registry
                         if [ -n "${env.DEPLOY_IMAGE_DIGEST ?: ''}" ]; then
-                            echo "▶ Utilisation du digest fourni par le build CI (méthode sécurisée)"
                             DIGEST="${env.DEPLOY_IMAGE_DIGEST}"
                         else
-                            echo "▶ Récupération du digest depuis le registry (HTTPS)..."
                             DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
                                 https://kind-registry:5000/v2/${env.DOCKER_IMAGE_NAME}/manifests/${env.DEPLOY_IMAGE_TAG} \
                                 | grep -i "Docker-Content-Digest" \
                                 | awk '{print \$2}' \
-                                | tr -d '\r')
+                                | tr -d '\\r')
                         fi
+                        [ -n "\$DIGEST" ] && echo "kind-registry:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST" || true
+                    """).trim()
+                    if (!env.VERIFY_IMAGE_REF) {
+                        error("❌ Impossible de récupérer le digest de l'image")
+                    }
+                    echo "   Image ref: ${env.VERIFY_IMAGE_REF}"
 
-                        if [ -z "\$DIGEST" ]; then
-                            echo "❌ Impossible de récupérer le digest de l'image"
-                            exit 1
-                        fi
-
-                        # Cosign utilise kind-registry:5000 (HTTPS direct depuis le conteneur Jenkins)
-                        IMAGE_REF="kind-registry:5000/${env.DOCKER_IMAGE_NAME}@\$DIGEST"
-                        echo "   Digest: \$DIGEST"
-                        echo "   Image ref: \$IMAGE_REF"
-
-                        # Vérifier la signature avec Cosign (avec certificat CA)
-                        echo "▶ Vérification de la signature..."
-                        if SSL_CERT_FILE=\$REGISTRY_CERT cosign verify --key "\${COSIGN_PUB_KEY}" \
-                            --insecure-ignore-tlog=true \
-                            "\$IMAGE_REF" 2>&1; then
-                            echo "✅ Signature valide - l'image a été signée par le pipeline CI"
-                        else
-                            echo "❌ ERREUR: Signature invalide ou absente !"
-                            echo ""
-                            echo "   L'image n'a pas été signée par le pipeline CI ou la signature est corrompue."
-                            echo "   Cela peut indiquer:"
-                            echo "   - L'image a été poussée manuellement sans signature"
-                            echo "   - L'image a été modifiée après signature"
-                            echo "   - Les clés Cosign ne correspondent pas"
-                            echo ""
-                            echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
-                            exit 1
-                        fi
-                    """
+                    // Clé publique de la clé Transit OpenBao d'abord, puis l'ancienne clé fichier,
+                    // gardée tant que des images signées avec elle restent déployables
+                    // (ETUDE_OPENBAO.md §7.2 étape 2, docs/OPENBAO.md). Un credential absent est ignoré.
+                    def verified = null
+                    for (credId in ['cosign-public-key-transit', 'cosign-public-key']) {
+                        try {
+                            withCredentials([file(credentialsId: credId, variable: 'COSIGN_PUB_KEY')]) {
+                                def rc = sh(returnStatus: true, script: '''
+                                    SSL_CERT_FILE=/etc/ssl/certs/registry.crt cosign verify --key "$COSIGN_PUB_KEY" \
+                                        --insecure-ignore-tlog=true "$VERIFY_IMAGE_REF"
+                                ''')
+                                if (rc == 0) {
+                                    verified = credId
+                                }
+                            }
+                        } catch (InterruptedException ie) {
+                            throw ie   // build interrompu : ne pas l'avaler
+                        } catch (Exception e) {
+                            // Credential absent (seule exception possible ici : sh returnStatus ne lève pas)
+                            echo "ℹ️  Credential ${credId} indisponible, ignoré : ${e.message}"
+                        }
+                        if (verified) {
+                            break
+                        }
+                    }
+                    if (verified) {
+                        echo "✅ Signature valide (clé ${verified}) - l'image a été signée par le pipeline CI"
+                    } else {
+                        echo "❌ ERREUR: Signature invalide ou absente !"
+                        echo "   L'image n'a pas été signée par le pipeline CI, a été modifiée après signature,"
+                        echo "   ou aucune clé publique connue (cosign-public-key-transit, cosign-public-key) ne correspond."
+                        echo "   Pour résoudre: relancez le pipeline CI pour reconstruire et signer l'image"
+                        error('Vérification de signature Cosign échouée')
+                    }
                 }
             }
         }
@@ -558,46 +448,32 @@ EOF
         // PHASE 3 : MISE À JOUR DES SECRETS KUBERNETES
         // ════════════════════════════════════════════════════════════════
 
-        stage('☸️ Update Kubernetes Secrets') {
+        stage('☸️ Vérification Secrets (ESO)') {
             steps {
                 script {
-                    echo "▶ Mise à jour des secrets Kubernetes..."
+                    echo "▶ Vérification des secrets synchronisés par ESO depuis OpenBao..."
                 }
                 sh """
-                    # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets
-                    set +x
-
-                    # Charger les secrets depuis /tmp (hors workspace)
-                    . ${SECRETS_ENV_VARS}
-
-                    # Note: Le kubeconfig RBAC définit déjà current-context correctement
-
-                    # Mettre à jour les secrets Kubernetes
-                    kubectl create secret generic rhdemo-db-secret \\
-                      --from-literal=password="\${RHDEMO_DATASOURCE_PASSWORD_PG}" \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --dry-run=client -o yaml | kubectl apply -f -
-
-                    kubectl create secret generic keycloak-db-secret \\
-                      --from-literal=password="\${KEYCLOAK_DB_PASSWORD}" \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --dry-run=client -o yaml | kubectl apply -f -
-
-                    kubectl create secret generic keycloak-admin-secret \\
-                      --from-literal=password="\${KEYCLOAK_ADMIN_PASSWORD}" \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --dry-run=client -o yaml | kubectl apply -f -
-
-                    # Mettre à jour le secret pour secrets-rhdemo.yml (lu depuis /tmp, hors workspace)
-                    kubectl create secret generic rhdemo-app-secrets \\
-                      --from-file=secrets-rhdemo.yml=${SECRETS_RHDEMO} \\
-                      --namespace ${env.K8S_NAMESPACE} \\
-                      --dry-run=client -o yaml | kubectl apply -f -
-
-                    # Réactiver l'écho
-                    set -x
-
-                    echo "✅ Secrets Kubernetes mis à jour"
+                    # Aucun secret ne transite par Jenkins : seul l'état des ExternalSecret est lu.
+                    FAILED=""
+                    for ES in ${env.EXTERNAL_SECRETS}; do
+                        READY=\$(kubectl get externalsecret "\$ES" -n ${env.K8S_NAMESPACE} \
+                            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)
+                        if [ "\$READY" = "True" ]; then
+                            echo "   ✓ \$ES synchronisé"
+                        else
+                            echo "   ✗ \$ES non synchronisé (Ready=\${READY:-absent})"
+                            FAILED="\$FAILED \$ES"
+                        fi
+                    done
+                    if [ -n "\$FAILED" ]; then
+                        echo "❌ ExternalSecret non synchronisé(s) :\$FAILED"
+                        echo "   Causes probables : OpenBao scellé (infra/jenkins-docker/openbao/unseal.sh),"
+                        echo "   OpenBao non raccordé au réseau kind (repair-cluster-after-restart.sh),"
+                        echo "   ESO absent (init-stagingkub.sh). Voir docs/OPENBAO.md."
+                        exit 1
+                    fi
+                    echo "✅ Secrets Kubernetes à jour (ESO)"
                 """
             }
         }
@@ -889,10 +765,6 @@ EOF
 
                 // Supprimer les fichiers de secrets et le répertoire temporaire isolé
                 sh """
-                    rm -f ${env.SECRETS_DECRYPTED} 2>/dev/null || true
-                    rm -f ${env.SECRETS_ENV_VARS} 2>/dev/null || true
-                    rm -f ${env.SECRETS_RHDEMO} 2>/dev/null || true
-                    rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true
 
                     echo "✅ Nettoyage terminé"
                 

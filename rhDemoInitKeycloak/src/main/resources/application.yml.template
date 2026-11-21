@@ -15,7 +15,7 @@
 # src/test/resources/-credentials.yml du projet de test rhDemoAPITestIHM
 # 
 # Pour le ephemere le fichier application-ephemere.yml est généré directement par le Jenkinsfile 
-# en utilisant les secrets encodés en SOPS dans rhDemo/secrets/secrets-ephemere.yml
+# avec des secrets générés aléatoirement à chaque build (stage « Génération Secrets ephemere »)
 
 
 # ========================================

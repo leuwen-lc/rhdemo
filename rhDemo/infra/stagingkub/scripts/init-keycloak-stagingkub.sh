@@ -13,7 +13,8 @@
 # Prérequis:
 #   - Cluster Kubernetes stagingkub démarré
 #   - Keycloak déployé et accessible
-#   - SOPS installé pour déchiffrer les secrets
+#   - OpenBao démarré et déverrouillé (infra/jenkins-docker/openbao/unseal.sh),
+#     alimenté par openbao-migrate.py stagingkub (docs/OPENBAO.md)
 #   - Maven installé
 # ════════════════════════════════════════════════════════════════
 
@@ -30,7 +31,8 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHDEMO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 INIT_KEYCLOAK_DIR="$(cd "${RHDEMO_ROOT}/../rhDemoInitKeycloak" && pwd)"
-SECRETS_FILE="${RHDEMO_ROOT}/secrets/secrets-stagingkub.yml"
+# shellcheck source=../../jenkins-docker/openbao/lib.sh
+source "${RHDEMO_ROOT}/infra/jenkins-docker/openbao/lib.sh"
 K8S_NAMESPACE="rhdemo-stagingkub"
 K8S_CONTEXT="kind-rhdemo"
 
@@ -52,20 +54,13 @@ if [ ! -d "${INIT_KEYCLOAK_DIR}" ]; then
 fi
 echo -e "${GREEN}✓ Répertoire rhDemoInitKeycloak trouvé${NC}"
 
-# Vérifier que le fichier de secrets existe
-if [ ! -f "${SECRETS_FILE}" ]; then
-    echo -e "${RED}✗ Fichier de secrets non trouvé: ${SECRETS_FILE}${NC}"
+# Vérifier qu'OpenBao est déverrouillé
+BAO_STATE="$(openbao_seal_state)"
+if [ "${BAO_STATE}" != "unsealed" ]; then
+    echo -e "${RED}✗ OpenBao est « ${BAO_STATE} » : infra/jenkins-docker/openbao/unseal.sh${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ Fichier de secrets trouvé${NC}"
-
-# Vérifier que SOPS est installé
-if ! command -v sops &> /dev/null; then
-    echo -e "${RED}✗ SOPS n'est pas installé${NC}"
-    echo -e "${YELLOW}  Installez SOPS: https://github.com/mozilla/sops${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ SOPS installé${NC}"
+echo -e "${GREEN}✓ OpenBao déverrouillé${NC}"
 
 # Vérifier que kubectl est installé
 if ! command -v kubectl &> /dev/null; then
@@ -120,31 +115,25 @@ echo ""
 # Déchiffrement et extraction des secrets
 # ════════════════════════════════════════════════════════════════
 
-echo -e "${YELLOW}▶ Déchiffrement et extraction des secrets...${NC}"
+echo -e "${YELLOW}▶ Lecture des secrets dans OpenBao (kv/stagingkub, kv/stagingkub-tests)...${NC}"
 
-# Déchiffrer le fichier de secrets en mémoire
-DECRYPTED_SECRETS=$(sops -d "${SECRETS_FILE}")
+openbao_admin_login || { echo -e "${RED}✗ Connexion admin à OpenBao refusée${NC}"; exit 1; }
+trap openbao_admin_logout EXIT
 
-# Fonction pour extraire une valeur du YAML déchiffré
-extract_secret() {
-    local key=$1
-    echo "$DECRYPTED_SECRETS" | grep "^[[:space:]]*${key}:" | sed 's/.*: *//' | tr -d '"' | tr -d "'"
-}
+KEYCLOAK_ADMIN_USER=$(openbao_kv_get stagingkub/keycloak admin_user)
+KEYCLOAK_ADMIN_PASSWORD=$(openbao_kv_get stagingkub/keycloak admin_password)
+KEYCLOAK_CLIENT_SECRET=$(openbao_kv_get stagingkub/rhdemo oidc_client_secret)
 
-# Extraction des secrets Keycloak admin
-KEYCLOAK_ADMIN_USER=$(extract_secret "user")
-KEYCLOAK_ADMIN_PASSWORD=$(extract_secret "password" | tail -1)  # Prendre le dernier (admin password)
+TEST_USER_ADMIN=$(openbao_kv_get stagingkub-tests/users iduseradmin)
+TEST_PWD_ADMIN=$(openbao_kv_get stagingkub-tests/users pwduseradmin)
+TEST_USER_MAJ=$(openbao_kv_get stagingkub-tests/users idusermaj)
+TEST_PWD_MAJ=$(openbao_kv_get stagingkub-tests/users pwdusermaj)
+TEST_USER_CONSULT=$(openbao_kv_get stagingkub-tests/users iduserconsult)
+TEST_PWD_CONSULT=$(openbao_kv_get stagingkub-tests/users pwduserconsult)
 
-# Extraction du secret client
-KEYCLOAK_CLIENT_SECRET=$(extract_secret "secret")
-
-# Extraction des utilisateurs de test
-TEST_USER_ADMIN=$(extract_secret "iduseradmin")
-TEST_PWD_ADMIN=$(extract_secret "pwduseradmin")
-TEST_USER_MAJ=$(extract_secret "idusermaj")
-TEST_PWD_MAJ=$(extract_secret "pwdusermaj")
-TEST_USER_CONSULT=$(extract_secret "iduserconsult")
-TEST_PWD_CONSULT=$(extract_secret "pwduserconsult")
+# Session OpenBao révoquée dès la fin des lectures (le trap EXIT est repris plus bas).
+openbao_admin_logout
+trap - EXIT
 
 # Vérification que les secrets ont été extraits
 if [ -z "${KEYCLOAK_ADMIN_USER}" ] || [ -z "${KEYCLOAK_ADMIN_PASSWORD}" ] || [ -z "${KEYCLOAK_CLIENT_SECRET}" ]; then
@@ -160,7 +149,7 @@ if [ -z "${TEST_USER_ADMIN}" ] || [ -z "${TEST_PWD_ADMIN}" ] || \
    [ -z "${TEST_USER_MAJ}" ] || [ -z "${TEST_PWD_MAJ}" ] || \
    [ -z "${TEST_USER_CONSULT}" ] || [ -z "${TEST_PWD_CONSULT}" ]; then
     echo -e "${RED}✗ Impossible d'extraire tous les utilisateurs de test${NC}"
-    echo -e "${YELLOW}  Vérifiez que le fichier de secrets contient rhdemo.test.* avec:${NC}"
+    echo -e "${YELLOW}  Vérifiez que kv/stagingkub-tests/users contient :${NC}"
     echo -e "${YELLOW}    - iduseradmin / pwduseradmin${NC}"
     echo -e "${YELLOW}    - idusermaj / pwdusermaj${NC}"
     echo -e "${YELLOW}    - iduserconsult / pwduserconsult${NC}"

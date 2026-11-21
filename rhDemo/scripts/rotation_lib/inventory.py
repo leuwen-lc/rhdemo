@@ -10,15 +10,20 @@ DEFAULT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 LEVELS = ("C", "H", "M")
 EXPOSURES = ("internet", "lan", "local")
 EXPOSURE_ORDER = {e: i for i, e in enumerate(EXPOSURES)}
-TARGET_KEYS = {"jenkins": {"credential", "type"}, "sops": {"file", "key"}}
+TARGET_KEYS = {"jenkins": {"credential", "type"}, "sops": {"file", "key"},
+               "openbao": {"path", "key"}, "approle-file": {"file"}}
+JENKINS_TYPES = ("string", "username-password", "file", "vault-approle")
 METHOD_KEYS = {
     "forgejo-token": {"account", "token_prefix", "scopes"},
     "forgejo-gpg": {"account"},
     "manual-value": {"procedure"},
     "manual": {"procedure"},
+    "openbao-approle": {"role"},
+    "postgres-password": {"kv_path", "kv_key", "namespace", "pod", "db_user", "database",
+                          "external_secrets", "k8s_secret", "restart"},
     "planned": {"phase"},
 }
-NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value"}
+NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}
 
 
 def load(path=DEFAULT_PATH):
@@ -70,7 +75,7 @@ def validate(inv):
                 errors.append(f"{sid} : cible {kind} inconnue")
             elif TARGET_KEYS[kind] - set(t):
                 errors.append(f"{sid} : cible {kind} incomplète")
-            elif kind == "jenkins" and t["type"] not in ("string", "username-password", "file"):
+            elif kind == "jenkins" and t["type"] not in JENKINS_TYPES:
                 errors.append(f"{sid} : type Jenkins {t['type']} inconnu")
     return errors
 

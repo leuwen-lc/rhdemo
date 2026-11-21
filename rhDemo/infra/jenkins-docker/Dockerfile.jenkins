@@ -46,6 +46,20 @@ ENV CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs
 USER root
 RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+
+# ═══════════════════════════════════════════════════════════════════
+# AUTORITÉ LOCALE RHDEMO (OpenBao en TLS, docs/OPENBAO.md)
+# ═══════════════════════════════════════════════════════════════════
+# Le plugin HashiCorp Vault, exécuté par le contrôleur, joint https://openbao:8200 :
+# la racine locale (openbao/init-local-ca.sh ca) est ajoutée au truststore Java.
+# Les jokers (cert[s]/c[a]/root-ca.crt*) rendent la copie facultative (aucune correspondance tant que
+# l'autorité n'existe pas) ; openbao/config.hcl garantit au moins un fichier source.
+# Après création de l'autorité : ./start-jenkins.sh --rebuild.
+COPY openbao/config.hcl cert[s]/c[a]/root-ca.crt* /tmp/rhdemo-ca/
+RUN if [ -f /tmp/rhdemo-ca/root-ca.crt ]; then \
+        keytool -importcert -noprompt -cacerts -storepass changeit \
+            -alias rhdemo-root-ca -file /tmp/rhdemo-ca/root-ca.crt; \
+    fi && rm -rf /tmp/rhdemo-ca
 USER jenkins
 
 # ═══════════════════════════════════════════════════════════════════

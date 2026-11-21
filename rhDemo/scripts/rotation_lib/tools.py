@@ -76,3 +76,37 @@ def gpg_generate(home, uid, algo="rsa4096", expire="2y"):
 def gpg_sign(home, fpr, text):
     return _gpg(home, "--local-user", fpr, "--armor", "--detach-sign",
                 stdin=text.encode("utf-8")).decode("ascii")
+
+
+# --- kubectl (contexte courant de l'utilisateur, jamais une valeur en argument) ------------
+
+def kubectl(*args, stdin=None, timeout=300):
+    """Lance kubectl ; une valeur secrète ne passe que par `stdin`. Renvoie stdout (texte)."""
+    proc = subprocess.run(["kubectl", *args], input=stdin.encode("utf-8") if stdin else None,
+                          capture_output=True, check=False, timeout=timeout)
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+        raise RotationError(f"kubectl {args[0]} {args[1] if len(args) > 1 else ''} : échec ({err[0][:200]})")
+    return proc.stdout.decode("utf-8")
+
+
+# --- fichier AppRole local (fixcve-auto : ~/.config/rhdemo-fixcve/openbao-approle.json) ----
+
+def approle_file_read(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise RotationError(f"fichier AppRole {path} illisible ({type(exc).__name__})") from None
+    if not data.get("role_id") or "secret_id" not in data:
+        raise RotationError(f"fichier AppRole {path} incomplet (role_id, secret_id)")
+    return data
+
+
+def approle_file_write(path, role_id, secret_id):
+    """Écriture atomique, mode 600."""
+    tmp = f"{path}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump({"role_id": role_id, "secret_id": secret_id}, fh)
+    os.replace(tmp, path)

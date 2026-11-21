@@ -19,6 +19,8 @@ CRED_TYPES = {
     "username-password": ("com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl",
                           "password"),
     "file": ("org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl", "secretBytes"),
+    # Plugin HashiCorp Vault (OpenBao) : seul secret restant dans Jenkins pour OpenBao.
+    "vault-approle": ("com.datapipe.jenkins.vault.credentials.VaultAppRoleCredential", "secretId"),
 }
 
 _XML_DECL = re.compile(r"^\s*<\?xml[^>]*\?>")
@@ -91,6 +93,40 @@ class Jenkins:
         if root.find(field) is None:
             raise RotationError(f"Jenkins : champ {field} absent de {cred_id}")
         return root
+
+    def exists(self, cred_id):
+        status, _ = self._get(self._path(cred_id))
+        if status not in (200, 404):
+            raise RotationError(f"Jenkins : lecture de {cred_id} refusée ({status})")
+        return status == 200
+
+    def config_xml(self, cred_id):
+        """XML du credential, secrets masqués par Jenkins (<secret-redacted/>) : sert à
+        contrôler le type, jamais à sauvegarder une valeur."""
+        status, body = self._get(self._path(cred_id))
+        if status != 200:
+            raise RotationError(f"Jenkins : lecture de {cred_id} refusée ({status})")
+        return decode_xml(body)
+
+    def _post(self, path, body=None, ctype="application/xml; charset=utf-8"):
+        headers = {**self._auth, **self._crumb_header()}
+        if body is not None:
+            headers["Content-Type"] = ctype
+        return http("POST", self.url + path, headers, body, opener=self._opener)
+
+    def replace(self, cred_id, xml):
+        """Remplace entièrement un credential existant (le type peut changer)."""
+        data = ("<?xml version='1.1' encoding='UTF-8'?>\n" + xml).encode("utf-8")
+        status, body = self._post(self._path(cred_id), data)
+        if status != 200:
+            raise RotationError(f"Jenkins : remplacement de {cred_id} refusé ({status}) {short(body)}")
+
+    def create(self, xml):
+        """Crée un credential dans le domaine global à partir de son XML."""
+        data = ("<?xml version='1.1' encoding='UTF-8'?>\n" + xml).encode("utf-8")
+        status, body = self._post("/credentials/store/system/domain/_/createCredentials", data)
+        if status != 200:
+            raise RotationError(f"Jenkins : création de credential refusée ({status}) {short(body)}")
 
     def username(self, cred_id):
         node = self.read(cred_id, "username-password").find("username")

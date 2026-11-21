@@ -15,7 +15,8 @@ sudo systemctl restart docker
 cp .env.example .env
 nano .env   # Définir JENKINS_ADMIN_PASSWORD et JENKINS_CLAUDE_PASSWORD
 
-# 3. Démarrer Jenkins
+# 3. Démarrer Jenkins (installation neuve : créer d'abord l'autorité locale et
+#    OpenBao, étapes 1 à 5 de docs/OPENBAO.md ; voir docs/INSTALLATION_COMPLETE.md)
 ./start-jenkins.sh
 ```
 

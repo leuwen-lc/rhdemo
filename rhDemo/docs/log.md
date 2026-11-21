@@ -321,3 +321,8 @@ Branche `evolutions_openbao_postmigration`. Valeurs héritées de SOPS renouvel�
 - `configure-openbao.sh generate-root` : jeton root ponctuel depuis la clé de déverrouillage, OTP jamais affiché ni passé en argument.
 
 `OPENBAO.md` réécrit pour une installation à blanc. `SOPS_SETUP.md` et `ETUDE_OPENBAO.md` reclassés `historique`. Mis à jour : `DECISIONS.md`, `PIPELINES_CI_CD.md`, `FIXCVE_AUTO.md`, `PARAMETRAGE-APPLICATIF-AVEC-KUB.md`, `INVENTAIRE_COMPOSANTS_OPEN_SOURCE.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `RENOVATE_AUTOMERGE_CI.md`, README de `secrets/`, `jenkins-docker` (README, QUICKSTART), `stagingkub` (README, README-INIT-KEYCLOAK), `infra/dev/README.md`, `ENVIRONMENTS.md`.
+
+## [2026-11-21] ingest | INSTALLATION_COMPLETE : ordre d'installation depuis une machine vide
+
+Nouveau guide `INSTALLATION_COMPLETE.md` : séquence d'installation de toute la chaîne (dev, Jenkins et registry, OpenBao, CI et ephemere, stagingkub, CD et Keycloak, observabilité, Renovate, fixcve-auto, fin d'installation, routine après redémarrage), qui renvoie à la documentation de chaque composant. Il explicite deux dépendances d'ordre : l'autorité locale d'OpenBao avant le premier démarrage de Jenkins, et la réémission du certificat d'OpenBao après la création du cluster KinD. La section « Utiliser le projet » du `README.md` racine y renvoie désormais ; note ajoutée dans le `QUICKSTART.md` de Jenkins.
+

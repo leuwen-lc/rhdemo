@@ -160,10 +160,25 @@ cmd_cosign() {
         secret_id_ttl="${SECRET_ID_TTL}" token_type=service >/dev/null
     echo "  ✓ AppRole jenkins-cosign (jeton 10 min)"
     echo ""
-    echo "Clé publique, pour le credential Jenkins cosign-public-key-transit :"
-    docker exec -e BAO_TOKEN "${OPENBAO_CONTAINER}" bao read -field=keys -format=json cosign-transit/keys/cosign \
-        | python3 -I -c 'import json,sys; k=json.load(sys.stdin); print(k[str(max(map(int,k)))]["public_key"])'
-    echo "Ensuite : ./configure-openbao.sh secret-id jenkins-cosign (credential openbao-cosign-approle)."
+    # Clé publique de la dernière version de la clé Transit, écrite dans un fichier pour le
+    # credential Jenkins « Secret file » cosign-public-key-transit (un « Secret text » tient
+    # sur une ligne et casserait le PEM). Pas un secret ; certs/ est ignoré par Git.
+    local pub_dir="${CERTS_DIR:-${SCRIPT_DIR}/../certs}/cosign" pub_file
+    pub_file="${pub_dir}/cosign-transit.pub"
+    mkdir -p "${pub_dir}"
+    bao read -field=keys -format=json cosign-transit/keys/cosign \
+        | python3 -I -c 'import json,sys; k=json.load(sys.stdin); print(k[str(max(map(int,k)))]["public_key"].strip())' \
+        > "${pub_file}.new"
+    openssl pkey -pubin -in "${pub_file}.new" -noout 2>/dev/null \
+        || { rm -f "${pub_file}.new"; echo "❌ Clé publique illisible"; exit 1; }
+    mv "${pub_file}.new" "${pub_file}"
+    chmod 644 "${pub_file}"
+    echo "  ✓ clé publique écrite dans $(cd "${pub_dir}" && pwd)/cosign-transit.pub"
+    echo ""
+    echo "Ensuite :"
+    echo "  1. Jenkins : credential « Secret file » cosign-public-key-transit avec ce fichier"
+    echo "     (après une rotation de la clé Transit, relancer cette commande et remplacer le fichier) ;"
+    echo "  2. rhDemo/scripts/openbao-migrate.py cosign-approle (credential openbao-cosign-approle)."
 }
 
 cmd_kubernetes() {

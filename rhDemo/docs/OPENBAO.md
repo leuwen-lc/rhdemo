@@ -65,7 +65,7 @@ Depuis `rhDemo/infra/jenkins-docker/` :
    - `./openbao-migrate.py jenkins` : pour chaque credential de Renovate et des notifications, écrit la valeur dans `kv/jenkins/<id>` puis remplace le credential par une référence OpenBao du même identifiant. Les tokens Codeberg et la clé GPG ne sont pas recopiés : ils sont renouvelés directement vers OpenBao. Les autres valeurs sont demandées (copier depuis leur source : GitHub, Docker Hub, adresse de notification).
    - Critère : un cycle `RHDemo-Renovate` vert, lectures visibles dans le journal d'audit.
 8. fixcve-auto (étape 1 bis) : `./openbao-migrate.py fixcve`, puis `./fixcve-install.sh --trust` (scripts modifiés). Après un cycle réussi, supprimer `~/.config/rhdemo-fixcve/credentials.sops.yaml`.
-9. Cosign (étape 2) : `openbao/configure-openbao.sh cosign` (affiche la clé publique), créer le credential fichier `cosign-public-key-transit` avec cette clé, puis `./openbao-migrate.py cosign-approle`. Après une CD verte sur une image signée par Transit, supprimer `cosign-private-key` et `cosign-password` ; garder `cosign-public-key` tant que des images signées par l'ancienne clé restent déployables.
+9. Cosign (étape 2) : `openbao/configure-openbao.sh cosign` (écrit la clé publique dans `certs/cosign/cosign-transit.pub`), créer le credential **Secret file** `cosign-public-key-transit` avec ce fichier (un Secret text tient sur une ligne et casserait le PEM), puis `./openbao-migrate.py cosign-approle`. Après une CD verte sur une image signée par Transit, supprimer `cosign-private-key` et `cosign-password` ; garder `cosign-public-key` tant que des images signées par l'ancienne clé restent déployables.
 10. stagingkub (étape 3) : `./openbao-migrate.py stagingkub` (copie depuis `secrets-stagingkub.yml`), puis `infra/stagingkub/scripts/init-stagingkub.sh` ou, sur un cluster existant, `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. Appliquer aussi `infra/stagingkub/rbac/jenkins-role.yaml` (lecture des `ExternalSecret` par la CD).
 11. Renouveler les valeurs copiées depuis SOPS, présentes chiffrées dans l'historique Git public (étape 4) : `./rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db`, et la procédure manuelle de `stagingkub-app-secrets`.
 12. `openbao/configure-openbao.sh revoke-root`.
@@ -123,9 +123,14 @@ Vérifié le 2026-11-21 sur un OpenBao 2.7.2 et un Jenkins jetables (supprimés 
 - *Name Constraints* de l'autorité : certificats d'OpenBao, de la Gateway et du registry acceptés ; certificats émis pour `codeberg.org`, `intra.leuwen-lc.fr.evil.com` ou une IP publique refusés par OpenSSL, Java (JDK de l'image Jenkins) et Go (client `bao`). Sans elles, la clé de l'intermédiaire, sur le disque jusqu'à l'étape 5, permettrait d'intercepter toute connexion des clients qui font confiance à la racine (dont le contrôleur Jenkins vers Codeberg) ;
 - tests unitaires : `scripts/tests/test_openbao.py`.
 
-À valider au premier déploiement (non testé, faute de mémoire disponible pour un second cluster) :
+Vérifié le 2026-11-21 sur le vrai cluster stagingkub (installation de l'étape 10) :
 
-- ESO 2.15.0 : authentification Kubernetes (JWT du client, `system:auth-delegator`), `SecretStore`, gabarit de `rhdemo-app-secrets` ;
-- NetworkPolicy de sortie d'ESO vers l'IP d'OpenBao avec Cilium (`ipBlock` vers un conteneur du réseau `kind`) et entrée du webhook ;
+- ESO 2.15.0 installé par `install-external-secrets.sh` ; authentification Kubernetes (JWT du client, `system:auth-delegator`) acceptée par OpenBao ; `SecretStore` prêt ;
+- NetworkPolicy de sortie d'ESO vers l'IP fixe d'OpenBao (`ipBlock`) fonctionnelle avec Cilium ;
+- les 4 Secrets recréés par ESO, avec ESO pour propriétaire, aux valeurs identiques aux anciennes (gabarit de `rhdemo-app-secrets` compris) ; pods applicatifs inchangés.
+
+À valider au premier déploiement :
+
+- entrée du webhook d'ESO depuis l'API Server (`allow-apiserver-to-webhook`) : sollicitée seulement à la création ou modification d'un `ExternalSecret`/`SecretStore`, passée sans erreur à l'installation ;
 - rotation PostgreSQL sur le vrai cluster (authentification locale de `psql` dans le pod) ;
 - signature d'une vraie image par la CI et vérification par la CD avec deux clés.

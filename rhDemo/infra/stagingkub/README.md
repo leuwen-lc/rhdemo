@@ -329,7 +329,16 @@ curl -k https://rhdemo-stagingkub.intra.leuwen-lc.fr/actuator/health
 | `scripts/init-stagingkub.sh` | Script d'initialisation (reconstruction complète) |
 | `scripts/repair-cluster-after-restart.sh` | Réparation après redémarrage : IP du nœud changée (DNS cassé), registre hors du réseau `kind`, pods en ImagePullBackOff |
 | `scripts/install-observability.sh` | Script d'installation de la stack observabilité (reconstruction complète) |
+| `scripts/clean-cluster.sh` | Destruction du cluster KinD pour repartir de zéro (puis `init-stagingkub.sh`, `install-observability.sh`) ; les données PostgreSQL, sur l'hôte (`hostPath`), sont conservées |
+| `scripts/validate-stagingkub.sh` | Contrôle de l'environnement : outils, cluster, NGF, registre, secrets, release Helm |
+| `scripts/init-keycloak-stagingkub.sh` | Initialisation de Keycloak (realm, clients, utilisateurs) par `rhDemoInitKeycloak`, voir [README-INIT-KEYCLOAK.md](scripts/README-INIT-KEYCLOAK.md) |
+| `scripts/helm-unlock.sh` | Déblocage d'une release Helm restée en `pending-*` (`another operation is in progress`), voir [README-helm-unlock.md](scripts/README-helm-unlock.md) |
+| `scripts/deploy-grafana-dashboard.sh` | Publication des dashboards Grafana après modification de leur JSON, voir [OBSERVABILITY_STACK_INTEGRATION.md](../../docs/OBSERVABILITY_STACK_INTEGRATION.md) |
+| `scripts/test-network-policies.sh` | Vérifie que les flux interdits sont bien bloqués, depuis les pods existants, voir [SECURITE_NETWORK_POLICY.md](../../docs/SECURITE_NETWORK_POLICY.md) |
 | `scripts/components/install-or-upgrade-*.sh` | Un script idempotent par composant d'infra (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), appelé par les deux scripts ci-dessus **et** par le pipeline de mise à jour en place — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) |
+| `scripts/components/install-external-secrets.sh` | Installation ou mise à jour d'External Secrets Operator et de son raccordement à OpenBao ; appelé par `init-stagingkub.sh`, à relancer à la main après une montée de version (hors mise à jour en place), voir [OPENBAO.md](../../docs/OPENBAO.md) |
+| `scripts/components/rbac-preflight-check.sh` | Préflight RBAC sourcé par chaque `install-or-upgrade-*.sh` (le dry-run serveur ne contrôle pas l'anti-élévation RBAC) ; relève aussi les images rendues pour le scan Trivy |
+| `networkpolicies/apply-networkpolicies.sh` | Application des NetworkPolicies des namespaces hors chart (monitoring, loki-stack, nginx-gateway) ; appelé par `install-observability.sh` |
 | `scripts/vendor-gateway-api-crds.sh` + `gateway-api-crds/v<version>/crds.yaml` | Manifeste des CRDs Gateway API vendoré dans le dépôt (pas de fetch réseau live pendant un upgrade) ; produit par Renovate dans la PR de montée de NGF (`postUpgradeTasks`) |
 | `rbac/` | Configuration RBAC Jenkins — `jenkins-deployer` et `jenkins-infra-upgrader`, voir `rbac/README.md` |
 

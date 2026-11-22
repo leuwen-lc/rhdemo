@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-21
+verifie_le: 2026-11-22
 sources:
   - rhDemo/src/main/resources/application.yml
   - rhDemo/src/main/resources/application-stagingkub.yml

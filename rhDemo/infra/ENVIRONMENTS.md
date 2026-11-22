@@ -49,7 +49,7 @@ Hôte (port 58443)
 
 - **Services** : `rhdemo-db`, `keycloak-db`, `keycloak`, `rhdemo-app` (image construite par le `Dockerfile` du projet), `nginx`.
 - **Cycle de vie** : `Jenkinsfile-CI` génère les secrets, démarre l'environnement, initialise la base et Keycloak, lance Selenium à travers le proxy ZAP, puis détruit tout. Le paramètre `KEEP_EPHEMERE_ENV` le garde après le build pour le débogage.
-- **Démarrage manuel** : `cd rhDemo/infra/ephemere && ./init-ephemere.sh && docker-compose up -d` (détail dans son README).
+- **Pas de démarrage manuel** : l'environnement dépend des secrets, des certificats et de l'image produits par le build en cours ; pour l'inspecter, lancer `RHDemo-CI` avec `KEEP_EPHEMERE_ENV` (accès : voir son README).
 - **Limites** : ne teste ni Kubernetes, ni Helm, ni les NetworkPolicies.
 
 ---

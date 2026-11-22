@@ -8,7 +8,7 @@ Infrastructure Docker Compose pour environnement ephemere isolé avec HTTPS, Pos
 nginx:58443 (HTTPS reverse proxy)
   ├─> rhdemo.ephemere.local → rhdemo-app:9000 (Spring Boot)
   │                            └─> rhdemo-db:5432 (PostgreSQL)
-  └─> keycloak.ephemere.local → keycloak:8080 (Keycloak 26.0.7)
+  └─> keycloak.ephemere.local → keycloak:8080 (Keycloak)
                                    └─> keycloak-db:5432 (PostgreSQL)
 ```
 
@@ -17,10 +17,12 @@ nginx:58443 (HTTPS reverse proxy)
 | Service | Port | Description |
 |---------|------|-------------|
 | **nginx** | 58443 (HTTPS) | Reverse proxy avec SSL termination |
-| **rhdemo-app** | 9000 | Application Spring Boot (image Paketo) |
-| **rhdemo-db** | 5432 | PostgreSQL 16 (données applicatives) |
+| **rhdemo-app** | 9000 | Application Spring Boot (image construite par le `Dockerfile` du projet) |
+| **rhdemo-db** | 5432 | PostgreSQL (données applicatives) |
 | **keycloak** | 8080 | Serveur d'authentification OAuth2/OIDC |
-| **keycloak-db** | 5432 | PostgreSQL 16 (données Keycloak) |
+| **keycloak-db** | 5432 | PostgreSQL (données Keycloak) |
+
+Seul le port 58443 de nginx est publié sur l'hôte ; les images et leurs versions sont dans [`docker-compose.yml`](docker-compose.yml).
 
 ### Réseau
 
@@ -36,10 +38,10 @@ nginx:58443 (HTTPS reverse proxy)
 
 - Docker 24.x+
 - Docker Compose 2.x+
-- Image Docker applicative: `rhdemo-api:0.0.1-SNAPSHOT` (construite via Paketo)
+- Image Docker applicative `rhdemo-api:<version>` construite par le build CI en cours
 
 ### Construction de l'environnement Ephemere
-La construction est obligatoirement pilotée par la chaine CI Jenkins avec le Jenkinsfile-CI déposé à la racine de rhDemo
+La construction est obligatoirement pilotée par `Jenkinsfile-CI` (racine de `rhDemo/`) : il génère les secrets (aléatoires, jamais stockés) et les certificats (`generate-certs.sh`), démarre le Compose, initialise la base et Keycloak, lance Selenium à travers ZAP puis détruit l'environnement. Il n'y a pas de démarrage manuel ; le paramètre `KEEP_EPHEMERE_ENV` garde l'environnement après le build.
 
 
 ### Configuration DNS locale
@@ -63,8 +65,8 @@ sudo nano /etc/hosts
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | **Application** | https://rhdemo.ephemere.local:58443 | Via Keycloak |
-| **Keycloak Admin** | https://keycloak.ephemere.local:58443 | admin / (voir `.env`) |
-| **Actuator** | https://rhdemo.ephemere.local/actuator:58443 | - |
+| **Keycloak Admin** | https://keycloak.ephemere.local:58443 | `admin` ; mot de passe tiré au hasard par le build : `docker exec keycloak-ephemere printenv KEYCLOAK_ADMIN_PASSWORD` |
+| **Actuator** | non exposé : `/actuator` est bloqué par nginx (403), healthchecks en direct sur `rhdemo-app:9000` | - |
 
 ⚠️ **Certificats auto-signés**: Acceptez l'avertissement de sécurité dans votre navigateur.
 

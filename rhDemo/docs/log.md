@@ -382,3 +382,15 @@ Code corrigé dans la foulée : `infra/stagingkub/scripts/validate-stagingkub.sh
 Corrigés aussi : `scripts/deploy.sh` (supprimé en décembre 2025) et le paramètre inexistant `DEPLOY_ENV` retirés de `CLAUDE.md` et `infra/ENVIRONMENTS.md` au profit de `RHDemo-CD` ; commentaires de `values.yaml` sans version NGF figée (renvoi à `NGF_VERSION`). Un doublon de la clé `networkPolicies` soupçonné dans `values.yaml` n'existait pas (erreur de lecture). Les mentions de `deploy.sh` dans `JENKINS-NETWORK-ANALYSIS.md` (historique) et `CICD_JENKINS_VS_FORGEJO_ACTIONS.md` (proposition) sont laissées telles quelles.
 
 `infra/ENVIRONMENTS.md` réaligné : environnement « none » et Ingress Nginx retirés, environnements dev et jenkins-docker ajoutés, tableau des ports et URLs avec le fichier source de chacun (NodePort 32616 et non 30443), schémas ephemere et stagingkub (Gateway API, ESO, Cilium), comparaison secrets/réseau/données/sauvegardes à jour, image de l'application construite par le `Dockerfile` (plus Paketo), tableau de performances non mesuré supprimé.
+
+## [2026-11-22] lint | inventaire des scripts bash et Python
+
+87 scripts versionnés passés en revue (références dans la documentation et dans le code). Les modules de `fixcve_lib/` et `rotation_lib/` sont tous importés ; les autres points d'entrée sont cités par une doc active ou un README, sauf :
+- supprimés : `infra/ephemere/nginx/generate-certs.sh` (doublon mort : nginx lit `nginx.crt` produit par `ephemere/generate-certs.sh`), `infra/stagingkub/scripts/test-deploy-helm.sh` (débogage temporaire, tag `latest` disparu, contournait Cosign), `migrate-postgresql-{rhdemo,keycloak}.sh` (migration PostgreSQL 16 → 18 faite ; restent dans l'historique Git). Leurs mentions dans `MIGRATION_HELM4_KUB1.36.md` et `SPRING_BOOT_4_MIGRATION.md` (historiques) sont laissées ;
+- documentés : `clean-jenkins-agents.sh` comme recours manuel au watchdog (README jenkins-docker, dépannage n° 5) ; `clean-cluster.sh`, `validate-stagingkub.sh`, `init-keycloak-stagingkub.sh`, `helm-unlock.sh`, `deploy-grafana-dashboard.sh`, `test-network-policies.sh`, `install-external-secrets.sh`, `rbac-preflight-check.sh` et `apply-networkpolicies.sh` ajoutés au tableau des fichiers du README stagingkub ;
+- corrigé : `init-ephemere.sh`, qui n'existe pas, cité par `CLAUDE.md` et `infra/ENVIRONMENTS.md` (ephemere n'est construit que par `Jenkinsfile-CI`) ; README ephemere réaligné (plus de Paketo ni PostgreSQL 16, mot de passe admin Keycloak tiré par le build, actuator bloqué par nginx) ;
+- sécurité : `infra/ephemere/.gitignore` protégeait l'ancien `nginx/ssl/` mais pas `certs/`, où `generate-certs.sh` écrit la clé privée `nginx.key` : `certs/*` désormais ignoré.
+
+`PARAMETRAGE-APPLICATIF-AVEC-KUB.md` revérifié (seuls des commentaires de `values.yaml` ont changé).
+
+Reste ouvert : la « Méthode 2 » du README stagingkub (déploiement Helm direct) pousse une image non signée et cite une version en dur.

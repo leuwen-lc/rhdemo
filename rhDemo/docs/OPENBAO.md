@@ -165,6 +165,7 @@ Les rotations Keycloak passent par un `kubectl port-forward` vers le pod Keycloa
 
 - Instantané : `docker exec -e BAO_TOKEN rhdemo-openbao bao operator raft snapshot save /openbao/logs/snapshot.snap` puis `docker cp` hors du conteneur. L'instantané reste chiffré : sans la clé de déverrouillage, il est inutilisable.
 - Restauration (à tester une fois) : `bao operator raft snapshot restore -force`, sur un OpenBao initialisé, puis déverrouillage avec la clé correspondant à l'instantané.
+- Journal des rotations : à chaque instantané, copier aussi `~/.config/rhdemo-rotation/journal.jsonl` à côté (`install -m 600 ~/.config/rhdemo-rotation/journal.jsonl <dossier>/journal-$(date +%F).jsonl`). C'est la seule trace des dates de rotation lue par `rotate-secrets.py --check` (la plupart des rotations ne passent pas par OpenBao, et l'audit n'est gardé qu'environ 12 semaines). Il ne contient aucune valeur, seulement des dates et des identifiants. Restauration : le remettre en place (répertoire en 700, fichier en 600) sans écraser un journal plus récent, puis retracer par `--record` les rotations postérieures à la copie.
 
 ## Ephemere
 

@@ -11,6 +11,9 @@ Usage :
   rotate-secrets.py <id> [<id>...]          renouveler ces secrets
   rotate-secrets.py --level C|H|M           renouveler les secrets automatisés de ce niveau et au-dessus
   rotate-secrets.py --record <id>           tracer une rotation faite à la main (méthodes manual)
+
+Les secrets de méthode per-build (ephemere) sont régénérés à chaque build : --check les affiche
+sans les compter en retard, la rotation et --record les refusent.
 Options : --dry-run (montre le plan après les lectures, ne crée ni ne révoque rien),
           --no (répond non à toute confirmation : aucun token non géré n'est révoqué).
 
@@ -49,8 +52,10 @@ def cmd_check(inv, journal, today=None):
     for e in inv_mod.ordered(inv["secrets"]):
         period = inv["periods"][e["criticality"]]
         ts = last.get(e["id"])
-        if ts is None:
-            state, when = "jamais tracée", "-"
+        if e["rotation"]["method"] in inv_mod.NO_ROTATION:
+            state, when = "régénéré à chaque build", "-"
+        elif ts is None:
+            state, when = "aucune rotation journalisée", "-"
             late += 1
         else:
             age = (today - ts).days
@@ -61,7 +66,7 @@ def cmd_check(inv, journal, today=None):
             else:
                 state = f"ok, {period - age} j restants"
         log(f"{e['num']:<4}{e['id']:<38}{e['criticality']:<6}{when:<20}{state}")
-    log(f"\n{late} secret(s) en retard ou jamais tracé(s).")
+    log(f"\n{late} secret(s) en retard ou sans rotation journalisée.")
     return 1 if late else 0
 
 
@@ -99,6 +104,9 @@ def cmd_rotate(ctx, entries):
         log(f"\n── #{e['num']} {e['id']} ({e['label']})")
         if method == "planned":
             log(f"  pas encore automatisé (phase {e['rotation']['phase']}), voir l'étude")
+            continue
+        if method in inv_mod.NO_ROTATION:
+            log(f"  rien à faire : {e['rotation']['note']}")
             continue
         if method == "manual":
             log(f"  manuel : {e['rotation']['procedure']}")
@@ -142,7 +150,10 @@ def main(argv=None):
         if args.check:
             return cmd_check(inv, journal)
         if args.record:
-            inv_mod.by_id(inv, args.record)
+            entry = inv_mod.by_id(inv, args.record)
+            if entry["rotation"]["method"] in inv_mod.NO_ROTATION:
+                raise RotationError(f"{args.record} est régénéré à chaque build : "
+                                    "aucune rotation à tracer")
             journal.append(args.record, "recorded", "rotation manuelle déclarée")
             log(f"rotation de {args.record} tracée")
             return 0

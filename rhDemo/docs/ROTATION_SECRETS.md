@@ -41,14 +41,16 @@ Dans la console Jenkins (Administrer Jenkins > Credentials), les secrets de `kv/
 | Avant l'échéance annuelle | Certificat TLS d'OpenBao (1 an) | Échéance : `openssl x509 -enddate -noout -in rhDemo/infra/jenkins-docker/certs/openbao/openbao.crt` ; renouvellement : `openbao/init-local-ca.sh openbao`, `docker compose restart openbao`, déverrouillage |
 | Tous les 5 ans (racine : 10 ans) | Certificat de l'intermédiaire de l'autorité locale | Pas de commande dédiée : signer un nouvel intermédiaire avec la clé racine sortie de KeePassXC (mêmes commandes `openssl` que `init-local-ca.sh ca`), puis réémettre le certificat d'OpenBao |
 | Avant leur expiration | Clé GPG de Renovate (2 ans), token SonarQube (date choisie à sa création) | `rotate-secrets.py renovate-gpg-key`, `rotate-secrets.py jenkins-sonar-token` |
-| Après une série de rotations | Instantané d'OpenBao | [OPENBAO.md](OPENBAO.md), « Sauvegarde et restauration » |
+| Après une série de rotations | Instantané d'OpenBao et copie du journal des rotations (`journal.jsonl`) | [OPENBAO.md](OPENBAO.md), « Sauvegarde et restauration » |
 | Chaque dimanche (cron, automatique) | Rotation du journal d'audit d'OpenBao, 12 archives compressées gardées | `openbao/rotate-audit.sh` ; vérifier de temps en temps `~/.cache/rhdemo-openbao-audit-rotate.log` ([OPENBAO.md](OPENBAO.md), « Journal d'audit ») |
 
-Rappel automatique : `--check` ne lit que le journal local et ne demande rien, il peut tourner en cron (code retour 1 si un secret est en retard ou jamais tracé), par exemple chaque lundi :
+Rappel automatique : `--check` ne lit que le journal local et ne demande rien, il peut tourner en cron (code retour 1 si un secret est en retard ou si aucune rotation n'est journalisée pour lui), par exemple chaque lundi :
 
 ```bash
-0 9 * * 1  ~/git/repository/rhDemo/scripts/rotate-secrets.py --check >/dev/null || notify-send "RHDemo : secrets à renouveler"
+0 9 * * 1  ~/git/repository/rhDemo/scripts/rotate-secrets.py --check >/dev/null || DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus notify-send "RHDemo : secrets à renouveler"
 ```
+
+Lancé par cron, `notify-send` ne trouve pas la session de bureau sans `DBUS_SESSION_BUS_ADDRESS` (`1000` : remplacer par la valeur de `id -u`) ; la notification n'apparaît que si la session graphique est ouverte au moment du passage.
 
 Périodes cibles, par criticité (`periods` de l'inventaire) : C 90 jours, H 180 jours, M 1 an.
 
@@ -66,11 +68,14 @@ Le script tourne sur le poste, jamais dans Jenkins (il doit pouvoir réparer un 
 ./rotate-secrets.py --record <id>          # tracer une rotation faite à la main
 ```
 
-Trois sortes de secrets, selon la méthode affichée par `--list` :
+Quatre sortes de secrets, selon la méthode affichée par `--list` :
 
 - **automatisés** (tokens et clé GPG Codeberg, `secret_id` AppRole, mots de passe PostgreSQL, secrets Keycloak de stagingkub, admin Grafana) : le script crée la nouvelle valeur, la vérifie, la propage puis révoque l'ancienne. Ce que fait chaque méthode : [OPENBAO.md](OPENBAO.md), « Rotation » ;
 - **semi-manuels** (`manual-value` : SMTP, token SonarQube) : la valeur est créée à la main chez le fournisseur, collée quand le script la demande, testée si possible, puis propagée ;
-- **manuels** (`manual` : mots de passe des comptes Jenkins, clé Cosign, kubeconfigs, mot de passe `admin` et clé de déverrouillage d'OpenBao…) : `--list` affiche la procédure ; une fois faite, `--record <id>` la trace pour `--check`.
+- **manuels** (`manual` : mots de passe des comptes Jenkins, clé Cosign, kubeconfigs, mot de passe `admin` et clé de déverrouillage d'OpenBao…) : `--list` affiche la procédure ; une fois faite, `--record <id>` la trace pour `--check` ;
+- **régénérés à chaque build** (`per-build` : secrets d'ephemere) : rien à renouveler. `--check` les affiche (« régénéré à chaque build ») sans les compter en retard ; la rotation et `--record` les refusent, pour que le journal ne contienne pas de fausse trace.
+
+« aucune rotation journalisée » dans `--check` signifie seulement que le journal local n'a pas d'entrée pour ce secret (par exemple une rotation antérieure à la création du journal) : renouveler le secret, ou le tracer par `--record` s'il vient d'être renouvelé à la main.
 
 Saisies demandées selon les secrets choisis, puis oubliées à la fin : mot de passe `admin` de Jenkins, mot de passe `admin` d'OpenBao, mot de passe et code TOTP du bot Codeberg concerné, valeur créée à la main. Aucune valeur n'est affichée, écrite sur le disque ni passée en argument de commande ; le journal (`~/.config/rhdemo-rotation/journal.jsonl`) ne contient que des dates et des identifiants.
 

@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -459,18 +460,34 @@ class InventoryTest(unittest.TestCase):
         self.assertIn("exposition cloud", errors)
         self.assertIn("en double", errors)
 
+    def test_per_build_sans_cible(self):
+        inv = inv_mod.load()
+        self.assertEqual(inv_mod.by_id(inv, "ephemere-secrets")["rotation"]["method"], "per-build")
+        bad = copy.deepcopy(inv)
+        e = inv_mod.by_id(bad, "ephemere-secrets")
+        e["targets"] = [{"kind": "openbao", "path": "x", "key": "y"}]
+        e["rotation"].pop("note")
+        errors = "\n".join(inv_mod.validate(bad))
+        self.assertIn("per-build n'admet aucune cible", errors)
+        self.assertIn("per-build exige note", errors)
+
     def test_ordre_urgence(self):
         inv = inv_mod.load()
         expo = [e["exposure"] for e in inv_mod.ordered(inv["secrets"])]
         self.assertEqual(expo, sorted(expo, key=inv_mod.EXPOSURE_ORDER.get))
 
 
+def _load_cli():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("rotate_secrets", os.path.join(helpers.SCRIPTS, "rotate-secrets.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 class CheckTest(unittest.TestCase):
     def test_retard_et_journal_sans_valeur(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("rotate_secrets", os.path.join(helpers.SCRIPTS, "rotate-secrets.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        mod = _load_cli()
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
         journal = Journal(os.path.join(tmp, "j.jsonl"))
@@ -485,6 +502,20 @@ class CheckTest(unittest.TestCase):
         journal.append("b", "recorded", "")
         self.assertEqual(mod.cmd_check(inv, journal, today=soon), 0)
         self.assertEqual(os.stat(journal.path).st_mode & 0o777, 0o600)
+
+    def test_per_build_jamais_en_retard_ni_tracable(self):
+        mod = _load_cli()
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        journal = Journal(os.path.join(tmp, "j.jsonl"))
+        inv = {"periods": {"C": 90, "H": 180, "M": 365}, "secrets": [
+            {"id": "e", "num": "16", "label": "", "criticality": "M", "exposure": "local",
+             "rotation": {"method": "per-build", "note": "jetable"}}]}
+        self.assertEqual(mod.cmd_check(inv, journal), 0)
+        self.assertEqual(mod.cmd_rotate(None, inv["secrets"]), 0)
+        with mock.patch.object(mod, "Journal", lambda: journal):
+            self.assertEqual(mod.main(["--record", "ephemere-secrets"]), 2)
+        self.assertFalse(os.path.exists(journal.path))
 
 
 if __name__ == "__main__":

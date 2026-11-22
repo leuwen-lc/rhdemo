@@ -29,8 +29,11 @@ METHOD_KEYS = {
     "grafana-admin": {"kv_path", "kv_key", "user_key", "namespace", "external_secrets", "k8s_secret",
                       "k8s_key", "restart", "service"},
     "planned": {"phase"},
+    "per-build": {"note"},
 }
 NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}
+# Secrets régénérés à chaque build (ephemere) : rien à renouveler, rien à tracer, aucune cible.
+NO_ROTATION = {"per-build"}
 
 
 def load(path=DEFAULT_PATH):
@@ -76,6 +79,8 @@ def validate(inv):
         targets = e.get("targets") or []
         if method in NEEDS_TARGETS and not targets:
             errors.append(f"{sid} : {method} exige au moins une cible")
+        if method in NO_ROTATION and targets:
+            errors.append(f"{sid} : {method} n'admet aucune cible")
         for t in targets:
             kind = t.get("kind")
             if kind not in TARGET_KEYS:

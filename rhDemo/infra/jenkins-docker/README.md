@@ -37,15 +37,15 @@ docker info
 │                                                                                     │
 │  ┌───────────────────────────┐     ┌──────────────────────────────────────────────┐ │
 │  │  JENKINS CONTROLLER       │     │  DOCKER SOCKET PROXY                         │ │
-│  │  (Port 8080, 50000)       │────►│  rhdemo-docker-socket-proxy                 │ │
-│  │  rhdemo-jenkins           │     │  Port TCP: 2375 (API filtrée)               │ │
+│  │  (Port 8080, 50000)       │────►│  rhdemo-docker-socket-proxy                  │ │
+│  │  rhdemo-jenkins           │     │  Port TCP: 2375 (API filtrée)                │ │
 │  │                           │     │                                              │ │
 │  │  Pilotage uniquement :    │     │  Endpoints autorisés :                       │ │
 │  │  • numExecutors: 0        │     │  • POST /containers/create (créer agent)     │ │
-│  │  • Orchestration pipelines│     │  • POST /containers/{id}/start              │ │
-│  │  • Interface web          │     │  • POST /containers/{id}/stop               │ │
-│  │  • Gestion credentials    │     │  • DELETE /containers/{id}                  │ │
-│  │  • JCasC + Docker Cloud   │     │  Tout le reste : bloqué                     │ │
+│  │  • Orchestration pipelines│     │  • POST /containers/{id}/start               │ │
+│  │  • Interface web          │     │  • POST /containers/{id}/stop                │ │
+│  │  • Credentials (OpenBao)  │     │  • DELETE /containers/{id}                   │ │
+│  │  • JCasC + Docker Cloud   │     │  Tout le reste : bloqué                      │ │
 │  │                           │     └──────────────────────────────────────────────┘ │
 │  └───────────────────────────┘                    │ crée/détruit                    │
 │                                                   ▼                                 │
@@ -55,12 +55,16 @@ docker info
 │                                    │  Créés à la demande, détruits après le build │ │
 │                                    │                                              │ │
 │                                    │  Outils de build :                           │ │
-│                                    │  • JDK 25 (Eclipse Temurin) + Maven 3.9.12  │ │
+│                                    │  • JDK 25 (Eclipse Temurin) + Maven 3.9.12   │ │
 │                                    │  • Docker CLI + Docker Compose (socket hôte) │ │
 │                                    │  • Node.js/npm (build frontend)              │ │
 │                                    │  • Firefox ESR + Xvfb (Selenium headless)    │ │
 │                                    │  • yq (parsing YAML)                         │ │
 │                                    │  • Trivy, kubectl, Helm, Cosign              │ │
+│                                    │                                              │ │
+│                                    │  Modèles : builder (tous les jobs) ;         │ │
+│                                    │  fixcve (RHDemo-FixCVE, sans socket Docker)  │ │
+│                                    │  Un seul conteneur à la fois (containerCap)  │ │
 │                                    └──────────────────────────────────────────────┘ │
 │                                                                                     │
 │  ┌──────────────────────────┐                                                       │
@@ -78,6 +82,8 @@ docker info
 │  Autres services :                                                                  │
 │  • kind-registry:5000 (Docker Registry local HTTPS)                                 │
 │  • OWASP ZAP (CI/CD uniquement, docker-compose.zap.yml)                             │
+│  • rhdemo-openbao:8200 (OpenBao : secrets des pipelines et de stagingkub, scellé    │
+│    au démarrage ; architecture détaillée dans docs/OPENBAO.md)                      │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -105,12 +111,14 @@ docker info
                                      │ • keycloak    (Deployment)           │
                                      │ • postgresql  (StatefulSet x2)       │
                                      │ • Nginx Ingress (NodePort 443)       │
+                                     │ • External Secrets : Secrets lus     │
+                                     │   dans OpenBao (réseau kind)         │
                                      │   ┌────────────────────────────────┐ │
-                                     │   │ ServiceAccount (distinct)       │ │
-                                     │   │ jenkins-infra-upgrader (RBAC)   │ │
-                                     │   │ Cilium/NGF/observabilité        │ │
-                                     │   │ (nginx-gateway, loki-stack,     │ │
-                                     │   │  monitoring, kube-system restr.)│ │
+                                     │   │ ServiceAccount (distinct)      │ │
+                                     │   │ jenkins-infra-upgrader (RBAC)  │ │
+                                     │   │ Cilium/NGF/observabilité       │ │
+                                     │   │ (nginx-gateway, loki-stack,    │ │
+                                     │   │  monitoring, kube-system restr)│ │
                                      │   └────────────────────────────────┘ │
                                      └──────────────────────────────────────┘
 ```
@@ -125,6 +133,9 @@ docker info
 | `rhdemo-maven-repository` | Cache Maven (.m2) partagé entre agents éphémères | ~1 GB |
 | `rhdemo-trivy-cache` | Cache DB Trivy partagé entre agents éphémères | ~300 MB |
 | `rhdemo-wdm-cache` | Cache WebDriverManager (geckodriver) partagé entre agents éphémères | ~50 MB |
+| `rhdemo-fixcve-state` | État de fixcve-auto (`state.json`, archives de cycle), monté par le seul modèle d'agent `fixcve` | < 10 MB |
+| `rhdemo-openbao-data` | Données Raft d'OpenBao, chiffrées par la clé de déverrouillage | < 50 MB |
+| `rhdemo-openbao-audit` | Journal d'audit d'OpenBao et ses archives compressées (`openbao/rotate-audit.sh`, hebdomadaire) | < 100 MB |
 | `rhdemo-sonarqube-data` | Données SonarQube | ~500 MB |
 | `rhdemo-sonarqube-extensions` | Plugins SonarQube | ~100 MB |
 | `rhdemo-sonarqube-logs` | Logs SonarQube | ~50 MB |
@@ -147,6 +158,7 @@ docker info
 | `sonarqube-db` | Base de données PostgreSQL pour SonarQube | - | docker-compose.yml |
 | `owasp-zap` | Proxy de sécurité pour tests Selenium (CI/CD) | 8090 (interne, non publié) | docker-compose.zap.yml |
 | `registry` | Docker Registry local (HTTPS) | 5000 | docker-compose.yml |
+| `openbao` | Gestionnaire de secrets : credentials des pipelines (`kv/jenkins/*`), clé Cosign (Transit), secrets de stagingkub ([docs/OPENBAO.md](../../docs/OPENBAO.md)) | 8200 (`127.0.0.1` seulement) | docker-compose.yml |
 | agents éphémères | Créés à la demande par Docker Cloud, détruits après le build | - | Docker Cloud (JCasC) |
 
 ### 🤖 Architecture Controller / Agents éphémères
@@ -158,6 +170,7 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
 - `numExecutors: 0` — n'exécute aucun build
 - `mode: EXCLUSIVE` — ne peut pas recevoir de jobs
 - Contient uniquement les plugins et la configuration JCasC
+- Lit les secrets des pipelines dans OpenBao (plugin HashiCorp Vault, credential `openbao-approle`) : les credentials « Vault » ne sont que des références vers `kv/jenkins/<id>`
 - Se connecte au daemon Docker via `docker-socket-proxy` (API filtrée TCP)
 - N'a pas accès direct à `/var/run/docker.sock`
 
@@ -172,7 +185,8 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
 
 - Image `rhdemo-jenkins-agent:latest` instanciée à la demande par Docker Cloud
 - Créés pour chaque build, détruits immédiatement après
-- Un seul à la fois (`instanceCapStr: "1"`) : les builds de tous les jobs sont sérialisés, les suivants attendent dans la file
+- Deux modèles : `builder` (tous les jobs, socket Docker de l'hôte monté) et `fixcve` (job `RHDemo-FixCVE` : volume d'état `rhdemo-fixcve-state` et cache Maven, **sans** socket Docker ni certificats locaux)
+- Un seul conteneur d'agent à la fois pour tout le nuage (`containerCap: 1`) : les builds de tous les jobs sont sérialisés, les suivants attendent dans la file ; un agent `builder` inactif garde la place 5 min, un agent `fixcve` 1 min
 - Contiennent tous les outils de build :
   - JDK 25 (Eclipse Temurin) + Maven 3.9.12
   - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
@@ -245,9 +259,13 @@ jenkins-docker/
 ├── .env                       # Vos variables (à créer, non commité)
 ├── start-jenkins.sh           # Script de démarrage
 ├── init-registry-certs.sh     # Génération certificats TLS registry
-└── certs/registry/            # Certificats TLS (non commités, à générer)
-    ├── registry.crt           # Certificat public
-    └── registry.key           # Clé privée
+├── openbao/                   # OpenBao : config.hcl, politiques, configure-openbao.sh, unseal.sh,
+│                              # init-local-ca.sh, rotate-audit.sh (docs/OPENBAO.md)
+└── certs/                     # Non commités, à générer
+    ├── registry/              # Certificat TLS du registry (registry.crt, registry.key)
+    ├── ca/                    # Autorité locale (racine, intermédiaire) : init-local-ca.sh ca
+    ├── openbao/               # Certificat TLS d'OpenBao : init-local-ca.sh openbao
+    └── cosign/                # Clé publique Cosign (cosign-transit.pub)
 ```
 
 ### Configuration des secrets
@@ -271,16 +289,22 @@ jenkins-docker/
    Les notifications email (optionnelles) ne se configurent **pas** dans `.env` — voir la
    section [Email](#email) plus bas.
 
+4. **Secrets des pipelines** : pas dans `.env`, mais dans OpenBao (`kv/jenkins/*`), lus par Jenkins à
+   chaque utilisation. `docker compose up -d openbao`, déverrouillage (`openbao/unseal.sh`, clé dans
+   KeePassXC) après chaque démarrage, puis `rhDemo/scripts/openbao-setup.py jenkins-approle` et
+   `openbao-setup.py jenkins` à l'installation : [docs/OPENBAO.md](../../docs/OPENBAO.md). Les comptes
+   Jenkins et la base SonarQube restent dans `.env`, pour que Jenkins démarre sans OpenBao.
+
 ### Configuration Jenkins as Code (JCasC)
 
 Le fichier `jenkins-casc.yaml` configure automatiquement :
 - ✅ Utilisateur admin
 - ✅ Controller en mode pilotage (`numExecutors: 0`, `mode: EXCLUSIVE`)
-- ✅ Docker Cloud avec template agent éphémère (label `builder`, un seul à la fois)
+- ✅ Docker Cloud avec deux modèles d'agents éphémères (`builder`, `fixcve`), un seul conteneur à la fois
 - ✅ Connexion Docker via `tcp://docker-socket-proxy:2375` (pas de socket direct)
 - ✅ Outils (JDK25, Maven3, Git, OWASP Dependency-Check)
-- ✅ Intégrations (SonarQube)
-- ✅ Jobs pipeline (CI + CD)
+- ✅ Intégrations (SonarQube, OpenBao par le bloc `unclassified.hashicorpVault`)
+- ✅ Jobs pipeline (CI, CD, Renovate, Stagingkub-Upgrade-Deploy, FixCVE)
 
 Pour modifier la configuration, éditer `casc/jenkins-casc.yaml` puis, dans Jenkins,
 Manage Jenkins → Configuration as Code → « Reload existing configuration » (ou
@@ -291,6 +315,8 @@ fichier seul : un montage de fichier garde l'ancien contenu après un `sed -i` o
 
 (Obligatoire pour pouvoir lancer le pipeline Jenkinsfile-CI)
 Voir le fichier [QUICKSTART.md](QUICKSTART.md) pour la liste complète des credentials à créer.
+Ceux qui vivent dans OpenBao sont créés en références par `rhDemo/scripts/openbao-setup.py jenkins`
+(valeur à changer dans OpenBao, pas dans la console : voir [docs/ROTATION_SECRETS.md](../../docs/ROTATION_SECRETS.md)).
 
 
 ## 🎯 Utilisation
@@ -359,7 +385,7 @@ Les plugins sont définis dans `plugins.txt` sous forme de **lockfile versionné
 |-----------|--------|-------|
 | Pipeline | `workflow-aggregator`, `pipeline-stage-view` | Pipeline déclaratif, visualisation des stages |
 | SCM | `git` | `checkout scm` |
-| Credentials | `credentials`, `credentials-binding`, `matrix-auth` | Gestion des secrets, droits par utilisateur |
+| Credentials | `credentials`, `credentials-binding`, `matrix-auth`, `hashicorp-vault-plugin` | Gestion des secrets, droits par utilisateur, credentials lus dans OpenBao (AppRole, KV v2) |
 | Build Java | `maven-plugin`, `jdk-tool` | `tools { maven 'Maven3' }`, `tools { jdk 'JDK21' }` |
 | Qualité | `sonar`, `coverage` | `withSonarQubeEnv`, `recordCoverage` (JaCoCo) |
 | Tests | `junit`, `htmlpublisher` | Rapports Surefire, Trivy, ZAP, OWASP |
@@ -918,7 +944,7 @@ docker system prune -a
 3. **Limiter l'accès réseau** aux ports Jenkins
 4. **Configurer l'authentification** LDAP/OAuth
 5. **Activer les audits** (Job Config History plugin)
-6. **Sauvegarder régulièrement** le volume `jenkins_home`
+6. **Sauvegarder régulièrement** le volume `jenkins_home`, et OpenBao par un instantané Raft ([docs/OPENBAO.md](../../docs/OPENBAO.md), « Sauvegarde et restauration ») : une copie du volume `rhdemo-openbao-data` est inutilisable sans la clé de déverrouillage
 
 ### Backup
 

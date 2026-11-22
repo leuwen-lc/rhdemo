@@ -26,6 +26,44 @@ Mise en œuvre de [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), qui en donne les raisons
 
 ## Architecture
 
+```text
+ POSTE (utilisateur)                                    KeePassXC : clé de déverrouillage, mot de passe
+ ┌──────────────────────────────────────────────┐        admin, clé racine de l'autorité locale
+ │ unseal.sh            déverrouillage manuel   │
+ │ configure-openbao.sh moteurs, politiques     │  127.0.0.1:8200 (HTTPS, boucle locale seulement)
+ │ openbao-setup.py     alimentation initiale   │──────────────────────────────┐
+ │ rotate-secrets.py    rotations               │  utilisateur admin           │
+ │ rotate-audit.sh      cron hebdomadaire       │  (jeton d'une heure)         │
+ └──────────────────────────────────────────────┘                              ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  OPENBAO  rhdemo-openbao (docker-compose.yml de jenkins-docker)                           │
+│  Raft un nœud (volume rhdemo-openbao-data), TLS par l'autorité locale, scellé au départ   │
+│  Journal d'audit (volume rhdemo-openbao-audit, valeurs en HMAC)                           │
+│                                                                                           │
+│  Données                                  Authentification → politique                    │
+│  • kv/jenkins/<credential>                • userpass admin        → admin                 │
+│  • kv/stagingkub/{rhdemo,keycloak}        • AppRole jenkins       → lecture kv/jenkins/*  │
+│  • kv/stagingkub-tests/users              • AppRole jenkins-cosign→ signature Transit     │
+│  • kv/observability/grafana               • Kubernetes eso-stagingkub   → kv/stagingkub/* │
+│  • Transit cosign (clé non exportable)    • Kubernetes eso-observability→ kv/observ.../*  │
+└───────────────┬───────────────────────────────────────┬───────────────────────────────────┘
+                │ https://openbao:8200                  │ https://<IP fixe>:8200
+                │ réseau rhdemo-jenkins-network         │ réseau kind (raccordé par
+                ▼                                       ▼ repair-cluster-after-restart.sh)
+┌──────────────────────────────────────────┐  ┌──────────────────────────────────────────┐
+│ JENKINS                                  │  │ CLUSTER KinD stagingkub                  │
+│ Contrôleur : plugin HashiCorp Vault,     │  │ External Secrets Operator                │
+│  credential openbao-approle ; les        │  │ • SecretStore rhdemo-stagingkub          │
+│  credentials « Vault » pointent vers     │  │   → 4 Secrets applicatifs                │
+│  kv/jenkins/<id> (CI, Renovate, FixCVE)  │  │ • SecretStore loki-stack                 │
+│ Agent, stage de signature (CI) :         │  │   → Secret grafana-admin                 │
+│  cosign openbao://cosign (AppRole        │  │ NetworkPolicy : sortie vers l'IP         │
+│  jenkins-cosign)                         │  │  d'OpenBao seulement                     │
+└──────────────────────────────────────────┘  └──────────────────────────────────────────┘
+```
+
+Ephemere ne lit rien dans OpenBao : ses secrets sont tirés au hasard à chaque build (section « Ephemere »).
+
 | Élément | Où | Rôle |
 | --- | --- | --- |
 | Conteneur `rhdemo-openbao` | `infra/jenkins-docker/docker-compose.yml` | Raft sur un nœud, TLS, journal d'audit ; port publié sur `127.0.0.1:8200` seulement |
@@ -79,7 +117,31 @@ OpenBao redémarre **scellé** après un redémarrage du poste, du démon Docker
 rhDemo/infra/jenkins-docker/openbao/unseal.sh   # coller la clé depuis KeePassXC
 ```
 
-La clé n'est jamais passée en argument (visible dans `ps`). `repair-cluster-after-restart.sh` rappelle l'état scellé et raccorde OpenBao au réseau `kind`, mais ne déverrouille jamais. Le healthcheck Docker du conteneur est `unhealthy` tant qu'il est scellé. Raisons du choix manuel : [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) §5.
+La clé n'est jamais passée en argument (visible dans `ps`). `unseal.sh` raccorde ensuite OpenBao au réseau `kind` avec son IP fixe s'il l'a perdu (conteneur recréé, par exemple au redémarrage de la stack Jenkins) ; dans ce cas, il force aussi la revalidation des `SecretStore` d'ESO et la resynchronisation des `ExternalSecret`, sans quoi la CD refuse de déployer jusqu'à ce qu'ESO réessaie de lui-même. `repair-cluster-after-restart.sh` fait le même raccordement et rappelle l'état scellé, mais ne déverrouille jamais. Le healthcheck Docker du conteneur est `unhealthy` tant qu'il est scellé. Raisons du choix manuel : [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) §5.
+
+## Journal d'audit
+
+Chaque requête à OpenBao est journalisée (bloc `audit` de `openbao/config.hcl`) dans `/openbao/logs/audit.log`, volume `rhdemo-openbao-audit` : une ligne JSON par requête et par réponse, avec l'heure (UTC), le chemin, l'identité (`approle` et nom du rôle, `userpass-admin`, `kubernetes`…) et l'erreur éventuelle. Les valeurs lues et les jetons sont remplacés par des HMAC : le journal ne contient aucun secret en clair. Lecture depuis le poste (pas besoin d'OpenBao déverrouillé) :
+
+```bash
+# Lectures de kv/jenkins/* depuis une heure donnée : heure, chemin, identité, résultat
+docker exec rhdemo-openbao cat /openbao/logs/audit.log | jq -r 'select(.type=="response"
+  and (.request.path|startswith("kv/data/jenkins/")) and .time > "2026-11-22T12:45")
+  | [.time[0:19], .request.path, .auth.display_name, (.error // "ok")] | @tsv'
+# Connexions refusées ou en erreur
+docker exec rhdemo-openbao cat /openbao/logs/audit.log | jq -r 'select(.type=="response" and .error)
+  | [.time[0:19], .request.path, .error] | @tsv' | tail -20
+```
+
+Adapter le préfixe (`kv/data/stagingkub/`, `auth/approle/login`, `cosign-transit/`) et l'heure. Les semaines précédentes sont dans les archives : remplacer `cat /openbao/logs/audit.log` par `sh -c 'zcat /openbao/logs/audit-*.log.gz'`.
+
+**Rotation** (une dizaine de Mo par jour d'activité des pipelines) : `openbao/rotate-audit.sh`, chaque dimanche à 3 h 30 par la crontab de l'utilisateur du poste :
+
+```cron
+30 3 * * 0 ~/git/repository/rhDemo/infra/jenkins-docker/openbao/rotate-audit.sh >> ~/.cache/rhdemo-openbao-audit-rotate.log 2>&1
+```
+
+Le script renomme `audit.log` en `audit-<horodatage>.log`, envoie SIGHUP à OpenBao, qui rouvre un fichier neuf (aucune ligne perdue), compresse l'archive (12 Mo deviennent 0,6 Mo) et en garde 12 dans le même volume (`KEEP`) ; rien en dessous de 1 Mo (`MIN_BYTES`). Il ne demande ni jeton ni déverrouillage. Si OpenBao ne rouvre pas le fichier, l'archive reste non compressée et le script le signale dans son journal.
 
 ## Rotation
 
@@ -144,6 +206,11 @@ Vérifié le 2026-11-21 sur un OpenBao 2.7.2 et un Jenkins jetables (supprimés 
 - *Name Constraints* de l'autorité : certificats d'OpenBao, de la Gateway et du registry acceptés ; certificats émis pour `codeberg.org`, `intra.leuwen-lc.fr.evil.com` ou une IP publique refusés par OpenSSL, Java (JDK de l'image Jenkins) et Go (client `bao`). Sans elles, la clé de l'intermédiaire, sur le disque jusqu'à l'étape 5, permettrait d'intercepter toute connexion des clients qui font confiance à la racine (dont le contrôleur Jenkins vers Codeberg) ;
 - `configure-openbao.sh generate-root` (OpenBao jetable en mode dev) : jeton de politique `root` obtenu, clé fausse refusée et génération annulée ;
 - tests unitaires : `scripts/tests/test_openbao.py`, `scripts/tests/test_keycloak_rotation.py`.
+
+Vérifié le 2026-11-22 sur le vrai Jenkins (étape 7, faite ce jour-là sur ce poste : jusque-là, seuls Cosign et fixcve lisaient OpenBao, les credentials des pipelines étaient restés des credentials Jenkins ordinaires) :
+
+- `openbao-setup.py jenkins-approle` puis `openbao-setup.py jenkins` : `openbao-approle` créé, les 8 credentials de `kv/jenkins/*` remplacés par des références OpenBao ;
+- `RHDemo-Renovate` #181 vert, journal d'audit : lectures de `ci-bot-forgejo-token`, `renovate-forgejo-token`, `renovate-gpg-key`, `renovate-github-token`, `dockerhub-renovate-readonly` et `notification-email` par l'AppRole `jenkins`, sans erreur ; `RHDemo-FixCVE` (`status`, `DRY_RUN`) : lectures de `fixcve-forgejo-token` et `fixcve-jenkins-api`.
 
 Vérifié le 2026-11-21 sur le vrai cluster stagingkub (installation de l'étape 10) :
 

@@ -235,7 +235,7 @@ services:
   # Redémarre SCELLÉ : déverrouillage manuel après chaque démarrage
   # (openbao/unseal.sh, clé collée depuis KeePassXC). Tant qu'il est scellé, les
   # pipelines qui lisent un credential OpenBao échouent.
-  # Raccordé au réseau kind par repair-cluster-after-restart.sh (ESO, étape 3).
+  # Raccordé au réseau kind par openbao/unseal.sh ou repair-cluster-after-restart.sh (ESO).
   # ═══════════════════════════════════════════════════════════════════
   openbao:
     image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f

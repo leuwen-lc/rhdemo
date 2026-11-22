@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-21
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/jenkins-docker/init-registry-certs.sh
   - rhDemo/infra/jenkins-docker/start-jenkins.sh

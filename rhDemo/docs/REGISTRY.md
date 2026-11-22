@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-23
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
   - rhDemo/Jenkinsfile-CD

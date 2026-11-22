@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-22
 sources:
   - rhDemo/pom.xml
 ---
@@ -84,8 +84,7 @@ Pour élargir le périmètre, modifier `targetClasses` dans le profil. Un périm
 - Traiter en priorité les survivants sur du code de sécurité (CSRF, CSP, rôles, redirections).
 - Ne pas viser 100 % : les mutants équivalents et les faux positifs sont normaux.
 - Le code de test ajouté doit respecter le quality gate SonarQube (voir [CLAUDE.md](../../CLAUDE.md)).
-- Les versions de `pitest-maven` et `pitest-junit5-plugin` sont écrites en dur dans le profil. Penser à les mettre à jour
-  de temps en temps.
+- Les versions de `pitest-maven` et `pitest-junit5-plugin` sont écrites en dur dans le profil ; Renovate les met à jour.
 
 ## Pistes d'évolution
 

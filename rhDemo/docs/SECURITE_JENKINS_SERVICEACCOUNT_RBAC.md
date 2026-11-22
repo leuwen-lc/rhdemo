@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-23
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/rbac/
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
@@ -42,6 +42,8 @@ Le principe de **moindre privilège** est appliqué :
 - Jenkins ne peut agir que sur le namespace `rhdemo-stagingkub` et les ressources strictement nécessaires
 - Pas d'accès admin au cluster
 - Pas d'accès aux autres namespaces (sauf `monitoring` pour les ServiceMonitors)
+
+Ce document porte sur `jenkins-deployer`, utilisé par `RHDemo-CD`. Les montées des composants système (Cilium, NGF, observabilité) passent par un second compte, `jenkins-infra-upgrader` (credential `kubeconfig-stagingkub-infra-upgrader`), aux droits plus larges (Roles par namespace système et ClusterRole qui reprend les règles des charts installés, exigé par la protection RBAC contre l'escalade) : leur liste et leur justification sont dans [rbac/README.md](../infra/stagingkub/rbac/README.md).
 
 ## Fichiers
 
@@ -96,7 +98,8 @@ kubectl apply -f jenkins-monitoring-role.yaml
 | pods/log | get, list | Debug et logs |
 | services | CRUD | Helm déploie les Services |
 | configmaps | CRUD | Helm déploie les ConfigMaps |
-| secrets | CRUD | Secrets applicatifs (DB, Keycloak) |
+| secrets | CRUD | Secrets gérés par la release Helm ; les Secrets applicatifs (DB, Keycloak, `rhdemo-app-secrets`) sont écrits par ESO depuis OpenBao, plus par Jenkins |
+| externalsecrets, secretstores (`external-secrets.io`) | get, list, watch | Contrôle de la synchronisation ESO par `Jenkinsfile-CD` (aucune valeur de secret lue) |
 | persistentvolumeclaims | CRUD | StatefulSets PostgreSQL |
 | events | get, list, watch | Debug déploiements |
 | endpoints | get, list, watch | Vérification services |
@@ -107,7 +110,8 @@ kubectl apply -f jenkins-monitoring-role.yaml
 | replicasets | get, list, watch | `kubectl rollout status` |
 | cronjobs | CRUD | Backups PostgreSQL |
 | jobs | get, list, watch, delete | Jobs créés par CronJobs |
-| ingresses | CRUD | Helm déploie l'Ingress |
+| gateways, httproutes, referencegrants (`gateway.networking.k8s.io`, avec `/status`) | CRUD | Helm déploie le routage Gateway API |
+| clientsettingspolicies, proxysettingspolicies, observabilitypolicies, ratelimitpolicies (`gateway.nginx.org`, avec `/status`) | CRUD | Politiques NGINX Gateway Fabric du chart |
 | networkpolicies | CRUD | Helm déploie les NetworkPolicies |
 
 ### Namespace `monitoring`
@@ -247,12 +251,12 @@ Comparer avec les ressources autorisées dans le Role.
 
 ### Ce qui est autorisé
 - Déployer l'application RHDemo
-- Gérer les secrets applicatifs
+- Gérer les Secrets de la release Helm, lire l'état des ExternalSecret
 - Créer les PersistentVolumes pour PostgreSQL
 - Configurer le monitoring Prometheus
 
 ### Ce qui est interdit
-- Accéder aux autres namespaces (kube-system, ingress-nginx, etc.)
+- Accéder aux autres namespaces (kube-system, nginx-gateway, external-secrets, etc.)
 - Modifier les RBAC (pas de création de Role/RoleBinding)
 - Accéder aux secrets des autres applications
 - Modifier la configuration du cluster

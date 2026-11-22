@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-06
+verifie_le: 2026-11-22
 sources:
   - rhDemo/pom.xml
   - rhDemo/frontend/package.json

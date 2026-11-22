@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-21
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/helm/observability/
   - rhDemo/infra/stagingkub/scripts/install-observability.sh
@@ -122,7 +122,7 @@ Les règles d'alerte par défaut de kube-prometheus-stack sont créées, sauf ce
 ## Sécurité
 
 - **NetworkPolicies** : `default-deny-all` dans `monitoring` et `loki-stack`, puis flux autorisés un par un ([`monitoring-networkpolicies.yaml`](../infra/stagingkub/networkpolicies/monitoring-networkpolicies.yaml), [`loki-stack-networkpolicies.yaml`](../infra/stagingkub/networkpolicies/loki-stack-networkpolicies.yaml)), dont l'accès à l'API server par des `CiliumNetworkPolicy`. Côté application, les NetworkPolicies du chart `rhdemo` n'autorisent depuis `monitoring` que le port de management de l'application et le port 9187 de l'exporter. Les charts ne créent aucune NetworkPolicy : `install-observability.sh` les applique en dernier, une fois les pods prêts. Détail : [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md).
-- **RBAC** : Alloy n'a que des droits de lecture (découverte des pods), sa CRD `podlogs` n'est pas installée. Le sidecar de dashboards de Grafana est limité au namespace `loki-stack` (`rbac.namespaced: true`, `searchNamespace: loki-stack`) : pas de lecture des secrets du cluster entier. Les droits de `jenkins-infra-upgrader` : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md).
+- **RBAC** : Alloy n'a que des droits de lecture (découverte des pods), sa CRD `podlogs` n'est pas installée. Le sidecar de dashboards de Grafana est limité au namespace `loki-stack` (`rbac.namespaced: true`, `searchNamespace: loki-stack`) : pas de lecture des secrets du cluster entier. Les droits de `jenkins-infra-upgrader` : [rbac/README.md](../infra/stagingkub/rbac/README.md).
 - **Grafana** : accès anonyme et inscription désactivés, télémétrie et vérification de mises à jour coupées. Le compte administrateur vient du Secret `grafana-admin` (`admin.existingSecret`), créé par External Secrets Operator depuis OpenBao (`kv/observability/grafana`, rôle `eso-observability` limité à `kv/observability/*`). Création : `rhDemo/scripts/openbao-setup.py observability` puis `install-external-secrets.sh` ; rotation : `rotate-secrets.py grafana-admin` ([OPENBAO.md](OPENBAO.md)). Le script de Grafana refuse de s'exécuter si le Secret manque (sauf en validation `HELM_DRY_RUN`). Sans stockage persistant, Grafana reprend ce mot de passe à chaque démarrage : un changement fait dans l'interface est écrasé.
 - **Loki** est sans authentification (`auth_enabled: false`) : seules les NetworkPolicies limitent qui peut lui écrire ou le lire.
 

@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-29
+verifie_le: 2026-11-22
 sources:
   - rhDemo/pom.xml
   - rhDemo/Jenkinsfile-CI
@@ -59,7 +59,7 @@ Le build frontend lui-même utilise `npm ci` (et non `npm install`) via `fronten
 
 Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-Renovate` l'exécute aussi (`./mvnw org.owasp:dependency-check-maven:check`) pour toute PR Renovate qui touche un manifeste de dépendances (`pom.xml`, `frontend/package.json`, `frontend/package-lock.json`) — voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate). Les PR qui ne touchent aucun de ces fichiers (Jenkinsfile, Helm values, etc.) suivent un chemin de validation direct, hors périmètre OWASP.
 
-`fixcve-auto` relance aussi `dependency-check:check` en local (`-DfailBuildOnCVSS=11`, OSS Index désactivé) pour vérifier un correctif avant push, avec le cache de l'hôte (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
+`fixcve-auto` (job `RHDemo-FixCVE`) relance aussi `dependency-check:check` (`-DfailBuildOnCVSS=11`, OSS Index désactivé) pour vérifier un correctif avant push, sur la base NVD de `RHDemo-CI` (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
 
 **Différence CI / Renovate depuis l'incident #104/#871 (voir section OSS Index ci-dessous)** : `Jenkinsfile-Renovate` exécute le scan avec `-DossIndexAnalyzerEnabled=false` — seul `Jenkinsfile-CI` interroge OSS Index. Les deux pipelines restent donc couverts par NVD/CPE + Node Audit + RetireJS, mais seul CI peut détecter une CVE qui ne serait visible que via OSS Index. Le rapport du scan Renovate est archivé (`dependency-check-report-pr<N>.html/json`) par PR pour permettre un diagnostic après coup sans dépendre du log de build (tronqué par le `-q` de l'invocation Maven).
 
@@ -99,32 +99,9 @@ Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une 
 
 **À surveiller** : vérifier sur la page usage du compte Sonatype Guide si le quota se recharge mensuellement ou s'il s'agit d'un pool fixe non renouvelé — le calcul ci-dessus suppose un renouvellement mensuel.
 
-### [pom.xml:309-345](../pom.xml#L309-L345)
+### Configuration du plugin
 
-```xml
-<plugin>
-    <groupId>org.owasp</groupId>
-    <artifactId>dependency-check-maven</artifactId>
-    <version>11.1.1</version>
-    <configuration>
-        <!-- Échouer le build si CVSS ≥ 7.0 -->
-        <failBuildOnCVSS>7.0</failBuildOnCVSS>
-
-        <!-- Format des rapports -->
-        <formats>
-            <format>HTML</format>
-            <format>JSON</format>
-        </formats>
-
-        <!-- Configuration NVD API -->
-        <nvdApiServerId>nvd-api</nvdApiServerId>
-        <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
-
-        <!-- Cache pour améliorer les performances -->
-        <dataDirectory>${project.build.directory}/dependency-check-data</dataDirectory>
-    </configuration>
-</plugin>
-```
+La configuration fait foi dans le plugin `dependency-check-maven` du [pom.xml](../pom.xml) (version, seuil, formats HTML/JSON/XML, fichier de suppressions, réglages NVD, OSS Index et Node Audit, `scanSet` du frontend). Elle est commune à `RHDemo-CI`, `RHDemo-Renovate` et fixcve-auto ; la clé NVD n'y figure pas (voir [Intégration CI/CD](#intégration-cicd)).
 
 ### Paramètres clés
 
@@ -134,6 +111,8 @@ Un `npm audit` en étape CI a été envisagé puis écarté : pour apporter une 
 | `failOnError` | `true` | Le build échoue en cas d'erreur du plugin |
 | `skipTestScope` | `false` | Analyse aussi les dépendances de test |
 | `connectionTimeout` | `30000` | Timeout de connexion à NVD (30s) |
+| `dataDirectory` | `${user.home}/.m2/dependency-check-data` | Base NVD hors de `target/` (voir [Cache local](#cache-local)) |
+| `nvdApiDelay` / `nvdMaxRetryCount` | `8000` / `10` | Relevés après des 503 répétés du NVD |
 
 ---
 
@@ -295,52 +274,16 @@ echo "owasp-suppressions.xml" >> .gitignore
 
 ### Jenkinsfile - Stage actuel
 
-**[Jenkinsfile-CI](../Jenkinsfile-CI)**
-
-```groovy
-stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
-    steps {
-        // nvd-api-key et ossindex-credentials en withCredentials, lus par .mvn/ci-settings.xml
-        sh './mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex'
-    }
-    post {
-        always {
-            publishHTML([
-                reportDir: 'rhDemo/target',
-                reportFiles: 'dependency-check-report.html',
-                reportName: 'OWASP Dependency Check',
-                allowMissing: true,
-                keepAll: true,
-                alwaysLinkToLastBuild: true
-            ])
-        }
-    }
-}
-```
+Stage `🔍 Analyse OWASP Dependency-Check` de [Jenkinsfile-CI](../Jenkinsfile-CI) : `./mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex`. Les credentials `nvd-api-key` et `ossindex-credentials` sont ouverts par `withCredentials` et lus par `.mvn/ci-settings.xml`, jamais passés en argument. Le rapport HTML est publié (HTML Publisher) et archivé avec le build.
 
 ### Comportement en cas de vulnérabilité détectée
 
 1. **CVSS < 7.0** : Build continue, rapport généré
 2. **CVSS ≥ 7.0** : **Build échoue**, rapport généré, email envoyé
 
-### Configuration Jenkins (optionnelle)
+### Clé API NVD
 
-Pour améliorer les performances, configurer une **clé API NVD** :
-
-1. Obtenir une clé API gratuite : https://nvd.nist.gov/developers/request-an-api-key
-2. Ajouter dans Jenkins Credentials :
-   - Type : Secret text
-   - ID : `nvd-api-key`
-   - Secret : Votre clé API
-3. Modifier le Jenkinsfile :
-
-```groovy
-environment {
-    NVD_API_KEY = credentials('nvd-api-key')
-}
-```
-
-**Avantage** : Limite de requêtes plus élevée (5000/10 min vs 5/30 sec)
+Sans clé, l'API NVD limite fortement le débit (5 requêtes / 30 s contre 50 avec clé). La clé est le credential Jenkins `nvd-api-key` (Secret text, clé gratuite sur https://nvd.nist.gov/developers/request-an-api-key), utilisé par `RHDemo-CI`, `RHDemo-Renovate` et `RHDemo-FixCVE`. En local : `-DnvdApiKey=...` (voir [Exécution locale](#exécution-locale)).
 
 ---
 
@@ -354,17 +297,18 @@ environment {
 | Exécutions suivantes (cache local) | 30-60 secondes |
 | Avec clé API NVD | 20-40 secondes |
 | Rattrapage après plusieurs semaines sans mise à jour (clé NVD, `nvdApiDelay` à 8000 ms) | plus de 50 minutes (mesuré le 2026-10-29 sur le cache de l'hôte, non terminé) |
-| Cache copié depuis Jenkins puis scan (fixcve) | ~20 secondes (mesuré le 2026-10-29) |
+| Rescan de fixcve-auto sur la base de la CI (delta depuis le dernier build) | ~20 secondes (19 s, build #970) |
 
 ### Cache local
 
-Le `dataDirectory` du [pom.xml](../pom.xml) est `${user.home}/.m2/dependency-check-data` ; la base H2 `odc.mv.db` (≈ 260 Mo après compactage) et le cache OSS Index (`oss_cache/`) y vivent. Trois utilisateurs, trois caches :
+Le `dataDirectory` du [pom.xml](../pom.xml) est `${user.home}/.m2/dependency-check-data` ; la base H2 `odc.mv.db` (≈ 260 Mo après compactage) et le cache OSS Index (`oss_cache/`) y vivent. Deux caches :
 
 | Utilisateur | Emplacement | Mis à jour par |
 |-------------|-------------|----------------|
-| `RHDemo-CI` et `RHDemo-Renovate` (agents éphémères) | volume Docker `rhdemo-maven-repository`, monté sur `/home/jenkins/.m2` (`dependency-check-data/` à sa racine) | chaque scan, avec la clé NVD de la CI |
+| `RHDemo-CI`, `RHDemo-Renovate` et `RHDemo-FixCVE` (agents éphémères) | volume Docker `rhdemo-maven-repository`, monté sur `/home/jenkins/.m2` (`dependency-check-data/` à sa racine) | chaque scan, avec la clé NVD de la CI |
 | Poste du développeur (`./mvnw dependency-check:check`) | `~/.m2/dependency-check-data` | les scans locaux |
-| Vérification de [`fixcve-auto`](FIXCVE_AUTO.md) | `~/.m2/dependency-check-data` (même cache que le poste) | amorcé depuis le volume Jenkins avant chaque scan (voir [FIXCVE_AUTO.md](FIXCVE_AUTO.md#cache-nvd-de-lhôte)) |
+
+Un seul conteneur d'agent tourne à la fois : aucun scan CI n'écrit dans la base pendant la vérification de fixcve-auto ([FIXCVE_AUTO.md](FIXCVE_AUTO.md#cache-nvd)).
 
 Le répertoire `repository/org/owasp/dependency-check-data/` du volume Jenkins est l'ancien emplacement par défaut du plugin : il n'est plus lu.
 
@@ -372,17 +316,7 @@ Un cache resté plusieurs semaines sans scan rattrape l'API NVD page par page, c
 
 ### Optimisations
 
-```xml
-<!-- Mise à jour quotidienne au lieu de chaque build -->
-<autoUpdate>true</autoUpdate>
-<cveValidForHours>24</cveValidForHours>
-
-<!-- Activer le cache local -->
-<dataDirectory>${user.home}/.m2/dependency-check-data</dataDirectory>
-
-<!-- Analyser uniquement les dépendances principales -->
-<skipTestScope>true</skipTestScope>
-```
+Déjà en place dans le [pom.xml](../pom.xml) : base NVD dans `~/.m2` (conservée entre les builds), cache OSS Index de 7 jours, analyseur .NET désactivé. Le scope test reste analysé (`skipTestScope=false`).
 
 ---
 

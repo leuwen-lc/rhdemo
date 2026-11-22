@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-29
+verifie_le: 2026-11-22
 sources:
   - rhDemo/docs/
 ---

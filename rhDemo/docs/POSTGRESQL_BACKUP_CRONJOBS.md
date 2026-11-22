@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/postgresql-backup-cronjob.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
@@ -119,9 +119,8 @@ Chaque CronJob exécute les étapes suivantes :
 
 ### Image Utilisée
 
-- **Image** : `postgres:16-alpine`
+- **Image** : `global.images.postgres` de [`values.yaml`](../infra/stagingkub/helm/rhdemo/values.yaml), la même que celle des StatefulSets PostgreSQL (tag et digest : voir ce fichier)
 - **Binaire** : `pg_dump` (inclus dans l'image PostgreSQL)
-- **Taille** : ~80MB (Alpine Linux)
 
 ---
 
@@ -408,9 +407,10 @@ done
    kubectl get svc -n rhdemo-stagingkub postgresql-rhdemo
    ```
 
-3. Tester la connectivité depuis un pod de test :
+3. Tester la connectivité depuis un pod de test, avec l'image PostgreSQL du chart et le label des backups (sinon la NetworkPolicy default-deny bloque le flux) :
    ```bash
-   kubectl run -it --rm debug --image=postgres:16-alpine --restart=Never -n rhdemo-stagingkub -- \
+   IMG=$(kubectl get sts postgresql-rhdemo -n rhdemo-stagingkub -o jsonpath='{.spec.template.spec.containers[0].image}')
+   kubectl run -it --rm debug --image="$IMG" --labels=app=postgresql-rhdemo-backup --restart=Never -n rhdemo-stagingkub -- \
      psql -h postgresql-rhdemo -U rhdemo -d rhdemo -c "SELECT version();"
    ```
 

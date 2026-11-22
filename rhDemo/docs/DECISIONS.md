@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-29
+verifie_le: 2026-11-22
 sources:
   - rhDemo/src/main/java/fr/leuwen/rhdemoAPI/springconfig/SecurityConfig.java
   - rhDemo/pom.xml
@@ -64,7 +64,7 @@ Le projet a démarré avec SOPS : secrets chiffrés versionnés dans Git, sans i
 
 ## Pourquoi RBAC pour Jenkins ?
 
-- **Moindre privilège** : Jenkins n'agit que sur le namespace de déploiement
+- **Moindre privilège** : le compte de déploiement (`jenkins-deployer`) n'agit que sur le namespace de l'application ; les montées des composants système passent par un compte distinct, `jenkins-infra-upgrader`, aux droits listés dans [rbac/README.md](../infra/stagingkub/rbac/README.md)
 - **Pas d'accès admin** : impossible de générer un kubeconfig admin (CLI `kind` retirée de l'image)
 - **Isolation** : aucun accès à `kube-system` ou aux autres namespaces sensibles
 - **Audit** : actions traçables via l'API audit Kubernetes

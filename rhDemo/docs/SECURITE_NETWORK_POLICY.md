@@ -1,10 +1,11 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-default-deny.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/networkpolicy-rhdemo-app.yaml
   - rhDemo/infra/stagingkub/networkpolicies/
+  - rhDemo/infra/stagingkub/external-secrets/networkpolicies.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
 ---
 
@@ -148,6 +149,9 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 | Kube State Metrics | API Server (host) | 6443 | TCP | Collecte métriques état du cluster |
 | NGF Controller | API Server (host) | 6443 | TCP | Watch des Gateway/HTTPRoute |
 | NGF Data Plane → Controller | ngf-nginx-gateway-fabric | 443/8443 | TCP (gRPC) | Réception configuration NGINX |
+| ESO (tous les pods) | API Server (host) | 6443 | TCP | Écriture des Secrets à partir des ExternalSecret |
+| API Server | Webhook ESO | 10250 | TCP | Validation des ExternalSecret/SecretStore |
+| Contrôleur ESO | OpenBao (IP fixe sur le réseau Docker `kind`) | 8200 | HTTPS | Lecture de `kv/stagingkub/*` et `kv/observability/*` ([OPENBAO.md](OPENBAO.md)) |
 
 ### 6. Flux Debug (optionnel)
 
@@ -159,6 +163,8 @@ Ce document décrit tous les flux réseau légitimes dans l'environnement stagin
 
 Par défaut, tous les flux sortants vers Internet sont **BLOQUÉS** sauf :
 - DNS (port 53) vers kube-dns uniquement
+
+La seule sortie du cluster autorisée ne va pas vers Internet : le contrôleur External Secrets Operator joint OpenBao, conteneur de `jenkins-docker` raccordé au réseau Docker `kind`, par un `ipBlock` limité à son IP fixe (`/32`) et au port 8200. Cilium voit ce conteneur comme `world`, d'où l'`ipBlock` plutôt qu'une entité. L'IP est injectée par `install-external-secrets.sh` à l'application des policies.
 
 ### Exceptions potentielles (désactivées par défaut)
 
@@ -218,6 +224,7 @@ Les Network Policies sont réparties en deux emplacements :
 | `networkpolicies/monitoring-networkpolicies.yaml` | monitoring | Prometheus, AlertManager, etc. + CiliumNetworkPolicies API Server |
 | `networkpolicies/loki-stack-networkpolicies.yaml` | loki-stack | Loki, Alloy, Grafana + CiliumNetworkPolicy API Server |
 | `networkpolicies/nginx-gateway-networkpolicies.yaml` | nginx-gateway | NGINX Gateway Fabric + CiliumNetworkPolicy API Server |
+| `external-secrets/networkpolicies.yaml` | external-secrets | External Secrets Operator : default-deny, DNS, API Server (CiliumNetworkPolicy), webhook, sortie vers OpenBao. Appliqué par `scripts/components/install-external-secrets.sh` (pas par `apply-networkpolicies.sh`), qui remplace `__OPENBAO_IP__` |
 
 > **Note** : Chaque fichier YAML peut contenir à la fois des `NetworkPolicy` Kubernetes standard
 > et des `CiliumNetworkPolicy` spécifiques à Cilium. Les CiliumNetworkPolicies sont nécessaires

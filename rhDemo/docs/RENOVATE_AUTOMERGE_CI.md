@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-06
+verifie_le: 2026-11-22
 sources:
   - rhDemo/Jenkinsfile-Renovate
   - renovate.json
@@ -39,18 +39,20 @@ Deux comptes bot Codeberg distincts, aucun n'étant le compte personnel :
 
 Raisons : un token agit avec l'identité de son compte, même à portée réduite. Une fuite exposerait donc tous les dépôts du compte personnel, alors qu'un bot collaborateur d'un seul dépôt limite les dégâts à ce dépôt. Les merges automatiques restent aussi identifiables dans l'historique, et une rotation du mot de passe personnel ne casse pas la CI. Séparer celui qui propose de celui qui merge reproduit une revue à deux acteurs. Le token de fixcve-auto est encore un autre compte.
 
+Les credentials marqués [OpenBao] sont des références du plugin HashiCorp Vault vers `kv/jenkins/<id>` d'OpenBao, sous le même identifiant ; le pipeline les lit sans différence par `withCredentials` ([OPENBAO.md](OPENBAO.md)).
+
 | Credential Jenkins | Type | Usage |
 | --- | --- | --- |
-| `renovate-forgejo-token` | Secret text | Renovate (portées `write:repository`, `write:issue`, `read:user` et `read:organization` : sans portée `user`, l'initialisation de Renovate échoue en « Authentication failure » ; la lecture suffit, `write:user` est inutile) |
-| `renovate-gpg-key` | Secret text | Clé GPG privée en base64, signature des commits de Renovate |
-| `renovate-github-token` | Secret text | Lecture des dépôts publics GitHub : notes de version et releases (dont celles de NGF) |
-| `dockerhub-renovate-readonly` | Username with password | Identifiant Docker Hub (Docker ID, pas l'adresse e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sert uniquement aux dates de publication des images |
-| `ci-bot-forgejo-token` | Secret text | Bot CI : liste, synchronisation, merge, commentaires |
+| `renovate-forgejo-token` [OpenBao] | Secret text | Renovate (portées `write:repository`, `write:issue`, `read:user` et `read:organization` : sans portée `user`, l'initialisation de Renovate échoue en « Authentication failure » ; la lecture suffit, `write:user` est inutile) |
+| `renovate-gpg-key` [OpenBao] | Secret text | Clé GPG privée en base64, signature des commits de Renovate |
+| `renovate-github-token` [OpenBao] | Secret text | Lecture des dépôts publics GitHub : notes de version et releases (dont celles de NGF) |
+| `dockerhub-renovate-readonly` [OpenBao] | Username with password | Identifiant Docker Hub (Docker ID, pas l'adresse e-mail) et jeton personnel de portée « Public Repo Read-only », avec date d'expiration. Sert uniquement aux dates de publication des images |
+| `ci-bot-forgejo-token` [OpenBao] | Secret text | Bot CI : liste, synchronisation, merge, commentaires |
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | Dry-run des composants système sur stagingkub |
 | `nvd-api-key` | Secret text | OWASP Dependency-Check |
-| `notification-email` | Secret text | Destinataire du mail d'échec (adresse hors du dépôt public) |
+| `notification-email` [OpenBao] | Secret text | Destinataire du mail d'échec (adresse hors du dépôt public) |
 
-Création des credentials : commentaires de `jenkins-casc.yaml`, section CREDENTIALS.
+Création : `openbao-setup.py jenkins` pour les références OpenBao, interface Jenkins pour les autres ; liste et prérequis dans les commentaires de `jenkins-casc.yaml`, section CREDENTIALS. Renouvellement : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
 
 ## Configuration Renovate
 
@@ -102,8 +104,8 @@ Limites :
 
 - Renovate date une version par le dernier push de son tag : si le tag est republié pendant les 7 jours, le délai repart. Les rafales de republication observées durent quelques jours.
 - `jenkins/inbound-agent` reste sur le tag flottant `latest-jdk25`. Ses tags versionnés (`3395.v6e5377b_0fb_3c-3-jdk25`) ne semblent pas comparables par le versioning `docker` de Renovate, qui cesserait alors de proposer des mises à jour ; à vérifier par un dry-run avant de l'épingler. Une nouvelle version de l'agent arrive donc comme une mise à jour de digest, avec 48 h de délai seulement.
-- Une image référencée par tag sans digest (`RENOVATE_IMAGE`, images de SonarQube et du registre local) n'a que le délai de Renovate.
-- Le jeton Docker Hub expire. Renouvellement : nouveau jeton personnel (portée « Public Repo Read-only ») sur hub.docker.com, puis mise à jour du credential Jenkins.
+- Une image référencée par tag sans digest (`RENOVATE_IMAGE`, base PostgreSQL de SonarQube, registre local) n'a que le délai de Renovate.
+- Le jeton Docker Hub expire. Renouvellement : nouveau jeton personnel (portée « Public Repo Read-only ») sur hub.docker.com, puis mise à jour de la valeur dans OpenBao (`kv/jenkins/dockerhub-renovate-readonly`, voir [ROTATION_SECRETS.md](ROTATION_SECRETS.md)).
 
 Historique : une première version (5 novembre 2026) comptait le délai depuis la première observation de la PR, datée par un commentaire du bot CI. Elle ne se terminait jamais (login du bot erroné) et relançait le délai à chaque nouveau digest ; elle a été remplacée le lendemain.
 
@@ -135,7 +137,7 @@ Un seul job liste, valide et merge : un second job séparé aurait dupliqué le 
 
 Ces scripts pilotent Cilium, NGF, kube-prometheus-stack, Loki, Alloy et Grafana. Le job exécute le script modifié avec `HELM_DRY_RUN=true` contre le cluster réel, avec le kubeconfig de `jenkins-infra-upgrader`. Un `--dry-run=server` exige les mêmes droits qu'une exécution réelle : la protection vient de l'absence de persistance, pas d'un compte moins privilégié. `FORGEJO_TOKEN` n'est pas exposé à ce bloc, qui exécute un script venu d'une PR non revue.
 
-Pendant le dry-run, `record_chart_images` (`rbac-preflight-check.sh`) écrit dans `CHART_IMAGES_FILE` les images rendues par `helm template`, avec les mêmes options que l'installation. Si le dry-run passe, ces images sont scannées par Trivy (seuil CRITICAL et `.trivyignore.yaml` identiques à `RHDemo-CI`, rapports dans `trivy-reports-pr<N>/`). Comportement fermé : aucune image listée, ou une référence au format inattendu, et la PR est refusée. Seuls les champs `image:` sont lus : une image passée en argument de conteneur (le config-reloader de prometheus-operator par exemple) n'est pas vue, et une image que le chart n'épingle pas par digest (NGF) est scannée sur son tag du moment. `kind-config.yaml` n'a pas de script composant : seul son changement de version déclenche ce chemin, et il exige de toute façon une approbation manuelle.
+Pendant le dry-run, `record_chart_images` (`rbac-preflight-check.sh`) écrit dans `CHART_IMAGES_FILE` les images rendues par `helm template`, avec les mêmes options que l'installation. Si le dry-run passe, ces images sont scannées par Trivy (seuil CRITICAL et `.trivyignore.yaml` identiques à `RHDemo-CI`, rapports dans `trivy-reports-pr<N>/`). Comportement fermé : aucune image listée, ou une référence au format inattendu, et la PR est refusée. Seuls les champs `image:` sont lus : une image passée en argument de conteneur (le config-reloader de prometheus-operator par exemple) n'est pas vue, et une image que le chart n'épingle pas par digest (NGF) est scannée sur son tag du moment. `kind-config.yaml` n'a pas de script composant : seul son changement de version déclenche ce chemin, et il exige de toute façon une approbation manuelle. External Secrets Operator (`install-external-secrets.sh`) ne passe pas par ce chemin : hors du motif `install-or-upgrade-*.sh`, sa PR est validée directement (chemin 4), puis la montée est appliquée à la main ([IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md#composants-système-de-stagingkub)).
 
 Après merge, le job déclenche `RHDemo-Stagingkub-Upgrade-Deploy` pour le composant concerné, sans attendre sa fin ([STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)).
 
@@ -185,7 +187,7 @@ Renovate tournait sur Codeberg Actions jusqu'à ce que le pool de runners `codeb
 - Les montées majeures n'arrivent pas jusqu'au job sans approbation dans le tableau de bord.
 - Délai avant installation : 7 jours pour une version (statut Renovate vérifié avant merge), 48 h pour un digest d'image.
 - Renovate ne peut exécuter qu'une commande, le vendoring des CRDs de NGF (`RENOVATE_ALLOWED_COMMANDS`, option globale fixée dans le pipeline et non modifiable par `renovate.json`).
-- Tous les tokens sont des credentials Jenkins ; aucun n'est en clair dans le dépôt.
+- Tous les tokens sont des credentials Jenkins, dont la plupart référencent OpenBao (chaque lecture y est journalisée) ; aucun n'est en clair dans le dépôt.
 
 ## Limites connues
 

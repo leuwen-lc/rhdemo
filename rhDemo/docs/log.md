@@ -356,3 +356,29 @@ Nouvelle méthode `per-build` dans `secrets/inventory.yaml` pour les secrets ré
 ## [2026-11-22] ingest | OPENBAO : sauvegarde du journal des rotations
 
 La procédure de sauvegarde d'OpenBao inclut désormais une copie de `~/.config/rhdemo-rotation/journal.jsonl`, seule trace des dates de rotation lue par `rotate-secrets.py --check`. Sans elle, perdre le poste fait repasser tous les secrets en « aucune rotation journalisée ». L'audit d'OpenBao ne la remplace pas : beaucoup de rotations n'y passent pas, et il n'est gardé qu'environ 12 semaines. Mis à jour : `OPENBAO.md` (« Sauvegarde et restauration »), `ROTATION_SECRETS.md` (tâches récurrentes).
+
+## [2026-11-22] lint | revérification des 16 docs dont une source a changé
+
+41 avertissements « source modifiée » après la release 1.1.11 (squash `f2e0e31` : commits relus sur `evolutions-post-1.1.10`) et la migration OpenBao. `verifie_le` passé au 2026-11-22 sur les 16 docs.
+
+Exacts sans correction : `DECISIONS.md` (hors une nuance), `INVENTAIRE_COMPOSANTS_OPEN_SOURCE.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `REGISTRY.md`, `TESTS_SECURITE_COUVERTURE.md`, `TRIVY_SECURITY_SCAN.md`, `index.md`.
+
+Corrigés :
+- `IMAGE_VERSIONS_MANAGEMENT.md` : images `openbao/openbao` et `sonarqube` (épinglée par digest, plus « par tag seulement »), ESO suivi par Renovate mais appliqué à la main.
+- `RENOVATE_AUTOMERGE_CI.md` : credentials en références OpenBao, création par `openbao-setup.py jenkins`, PR ESO hors du chemin 1, SonarQube.
+- `OWASP_DEPENDENCY_CHECK.md` : fixcve-auto dans Jenkins sur la base NVD de la CI (plus d'amorçage depuis l'hôte) ; extraits périmés du pom (11.1.1, `dataDirectory` sous `target/`), du stage Jenkins et des « Optimisations » remplacés par des renvois.
+- `PIPELINES_CI_CD.md` : pas de tag `latest`, CD déclenchée par la CI avec `CI_BUILD_NUMBER` (digest du build), `imagePullPolicy` réel, signature Cosign par Transit, paramètres manquants, FixCVE dans les tableaux, ESO dans le schéma CD, Helm 4.
+- `SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md` : droits ExternalSecret, Gateway API et `gateway.nginx.org` à la place d'`ingresses`, renvoi vers `rbac/README.md` pour `jenkins-infra-upgrader` (renvoi d'`OBSERVABILITY_STACK_INTEGRATION.md` corrigé en conséquence).
+- `SECURITE_NETWORK_POLICY.md` : namespace `external-secrets` et sortie vers OpenBao (`ipBlock`, 8200), source ajoutée.
+- `CERTIFICATS_WEB.md` : secret `rhdemo-tls-cert` retiré (plus créé depuis mars).
+- `POSTGRESQL_BACKUP_CRONJOBS.md` : image `global.images.postgres` au lieu de `postgres:16-alpine`, commande de test avec le label autorisé par la NetworkPolicy.
+- `TESTS_MUTATION.md` : versions de PIT suivies par Renovate.
+- `DECISIONS.md` : moindre privilège précisé (`jenkins-deployer` / `jenkins-infra-upgrader`).
+
+Code corrigé dans la foulée : `infra/stagingkub/scripts/validate-stagingkub.sh` contrôlait le secret `rhdemo-tls-cert`, qui n'existe plus ; il contrôle désormais `shared-tls-cert` dans `nginx-gateway`, le certificat réellement servi par le shared-gateway.
+
+`infra/stagingkub/helm/rhdemo/README.md` (non suivi par le lint) réécrit : l'ancien tutoriel recopiait des templates périmés (Ingress `rhdemo-ingress` et `rhdemo-tls-cert` au lieu de Gateway API, namespace créé par le chart, images et structure de `values.yaml` anciennes). Il décrit désormais ce que le chart crée et ne crée pas (namespace, Gateway, TLS, Secrets ESO), les templates actuels, l'exposition et le déploiement par `RHDemo-CD`, avec renvois aux fichiers.
+
+Corrigés aussi : `scripts/deploy.sh` (supprimé en décembre 2025) et le paramètre inexistant `DEPLOY_ENV` retirés de `CLAUDE.md` et `infra/ENVIRONMENTS.md` au profit de `RHDemo-CD` ; commentaires de `values.yaml` sans version NGF figée (renvoi à `NGF_VERSION`). Un doublon de la clé `networkPolicies` soupçonné dans `values.yaml` n'existait pas (erreur de lecture). Les mentions de `deploy.sh` dans `JENKINS-NETWORK-ANALYSIS.md` (historique) et `CICD_JENKINS_VS_FORGEJO_ACTIONS.md` (proposition) sont laissées telles quelles.
+
+`infra/ENVIRONMENTS.md` réaligné : environnement « none » et Ingress Nginx retirés, environnements dev et jenkins-docker ajoutés, tableau des ports et URLs avec le fichier source de chacun (NodePort 32616 et non 30443), schémas ephemere et stagingkub (Gateway API, ESO, Cilium), comparaison secrets/réseau/données/sauvegardes à jour, image de l'application construite par le `Dockerfile` (plus Paketo), tableau de performances non mesuré supprimé.

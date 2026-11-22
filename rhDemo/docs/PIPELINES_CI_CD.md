@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-23
+verifie_le: 2026-11-22
 sources:
   - rhDemo/Jenkinsfile-CI
   - rhDemo/vars/rhDemoLib.groovy
@@ -32,13 +32,13 @@ Le projet RHDemo utilise **cinq pipelines Jenkins distincts** :
 | Pipeline | Rôle | Déclenchement | Doc dédiée |
 |---|---|---|---|
 | **RHDemo-CI** (`Jenkinsfile-CI`) | Build, tests, scans qualité/sécurité, déploiement ephemere, tests Selenium/ZAP, publication image | SCM sur les branches d'évolution | ce document |
-| **RHDemo-CD** (`Jenkinsfile-CD`) | Déploiement Helm de l'image validée sur stagingkub (K8s) | Manuel | ce document |
+| **RHDemo-CD** (`Jenkinsfile-CD`) | Déploiement Helm de l'image validée sur stagingkub (K8s) | Automatique après un build CI réussi qui publie l'image, ou manuel | ce document |
 | **RHDemo-Renovate** (`Jenkinsfile-Renovate`) | Scan Renovate, ouverture des PR, build/test/OWASP puis **merge automatique** des PR patch/minor qui passent la CI | Cron | [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) |
 | **RHDemo-Stagingkub-Upgrade-Deploy** (`Jenkinsfile-Stagingkub-Upgrade-Deploy`) | Application réelle (post-merge) des montées de version en place des composants d'infra stagingkub | Après merge d'une PR Renovate d'infra | [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) |
 | **RHDemo-FixCVE** (`Jenkinsfile-FixCVE`) | Remédiation automatique des CVE bloquantes Trivy/OWASP de la CI, validation ou rollback au build suivant | Fin de chaque build CI (`post { always }`), cron de secours horaire | [FIXCVE_AUTO.md](FIXCVE_AUTO.md) |
 
-Toutes les fins de build CI et CD, ainsi que l'upgrade d'infra, envoient une
-**notification email** (email-ext). L'ancien `Jenkinsfile` monolithique (CI+CD
+Les pipelines envoient une **notification email** (email-ext) : à chaque fin de
+build pour la CI et la CD, en cas d'échec ou d'alerte pour les autres. L'ancien `Jenkinsfile` monolithique (CI+CD
 mélangés) a été **supprimé**.
 
 Enchaînement CI → CD :
@@ -50,7 +50,7 @@ Enchaînement CI → CD :
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Build & Tests                                               │
 │    ├─ Compilation Maven                                        │
-│    ├─ Tests unitaires                                          │
+│    ├─ Tests unitaires et d'intégration                         │
 │    ├─ Analyse OWASP Dependency-Check                           │
 │    ├─ Build Maven (JAR)                                        │
 │    └─ Analyse SonarQube + Quality Gate                         │
@@ -62,28 +62,31 @@ Enchaînement CI → CD :
 │    ├─ Déploiement environnement ephemere Docker                 │
 │    ├─ Initialisation base de données                           │
 │    ├─ Initialisation Keycloak                                  │
+│    ├─ Scan Trivy des images + SBOM CycloneDX                   │
 │    ├─ Tests Selenium                                           │
 │    └─ Tests sécurité OWASP ZAP                                 │
 │                                                                 │
 │ 4. Publication                                                  │
-│    └─ Push de l'image validée vers le registry                 │
+│    ├─ Push de l'image validée vers le registry                 │
+│    └─ Signature Cosign (clé Transit d'OpenBao)                 │
 │                                                                 │
-│ ✅ Résultat: Image Docker taggée et publiée                    │
+│ ✅ Résultat: image publiée et signée, CD déclenchée            │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ Image validée et publiée
+                              │ Image validée, publiée et signée
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                       JENKINSFILE-CD                            │
 │                   (Déploiement Continu)                         │
 ├─────────────────────────────────────────────────────────────────┤
 │ 1. Préparation                                                  │
-│    ├─ Secrets : ESO depuis OpenBao (rien dans Jenkins)         │
+│    ├─ Tag + digest : paramètre ou artefact du build CI         │
 │    └─ Vérification de l'image dans le registry                 │
 │                                                                 │
 │ 2. Configuration Kubernetes                                     │
 │    ├─ Connexion au cluster KinD                                │
-│    └─ Mise à jour des secrets Kubernetes                       │
+│    ├─ Vérification de la signature Cosign                      │
+│    └─ ExternalSecret synchronisés (ESO, OpenBao)               │
 │                                                                 │
 │ 3. Déploiement                                                  │
 │    ├─ Déploiement Helm sur stagingkub                          │
@@ -117,11 +120,11 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 
 #### Phase 2 : Build et Tests
 - Compilation Maven
-- Tests unitaires
+- Tests unitaires et d'intégration
 - Analyse OWASP Dependency-Check
-- Build Maven (création du JAR)
 - Analyse SonarQube (optionnel) : SonarQube est démarré au début du stage puis arrêté après la Quality Gate, pour libérer la mémoire du poste (voir `infra/jenkins-docker/README.md`)
 - Quality Gate SonarQube (optionnel)
+- Couverture de code (JaCoCo)
 
 #### Phase 3 : Docker Build
 - Construction de l'image Docker
@@ -135,7 +138,8 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Initialisation base de données (pgschema.sql + pgdata.sql)
 - Initialisation Keycloak (realm + users)
 
-#### Phase 5 : Tests Selenium et OWASP ZAP
+#### Phase 5 : Scans, tests Selenium et OWASP ZAP
+- Scan Trivy des images ([TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md)) et SBOM CycloneDX
 - Tests Selenium (optionnel)
 - Tests sécurité OWASP ZAP
 
@@ -144,12 +148,19 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Tag de l'image avec la version finale :
   - **SNAPSHOT** : `<VERSION>-<BUILD_NUMBER>` (ex: `1.1.0-SNAPSHOT-95`)
   - **RELEASE** : `<VERSION>` (ex: `1.0.0-RELEASE`)
-- Tag supplémentaire : `latest` (toujours mis à jour vers la dernière image validée)
-- Push vers le registry Docker local (`localhost:5000` ou `kind-registry:5000`)
+- Push vers le registry Docker local (`localhost:5000`) ; pas de tag `latest`
+- Tag, digest et référence de l'image écrits dans `image-digest/`, archivés pour la CD
+- Signature Cosign par la clé Transit d'OpenBao (AppRole `openbao-cosign-approle`, clé non exportable, voir [OPENBAO.md](OPENBAO.md))
+- Nettoyage du registry : seuls les 3 derniers SNAPSHOT sont gardés
 
 #### Phase 7 : Archivage
 - Archivage du JAR
 - Archivage des rapports (tests, OWASP, ZAP)
+
+#### Fin de build
+- Déclenchement de `RHDemo-FixCVE` quel que soit le résultat (sans attendre sa fin)
+- Si le build réussit et publie l'image : déclenchement de `RHDemo-CD` avec `CI_BUILD_NUMBER`, pour déployer exactement l'image de ce build
+- Notification email
 
 ### Paramètres
 
@@ -157,7 +168,9 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 |-----------|------|--------|-------------|
 | `RUN_SELENIUM_TESTS` | Boolean | `true` | Exécuter les tests Selenium |
 | `RUN_SONAR` | Boolean | `true` | Exécuter l'analyse SonarQube |
-| `PUBLISH_IMAGE` | Boolean | `true` | Publier l'image sur le registry |
+| `PUBLISH_IMAGE` | Boolean | `true` | Publier l'image sur le registry (et déclencher la CD) |
+| `SIGN_IMAGE` | Boolean | `true` | Signer l'image avec Cosign après publication |
+| `KEEP_EPHEMERE_ENV` | Boolean | `false` | Garder l'environnement ephemere pour le débogage |
 | `IMAGE_TAG_SUFFIX` | String | `""` | Suffixe optionnel pour le tag (ex: `-rc1`, `-hotfix`) |
 
 ### Exemple d'utilisation
@@ -176,8 +189,9 @@ IMAGE_TAG_SUFFIX=-rc1
 ### Artifacts produits
 
 - Images Docker publiées sur le registry :
-  - **SNAPSHOT** : `rhdemo-api:1.1.0-SNAPSHOT-95` + `rhdemo-api:latest`
-  - **RELEASE** : `rhdemo-api:1.0.0-RELEASE` + `rhdemo-api:latest`
+  - **SNAPSHOT** : `rhdemo-api:1.1.0-SNAPSHOT-95`
+  - **RELEASE** : `rhdemo-api:1.0.0-RELEASE`
+- `image-digest/` : tag, digest et référence de l'image publiée (lus par la CD)
 - JAR : `target/*.jar`
 - Rapports :
   - Tests unitaires : `target/surefire-reports/**`
@@ -200,8 +214,8 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 #### Phase 1 : Préparation
 - Checkout du code source
 - Détermination de la version de l'image à déployer :
-  - **Avec paramètre `IMAGE_TAG`** : Utilise le tag spécifié (ex: `1.1.0-SNAPSHOT-95`)
-  - **Sans paramètre** : Utilise le tag `latest` (dernière image validée par CI)
+  - **Avec paramètre `IMAGE_TAG`** : utilise le tag spécifié (ex: `1.1.0-SNAPSHOT-95`) ; le digest est lu dans le registry
+  - **Sans `IMAGE_TAG`** : tag et digest lus dans l'artefact `image-digest/` du build CI `CI_BUILD_NUMBER` (passé par la CI quand elle déclenche la CD), ou à défaut du dernier build CI réussi (Copy Artifact)
 - Secrets applicatifs : plus déchiffrés par le pipeline, créés dans le namespace par External Secrets Operator depuis OpenBao ([OPENBAO.md](OPENBAO.md))
 
 #### Phase 2 : Configuration Kubernetes
@@ -209,7 +223,7 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 - Vérification du nom du registry : **DOIT être `kind-registry`** (sinon échec du pipeline)
 - Connexion automatique du registry au réseau `kind` avec alias DNS `kind-registry`
 - Vérification de l'image dans le registry
-- Vérification de la signature Cosign avec la clé publique Transit (`cosign-public-key-transit`)
+- Vérification de la signature Cosign avec la clé publique Transit (`cosign-public-key-transit`), sauf si `VERIFY_SIGNATURE=false`
 - Vérification que les `ExternalSecret` sont synchronisés (lecture seule, aucun secret ne transite par Jenkins)
 
 #### Phase 3 : Déploiement
@@ -225,32 +239,26 @@ Déployer une image Docker validée (publiée par le pipeline CI) sur l'environn
 
 | Paramètre | Type | Défaut | Description |
 |-----------|------|--------|-------------|
-| `IMAGE_TAG` | String | `""` | Tag de l'image à déployer (ex: `1.1.0-SNAPSHOT-95`, `1.0.0-RELEASE`). **Si vide, utilise `latest`** (dernière image validée par CI) |
+| `IMAGE_TAG` | String | `""` | Tag de l'image à déployer (ex: `1.1.0-SNAPSHOT-95`, `1.0.0-RELEASE`). Si vide : image du build CI `CI_BUILD_NUMBER`, ou du dernier build CI réussi |
+| `CI_BUILD_NUMBER` | String | `""` | Build CI dont l'artefact `image-digest/` est lu (posé automatiquement par la CI) |
+| `VERIFY_SIGNATURE` | Boolean | `true` | Vérifier la signature Cosign avant le déploiement |
 | `FORCE_RECREATE_PODS` | Boolean | `false` | Forcer la recréation des pods (rollout restart) |
 | `SKIP_HEALTH_CHECK` | Boolean | `false` | Ne pas attendre les health checks |
 
 ### Exemple d'utilisation
 
 ```bash
-# Déploiement automatique de la dernière image validée par CI (tag 'latest')
-# Pas de paramètres nécessaires
-# → Utilise rhdemo-api:latest
+# Cas normal : rien à faire, la CI déclenche la CD avec CI_BUILD_NUMBER
 
-# Déploiement d'une version SNAPSHOT spécifique (avec numéro de build)
-IMAGE_TAG=1.1.0-SNAPSHOT-95
-# → Utilise rhdemo-api:1.1.0-SNAPSHOT-95
+# Redéployer l'image du dernier build CI réussi
+# Pas de paramètres
 
-# Déploiement d'une version RELEASE spécifique
+# Déploiement d'une version précise
 IMAGE_TAG=1.0.0-RELEASE
-# → Utilise rhdemo-api:1.0.0-RELEASE
 
 # Déploiement avec recréation forcée des pods
 IMAGE_TAG=1.1.0-SNAPSHOT-95
 FORCE_RECREATE_PODS=true
-
-# Déploiement rapide sans health checks
-SKIP_HEALTH_CHECK=true
-# → Utilise rhdemo-api:latest sans attendre les health checks
 ```
 
 ### Pré-requis
@@ -339,7 +347,7 @@ idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.
 
 ```bash
 # À chaque commit/PR
-1. Déclencher Jenkinsfile-CI
+1. git push : RHDemo-CI démarre par polling SCM
 2. Vérifier les résultats :
    - Tests unitaires
    - Quality gate SonarQube
@@ -350,70 +358,23 @@ idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.
 
 ### 2. Déploiement sur stagingkub
 
-```bash
-# Option A : Déploiement automatique de la dernière version (recommandé pour dev)
-1. Après un build CI réussi → l'image 'latest' est mise à jour
-2. Déclencher Jenkinsfile-CD SANS paramètre
-3. Le CD déploie automatiquement rhdemo-api:latest
-
-# Option B : Déploiement d'une version spécifique (recommandé pour prod)
-1. Noter le tag de l'image publiée par CI (ex: 1.1.0-SNAPSHOT-95)
-2. Déclencher Jenkinsfile-CD avec IMAGE_TAG=1.1.0-SNAPSHOT-95
-3. Le CD déploie exactement cette version
-
-# Dans les deux cas, vérifier le déploiement :
-   - Pods ready
-   - Health checks OK
-   - Application accessible
-```
+Automatique : un build CI réussi qui publie l'image déclenche `RHDemo-CD` avec son
+numéro de build ; la CD déploie le digest exact de ce build après avoir vérifié sa
+signature. Pour redéployer une autre version, lancer `RHDemo-CD` à la main avec
+`IMAGE_TAG`. Vérifier ensuite les pods, les health checks et l'accès à l'application.
 
 ### 3. Workflow complet
 
 ```
-┌──────────────┐
-│ Développeur  │
-│  git push    │
-└──────┬───────┘
-       │
-       ▼
-┌────────────────────────────────────────────────┐
-│       Jenkinsfile-CI (automatique)             │
-│  - Build #95                                   │
-│  - Tests                                       │
-│  - Docker build                                │
-│  - Tests Selenium + ZAP                        │
-│  - Publish image                               │
-└──────┬─────────────────────────────────────────┘
-       │
-       │ ✅ Images publiées sur registry :
-       │    - rhdemo-api:1.1.0-SNAPSHOT-95
-       │    - rhdemo-api:latest (updated)
-       │
-       ▼
-┌────────────────────────────────────────────────┐
-│       Jenkinsfile-CD (manuel)                  │
-│                                                │
-│  Option A (dev) : Sans paramètre               │
-│    → Déploie rhdemo-api:latest                 │
-│    → imagePullPolicy: Always                   │
-│                                                │
-│  Option B (prod) : IMAGE_TAG=1.1.0-SNAPSHOT-95 │
-│    → Déploie rhdemo-api:1.1.0-SNAPSHOT-95      │
-│    → imagePullPolicy: Always                   │
-│                                                │
-│  - Pull image depuis registry                  │
-│  - Deploy Helm                                 │
-│  - Health checks                               │
-└──────┬─────────────────────────────────────────┘
-       │
-       │ ✅ Déployé sur stagingkub
-       │
-       ▼
-┌────────────────────────────────────────────────┐
-│        Application accessible                  │
-│  - https://rhdemo-stagingkub.intra.leuwen-lc.fr             │
-│  - https://keycloak-stagingkub.intra.leuwen-lc.fr           │
-└────────────────────────────────────────────────┘
+git push → RHDemo-CI (polling SCM)
+             build, tests, scans, ephemere, Selenium + ZAP
+             push rhdemo-api:<version>-<build>, signature Cosign
+             │                         └─ fin de build → RHDemo-FixCVE
+             ▼ succès + image publiée
+           RHDemo-CD (CI_BUILD_NUMBER)
+             vérification signature, ExternalSecret, Helm, health checks
+             ▼
+           https://rhdemo-stagingkub.intra.leuwen-lc.fr
 ```
 
 ---
@@ -431,9 +392,7 @@ Le pipeline CI applique automatiquement une stratégie de versioning basée sur 
 <version>1.1.0-SNAPSHOT</version>
 ```
 
-**Tags créés par CI** :
-- `rhdemo-api:1.1.0-SNAPSHOT-95` (avec numéro de build unique)
-- `rhdemo-api:latest` (mis à jour à chaque build)
+**Tag créé par CI** : `rhdemo-api:1.1.0-SNAPSHOT-95` (avec numéro de build unique).
 
 **Raison** : Chaque build SNAPSHOT est unique grâce au numéro de build Jenkins. Cela permet de :
 - Tracer exactement quelle version est déployée
@@ -447,11 +406,9 @@ Le pipeline CI applique automatiquement une stratégie de versioning basée sur 
 <version>1.0.0-RELEASE</version>
 ```
 
-**Tags créés par CI** :
-- `rhdemo-api:1.0.0-RELEASE` (version fixe)
-- `rhdemo-api:latest` (mis à jour à chaque build)
+**Tag créé par CI** : `rhdemo-api:1.0.0-RELEASE` (version fixe, sans numéro de build).
 
-**Raison** : Les versions RELEASE sont immuables, pas besoin de numéro de build.
+Aucun tag `latest` n'est publié : la CD déploie toujours un tag précis, et vérifie la signature de son digest.
 
 ### Politique de pull (imagePullPolicy)
 
@@ -459,41 +416,8 @@ Le pipeline CD adapte automatiquement la politique de pull selon le tag :
 
 | Tag | imagePullPolicy | Raison |
 |-----|----------------|--------|
-| `latest` | `Always` | Garantit qu'on récupère toujours la dernière image du registry |
-| `*-SNAPSHOT-*` | `Always` | Force le pull pour éviter d'utiliser une version en cache |
-| `*-RELEASE` | `IfNotPresent` | Version fixe, peut utiliser le cache |
-
-### Exemples de workflow
-
-#### Développement actif (SNAPSHOT)
-
-```bash
-# Build CI #95
-pom.xml → 1.1.0-SNAPSHOT
-CI → Pousse rhdemo-api:1.1.0-SNAPSHOT-95 + latest
-
-# Déploiement CD automatique
-CD (sans paramètre) → Déploie rhdemo-api:latest (=1.1.0-SNAPSHOT-95)
-
-# Build CI #96
-CI → Pousse rhdemo-api:1.1.0-SNAPSHOT-96 + latest (updated)
-
-# Déploiement CD automatique
-CD (sans paramètre) → Déploie rhdemo-api:latest (=1.1.0-SNAPSHOT-96)
-  ↳ Avec imagePullPolicy=Always, récupère automatiquement la nouvelle version
-```
-
-#### Release en production
-
-```bash
-# Build CI avec version RELEASE
-pom.xml → 1.0.0-RELEASE
-CI → Pousse rhdemo-api:1.0.0-RELEASE + latest
-
-# Déploiement CD avec tag spécifique
-CD avec IMAGE_TAG=1.0.0-RELEASE → Déploie exactement cette version
-  ↳ Avec imagePullPolicy=IfNotPresent, utilise le cache si disponible
-```
+| contient `SNAPSHOT` | `Always` | Force le pull pour éviter d'utiliser une version en cache |
+| autre (`*-RELEASE`) | `IfNotPresent` | Version fixe, peut utiliser le cache |
 
 ### Nettoyage automatique du registry
 
@@ -509,24 +433,22 @@ Avant build #98 :
   - rhdemo-api:1.1.0-SNAPSHOT-95
   - rhdemo-api:1.1.0-SNAPSHOT-96
   - rhdemo-api:1.1.0-SNAPSHOT-97
-  - rhdemo-api:latest
 
 Après build #98 :
   - rhdemo-api:1.1.0-SNAPSHOT-96
   - rhdemo-api:1.1.0-SNAPSHOT-97
   - rhdemo-api:1.1.0-SNAPSHOT-98
-  - rhdemo-api:latest
 ```
 
 ---
 
 ## ⚙️ Configuration Jenkins
 
-### 1. Créer deux pipelines Jenkins
+### 1. Création des jobs Jenkins
 
 #### Option A : Configuration automatique (JCasC - Recommandé)
 
-Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) configure **automatiquement** les deux pipelines au démarrage de Jenkins.
+Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) configure **automatiquement** les cinq jobs au démarrage de Jenkins.
 
 **Avantages** :
 - ✅ Configuration versionnée dans Git
@@ -547,7 +469,7 @@ exactes.
 | `cosign-public-key-transit` | Secret file | RHDemo-CD : vérification de signature |
 | `kubeconfig-stagingkub` | Secret file | RHDemo-CD (`jenkins-deployer`) |
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | RHDemo-Stagingkub-Upgrade-Deploy (`jenkins-infra-upgrader`) |
-| Token API Forgejo + clé GPG | — | RHDemo-Renovate (rebase/merge/commentaires, commits signés) |
+| `renovate-forgejo-token`, `renovate-gpg-key`, `renovate-github-token`, `dockerhub-renovate-readonly`, `ci-bot-forgejo-token` | Références OpenBao | RHDemo-Renovate ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md#comptes-et-credentials)) |
 | `fixcve-forgejo-token`, `fixcve-jenkins-api` | Références OpenBao | RHDemo-FixCVE (push du bot, lecture des builds CI) |
 
 ### 3. Outils globaux
@@ -556,13 +478,13 @@ exactes.
 |-------|---------|
 | JDK | **25** (Temurin) |
 | Maven | via `mvnw` (wrapper) |
-| Helm (agent) | **4.2.x** (`HELM_VERSION` dans `Dockerfile.agent`) |
+| Helm (agent) | **4** (version exacte : `HELM_VERSION` dans `Dockerfile.agent`) |
 
 ### 4. Déclenchement
 
 Jenkins **n'est pas exposé sur Internet** : pas de webhook entrant depuis
 Forgejo. RHDemo-CI se déclenche par **polling SCM** sur les branches
-d'évolution ; RHDemo-Renovate par **cron** ; RHDemo-FixCVE à la fin de chaque build CI. Les statuts CI ne remontent pas
+d'évolution ; RHDemo-Renovate par **cron** ; RHDemo-FixCVE à la fin de chaque build CI ; RHDemo-CD après un build CI réussi qui publie l'image. Les statuts CI ne remontent pas
 vers Forgejo (`prCreation: immediate`), d'où le merge des PR piloté côté
 Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 
@@ -570,14 +492,14 @@ Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 
 ## 📊 Comparaison des pipelines
 
-| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy |
-|---------|----------------|----------------|----------------------|---------------------------------------|
-| **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra |
-| **Durée indicative** | ~8 min (timeout 2 h) | ~2 min (timeout 30 min) | ~10-15 min | quelques min/composant |
-| **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) |
-| **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade |
-| **Déclenchement** | SCM (branches d'évolution) | Manuel | Cron | Post-merge PR infra |
-| **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` |
+| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy | Jenkinsfile-FixCVE |
+|---------|----------------|----------------|----------------------|---------------------------------------|--------------------|
+| **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra | Remédiation des CVE bloquantes de la CI |
+| **Durée indicative** | ~8 min (timeout 2 h) | ~2 min (timeout 30 min) | ~10-15 min | quelques min/composant | timeout 30 min |
+| **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) | agent `fixcve` (sans socket Docker) |
+| **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade | rescan local OWASP, preuve par le build CI suivant |
+| **Déclenchement** | SCM (branches d'évolution) | Fin de CI réussie, ou manuel | Cron | Post-merge PR infra | Fin de chaque build CI, cron de secours |
+| **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` | — |
 
 Les durées sont celles d'une exécution normale, sans contention de ressources sur la machine (le projet tourne sur un seul PC). Les valeurs « timeout » de la CI et de la CD sont les garde-fous définis dans `options { timeout(...) }` des Jenkinsfile : elles ne sont atteintes qu'en cas de forte contention ou de blocage, et ne représentent pas la durée habituelle.
 
@@ -638,8 +560,8 @@ kubectl top pods -n rhdemo-stagingkub
 
 **Solution** :
 ```bash
-# Vérifier les secrets
-kubectl get secrets -n rhdemo-stagingkub
+# Vérifier les secrets (créés par ESO depuis OpenBao)
+kubectl get externalsecrets,secrets -n rhdemo-stagingkub
 
 # Vérifier les logs de l'application
 kubectl logs -n rhdemo-stagingkub deployment/rhdemo
@@ -699,7 +621,6 @@ Voir [REGISTRY.md](REGISTRY.md) et [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK
 
 ---
 
-**Dernière mise à jour** : 2026-08-31 — ajout des pipelines Renovate et
-Stagingkub-Upgrade-Deploy, suppression du `Jenkinsfile` monolithique, JDK 25,
-Helm 4, notifications email, hébergement Forgejo/Codeberg. Le détail par phase
+**Dernière mise à jour** : 2026-11-22 — job RHDemo-FixCVE, secrets par OpenBao et ESO,
+signature Cosign par Transit, CD déclenchée par la CI sur le digest du build (pas de tag `latest`). Le détail par phase
 ci-dessus reflète l'esprit des pipelines ; les fichiers `Jenkinsfile-*` font foi.

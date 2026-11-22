@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-06
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
   - rhDemo/infra/ephemere/docker-compose.yml
@@ -56,16 +56,18 @@ Dans stagingkub, `global.images` est la source unique des images tierces du char
 | --- | --- |
 | [`infra/jenkins-docker/Dockerfile.jenkins`](../infra/jenkins-docker/Dockerfile.jenkins) | `jenkins/jenkins` (contrôleur) |
 | [`infra/jenkins-docker/Dockerfile.agent`](../infra/jenkins-docker/Dockerfile.agent) | `jenkins/inbound-agent` (agents) |
-| [`infra/jenkins-docker/docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml) | `tecnativa/docker-socket-proxy` |
+| [`infra/jenkins-docker/docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml) | `tecnativa/docker-socket-proxy`, `sonarqube`, `openbao/openbao` ([OPENBAO.md](OPENBAO.md)) |
 | [`infra/jenkins-docker/docker-compose.zap.yml`](../infra/jenkins-docker/docker-compose.zap.yml) | `zaproxy/zap-stable` |
 
-Restent **épinglées par tag seulement** : SonarQube, sa base `postgres:18-alpine` et le registre local `registry:3` (`infra/jenkins-docker/docker-compose.yml`), ainsi que l'image `renovate/renovate` (`RENOVATE_IMAGE` de `Jenkinsfile-Renovate`). Renovate les suit par tag, avec le délai de 7 jours des nouvelles versions.
+Restent **épinglées par tag seulement** : la base de SonarQube `postgres:18-alpine` et le registre local `registry:3` (`infra/jenkins-docker/docker-compose.yml`), ainsi que l'image `renovate/renovate` (`RENOVATE_IMAGE` de `Jenkinsfile-Renovate`). Renovate les suit par tag, avec le délai de 7 jours des nouvelles versions.
 
 ### Composants système de stagingkub
 
 Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy et Grafana sont installés par Helm à partir des scripts `infra/stagingkub/scripts/components/install-or-upgrade-*.sh`. On y fixe la **version du chart** (variable `*_VERSION` annotée pour Renovate), pas les images : chaque chart référence ses propres images. Ces images sont scannées par Trivy à chaque montée de chart, à partir du rendu `helm template` ([TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md#périmètre-du-scan)).
 
 Le chart NGF est publié uniquement en OCI sur ghcr, qui ne donne pas de date : Renovate le suit par les releases GitHub `nginx/nginx-gateway-fabric`, dont les versions sont celles du chart. Une montée de `NGF_VERSION` exige aussi les CRDs Gateway API de la nouvelle version, sinon le script d'installation échoue : Renovate les ajoute à sa PR en lançant `vendor-gateway-api-crds.sh <version>` (`postUpgradeTasks`, voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md#1-composant-système-de-stagingkub)). Pour une montée manuelle, lancer ce script et commiter le manifeste avec le changement de version.
+
+External Secrets Operator ([OPENBAO.md](OPENBAO.md)) suit le même principe (`ESO_VERSION` annotée dans `install-external-secrets.sh`), mais hors mise à jour en place : sa PR Renovate ne passe ni par le dry-run ni par `RHDemo-Stagingkub-Upgrade-Deploy` (validation directe, chemin 4 de l'[aiguillage](RENOVATE_AUTOMERGE_CI.md#aiguillage-de-la-validation)). Après merge, relancer le script à la main avec le kubeconfig administrateur du cluster : `jenkins-infra-upgrader` n'a pas les droits requis (CRDs, `ClusterRoleBinding` auth-delegator).
 
 ### Image de l'application
 

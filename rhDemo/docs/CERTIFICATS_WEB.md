@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-10-23
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/stagingkub/shared-gateway.yaml
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
@@ -81,7 +81,6 @@ Le script génère :
 - `certs/tls.crt` : Certificat X.509 auto-signé
 - `certs/tls.key` : Clé privée RSA 2048 bits
 - Secret Kubernetes `shared-tls-cert` dans le namespace `nginx-gateway` (utilisé par le shared-gateway)
-- Secret Kubernetes `rhdemo-tls-cert` dans le namespace `rhdemo-stagingkub` (**legacy, inutilisé** — à supprimer d'`init-stagingkub.sh` : le port-forward utilise HTTP direct, et sans DNS cluster Keycloak est de toute façon inaccessible hors cluster)
 
 Le certificat couvre le domaine wildcard `*.intra.leuwen-lc.fr`.
 

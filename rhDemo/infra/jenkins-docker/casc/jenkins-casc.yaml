@@ -370,7 +370,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions_openbao_postmigration')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -458,7 +458,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions_openbao_postmigration')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   // Clone superficiel pour accélérer le checkout
                   cloneOptions {
@@ -492,9 +492,6 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   # PIPELINE RENOVATE - Validation et automerge des PRs Renovate
   # ─────────────────────────────────────────────────────────────────
-  # Reste sur evolutions-post-1.1.11 pendant le développement d'OpenBao : BASE_BRANCH de
-  # Jenkinsfile-Renovate et baseBranchPatterns de renovate.json visent cette branche. Les
-  # jobs CI, CD et Upgrade-Deploy construisent evolution_openbao (docs/OPENBAO.md).
   - script: |
       pipelineJob('RHDemo-Renovate') {
         displayName('RHDemo - Renovate Automerge')
@@ -595,7 +592,7 @@ jobs:
                   url('https://codeberg.org/leuwen-lc/rhdemo.git')
                   // Pas de credentials nécessaire pour un repository public
                 }
-                branches('*/evolutions_openbao_postmigration')
+                branches('*/evolutions-post-1.1.11')
                 extensions {
                   cloneOptions {
                     shallow(false)

@@ -151,7 +151,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 - Push vers le registry Docker local (`localhost:5000`) ; pas de tag `latest`
 - Tag, digest et référence de l'image écrits dans `image-digest/`, archivés pour la CD
 - Signature Cosign par la clé Transit d'OpenBao (AppRole `openbao-cosign-approle`, clé non exportable, voir [OPENBAO.md](OPENBAO.md))
-- Nettoyage du registry : seuls les 3 derniers SNAPSHOT sont gardés
+- Nettoyage du registry : seuls les 3 derniers SNAPSHOT sont gardés, les signatures Cosign orphelines sont supprimées, puis garbage collection
 
 #### Phase 7 : Archivage
 - Archivage du JAR
@@ -424,8 +424,9 @@ Le pipeline CD adapte automatiquement la politique de pull selon le tag :
 Le pipeline CI nettoie automatiquement les anciennes images SNAPSHOT pour économiser l'espace disque :
 
 - **Politique de rétention** : Garde les 3 derniers builds SNAPSHOT
-- **Garbage collection** : Libère l'espace disque après suppression
-- **Images RELEASE** : Jamais supprimées automatiquement
+- **Signatures Cosign** : cosign range la signature d'une image sous le tag `sha256-<digest>` ; toute signature dont le digest ne correspond plus à aucune image taguée est supprimée (sans cette passe, les signatures des SNAPSHOT supprimés s'accumulaient : 334 constatées le 2026-11-22)
+- **Garbage collection** : `registry garbage-collect` sur `/etc/distribution/config.yml` (emplacement de `registry:3`), lancé à chaque build, même sans SNAPSHOT à supprimer
+- **Images RELEASE** : Jamais supprimées automatiquement, leurs signatures sont conservées
 
 **Exemple** :
 ```

@@ -1767,61 +1767,46 @@ YMLEOF
 
                     echo "▶ Récupération de la liste des tags SNAPSHOT..."
 
-                    # Récupérer tous les tags de l'image (avec certificat CA pour HTTPS)
+                    # Pas de sortie anticipée : la purge des signatures orphelines et le garbage
+                    # collection doivent tourner même sans SNAPSHOT à supprimer.
+                    TAGS_TO_DELETE=""
                     ALL_TAGS=\$(curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
-
-                    if [ -z "\$ALL_TAGS" ]; then
-                        echo "ℹ️  Aucun tag trouvé dans le registry"
-                        exit 0
-                    fi
-
-                    # Filtrer uniquement les tags SNAPSHOT avec numéro de build
+                    # Uniquement les tags SNAPSHOT avec numéro de build
                     SNAPSHOT_TAGS=\$(echo "\$ALL_TAGS" | grep "SNAPSHOT-[0-9]" | sort -V || true)
-
-                    if [ -z "\$SNAPSHOT_TAGS" ]; then
-                        echo "ℹ️  Aucune image SNAPSHOT avec numéro de build trouvée"
-                        exit 0
-                    fi
-
-                    # Compter le nombre de tags SNAPSHOT
-                    TAG_COUNT=\$(echo "\$SNAPSHOT_TAGS" | wc -l)
+                    TAG_COUNT=\$(echo "\$SNAPSHOT_TAGS" | grep -c . || true)
                     echo "📊 Nombre d'images SNAPSHOT trouvées: \$TAG_COUNT"
 
                     if [ "\$TAG_COUNT" -le "\$RETENTION_COUNT" ]; then
-                        echo "✅ Nombre d'images ≤ \$RETENTION_COUNT, aucun nettoyage nécessaire"
-                        exit 0
+                        echo "✅ Nombre d'images ≤ \$RETENTION_COUNT, aucune image à supprimer"
+                    else
+                        TO_DELETE_COUNT=\$(( TAG_COUNT - RETENTION_COUNT ))
+                        echo "🗑️  Suppression des \$TO_DELETE_COUNT images les plus anciennes..."
+                        TAGS_TO_DELETE=\$(echo "\$SNAPSHOT_TAGS" | head -n \$TO_DELETE_COUNT)
                     fi
 
-                    # Calculer combien d'images à supprimer
-                    TO_DELETE_COUNT=\$(( TAG_COUNT - RETENTION_COUNT ))
-                    echo "🗑️  Suppression des \$TO_DELETE_COUNT images les plus anciennes..."
-
-                    # Garder seulement les N derniers tags
-                    TAGS_TO_DELETE=\$(echo "\$SNAPSHOT_TAGS" | head -n \$TO_DELETE_COUNT)
+                    # Digest d'un manifest par tag : images (Docker v2) et signatures Cosign (index OCI).
+                    ACCEPT="application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json"
+                    manifest_digest() {
+                        curl -sI --cacert \$REGISTRY_CERT -H "Accept: \$ACCEPT" \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\$1 \\
+                            | awk 'tolower(\$1)=="docker-content-digest:" {print \$2}' | tr -d '\\r'
+                    }
+                    # Suppression d'un manifest par digest (retire tous les tags qui le désignent)
+                    delete_manifest() {
+                        CODE=\$(curl -s --cacert \$REGISTRY_CERT -o /dev/null -w "%{http_code}" -X DELETE \\
+                            \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\$1)
+                        [ "\$CODE" = "202" ] || [ "\$CODE" = "204" ]
+                    }
 
                     # Supprimer les anciennes images
                     for TAG in \$TAGS_TO_DELETE; do
                         echo "  ➤ Suppression de \${IMAGE_NAME}:\${TAG}..."
-
-                        # Récupérer le manifest avec le bon Accept header pour obtenir le digest
-                        DIGEST=\$(curl -sI --cacert \$REGISTRY_CERT -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \\
-                            \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${TAG} \\
-                            | grep -i "Docker-Content-Digest" \\
-                            | awk '{print \$2}' \\
-                            | tr -d '\\r')
-
-                        if [ -n "\$DIGEST" ]; then
-                            # Supprimer le manifest (cela marque l'image pour suppression)
-                            HTTP_CODE=\$(curl -s --cacert \$REGISTRY_CERT -o /dev/null -w "%{http_code}" -X DELETE \\
-                                \${REGISTRY_URL}/v2/\${IMAGE_NAME}/manifests/\${DIGEST})
-
-                            if [ "\$HTTP_CODE" = "202" ] || [ "\$HTTP_CODE" = "204" ]; then
-                                echo "    ✓ Tag \${TAG} marqué pour suppression (digest: \$(echo \$DIGEST | cut -c1-20)...)"
-                            else
-                                echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$HTTP_CODE)"
-                            fi
-                        else
+                        DIGEST=\$(manifest_digest "\$TAG")
+                        if [ -z "\$DIGEST" ]; then
                             echo "    ⚠️  Impossible de récupérer le digest pour \${TAG}"
+                        elif delete_manifest "\$DIGEST"; then
+                            echo "    ✓ Tag \${TAG} supprimé (digest: \$(echo \$DIGEST | cut -c1-20)...)"
+                        else
+                            echo "    ⚠️  Échec suppression du tag \${TAG} (HTTP \$CODE)"
                         fi
                     done
 
@@ -1830,28 +1815,52 @@ YMLEOF
                     echo "📋 Images SNAPSHOT restantes:"
                     curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' | grep "SNAPSHOT-[0-9]" | sort -V || echo "   (aucune)"
 
+                    # Signatures Cosign orphelines : cosign 3 range la signature d'une image sous le
+                    # tag sha256-<hex de son digest>. Supprimer une image ne retire pas ce tag : toute
+                    # signature dont le digest ne correspond plus à aucune image taguée est supprimée
+                    # (images supprimées à ce build, et stock accumulé avant cette correction).
+                    echo ""
+                    echo "▶ Suppression des signatures Cosign orphelines..."
+                    REMAINING=\$(curl -s --cacert \$REGISTRY_CERT \${REGISTRY_URL}/v2/\${IMAGE_NAME}/tags/list | jq -r '.tags[]?' 2>/dev/null || echo "")
+                    LIVE_DIGESTS=""
+                    for TAG in \$(echo "\$REMAINING" | grep -v '^sha256-' || true); do
+                        LIVE_DIGESTS="\$LIVE_DIGESTS \$(manifest_digest "\$TAG")"
+                    done
+                    ORPHANS=0
+                    for SIG in \$(echo "\$REMAINING" | grep '^sha256-' || true); do
+                        case " \$LIVE_DIGESTS " in
+                            *" sha256:\${SIG#sha256-} "*) continue ;;
+                        esac
+                        SIG_DIGEST=\$(manifest_digest "\$SIG")
+                        if [ -n "\$SIG_DIGEST" ] && delete_manifest "\$SIG_DIGEST"; then
+                            ORPHANS=\$((ORPHANS + 1))
+                        else
+                            echo "    ⚠️  Échec suppression de la signature \${SIG}"
+                        fi
+                    done
+                    echo "   ✓ \$ORPHANS signature(s) orpheline(s) supprimée(s)"
+
                     echo ""
                     echo "▶ Exécution du garbage collection du registry pour libérer l'espace disque..."
 
                     # Trouver le container du registry
                     # Note: Le nom 'kind-registry' a déjà été vérifié dans le stage de publication
                     REGISTRY_CONTAINER=\$(docker ps --filter "publish=5000" --format "{{.Names}}" | head -n 1)
+                    # Emplacement de la configuration de registry:3 (registry:2 utilisait /etc/docker/registry)
+                    REGISTRY_CONFIG=/etc/distribution/config.yml
 
                     if [ -z "\$REGISTRY_CONTAINER" ]; then
                         echo "⚠️  Container registry introuvable, garbage collection ignoré"
+                    elif ! GC_DRY=\$(docker exec \$REGISTRY_CONTAINER registry garbage-collect --dry-run \$REGISTRY_CONFIG 2>&1); then
+                        echo "⚠️  Garbage collection impossible (dry-run en échec) :"
+                        echo "\$GC_DRY" | tail -5
                     else
                         echo "   Registry container: \$REGISTRY_CONTAINER"
-
-                        # Exécuter le garbage collector en mode read-only d'abord pour voir ce qui serait supprimé
-                        echo "   Analyse des blobs à supprimer..."
-                        BLOBS_TO_DELETE=\$(docker exec \$REGISTRY_CONTAINER registry garbage-collect --dry-run /etc/docker/registry/config.yml 2>&1 | grep -c "would delete" || echo "0")
-
-                        if [ "\$BLOBS_TO_DELETE" -gt 0 ]; then
+                        # Ligne de résumé : « N blobs marked, M blobs and K manifests eligible for deletion »
+                        BLOBS_TO_DELETE=\$(echo "\$GC_DRY" | sed -n 's/.* \\([0-9][0-9]*\\) blobs and .*eligible for deletion.*/\\1/p' | tail -1)
+                        if [ "\${BLOBS_TO_DELETE:-0}" -gt 0 ]; then
                             echo "   💾 \$BLOBS_TO_DELETE blob(s) seront supprimés"
-
-                            # Exécuter le garbage collector en mode suppression réelle
-                            docker exec \$REGISTRY_CONTAINER registry garbage-collect /etc/docker/registry/config.yml
-
+                            docker exec \$REGISTRY_CONTAINER registry garbage-collect --quiet \$REGISTRY_CONFIG
                             echo "   ✅ Garbage collection terminé, espace disque libéré"
                         else
                             echo "   ℹ️  Aucun blob à supprimer"

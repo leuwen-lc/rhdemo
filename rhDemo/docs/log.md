@@ -393,4 +393,17 @@ Corrigés aussi : `scripts/deploy.sh` (supprimé en décembre 2025) et le param�
 
 `PARAMETRAGE-APPLICATIF-AVEC-KUB.md` revérifié (seuls des commentaires de `values.yaml` ont changé).
 
-Reste ouvert : la « Méthode 2 » du README stagingkub (déploiement Helm direct) pousse une image non signée et cite une version en dur.
+README stagingkub, méthodes de déploiement : la méthode 1 dit que `RHDemo-CD` est déclenché par la CI ; la méthode 2 (déploiement Helm direct d'une image construite et poussée à la main, non signée, version en dur) devient un redéploiement de diagnostic d'une image déjà publiée, après la même vérification Cosign que `Jenkinsfile-CD` (commandes testées sur le registre : `1.1.12-SNAPSHOT-1087` vérifiée, `1.1.11-RELEASE` refusée car signée avant la clé Transit).
+
+Reste ouvert : le registre garde 345 tags de signature Cosign (`sha256-…`) et un ancien tag `latest` ; le nettoyage SNAPSHOT de `Jenkinsfile-CI` supprime les images mais pas leurs signatures.
+
+## [2026-11-22] ingest | nettoyage du registre : signatures Cosign et garbage collection
+
+Stage `🧹 Nettoyage Registry SNAPSHOT` de `Jenkinsfile-CI` corrigé, trois défauts constatés sur le registre (358 tags pour `rhdemo-api`, 22,8 Go) :
+- les signatures Cosign (tag `sha256-<digest>`, index OCI) des SNAPSHOT supprimés n'étaient jamais retirées : nouvelle passe qui supprime toute signature dont le digest ne correspond plus à aucune image taguée (334 orphelines sur 345 au premier passage) ; les 11 signatures des images restantes sont conservées ;
+- le garbage collection visait `/etc/docker/registry/config.yml` (`registry:2`) : avec `registry:3` la commande échouait, masquée par un `grep -c` qui concluait « aucun blob à supprimer » ; 1 704 blobs en attente. Chemin `/etc/distribution/config.yml`, échec désormais affiché ;
+- le stage sortait (`exit 0`) quand il y avait 3 SNAPSHOT ou moins, sautant le garbage collection.
+
+Testé sur le registre réel avec suppressions et garbage collection neutralisés. `PIPELINES_CI_CD.md` mis à jour.
+
+Manifest `sha256:a01e4457…` supprimé à la main du registre : il portait l'ancien tag `latest` (plus publié par la CI) et `1.1.2-RELEASE` (non signée, trop ancienne pour servir). Ses blobs seront libérés par le garbage collection du prochain build CI.

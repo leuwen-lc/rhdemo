@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-21
+verifie_le: 2026-11-22
 sources:
   - rhDemo/infra/jenkins-docker/openbao/
   - rhDemo/infra/jenkins-docker/docker-compose.yml
@@ -12,8 +12,7 @@ sources:
   - rhDemo/infra/stagingkub/scripts/repair-cluster-after-restart.sh
   - rhDemo/scripts/openbao-setup.py
   - rhDemo/scripts/rotation_lib/
-  - rhDemo/scripts/fixcve-auto-poll.sh
-  - rhDemo/scripts/fixcve-install.sh
+  - rhDemo/Jenkinsfile-FixCVE
   - rhDemo/secrets/inventory.yaml
   - rhDemo/Jenkinsfile-CI
   - rhDemo/Jenkinsfile-CD
@@ -34,14 +33,13 @@ Mise en œuvre de [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), qui en donne les raisons
 | Configuration | `openbao/configure-openbao.sh` et `openbao/policies/` | Moteurs, politiques, AppRole, utilisateur `admin`, authentification Kubernetes |
 | Jenkins | plugin `hashicorp-vault-plugin`, bloc `unclassified.hashicorpVault` de `jenkins-casc.yaml` | Credentials « Vault » qui pointent vers `kv/jenkins/<id>` : les pipelines les lisent par `withCredentials` comme des credentials ordinaires |
 | stagingkub | External Secrets Operator (namespace `external-secrets`), `infra/stagingkub/external-secrets/` | Crée les 4 Secrets applicatifs depuis `kv/stagingkub/*` (rôle `eso-stagingkub`) et le Secret `grafana-admin` de `loki-stack` depuis `kv/observability/grafana` (rôle `eso-observability`, limité à `kv/observability/*`) |
-| Poste | `openbao-setup.py`, `rotate-secrets.py`, `fixcve-auto-poll.sh` | Alimentation initiale, rotation, lecture des secrets de fixcve-auto |
+| Poste | `openbao-setup.py`, `rotate-secrets.py` | Alimentation initiale, rotation |
 
 Données (KV v2 monté sur `kv/`) :
 
 | Chemin | Contenu | Lecteur |
 | --- | --- | --- |
-| `kv/jenkins/<credential>` | `value`, ou `username`/`password` | Jenkins (AppRole `jenkins`) |
-| `kv/fixcve/{jenkins,codeberg,nvd}` | tokens de fixcve-auto, clé NVD | poller (AppRole `fixcve`) |
+| `kv/jenkins/<credential>` | `value`, ou `username`/`password` ; dont `fixcve-forgejo-token` et `fixcve-jenkins-api` pour le job `RHDemo-FixCVE` | Jenkins (AppRole `jenkins`) |
 | `kv/stagingkub/rhdemo` | `db_password`, `oidc_client_secret` | ESO (rôle Kubernetes `eso-stagingkub`) |
 | `kv/stagingkub/keycloak` | `db_password`, `admin_user`, `admin_password` | ESO |
 | `kv/stagingkub-tests/users` | utilisateurs de test Keycloak | `init-keycloak-stagingkub.sh` (admin) |
@@ -64,10 +62,10 @@ Depuis `rhDemo/infra/jenkins-docker/` :
 6. `./start-jenkins.sh` : construit le contrôleur (plugin, autorité dans le truststore Java). Recharger JCasC.
 7. Credentials Jenkins, depuis `rhDemo/scripts/` :
    - `./openbao-setup.py jenkins-approle` : credential `openbao-approle`, seul accès de Jenkins à OpenBao ;
-   - `./openbao-setup.py jenkins` : pour chaque credential de Renovate et des notifications, valeur écrite dans `kv/jenkins/<id>` et credential Jenkins de même identifiant créé en référence OpenBao. Les tokens Codeberg et la clé GPG sont émis directement sur Codeberg (mot de passe et TOTP des bots demandés) ; les autres valeurs sont demandées (token GitHub, Docker Hub, adresse de notification).
+   - `./openbao-setup.py jenkins` : pour chaque credential de Renovate, de fixcve-auto et des notifications, valeur écrite dans `kv/jenkins/<id>` et credential Jenkins de même identifiant créé en référence OpenBao. Les tokens Codeberg et la clé GPG sont émis directement sur Codeberg (mot de passe et TOTP des bots demandés) ; les autres valeurs sont demandées (token GitHub, Docker Hub, adresse de notification, token API du compte Jenkins `claude` pour `fixcve-jenkins-api`).
    - Critère : un cycle `RHDemo-Renovate` vert, lectures visibles dans le journal d'audit.
 8. Cosign : `openbao/configure-openbao.sh cosign` (écrit la clé publique dans `certs/cosign/cosign-transit.pub`), créer le credential **Secret file** `cosign-public-key-transit` avec ce fichier (un Secret text tient sur une ligne et casserait le PEM), puis `./openbao-setup.py cosign-approle`.
-9. fixcve-auto : `./openbao-setup.py fixcve` (token Jenkins du compte `claude` demandé, token Codeberg émis, clé NVD facultative, fichier AppRole créé), puis `./fixcve-install.sh` et `./fixcve-install.sh --trust` ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+9. fixcve-auto : rien de plus côté OpenBao, ses deux credentials sont créés à l'étape 7 ; job `RHDemo-FixCVE` dans JCasC ([FIXCVE_AUTO.md](FIXCVE_AUTO.md), « Installation »).
 10. stagingkub : `./openbao-setup.py stagingkub` **avant le premier déploiement** (PostgreSQL ne prend son mot de passe qu'à l'initialisation de sa base, Keycloak son administrateur au premier démarrage). Les valeurs sont générées, jamais saisies. Puis `infra/stagingkub/scripts/init-stagingkub.sh` (authentification Kubernetes d'OpenBao, ESO, `ExternalSecret`), le premier déploiement, et `init-keycloak-stagingkub.sh`. Sur un cluster existant : `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. La CD lit les `ExternalSecret` grâce à `infra/stagingkub/rbac/jenkins-role.yaml`. Pour l'observabilité, `./openbao-setup.py observability` (admin de Grafana) avant `install-external-secrets.sh`, qui crée aussi le Secret `grafana-admin` de `loki-stack`.
 11. `openbao/configure-openbao.sh revoke-root`.
 
@@ -75,7 +73,7 @@ Toutes les commandes de `openbao-setup.py` sont idempotentes : une valeur déjà
 
 ## Déverrouillage
 
-OpenBao redémarre **scellé** après un redémarrage du poste, du démon Docker ou du conteneur (dont un `docker compose up` après une mise à jour d'image). Tant qu'il l'est, les pipelines qui lisent un credential OpenBao, la signature Cosign, ESO et fixcve-auto échouent ou attendent.
+OpenBao redémarre **scellé** après un redémarrage du poste, du démon Docker ou du conteneur (dont un `docker compose up` après une mise à jour d'image). Tant qu'il l'est, les pipelines qui lisent un credential OpenBao (dont `RHDemo-FixCVE`), la signature Cosign et ESO échouent ou attendent.
 
 ```bash
 rhDemo/infra/jenkins-docker/openbao/unseal.sh   # coller la clé depuis KeePassXC
@@ -89,8 +87,8 @@ Tout passe par `rotate-secrets.py` (inventaire `secrets/inventory.yaml`). Tâche
 
 | Secret | Commande | Effet |
 | --- | --- | --- |
-| Tokens Codeberg, clé GPG Renovate | `rotate-secrets.py <id>` | nouvelle valeur écrite dans `kv/jenkins/…` ou `kv/fixcve/codeberg` |
-| `secret_id` AppRole (Jenkins, Cosign, fixcve) | `rotate-secrets.py openbao-approle-jenkins` (etc.) | nouveau `secret_id` vérifié par une connexion, propagé, anciens détruits ; validité 100 jours, période 90 jours |
+| Tokens Codeberg, clé GPG Renovate | `rotate-secrets.py <id>` | nouvelle valeur écrite dans `kv/jenkins/…` |
+| `secret_id` AppRole (Jenkins, Cosign) | `rotate-secrets.py openbao-approle-jenkins` (etc.) | nouveau `secret_id` vérifié par une connexion, propagé, anciens détruits ; validité 100 jours, période 90 jours |
 | Mots de passe PostgreSQL de stagingkub | `rotate-secrets.py stagingkub-rhdemo-db stagingkub-keycloak-db` | KV, synchronisation ESO forcée, `ALTER ROLE` dans le pod (mot de passe sur l'entrée standard de `psql`), redémarrage des pods ; retour arrière automatique si l'`ALTER ROLE` échoue |
 | Secret du client OIDC `RHDemo` | `rotate-secrets.py stagingkub-oidc-client` | KV, synchronisation ESO forcée (le Secret est un fichier généré par gabarit), valeur imposée dans Keycloak par l'API d'administration, redémarrage de `rhdemo-app` ; retour arrière dans Keycloak et le KV en cas d'échec |
 | Administrateur Keycloak, utilisateurs de test | `rotate-secrets.py stagingkub-keycloak-admin stagingkub-test-users` | KV d'abord, puis API Keycloak et connexion de vérification avec la nouvelle valeur ; sinon retour à l'ancienne des deux côtés. `KEYCLOAK_ADMIN_PASSWORD` ne servant qu'au premier démarrage, le changer dans OpenBao seul ne suffirait pas. Utilisateurs de test : 12 caractères saisissables (lettres, chiffres, `-_.!@%+=?`), longueur réglable dans l'inventaire |
@@ -109,6 +107,20 @@ Les rotations Keycloak passent par un `kubectl port-forward` vers le pod Keycloa
 ## Ephemere
 
 Plus de secrets stockés : le stage « Génération Secrets ephemere » de `Jenkinsfile-CI` tire des valeurs aléatoires à chaque build (environnement détruit en fin de build) et les écrit dans un fichier de variables lu par Docker Compose, `rhDemoInitKeycloak`, Selenium et ZAP. Les identifiants des utilisateurs de test sont fixes (`rhdemo-admin`, `rhdemo-maj`, `rhdemo-consult`), leurs mots de passe aléatoires.
+
+## fixcve-auto : nettoyage de l'ancien mode
+
+Jusqu'au 2026-11-22, fixcve-auto tournait sur le poste avec son propre AppRole (`fixcve`) et ses secrets dans `kv/fixcve/*`. Il tourne désormais dans Jenkins ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)). Une fois `RHDemo-FixCVE` validé, avec le jeton de l'utilisateur `admin` (sa politique couvre `auth/*`, les politiques et `kv/*`) :
+
+```bash
+source rhDemo/infra/jenkins-docker/openbao/lib.sh && openbao_admin_login
+docker exec -e BAO_TOKEN rhdemo-openbao bao delete auth/approle/role/fixcve
+docker exec -e BAO_TOKEN rhdemo-openbao bao policy delete fixcve
+for p in jenkins codeberg nvd; do docker exec -e BAO_TOKEN rhdemo-openbao bao kv metadata delete -mount=kv fixcve/$p; done
+openbao_admin_logout
+```
+
+Révoquer aussi l'ancien token Codeberg du bot s'il n'a pas été remplacé par `openbao-setup.py jenkins fixcve-forgejo-token`.
 
 ## Jeton root ponctuel
 

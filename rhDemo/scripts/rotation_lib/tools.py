@@ -101,7 +101,7 @@ class PortForward:
                 self.proc.kill()
 
 
-# --- fichier AppRole local (fixcve-auto : ~/.config/rhdemo-fixcve/openbao-approle.json) ----
+# --- fichier AppRole local (cible « approle-file » de l'inventaire, aucune utilisée à ce jour) ----
 
 def approle_file_read(path):
     try:

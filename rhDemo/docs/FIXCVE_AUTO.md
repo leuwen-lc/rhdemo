@@ -1,8 +1,11 @@
 ---
 statut: actif
-verifie_le: 2026-11-05
+verifie_le: 2026-11-22
 sources:
+  - rhDemo/Jenkinsfile-FixCVE
+  - rhDemo/scripts/fixcve-state.sh
   - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve-git-sync.sh
   - rhDemo/scripts/fixcve-classify.py
   - rhDemo/scripts/fixcve-detect.py
   - rhDemo/scripts/fixcve-apply.py
@@ -11,7 +14,7 @@ sources:
 
 # Remédiation CVE automatisée (fixcve-auto)
 
-Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. La procédure est **entièrement déterministe** (aucun LLM) depuis la refonte du 2026-10-09 (voir [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md), section 10). Le skill interactif `/fixcve` réutilise les mêmes scripts avec validation humaine.
+Automatisation complète de la remédiation des CVE bloquantes détectées par Trivy ou OWASP Dependency-Check dans le pipeline `RHDemo-CI`, **sans validation humaine**. Elle tourne dans Jenkins (job `RHDemo-FixCVE`) depuis le 2026-11-22 ; elle était auparavant lancée par un cron du poste ([ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md)). La procédure est **entièrement déterministe** (aucun LLM) depuis la refonte du 2026-10-09 (voir [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md), section 10). Le skill interactif `/fixcve` réutilise les mêmes scripts avec validation humaine.
 
 **Objectif mesuré** : un cycle n'échoue que face à une CVE **sans correctif publié, CVSS ≥ 9 et sans critère A** (« échec conforme »). Tout autre échec est un défaut de la procédure, compté par l'indicateur `fixcve-stats.py` (voir « Indicateur »).
 
@@ -20,9 +23,9 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 ## Architecture
 
 ```text
-crontab (toutes les 15 min)
-   └─> rhDemo/scripts/fixcve-auto-poll.sh   (bash, racine de confiance, copie de travail principale)
-         │  synchronise le clone isolé, vérifie l'empreinte des scripts (épinglage de confiance)
+RHDemo-CI ── post { always } ──> job RHDemo-FixCVE (Jenkinsfile-FixCVE, agent « fixcve »)
+cron de secours horaire ────────┘   └─> fixcve-state.sh (action d'exploitation)
+                                          └─> fixcve-auto-poll.sh (checkout neuf, branche du job)
          │
          ├─ Phase A (idle) : nouveau build Jenkins en échec sur un stage Trivy/OWASP
          │     1. fixcve-detect.py    -> detected.json   rapports Jenkins -> findings
@@ -52,7 +55,7 @@ Tout le code est dans [`rhDemo/scripts/`](../scripts/) : les points d'entrée `f
 | 5. Application | `fixcve-apply.py` (`apply.py`, `edits.py`, `suppressions.py`, `advisories.py`) | Plan validé | fichiers de remédiation, `apply-result.json` |
 | 6. Vérification | `fixcve-verify.py` (`verify.py`) | Parseurs XML/YAML/JSON, lockfile, `npm audit`, rescan Dependency-Check local | `verify.json` |
 
-Les fichiers de cycle vivent dans `rhDemo/.fixcve-cycle/` (gitignoré) et sont archivés dans `~/.config/rhdemo-fixcve/cycle/archive/<build>-<étape>.json` (post-mortem, rejeu en test).
+Les fichiers de cycle vivent dans `rhDemo/.fixcve-cycle/` de l'espace de travail et sont archivés dans le volume d'état, `cycle/archive/<build>-<étape>.json` (post-mortem, rejeu en test).
 
 ### Table de décision (étape 3)
 
@@ -79,7 +82,7 @@ Une montée qui ne peut pas être appliquée ou que la vérification ne confirme
 
 Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>` pour un CVE, `<vulnerabilityName>` pour un GHSA : OSS Index nomme par CVE, Node Audit par GHSA, voir [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md)) ; formes manquantes ajoutées au bloc existant ; portée `groupId` entier pour les groupes à CPE générique (tomcat, log4j, spring-security, jackson...) ; justification dans `<notes>`, jamais en commentaire XML. Trivy : entrée `.trivyignore.yaml` avec jeton `[OSV:<DISTRO>:<branche>]` pour un paquet système.
 
-**Clôture automatique** des suppressions temporaires : à chaque cycle, les blocs `[PENDING_UPSTREAM_FIX]` npm et Maven sont revérifiés (avis OSV + registre) ; si un correctif est publié, toutes les formes de la faille sont retirées et la montée appliquée (événement `pending_fix_resolved`). Les suppressions Trivy (composants d'images tierces) restent à revérifier manuellement (`poll.log` les liste) ; pour un paquet système portant le jeton `[OSV:<DISTRO>:<branche>]`, l'avis de distribution OSV (`ALPINE-<CVE>`, `DEBIAN-<CVE>`, `UBUNTU-<CVE>`) est lu et une ligne `ALERTE` est écrite si la branche installée a un correctif, uniquement dans `~/.config/rhdemo-fixcve/poll.log` (préfixe `resolve info: ALERTE`, répétée à chaque cycle tant que la suppression reste en place ; rien dans le journal d'audit ni dans Jenkins). Aucune action automatique : un correctif de distribution ne prouve pas qu'une image tierce l'embarque. Cette revérification n'a lieu que dans un cycle déclenché par un build en échec.
+**Clôture automatique** des suppressions temporaires : à chaque cycle, les blocs `[PENDING_UPSTREAM_FIX]` npm et Maven sont revérifiés (avis OSV + registre) ; si un correctif est publié, toutes les formes de la faille sont retirées et la montée appliquée (événement `pending_fix_resolved`). Les suppressions Trivy (composants d'images tierces) restent à revérifier manuellement (la console du job les liste) ; pour un paquet système portant le jeton `[OSV:<DISTRO>:<branche>]`, l'avis de distribution OSV (`ALPINE-<CVE>`, `DEBIAN-<CVE>`, `UBUNTU-<CVE>`) est lu et une ligne `ALERTE` est écrite si la branche installée a un correctif, dans la console du job, avec un mail (build `UNSTABLE`), à chaque cycle tant que la suppression reste en place ; rien dans le journal d'audit. Aucune action automatique : un correctif de distribution ne prouve pas qu'une image tierce l'embarque. Cette revérification n'a lieu que dans un cycle déclenché par un build en échec.
 
 ---
 
@@ -88,17 +91,18 @@ Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>`
 | Garde-fou | Détail |
 | --- | --- |
 | **Aucun LLM** | Plus aucune surface d'injection de prompt : les rapports et avis externes ne sont lus que par du code ; aucun secret n'est exposé à un modèle. Les textes libres externes (titres de CVE) ne sont jamais recopiés dans un fichier versionné. |
-| **Épinglage de confiance** | Les scripts exécutés viennent du clone, donc de la forge. Le poller (racine de confiance, lancé depuis la copie principale) compare leurs empreintes SHA-256 à `~/.config/rhdemo-fixcve/trusted.sha256` et refuse d'agir (ligne `ALERTE` dans `poll.log`) en cas d'écart. Approbation : `fixcve-install.sh --trust`, qui affiche les évolutions depuis la dernière approbation. Un push seul ne peut donc pas changer ce que fait le bot. |
-| **Clone git isolé** | `~/fixcve-worktrees/rhdemo` (`chmod 700`), jamais la copie de travail principale ; suit la branche active de celle-ci. |
-| **Working tree propre / branche à jour** | Arbre sale (hors journal) : aucune action ; alerte après 8 cycles (2 h). Retard sur origin : fast-forward. Divergence (push du bot rejeté car origin a avancé pendant le cycle, ex. merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`scripts/fixcve-git-sync.sh`) ; sinon ou en cas de conflit, aucune action. |
+| **Pas d'épinglage des scripts** | Comme `Jenkinsfile-CI` et `Jenkinsfile-Renovate`, `Jenkinsfile-FixCVE` et les scripts sont lus sur la branche : un compte qui pousse peut modifier le bot (risque accepté le 2026-11-22, [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md), T1). |
+| **Checkout neuf à chaque passage** | Espace de travail jetable de l'agent, placé sur `origin/<branche du job>` à jour : jamais d'arbre sale hérité d'un cycle interrompu. |
+| **Push refusé** | origin a avancé pendant le cycle (merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`scripts/fixcve-git-sync.sh`) ; sinon ou en cas de conflit, échec du passage sans mise à jour de l'état, le suivant recommence. |
+| **Revert limité aux commits du bot** | Le rollback n'annule qu'un commit dont l'auteur est `RHDemo FixCVE Bot` et présent sur la branche : un état altéré ne peut pas faire annuler un commit quelconque. |
 | **Validation de schéma** | `fixcve-validate-json.py` entre chaque étape (`detect`, `lookup`, `plan`) : clés exactes, regex/enum, référence croisée, une action et une seule par finding, critère B interdit au-dessus de 9.0, version Trivy imposée pour une image. |
-| **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index désactivé pour préserver le quota) — aucun finding traité ne doit subsister, aucun nouveau sur un paquet monté. Avant le scan, la base NVD de l'hôte est amorcée depuis celle de Jenkins (voir [Cache NVD de l'hôte](#cache-nvd-de-lhôte)) et tout rapport antérieur est supprimé : un scan interrompu ne relit jamais un vieux rapport. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
+| **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index désactivé pour préserver le quota) — aucun finding traité ne doit subsister, aucun nouveau sur un paquet monté. La base NVD est celle de `RHDemo-CI` (volume Maven partagé, voir [Cache NVD](#cache-nvd)) ; tout rapport antérieur est supprimé avant le scan : un scan interrompu ne relit jamais un vieux rapport. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
 | **Deux commits** | Le correctif, puis le journal : un rollback (`git revert` du seul correctif) ne touche jamais au journal append-only. |
 | **Validation par SHA** | La phase B ne juge que le build dont le commit contient le correctif (`git merge-base --is-ancestor`), jamais un build intercalé (#749/#750). |
 | **Validation par non-régression** | Build rouge après correctif : conservé si les findings traités ont disparu sans nouveau finding (`validation_partial`), ou si le stage d'origine est propre et l'échec porte sur le scan suivant (`validation_stage_cleared`, #890), ou si le détecteur ne voit rien alors que le build échoue sur ce même stage sans citer aucun finding du correctif (#972), ou si le correctif se réduit à des suppressions/documentation, que tous ses findings ont disparu et qu'une CVE nouvelle apparaît (cause indépendante, #975 ; fonction `fix_commit_only_suppressions`) ; sinon rollback. Un `git revert` en conflit est abandonné (`revert_fix_commit`) : le correctif est conservé, événement `rollback_conflict`, attente humaine (#975). Cause réelle du rollback journalisée (`failure_stage`, `failure_detail`, #819). |
 | **Haltes** | 2 rollbacks consécutifs, 2 échecs pré-push consécutifs (étape en échec, schéma invalide, vérification locale), 2 pushes « sans finding » consécutifs. |
 | **Anti-boucles** | Blocage confirmé : silence 48 h sur le même code source ; blocage transitoire : 1 h, 3 essais, sans commit ; hors périmètre (ni Trivy ni OWASP) : jamais committé ; « déjà corrigé sur HEAD » : aucun commit. |
-| **Verrou** | `flock` sur `~/.config/rhdemo-fixcve/poll.lock`. |
+| **Un passage à la fois** | `disableConcurrentBuilds()` du job, `flock` sur `poll.lock` du volume d'état, un seul conteneur d'agent pour tout le nuage Docker (jamais en même temps qu'un build CI). Durée maximale d'un passage : 30 min. |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl` (vue `fixcve-audit.md` générée), un `outcome_code` par événement. |
 
 ---
@@ -151,7 +155,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 ## Tests
 
 - `rhDemo/scripts/tests/run-all.sh` : tests unitaires hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).
-- `rhDemo/scripts/tests/poll-sandbox.sh <rapports> <commit> <build>` : exécute le vrai poller contre un faux Jenkins (`tests/fake_jenkins.py`) et un dépôt « origin » local, avec le réseau réel (OSV, npm, Maven Central). Variables `PHASE_B=FAILURE` (rollback) et `OFFLINE=1` (recherche en panne). Aucun push vers la forge, aucun credential réel.
+- Poller complet : dans Jenkins, job `RHDemo-FixCVE` avec `DRY_RUN` coché (cycle réel sur une copie de l'état, sans push), éventuellement avec `ACTION=replay` sur un build en échec. Le bac à sable local (`poll-sandbox.sh`, faux Jenkins) a été retiré avec le mode local.
 
 ---
 
@@ -167,74 +171,75 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 
 ⚠️ **Écart CI / local** : le rescan local n'interroge pas OSS Index (quota partagé avec `RHDemo-CI`) ; une faille connue d'OSS Index seul n'est vue que par le build CI (phase B).
 
-⚠️ **Credentials** : tokens et clé NVD dans OpenBao (`kv/fixcve/*`), lus à chaque passage par l'AppRole `fixcve` dont le fichier `~/.config/rhdemo-fixcve/openbao-approle.json` (mode 600) reste lisible par l'utilisateur unix du cron ; portée limitée à ces trois secrets, lectures auditées, `secret_id` révocable ([OPENBAO.md](OPENBAO.md)). Aucun confinement réseau ou noyau (microVM, bubblewrap) à ce jour.
+⚠️ **Credentials** : credentials Jenkins références OpenBao (`kv/jenkins/fixcve-forgejo-token`, `kv/jenkins/fixcve-jenkins-api`), plus `nvd-api-key` partagé avec la CI, passés au poller par variables d'environnement le temps du passage ([OPENBAO.md](OPENBAO.md)). Une compromission de Jenkins donne aussi le token du bot, avec les mêmes droits que `ci-bot-forgejo-token` déjà présent. L'agent `fixcve` n'a pas le socket Docker de l'hôte, mais les agents de la CI l'ont et peuvent lire tous les volumes.
 
 ---
 
-## Prérequis d'installation
+## Installation
 
 ### 1. Comptes externes
 
-- **Jenkins** : un compte dédié (`claude`, **pas** `admin`), lecture seule suffisante.
+- **Jenkins** : un compte dédié (`claude`, **pas** `admin`), lecture seule, dont le token API sert au bot (et au skill `/fixcve`).
 - **Codeberg** : un compte bot séparé (`fixcvebot-leuwen-lc`), jamais le compte personnel ; distinct de `cibot-leuwen-lc` (bot CI de Renovate, voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
   1. Créer le compte sur `https://codeberg.org`.
   2. L'ajouter comme collaborateur **Write** (pas Admin) de `leuwen-lc/rhdemo`.
-  3. Générer un token à scope écriture restreint à `rhdemo`.
-  4. Si la branche est protégée, l'ajouter à la liste autorisée en push.
-- **OpenBao** déverrouillé et alimenté par `rhDemo/scripts/openbao-setup.py fixcve` (token Jenkins demandé, token Codeberg émis directement, clé NVD facultative, fichier AppRole créé ; voir [OPENBAO.md](OPENBAO.md)). OpenBao scellé : le passage est sauté (ligne dans `poll.log`), comme pour un Jenkins injoignable.
-- **Clé API NVD** (optionnelle, recommandée) : rescan Dependency-Check local complet. Sans clé, aucun scan local n'est lancé. La clé est la même que celle de la CI (credential Jenkins `nvd-api-key`) : le NVD limite le débit par clé, il n'y a pas de quota mensuel, et l'amorçage du cache évite que fixcve consomme des requêtes pour rattraper la base.
+  3. Si la branche est protégée, l'ajouter à la liste autorisée en push.
+- **Clé API NVD** : celle de la CI (credential `nvd-api-key`). Sans elle, pas de rescan local, la preuve revient au build CI.
 
-### 2. Script d'installation
-
-[`fixcve-install.sh`](../scripts/fixcve-install.sh), idempotent : outils, présence des credentials (sinon renvoi vers `openbao-setup.py fixcve`), `git-askpass.sh`, `logrotate.conf`, clone isolé, `frontend/node`, installation du skill `/fixcve` versionné ([`fixcve-skills/fixcve/SKILL.md`](../scripts/fixcve-skills/fixcve/SKILL.md)).
+### 2. Credentials (OpenBao déverrouillé)
 
 ```bash
-rhDemo/scripts/fixcve-install.sh             # provisionnement
-rhDemo/scripts/fixcve-install.sh --nvd-key   # ajoute ou remplace la clé NVD (saisie masquée, kv/fixcve/nvd)
-rhDemo/scripts/fixcve-install.sh --trust     # approuve les scripts du bot (après chaque évolution)
+rhDemo/scripts/openbao-setup.py jenkins fixcve-forgejo-token fixcve-jenkins-api
 ```
 
-Les commits automatiques portent l'identité `RHDemo FixCVE Bot` (`GIT_AUTHOR_*`/`GIT_COMMITTER_*` exportés par le poller).
+Le token Codeberg est émis directement sur le compte bot (mot de passe et code TOTP demandés) ; pour `fixcve-jenkins-api`, saisir `claude` et un token API créé en se connectant avec ce compte. Les deux deviennent des credentials Jenkins références OpenBao.
 
-### 3. Activation du cron
+### 3. Jenkins
 
-**Ne pas installer sans avoir relu `fixcve-auto-poll.sh` et les garde-fous.** `crontab -e` :
+Agent `fixcve` (volume `rhdemo-fixcve-state`), plafond d'un conteneur et job `RHDemo-FixCVE` sont dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) ; le répertoire du volume est créé par l'image agent (`Dockerfile.agent`, reconstruite par `start-jenkins.sh` quand elle change). Après un changement : reconstruire l'image si besoin, puis recharger JCasC. Le déclenchement vient du `post { always }` de `Jenkinsfile-CI`.
 
-```cron
-*/15 * * * * /home/leno-vo/git/repository/rhDemo/scripts/fixcve-auto-poll.sh >> /home/leno-vo/.config/rhdemo-fixcve/poll.log 2>&1
-0 3 * * * /usr/sbin/logrotate --state /home/leno-vo/.config/rhdemo-fixcve/logrotate.state /home/leno-vo/.config/rhdemo-fixcve/logrotate.conf
-```
+Les commits automatiques portent l'identité `RHDemo FixCVE Bot`. Le skill interactif `/fixcve` reste sur le poste : `rhDemo/scripts/fixcve-install.sh` l'installe dans `.claude/skills`.
+
+### 4. Bascule depuis l'ancien cron (une fois)
+
+Jamais deux bots en même temps.
+
+1. Retirer les lignes fixcve de la crontab (`crontab -e`).
+2. Copier l'état et les archives dans le volume (image agent reconstruite, qui crée le répertoire avec le bon propriétaire ; `jenkins` y a l'UID 1000, comme l'utilisateur du poste) :
+   `docker run --rm --entrypoint sh -v rhdemo-fixcve-state:/home/jenkins/fixcve-state -v ~/.config/rhdemo-fixcve:/s:ro rhdemo-jenkins-agent:latest -c 'cp /s/state.json /home/jenkins/fixcve-state/ && cp -r /s/cycle /home/jenkins/fixcve-state/'`
+3. Lancer `RHDemo-FixCVE` avec `ACTION=status`, puis avec `DRY_RUN`.
+4. Une fois un vrai cycle validé : supprimer `~/fixcve-worktrees/rhdemo`, `~/.config/rhdemo-fixcve`, l'AppRole et les secrets de l'ancien mode ([OPENBAO.md](OPENBAO.md), « fixcve-auto »).
+
+Retour arrière : désactiver le job ; la remédiation se fait alors avec le skill `/fixcve`.
 
 ---
 
 ## Exploitation
 
-Toute édition de `state.json` se fait sous le verrou : `flock ~/.config/rhdemo-fixcve/poll.lock -c '<commande>'`.
+Paramètres du job `RHDemo-FixCVE` (« Lancer un build avec des paramètres ») :
 
-- **Pause** : `jq '.status="halted"'` sur `state.json` (ou commenter la ligne cron).
-- **Reprise après halte** : `jq '.status="idle" | .consecutive_rollbacks=0 | .consecutive_prepush_failures=0'`.
-- **Revérifier tout de suite un blocage** : `jq '.blocked_confirmed=null'` (inutile après un changement de code : le SHA source change).
-- **Rejouer un build** : `jq '.last_processed_build=<build - 1>'`.
-- **Cache NVD de l'hôte** : voir la section ci-dessous.
-- **Journaux** : `poll.log` (chaque passage cron, y compris hors périmètre et blocages transitoires) ; `rhDemo/docs/fixcve-audit.jsonl` (événements à valeur sécurité, versionné) et sa vue `fixcve-audit.md` ; archives de cycle dans `~/.config/rhdemo-fixcve/cycle/archive/`.
+| Besoin | Paramètres |
+| --- | --- |
+| Pause | Désactiver le job |
+| Consulter l'état | `ACTION=status` ; l'état est aussi archivé à chaque passage (`fixcve-state.json`) |
+| Reprise après halte | `ACTION=resume` (compteurs remis à zéro, puis passage) |
+| Revérifier tout de suite un blocage | `ACTION=clear-blocked` (inutile après un changement de code : le SHA source change) |
+| Rejouer un build | `ACTION=replay`, `BUILD_TO_REPLAY=<build>` |
+| Essai sans effet | `DRY_RUN` coché, avec n'importe quelle action |
 
-### Cache NVD de l'hôte
+- **Notifications** : mail si le passage échoue (Jenkins ou Codeberg injoignable, push refusé, erreur d'une étape) ou s'il est `UNSTABLE` (halte, rollback, blocage sans correctif, ligne `ALERTE`), détail dans `fixcve-notify.txt` archivé. Rien sur un passage à vide.
+- **Journaux** : console du job (chaque passage, y compris hors périmètre et blocages transitoires) ; `rhDemo/docs/fixcve-audit.jsonl` (événements à valeur sécurité, versionné) et sa vue `fixcve-audit.md` ; archives de cycle dans `cycle/archive/` du volume d'état.
+- **Délai** : un agent inactif de la CI garde sa place 5 min (`idleMinutes`) ; le passage fixcve démarre donc jusqu'à 5 min après la fin du build CI.
 
-La vérification locale utilise `~/.m2/dependency-check-data/` (`dataDirectory` du `pom.xml`), distinct du cache de Jenkins (volume `rhdemo-maven-repository`, tenu à jour par chaque `RHDemo-CI`). Sans amorçage, un cache de l'hôte resté plusieurs semaines sans scan doit rattraper l'API NVD page par page, avec `nvdApiDelay` à 8 s : plus d'une heure (cycle du build #967 le 2026-10-29, interrompu après 52 min).
+### Cache NVD
 
-- **Amorçage automatique** (`seed_odc_cache()` dans [`verify.py`](../scripts/fixcve_lib/verify.py)) : la base `odc.mv.db` du volume Jenkins est copiée vers l'hôte si elle est plus récente, via un conteneur jetable de l'image agent (aucune requête NVD). Il est ignoré, sans erreur, si un verrou `odc.update.lock` existe côté hôte ou côté Jenkins, si la base Jenkins a été modifiée il y a moins de 2 minutes ou pendant la copie, ou si Docker n'est pas utilisable. La ligne `info: odc amorcage_…` de la sortie de l'étape indique la raison. Un cycle sans amorçage garde le comportement lent d'origine.
-- **Après amorçage** : le scan ne télécharge que le delta depuis le dernier build CI ; le build #970 a été vérifié en 19 s.
-- **Interrompre un cycle bloqué** : arrêter les processus du cycle (Maven d'abord), puis restaurer le worktree (`git restore` des fichiers modifiés par l'étape d'application). Le verrou `poll.lock` est alors libre et le passage cron suivant démarre aussitôt un nouveau cycle sur le dernier build en échec.
-- **Réamorcer à la main** : supprimer `odc.update.lock` et remplacer `odc.mv.db` par la copie du volume Jenkins, quand aucun scan CI n'est en cours.
+La vérification locale utilise la base NVD de `RHDemo-CI` (`~/.m2/dependency-check-data/`, volume `rhdemo-maven-repository`), tenue à jour par chaque build CI : le rescan ne télécharge que le delta depuis le dernier build (19 s pour le build #970). Le plafond d'un conteneur d'agent garantit qu'aucun scan CI n'écrit dans la base en même temps. L'amorçage depuis le volume Jenkins, nécessaire quand le bot tournait sur le poste, a disparu.
 
----
-
-## Évolution future : exécution via Jenkins
-
-Héberger le poller dans Jenkins (job déclenché par `post { failure }` de `Jenkinsfile-CI`) supprimerait la reconstruction a posteriori du stage fautif et le cron local, au prix d'une machine à états à réécrire et de credentials à migrer vers le Credentials Store. Plus simple depuis que la procédure n'a plus besoin de Claude Code. La **publication par branche de validation** (proposition J du TODO, reportée) en est un prérequis naturel.
+Interrompre un passage bloqué : l'arrêter dans Jenkins (le `timeout` de 30 min le fait sinon). L'espace de travail est jeté avec l'agent ; l'état n'est mis à jour qu'après un push réussi.
 
 ## Voir aussi
 
+- [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) — passage du cron local à Jenkins (décisions du 2026-11-22)
 - [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md) — plan d'évolutions et revue du 2026-10-09
 - [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) — incidents, garde-fous et tests associés
 - [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) — parité CI / Renovate, double inscription CVE + GHSA

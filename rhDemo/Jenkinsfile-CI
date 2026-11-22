@@ -1953,6 +1953,18 @@ YMLEOF
                 sh "rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true"
 
                 echo "✅ Nettoyage terminé"
+
+                // fixcve-auto (docs/FIXCVE_AUTO.md) : à chaque fin de build, quel que soit le
+                // résultat (un échec Trivy/OWASP se corrige, le build qui suit un correctif le
+                // valide ou l'annule). Best-effort : ne fait jamais échouer la CI.
+                try {
+                    build job: 'RHDemo-FixCVE',
+                          parameters: [string(name: 'CI_BUILD_NUMBER', value: env.BUILD_NUMBER)],
+                          wait: false,
+                          propagate: false
+                } catch (Exception e) {
+                    echo "⚠️  RHDemo-FixCVE non déclenché : ${e.message}"
+                }
             }
         }
         success {

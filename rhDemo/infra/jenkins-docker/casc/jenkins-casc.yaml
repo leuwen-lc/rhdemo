@@ -32,6 +32,10 @@ jenkins:
         dockerApi:
           dockerHost:
             uri: "tcp://docker-socket-proxy:2375"
+        # Un seul conteneur d'agent pour tout le nuage : instanceCapStr ne vaut que par modèle, et
+        # le modèle « fixcve » ne doit jamais tourner en même temps qu'un build (base NVD partagée,
+        # mémoire). Un agent inactif garde sa place pendant son idleMinutes.
+        containerCap: 1
         templates:
           - labelString: "builder"
             dockerTemplateBase:
@@ -65,6 +69,31 @@ jenkins:
             # true : supprime à la destruction de l'agent les 2 volumes anonymes créés par
             # les VOLUME de jenkins/inbound-agent (/home/jenkins/agent, /home/jenkins/.jenkins).
             # Les volumes nommés (cache Maven, Trivy, Selenium) ne sont jamais supprimés par docker rm -v.
+            removeVolumes: true
+            pullStrategy: PULL_NEVER
+          # fixcve-auto (Jenkinsfile-FixCVE, docs/FIXCVE_AUTO.md) : pas de socket Docker (le bot n'en
+          # a pas besoin), volume d'état persistant monté par ce seul modèle, cache Maven partagé
+          # avec la CI (base NVD). Les certificats locaux sont inutiles : Jenkins en HTTP sur le
+          # réseau interne, Codeberg et les registres publics en TLS public.
+          - labelString: "fixcve"
+            dockerTemplateBase:
+              image: "rhdemo-jenkins-agent:latest"
+              mountsString: |
+                type=volume,source=rhdemo-maven-repository,destination=/home/jenkins/.m2
+                type=volume,source=rhdemo-fixcve-state,destination=/home/jenkins/fixcve-state
+              network: "rhdemo-jenkins-network"
+              environmentsString: |
+                JAVA_HOME=/opt/java/openjdk
+                MAVEN_HOME=/opt/maven
+                PATH=/opt/java/openjdk/bin:/opt/maven/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            remoteFs: "/home/jenkins/agent"
+            connector:
+              jnlp:
+                jenkinsUrl: "http://jenkins:8080/"
+            # Agent rendu tout de suite : sa place (containerCap) revient à la CI.
+            retentionStrategy:
+              idleMinutes: 1
+            instanceCapStr: "1"
             removeVolumes: true
             pullStrategy: PULL_NEVER
 
@@ -273,6 +302,15 @@ tool:
 #      Renovate perd alors la date de publication des grosses images et leur délai minimal.
 #      Échec de connexion (jeton expiré) : le stage "Scan Renovate" échoue, donc mail.
 #    - Usage: RHDemo-Renovate, stage "Scan Renovate" (RENOVATE_HOST_RULES)
+#
+# 12. fixcve-forgejo-token (Secret text) [OpenBao]
+#    - Token du compte bot fixcvebot-leuwen-lc (collaborateur Write), portée write:repository ;
+#      créé et renouvelé par rotate-secrets.py fixcve-forgejo-token
+#    - Usage: RHDemo-FixCVE (push des correctifs et du journal d'audit, par GIT_ASKPASS)
+#
+# 13. fixcve-jenkins-api (Username with password) [OpenBao]
+#    - Username: claude ; Password : token API de ce compte Jenkins en lecture seule
+#    - Usage: RHDemo-FixCVE (lecture des builds, rapports et consoles de RHDemo-CI par l'API REST)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -551,6 +589,71 @@ jobs:
           // Décalé de 3h à 6h : Codeberg est régulièrement indisponible vers 3h du matin,
           // ce qui fait échouer le pipeline (checkout/API Forgejo) avant même de commencer.
           cron('0 6 * * *')
+        }
+      }
+
+  # ─────────────────────────────────────────────────────────────────
+  # PIPELINE FIXCVE - Remédiation automatique des CVE (docs/FIXCVE_AUTO.md)
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-FixCVE') {
+        displayName('RHDemo - FixCVE Auto')
+        description('''Remédiation automatique et déterministe des CVE bloquantes de RHDemo-CI
+
+        • Déclenché à la fin de chaque build RHDemo-CI, plus un cron de secours horaire
+        • Échec Trivy/OWASP : recherche de correctif, montée de version ou suppression
+          justifiée, vérification locale, commit et push par le bot fixcvebot-leuwen-lc
+        • Build suivant : validation, ou rollback du correctif
+        • Mail si halte, rollback, blocage sans correctif ou alerte
+
+        📖 Documentation : docs/FIXCVE_AUTO.md''')
+
+        parameters {
+          choiceParam('ACTION', ['poll', 'status', 'resume', 'clear-blocked', 'replay'],
+            'poll : passage normal. status : affiche l\'état. resume : reprise après une halte. clear-blocked : revérifie un blocage. replay : retraite BUILD_TO_REPLAY.')
+          stringParam('BUILD_TO_REPLAY', '', 'Build RHDemo-CI à retraiter (ACTION=replay)')
+          booleanParam('DRY_RUN', false, 'Cycle complet sur une copie de l\'état, sans commit poussé')
+          stringParam('CI_BUILD_NUMBER', '', 'Build RHDemo-CI déclencheur (posé automatiquement)')
+        }
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                }
+                // Même branche que RHDemo-CI : le bot travaille sur la branche que la CI construit.
+                branches('*/evolutions-post-1.1.11')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-FixCVE')
+            lightweight(true)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('300')
+                artifactNumToKeepStr('100')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+
+        triggers {
+          // Secours : rattrape un déclenchement perdu (Jenkins redémarré pendant la file d'attente).
+          cron('H * * * *')
         }
       }
 

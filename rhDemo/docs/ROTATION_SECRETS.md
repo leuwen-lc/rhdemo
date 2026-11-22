@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-21
+verifie_le: 2026-11-22
 sources:
   - rhDemo/scripts/rotate-secrets.py
   - rhDemo/scripts/rotation_lib/
@@ -23,10 +23,10 @@ Ce guide couvre l'exploitation courante des secrets : ce qu'il faut faire régul
 
 | Où | Quoi |
 | --- | --- |
-| OpenBao (`kv/`) | Tokens et clés des pipelines (`kv/jenkins/*`), credentials de fixcve-auto (`kv/fixcve/*`), secrets de stagingkub (`kv/stagingkub/*`, `kv/stagingkub-tests/users`), admin de Grafana (`kv/observability/grafana`) ; clé Cosign (Transit, non exportable) |
+| OpenBao (`kv/`) | Tokens et clés des pipelines (`kv/jenkins/*`), secrets de stagingkub (`kv/stagingkub/*`, `kv/stagingkub-tests/users`), admin de Grafana (`kv/observability/grafana`) ; clé Cosign (Transit, non exportable) |
 | KeePassXC | Racines de confiance : clé de déverrouillage et mot de passe `admin` d'OpenBao, clé et phrase de passe de la racine de l'autorité locale, mots de passe des comptes bots Codeberg |
 | Credentials Jenkins | Ce qui n'est pas dans OpenBao : <br>• `secret_id` AppRole (`openbao-approle`, `openbao-cosign-approle`) : le « mot de passe » avec lequel Jenkins se connecte à OpenBao, couplé à un `role_id` (l'identifiant). Il ne peut pas être dans OpenBao puisqu'il sert à y entrer ; il expire à 100 jours ; <br>• kubeconfigs (`kubeconfig-stagingkub`…) : fichiers de connexion au cluster stagingkub (adresse de l'API, certificat, jeton du ServiceAccount de Jenkins aux droits limités) ; <br>• SMTP, token SonarQube |
-| Fichiers locaux non versionnés (mode 600) | `rhDemo/infra/jenkins-docker/.env` (comptes Jenkins, base SonarQube : gardés hors d'OpenBao par choix, pour que Jenkins démarre sans OpenBao déverrouillé ; copie dans KeePassXC), `~/.config/rhdemo-fixcve/openbao-approle.json` |
+| Fichiers locaux non versionnés (mode 600) | `rhDemo/infra/jenkins-docker/.env` (comptes Jenkins, base SonarQube : gardés hors d'OpenBao par choix, pour que Jenkins démarre sans OpenBao déverrouillé ; copie dans KeePassXC) |
 | Nulle part | Ephemere : valeurs tirées au hasard à chaque build, perdues avec l'environnement |
 
 ## Tâches récurrentes
@@ -35,7 +35,7 @@ Ce guide couvre l'exploitation courante des secrets : ce qu'il faut faire régul
 | --- | --- | --- |
 | Après chaque redémarrage du poste ou d'OpenBao | Déverrouiller OpenBao | [OPENBAO.md](OPENBAO.md), « Déverrouillage » |
 | Chaque semaine (ou par cron) | Repérer les secrets à renouveler | `rhDemo/scripts/rotate-secrets.py --check`, puis renouveler ce qui est signalé (section suivante) |
-| Tous les 90 jours au plus | `secret_id` AppRole de Jenkins, Cosign et fixcve : **ils expirent à 100 jours**, après quoi les pipelines et fixcve-auto perdent l'accès à OpenBao | `rotate-secrets.py openbao-approle-jenkins openbao-approle-cosign openbao-approle-fixcve` |
+| Tous les 90 jours au plus | `secret_id` AppRole de Jenkins et Cosign : **ils expirent à 100 jours**, après quoi les pipelines (dont fixcve-auto) perdent l'accès à OpenBao | `rotate-secrets.py openbao-approle-jenkins openbao-approle-cosign` |
 | Avant l'échéance annuelle | Certificat TLS d'OpenBao (1 an) | Échéance : `openssl x509 -enddate -noout -in rhDemo/infra/jenkins-docker/certs/openbao/openbao.crt` ; renouvellement : `openbao/init-local-ca.sh openbao`, `docker compose restart openbao`, déverrouillage |
 | Tous les 5 ans (racine : 10 ans) | Certificat de l'intermédiaire de l'autorité locale | Pas de commande dédiée : signer un nouvel intermédiaire avec la clé racine sortie de KeePassXC (mêmes commandes `openssl` que `init-local-ca.sh ca`), puis réémettre le certificat d'OpenBao |
 | Avant leur expiration | Clé GPG de Renovate (2 ans), token SonarQube (date choisie à sa création) | `rotate-secrets.py renovate-gpg-key`, `rotate-secrets.py jenkins-sonar-token` |
@@ -142,4 +142,4 @@ Notation : chemin OpenBao puis clé, à passer à `openbao_kv_get` sans le préf
 | Ephemere gardé après un build (option `KEEP_EPHEMERE_ENV`), console Keycloak (https://keycloak.ephemere.local:58443) | `admin` | `docker exec keycloak-ephemere printenv KEYCLOAK_ADMIN_PASSWORD` ; les mots de passe des utilisateurs de test ne sont pas conservés : les réinitialiser depuis cette console |
 | Poste de développement | voir [infra/dev/README.md](../infra/dev/README.md) | `rhDemo/infra/dev/.env`, `rhDemo/secrets/secrets-rhdemo.yml` |
 
-Les valeurs lues par les pipelines (tokens Codeberg, GitHub, Docker Hub…) sont dans `kv/jenkins/<identifiant du credential>`, celles de fixcve-auto dans `kv/fixcve/*`. Une valeur renouvelée par le script se relit de la même façon.
+Les valeurs lues par les pipelines (tokens Codeberg, GitHub, Docker Hub…) sont dans `kv/jenkins/<identifiant du credential>`, y compris celles de fixcve-auto (`fixcve-forgejo-token`, `fixcve-jenkins-api` : token API du compte Jenkins `claude`, aussi demandé par le skill `/fixcve`). Une valeur renouvelée par le script se relit de la même façon.

@@ -7,7 +7,7 @@
 #   ./configure-openbao.sh init            initialise (une seule fois) : affiche la clé de
 #                                          déverrouillage et le jeton root, À COPIER DANS
 #                                          KEEPASSXC ; rien n'est écrit sur le disque
-#   ./configure-openbao.sh base            étape 1 : KV v2, AppRole jenkins et fixcve,
+#   ./configure-openbao.sh base            étape 1 : KV v2, AppRole jenkins,
 #                                          utilisateur admin, politiques (jeton root demandé)
 #   ./configure-openbao.sh cosign          étape 2 : moteur Transit et clé Cosign non
 #                                          exportable, AppRole jenkins-cosign
@@ -116,13 +116,12 @@ cmd_base() {
     bao audit list | grep -q "^fichier/" && echo "  ✓ audit fichier actif (config.hcl)"
 
     echo "▶ Politiques"
-    for p in admin jenkins fixcve jenkins-cosign eso-stagingkub; do
+    for p in admin jenkins jenkins-cosign eso-stagingkub; do
         write_policy "${p}"
     done
 
     echo "▶ AppRole"
     approle_role jenkins jenkins
-    approle_role fixcve fixcve
 
     echo "▶ Utilisateur admin (remplace le jeton root, jeton d'une heure)"
     if bao read auth/userpass/users/admin >/dev/null 2>&1; then
@@ -140,7 +139,6 @@ cmd_base() {
 
 ✅ Configuration de base terminée.
    - secret_id du contrôleur Jenkins : ./configure-openbao.sh secret-id jenkins
-   - secret_id de fixcve-auto       : ./configure-openbao.sh secret-id fixcve
    - alimentation des secrets       : rhDemo/scripts/openbao-setup.py (docs/OPENBAO.md)
    - en fin d'installation          : ./configure-openbao.sh revoke-root
 EOF
@@ -213,7 +211,7 @@ cmd_kubernetes() {
 }
 
 cmd_secret_id() {
-    local role="${1:?rôle AppRole attendu (jenkins, fixcve, jenkins-cosign)}"
+    local role="${1:?rôle AppRole attendu (jenkins, jenkins-cosign)}"
     require_unsealed
     ask_token "Jeton root ou admin"
     local role_id secret_id

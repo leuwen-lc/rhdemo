@@ -27,7 +27,7 @@ Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.
 
 ## 🎯 Vue d'ensemble
 
-Le projet RHDemo utilise **quatre pipelines Jenkins distincts** :
+Le projet RHDemo utilise **cinq pipelines Jenkins distincts** :
 
 | Pipeline | Rôle | Déclenchement | Doc dédiée |
 |---|---|---|---|
@@ -35,6 +35,7 @@ Le projet RHDemo utilise **quatre pipelines Jenkins distincts** :
 | **RHDemo-CD** (`Jenkinsfile-CD`) | Déploiement Helm de l'image validée sur stagingkub (K8s) | Manuel | ce document |
 | **RHDemo-Renovate** (`Jenkinsfile-Renovate`) | Scan Renovate, ouverture des PR, build/test/OWASP puis **merge automatique** des PR patch/minor qui passent la CI | Cron | [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) |
 | **RHDemo-Stagingkub-Upgrade-Deploy** (`Jenkinsfile-Stagingkub-Upgrade-Deploy`) | Application réelle (post-merge) des montées de version en place des composants d'infra stagingkub | Après merge d'une PR Renovate d'infra | [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) |
+| **RHDemo-FixCVE** (`Jenkinsfile-FixCVE`) | Remédiation automatique des CVE bloquantes Trivy/OWASP de la CI, validation ou rollback au build suivant | Fin de chaque build CI (`post { always }`), cron de secours horaire | [FIXCVE_AUTO.md](FIXCVE_AUTO.md) |
 
 Toutes les fins de build CI et CD, ainsi que l'upgrade d'infra, envoient une
 **notification email** (email-ext). L'ancien `Jenkinsfile` monolithique (CI+CD
@@ -533,7 +534,7 @@ Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker
 - ✅ Pas de configuration manuelle
 
 Les jobs créés automatiquement : `RHDemo-CI`, `RHDemo-CD`, `RHDemo-Renovate`,
-`RHDemo-Stagingkub-Upgrade-Deploy`. Le dépôt est hébergé sur **Forgejo/Codeberg**
+`RHDemo-Stagingkub-Upgrade-Deploy`, `RHDemo-FixCVE`. Le dépôt est hébergé sur **Forgejo/Codeberg**
 (pas GitHub/GitLab) ; se référer à `jenkins-casc.yaml` pour l'URL et les branches
 exactes.
 
@@ -547,6 +548,7 @@ exactes.
 | `kubeconfig-stagingkub` | Secret file | RHDemo-CD (`jenkins-deployer`) |
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | RHDemo-Stagingkub-Upgrade-Deploy (`jenkins-infra-upgrader`) |
 | Token API Forgejo + clé GPG | — | RHDemo-Renovate (rebase/merge/commentaires, commits signés) |
+| `fixcve-forgejo-token`, `fixcve-jenkins-api` | Références OpenBao | RHDemo-FixCVE (push du bot, lecture des builds CI) |
 
 ### 3. Outils globaux
 
@@ -560,7 +562,7 @@ exactes.
 
 Jenkins **n'est pas exposé sur Internet** : pas de webhook entrant depuis
 Forgejo. RHDemo-CI se déclenche par **polling SCM** sur les branches
-d'évolution ; RHDemo-Renovate par **cron**. Les statuts CI ne remontent pas
+d'évolution ; RHDemo-Renovate par **cron** ; RHDemo-FixCVE à la fin de chaque build CI. Les statuts CI ne remontent pas
 vers Forgejo (`prCreation: immediate`), d'où le merge des PR piloté côté
 Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 

@@ -10,7 +10,7 @@ Chaque environnement a ses propres secrets, sans valeur partagée : la compromis
 | **stagingkub** (Kubernetes, CD) | OpenBao (`kv/stagingkub/*`), recopiés dans le cluster par External Secrets Operator | `scripts/openbao-setup.py stagingkub` (valeurs générées) | `scripts/rotate-secrets.py` |
 | **dev** (poste) | `secrets-rhdemo.yml`, local, ignoré par Git | Copie de `secrets-rhdemo.yml.template` | À la main |
 
-Pipelines et outils (Jenkins, Renovate, fixcve-auto) : secrets dans OpenBao également (`kv/jenkins/*`, `kv/fixcve/*`).
+Pipelines (CI, Renovate, fixcve-auto) : secrets dans OpenBao également (`kv/jenkins/*`), lus par Jenkins.
 
 ## 📁 Fichiers de ce répertoire
 

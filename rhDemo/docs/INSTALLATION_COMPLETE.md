@@ -10,7 +10,7 @@ sources:
   - rhDemo/infra/stagingkub/scripts/init-keycloak-stagingkub.sh
   - rhDemo/infra/stagingkub/scripts/install-observability.sh
   - rhDemo/scripts/openbao-setup.py
-  - rhDemo/scripts/fixcve-install.sh
+  - rhDemo/Jenkinsfile-FixCVE
 ---
 
 # Installation complète depuis une machine vide
@@ -104,7 +104,7 @@ Paramétrage de l'application dans le cluster : [PARAMETRAGE-APPLICATIF-AVEC-KUB
 
 ## 9. fixcve-auto (facultatif)
 
-Remédiation automatique des CVE détectées par la CI : comptes dédiés (Jenkins `claude`, bot Codeberg), `rhDemo/scripts/openbao-setup.py fixcve`, `rhDemo/scripts/fixcve-install.sh` puis `--trust`, activation du cron en dernier : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), « Prérequis d'installation ».
+Remédiation automatique des CVE détectées par la CI, par le job Jenkins `RHDemo-FixCVE` : comptes dédiés (Jenkins `claude`, bot Codeberg), puis `rhDemo/scripts/openbao-setup.py jenkins fixcve-forgejo-token fixcve-jenkins-api` ; le job et son agent sont déjà dans JCasC. Skill interactif `/fixcve` : `rhDemo/scripts/fixcve-install.sh`. Détail : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), « Installation ».
 
 ## 10. Fin d'installation
 

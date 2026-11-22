@@ -8,8 +8,7 @@ sources:
   - rhDemo/Jenkinsfile-CD
   - rhDemo/Jenkinsfile-Renovate
   - rhDemo/secrets/
-  - rhDemo/scripts/fixcve-install.sh
-  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/Jenkinsfile-FixCVE
   - rhDemo/infra/stagingkub/rbac/
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
   - rhDemo/secrets/inventory.yaml
@@ -49,14 +48,14 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 | 2 | Clé Cosign | Clé Transit d'OpenBao, non exportable (publique : credential `cosign-public-key-transit`) | Faire signer une image malveillante par OpenBao, avec l'AppRole `jenkins-cosign` (encore faut-il la pousser dans le registry local) | C | Local |
 | 3 | Token Codeberg `ci-bot-forgejo-token` (compte `cibot-leuwen-lc`) | OpenBao `kv/jenkins/ci-bot-forgejo-token`, lu par un credential Jenkins de même identifiant | Push et merge sur `rhdemo` (Write), commentaires | C | Internet |
 | 4 | Token Codeberg `renovate-forgejo-token` (bot Renovate) | OpenBao `kv/jenkins/renovate-forgejo-token` | Push de branches, ouverture de PR, scope `user` (gestion des clés du compte bot) | H | Internet |
-| 5 | Token Codeberg du bot fixcve (`fixcvebot-leuwen-lc`) | OpenBao `kv/fixcve/codeberg` | Push sur `rhdemo` (Write) | H | Internet |
+| 5 | Token Codeberg du bot fixcve (`fixcvebot-leuwen-lc`) | OpenBao `kv/jenkins/fixcve-forgejo-token` (credential Jenkins depuis le 2026-11-22) | Push sur `rhdemo` (Write) | H | Internet |
 | 6 | Token(s) Codeberg et clés SSH du compte personnel `leuwen-lc` | Poste de travail (credential helper Git, `~/.ssh`) | Admin du dépôt : réglages, protections de branche, suppression | C | Internet |
 | 6b | Mots de passe des comptes bots Codeberg (`cibot-leuwen-lc`, bot Renovate, `fixcvebot-leuwen-lc`) | Gestionnaire de mots de passe de l'utilisateur | Avec la 2FA, insuffisant seul pour créer des tokens ; reste la porte d'entrée du compte | C | Internet |
 | 7 | Clé GPG `renovate-gpg-key` | OpenBao `kv/jenkins/renovate-gpg-key`, clé publique sur le compte bot Codeberg | Commits « vérifiés » au nom de Renovate | H | Internet |
 | 8 | Kubeconfig `kubeconfig-stagingkub-infra-upgrader` | Credential Jenkins, fichier local non versionné | Upgrades Helm de l'infra du cluster (Cilium, NGF, observabilité) | H | Local |
 | 9 | Kubeconfig `kubeconfig-stagingkub` (`jenkins-deployer`) | Credential Jenkins, fichier local non versionné | Déploiement et lecture des Secrets du namespace `rhdemo-stagingkub` | H | Local |
 | 10 | Mot de passe `admin` Jenkins | `infra/jenkins-docker/.env` (en clair), appliqué par JCasC | Tout : lecture de tous les credentials, **dont les secrets Internet #3, #4, #7, #12**, exécution de code | C | Local |
-| 11 | Mot de passe et token API du compte Jenkins `claude` | `.env` (mot de passe), OpenBao `kv/fixcve/jenkins` (token) | Lecture des builds et des logs (lecture seule) | M | Local |
+| 11 | Mot de passe et token API du compte Jenkins `claude` | `.env` (mot de passe), OpenBao `kv/jenkins/fixcve-jenkins-api` (token) | Lecture des builds et des logs (lecture seule) | M | Local |
 | 12 | Mot de passe de l'appareil « Jenkins » de la boîte des notifications | Credential Jenkins `smtp-infomaniak-credentials` | Envoyer des mails au nom de l'adresse de notification (hameçonnage), lire la boîte (IMAP) | H | Internet |
 | 13 | Credential Claude (abonnement) | `~/.claude/.credentials.json` (jeton OAuth de Claude Code) | Consommation du quota d'abonnement, facturation si l'usage supplémentaire payant est activé, accès à l'historique des sessions | H | Internet |
 | 14 | Token SonarQube `jenkins-sonar-token`, mot de passe admin SonarQube, `SONAR_DB_PASSWORD` | Credential Jenkins, `.env` | Falsifier la Quality Gate ; base SonarQube | M | Local |
@@ -64,7 +63,7 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 | 16 | Mêmes secrets pour ephemere | Nulle part : tirés au hasard à chaque build par `Jenkinsfile-CI` | Environnement jetable, détruit en fin de build | M | Local |
 | 17 | Mot de passe admin Grafana | OpenBao `kv/observability/grafana`, recopié dans `loki-stack` par ESO (rotation automatisée depuis le 2026-11-21) | Lecture des logs et métriques, modification des dashboards | M | LAN |
 | 18 | Clés privées TLS (`shared-tls-cert`, certificat du registry) | Secret Kubernetes, `infra/*/certs/` | Interception si un attaquant est déjà sur le réseau local | M | LAN |
-| 20 à 22 | `secret_id` AppRole d'OpenBao (Jenkins, Cosign, fixcve) | Credentials Jenkins `openbao-approle`, `openbao-cosign-approle` ; `~/.config/rhdemo-fixcve/openbao-approle.json` | Lire les secrets de l'identité concernée, ou faire signer une image (Cosign) ; valables 100 jours | C | Local |
+| 20 à 22 | `secret_id` AppRole d'OpenBao (Jenkins, Cosign ; fixcve supprimé le 2026-11-22, le bot tourne dans Jenkins) | Credentials Jenkins `openbao-approle`, `openbao-cosign-approle` | Lire les secrets de l'identité concernée, ou faire signer une image (Cosign) ; valables 100 jours | C | Local |
 | 23 | Mot de passe de l'utilisateur `admin` d'OpenBao | KeePassXC | Lire et écrire tous les secrets d'OpenBao | C | Local |
 | 24 | Clé de déverrouillage d'OpenBao | KeePassXC et papier | Déverrouiller OpenBao, recréer un jeton root | C | Local |
 
@@ -189,7 +188,7 @@ Corrections issues du premier essai réel : Jenkins renvoie parfois le XML des c
 
 ### 4.1 Tokens Codeberg (#3, #4, #5)
 
-Le script demande le mot de passe et le code TOTP du bot, crée un token aux **mêmes scopes** que l'ancien (lus dans l'inventaire), le vérifie, l'écrit dans OpenBao (`kv/jenkins/…` ou `kv/fixcve/codeberg`), puis supprime l'ancien par son identifiant (`GET /api/v1/users/{user}/tokens` pour le retrouver par son nom). Nommer les tokens avec la date (`jenkins-ci-2026-11-16`) facilite la révocation ciblée.
+Le script demande le mot de passe et le code TOTP du bot, crée un token aux **mêmes scopes** que l'ancien (lus dans l'inventaire), le vérifie, l'écrit dans OpenBao (`kv/jenkins/…`), puis supprime l'ancien par son identifiant (`GET /api/v1/users/{user}/tokens` pour le retrouver par son nom). Nommer les tokens avec la date (`jenkins-ci-2026-11-16`) facilite la révocation ciblée.
 
 **Prérequis : activer la 2FA (TOTP) sur les trois comptes bots.** Aujourd'hui, sans 2FA, le mot de passe d'un bot (#6b) suffit pour créer des tokens par API. Avec la 2FA, il faut aussi le code TOTP, qui reste sur le téléphone de l'utilisateur. Après activation, vérifier que le Git de Jenkins et de fixcve s'authentifie bien par token : les tokens ne sont pas concernés par la 2FA.
 

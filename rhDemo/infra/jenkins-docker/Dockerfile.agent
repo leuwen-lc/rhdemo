@@ -155,8 +155,10 @@ RUN (groupadd -g 984 docker || groupadd docker) && \
 # Créer les répertoires de cache avec le bon owner AVANT le switch USER
 # Quand Docker monte un volume nommé vide sur ce chemin, il copie le contenu
 # de l'image (répertoire jenkins:jenkins) — les permissions sont ainsi correctes.
-RUN mkdir -p /home/jenkins/.cache/selenium /home/jenkins/.cache/trivy \
-    && chown -R jenkins:jenkins /home/jenkins/.cache
+# fixcve-state : volume d'état de fixcve-auto (modèle d'agent « fixcve », jenkins-casc.yaml).
+RUN mkdir -p /home/jenkins/.cache/selenium /home/jenkins/.cache/trivy /home/jenkins/fixcve-state \
+    && chown -R jenkins:jenkins /home/jenkins/.cache /home/jenkins/fixcve-state \
+    && chmod 700 /home/jenkins/fixcve-state
 
 # Retour à l'utilisateur jenkins
 USER jenkins

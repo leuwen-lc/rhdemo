@@ -1,0 +1,103 @@
+#!/usr/bin/env groovy
+/**
+ * RHDemo-FixCVE : remédiation automatique des CVE bloquantes de RHDemo-CI (docs/FIXCVE_AUTO.md).
+ *
+ * Déclenché par le post { always } de chaque build RHDemo-CI (paramètre CI_BUILD_NUMBER), plus un
+ * cron de secours horaire (jenkins-casc.yaml) qui rattrape un déclenchement perdu. Le bot lui-même
+ * est rhDemo/scripts/fixcve-auto-poll.sh, lancé par fixcve-state.sh ; ce pipeline ne fait que lui
+ * fournir son environnement et notifier.
+ *
+ * Paramètres (définis dans jenkins-casc.yaml) :
+ *   ACTION           poll (défaut), status, resume (reprise après halte), clear-blocked, replay
+ *   BUILD_TO_REPLAY  build CI à retraiter (ACTION=replay)
+ *   DRY_RUN          cycle complet sur une copie de l'état, sans push
+ *   CI_BUILD_NUMBER  build CI déclencheur (posé par RHDemo-CI)
+ *
+ * Agent « fixcve » : sans socket Docker, volume rhdemo-fixcve-state (état persistant) et cache
+ * Maven partagé avec la CI (base NVD de Dependency-Check). Un seul conteneur d'agent à la fois
+ * pour tout le nuage Docker : jamais en même temps qu'un build CI.
+ */
+pipeline {
+    agent { label 'fixcve' }
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '300', artifactNumToKeepStr: '100'))
+    }
+
+    environment {
+        FIXCVE_STATE_DIR   = '/home/jenkins/fixcve-state'
+        FIXCVE_JENKINS_URL = 'http://jenkins:8080'
+        CODEBERG_USER      = 'fixcvebot-leuwen-lc'
+        NOTIFY_FILE        = 'fixcve-notify.txt'
+        // Destinataire des mails, comme les autres pipelines (credential OpenBao, dépôt public).
+        NOTIFICATION_EMAIL = credentials('notification-email')
+    }
+
+    stages {
+        stage('🛡️ Passage fixcve-auto') {
+            steps {
+                script {
+                    // Branche suivie : celle de ce job (même branche que RHDemo-CI dans jenkins-casc.yaml).
+                    def branch = (env.GIT_BRANCH ?: '').replaceFirst(/^origin\//, '')
+                    if (!branch) {
+                        error('Branche du job introuvable (GIT_BRANCH vide)')
+                    }
+                    sh "rm -f ${env.NOTIFY_FILE}"
+                    withCredentials([
+                        usernamePassword(credentialsId: 'fixcve-jenkins-api', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN'),
+                        string(credentialsId: 'fixcve-forgejo-token', variable: 'CODEBERG_TOKEN'),
+                        string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
+                    ]) {
+                        withEnv([
+                            "FIXCVE_BRANCH=${branch}",
+                            "FIXCVE_DRY_RUN=${params.DRY_RUN ? 'true' : 'false'}",
+                            "FIXCVE_EXPECTED_BUILD=${params.CI_BUILD_NUMBER ?: ''}",
+                            "FIXCVE_NOTIFY_FILE=${env.WORKSPACE}/${env.NOTIFY_FILE}",
+                            "FIXCVE_ACTION=${params.ACTION ?: 'poll'}",
+                            "FIXCVE_REPLAY=${params.BUILD_TO_REPLAY ?: ''}"
+                        ]) {
+                            // Valeurs passées par l'environnement, jamais interpolées dans la commande.
+                            sh 'rhDemo/scripts/fixcve-state.sh "$FIXCVE_ACTION" "$FIXCVE_REPLAY"'
+                        }
+                    }
+                    // Halte, rollback, blocage confirmé ou ALERTE : build UNSTABLE, donc mail.
+                    if (fileExists(env.NOTIFY_FILE) && readFile(env.NOTIFY_FILE).trim()) {
+                        unstable('fixcve-auto demande une attention : voir fixcve-notify.txt')
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'cp "$FIXCVE_STATE_DIR/state.json" fixcve-state.json 2>/dev/null || true'
+            archiveArtifacts artifacts: 'fixcve-state.json, fixcve-notify.txt', allowEmptyArchive: true
+        }
+        unstable {
+            script {
+                def detail = fileExists(env.NOTIFY_FILE) ? readFile(env.NOTIFY_FILE).trim() : ''
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "⚠️ RHDemo-FixCVE #${env.BUILD_NUMBER} : attention requise",
+                             body: "${detail}\n\nJournal : rhDemo/docs/fixcve-audit.md\nConsole : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-FixCVE #${env.BUILD_NUMBER} : échec",
+                             body: "Le passage fixcve-auto #${env.BUILD_NUMBER} a échoué (Jenkins, OpenBao ou Codeberg injoignable, push refusé, erreur d'une étape).\n\nConsole : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+    }
+}

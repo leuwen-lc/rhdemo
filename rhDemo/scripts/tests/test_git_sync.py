@@ -142,6 +142,25 @@ class FixCommitHelpersTest(unittest.TestCase):
         self.assertEqual(git(self.repo, "status", "--porcelain"), "")
         self.assertEqual(git(self.repo, "rev-list", "--count", "HEAD"), "3")
 
+    def test_revert_refuse_commit_humain(self):
+        """Garde-fou : un état altéré ne peut pas faire annuler un commit qui n'est pas du bot."""
+        with open(os.path.join(self.repo, "humain.txt"), "w") as f:
+            f.write("h")
+        git(self.repo, "add", "humain.txt")
+        git(self.repo, "commit", "-q", "-m", "fix: correctif humain", author="Humain")
+        sha = git(self.repo, "rev-parse", "HEAD")
+        r = self._bash(f"revert_fix_commit {sha}")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("revert refusé", r.stderr)
+        self.assertEqual(git(self.repo, "rev-parse", "HEAD"), sha)
+
+    def test_revert_refuse_commit_hors_branche(self):
+        sha = self._commit({self.supp: "<s>\n<a/>\n</s>\n"})
+        git(self.repo, "reset", "-q", "--hard", "HEAD~1")
+        r = self._bash(f"revert_fix_commit {sha}")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("revert refusé", r.stderr)
+
     def test_revert_en_conflit_abandonne_clone_propre(self):
         """Incident #974/#975 : un commit voisin plus récent rend le revert conflictuel."""
         sha = self._commit({self.supp: "<s>\n<a/>\n</s>\n"})

@@ -58,6 +58,10 @@ Réutilise `nvd-api-key` déjà créé ci-dessus. En plus, à créer :
 
 > Pourquoi deux comptes bot distincts (`cibot-leuwen-lc` et le bot Renovate) et pourquoi `renovate-forgejo-token` ne peut pas être remplacé par `ci-bot-forgejo-token` : voir `docs/RENOVATE_AUTOMERGE_CI.md`, section « Comptes et credentials ».
 
+### Pour fixcve-auto (`RHDemo-FixCVE`)
+
+Réutilise `nvd-api-key`. Credentials `fixcve-forgejo-token` (token du bot `fixcvebot-leuwen-lc`) et `fixcve-jenkins-api` (compte `claude` et son token API), créés en références OpenBao par `rhDemo/scripts/openbao-setup.py jenkins fixcve-forgejo-token fixcve-jenkins-api` : voir `docs/FIXCVE_AUTO.md`, « Installation ».
+
 ### Pour la mise à jour en place de l'infra stagingkub (`RHDemo-Stagingkub-Upgrade-Deploy`)
 
 Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus-stack/Loki/Alloy/Grafana. À créer :

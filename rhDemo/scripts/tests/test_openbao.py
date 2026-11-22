@@ -397,40 +397,20 @@ class SetupStagingkubTest(Base):
         self.assertNotIn("stagingkub/rhdemo", self.st.kv)
 
 
-class SetupFixcveTest(Base):
-    def setUp(self):
-        super().setUp()
-        self.m = load_setup()
-        self.m.FIXCVE_DIR = os.path.join(self.tmp, "fixcve")
+class SetupFixcveTest(unittest.TestCase):
+    """fixcve-auto tourne dans Jenkins : ses credentials sont des références OpenBao kv/jenkins/*."""
 
-    def ctx_with(self, secrets):
-        return rotations.Context(self.inv, StubPrompter(secrets), Journal(os.path.join(self.tmp, "j.jsonl")))
+    def test_credentials_fixcve_dans_le_perimetre_jenkins(self):
+        m = load_setup()
+        self.assertEqual(m.JENKINS_CREDENTIALS["fixcve-forgejo-token"][0], "string")
+        self.assertEqual(m.JENKINS_CREDENTIALS["fixcve-jenkins-api"][0], "username-password")
+        self.assertFalse(hasattr(m, "cmd_fixcve"))
 
-    def test_valeurs_presentes_seul_approle_cree(self):
-        ob = self.admin()
-        ob.kv_put("fixcve/jenkins", {"user": "claude", "token": "t"})
-        ob.kv_put("fixcve/codeberg", {"user": "bot", "token": "c"})
-        self.m.cmd_fixcve(self.ctx())
-        data = tools.approle_file_read(os.path.join(self.m.FIXCVE_DIR, "openbao-approle.json"))
-        ob.approle_login(data["role_id"], data["secret_id"])
-        self.assertEqual(len(self.st.kv["fixcve/jenkins"]), 1)       # rien d'écrasé
-        self.m.cmd_fixcve(self.ctx())                                 # relance : fichier conservé
-        self.assertEqual(tools.approle_file_read(os.path.join(self.m.FIXCVE_DIR, "openbao-approle.json")), data)
-
-    def test_token_jenkins_demande(self):
-        self.admin().kv_put("fixcve/codeberg", {"user": "bot", "token": "c"})
-        self.m.cmd_fixcve(self.ctx_with({"text": "", "value:fixcve-jenkins": "tok"}))
-        self.assertEqual(self.st.kv["fixcve/jenkins"][-1], {"user": "claude", "token": "tok"})
-
-    def test_codeberg_vide_considere_absent(self):
-        self.assertTrue(self.m._missing(self.admin().kv_put("fixcve/codeberg", {"user": "bot", "token": ""})
-                                        or self.admin(), "fixcve/codeberg", "token"))
-
-    def test_cle_nvd_format(self):
-        with self.assertRaisesRegex(RotationError, "format"):
-            self.m.cmd_fixcve_nvd(self.ctx_with({"value:fixcve-nvd": "pas une clé !"}))
-        self.m.cmd_fixcve_nvd(self.ctx_with({"value:fixcve-nvd": "abcd1234-abcd-1234-abcd-1234abcd5678"}))
-        self.assertEqual(self.st.kv["fixcve/nvd"][-1]["api_key"], "abcd1234-abcd-1234-abcd-1234abcd5678")
+    def test_token_codeberg_cible_kv_jenkins(self):
+        e = inv_mod.by_id(inv_mod.load(), "fixcve-forgejo-token")
+        self.assertEqual(e["targets"], [{"kind": "openbao", "path": "jenkins/fixcve-forgejo-token", "key": "value"}])
+        ids = {x["id"] for x in inv_mod.load()["secrets"]}
+        self.assertNotIn("openbao-approle-fixcve", ids)
 
 
 class InventoryOpenBaoTest(unittest.TestCase):

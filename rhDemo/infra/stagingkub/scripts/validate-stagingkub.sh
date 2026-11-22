@@ -190,7 +190,8 @@ check_k8s_resource "secret" "rhdemo-db-secret" "rhdemo-stagingkub"
 check_k8s_resource "secret" "keycloak-db-secret" "rhdemo-stagingkub"
 check_k8s_resource "secret" "keycloak-admin-secret" "rhdemo-stagingkub"
 check_k8s_resource "secret" "rhdemo-app-secrets" "rhdemo-stagingkub"
-check_k8s_resource "secret" "rhdemo-tls-cert" "rhdemo-stagingkub"
+# Certificat TLS du shared-gateway (créé par init-stagingkub.sh, docs/CERTIFICATS_WEB.md)
+check_k8s_resource "secret" "shared-tls-cert" "nginx-gateway"
 echo ""
 
 # 7. Vérification du déploiement Helm (si existe)

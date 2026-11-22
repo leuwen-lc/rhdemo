@@ -266,39 +266,33 @@ kubectl get ns rhdemo-stagingkub
 
 ### Méthode 1 : Déploiement via Jenkins (recommandé)
 
-1. Ouvrir le pipeline Jenkins CD (`Jenkinsfile-CD`)
-2. Cliquer sur "Build with Parameters"
-3. Entrer la version à déployer
-4. Lancer le build
+`RHDemo-CD` est déclenché automatiquement par chaque build `RHDemo-CI` réussi qui publie l'image, avec le numéro de ce build : il déploie exactement l'image (tag et digest) produite par la CI. Pour déployer une autre version, lancer `RHDemo-CD` à la main (« Build with Parameters ») avec `IMAGE_TAG=<tag>` ([PIPELINES_CI_CD.md](../../docs/PIPELINES_CI_CD.md)).
 
-Le pipeline exécutera automatiquement :
+Le pipeline exécute :
 - Configuration de l'accès Kubernetes (kubeconfig RBAC)
 - Vérification de l'image dans le registry et de sa signature (Cosign)
 - Vérification que les secrets Kubernetes sont synchronisés par ESO
 - Déploiement Helm (`imagePullPolicy=Always` pour les tags SNAPSHOT, ServiceMonitors activés si Prometheus Operator est présent)
-- Redémarrage forcé des pods, attente de disponibilité, health checks et état du déploiement
+- Redémarrage forcé des pods (optionnel), attente de disponibilité, health checks et état du déploiement
 
-### Méthode 2 : Déploiement Helm direct
+### Méthode 2 : Redéploiement manuel d'une image publiée (diagnostic)
+
+Seulement pour diagnostiquer quand Jenkins est indisponible, et seulement avec une image **déjà publiée et signée par la CI** : une image construite et poussée à la main n'est pas signée, et `RHDemo-CD` refuserait ensuite de la redéployer. Les commandes reprennent la vérification de signature de `Jenkinsfile-CD` ; elles se lancent depuis `rhDemo/`, avec le kubeconfig administrateur du cluster (contexte `kind-rhdemo`).
 
 ```bash
-# 1. Construire l'image Docker (depuis rhDemo/)
-./mvnw clean package -DskipTests
-docker build -t rhdemo-api:1.1.11-SNAPSHOT .
-
-# 2. Tagger et pousser vers le registry local
-docker tag rhdemo-api:1.1.11-SNAPSHOT localhost:5000/rhdemo-api:1.1.11-SNAPSHOT
-docker push localhost:5000/rhdemo-api:1.1.11-SNAPSHOT
-
-# 3. Déployer avec Helm
-cd infra/stagingkub
-helm upgrade --install rhdemo ./helm/rhdemo \
-  --namespace rhdemo-stagingkub \
-  --create-namespace \
-  --set rhdemo.image.repository=localhost:5000/rhdemo-api \
-  --set rhdemo.image.tag=1.1.11-SNAPSHOT \
-  --wait \
-  --timeout 15m
+CA=/etc/docker/certs.d/localhost:5000/ca.crt
+curl -s --cacert $CA https://localhost:5000/v2/rhdemo-api/tags/list | tr ',' '\n' | grep -v sha256-   # tags publiés
+TAG=<tag>
+DIGEST=$(curl -sI --cacert $CA -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+  https://localhost:5000/v2/rhdemo-api/manifests/$TAG | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
+SSL_CERT_FILE=$CA cosign verify --key infra/jenkins-docker/certs/cosign/cosign-transit.pub \
+  --insecure-ignore-tlog=true localhost:5000/rhdemo-api@$DIGEST                   # doit réussir
+helm upgrade --install rhdemo infra/stagingkub/helm/rhdemo --namespace rhdemo-stagingkub \
+  --set rhdemo.image.repository=localhost:5000/rhdemo-api --set rhdemo.image.tag=$TAG \
+  --set rhdemo.image.pullPolicy=Always --wait --timeout 15m
 ```
+
+Les tags `sha256-…` exclus de la liste sont les signatures Cosign. La clé publique `cosign-transit.pub` est écrite par `configure-openbao.sh cosign` ([OPENBAO.md](../../docs/OPENBAO.md)). Une image signée avant le passage à la clé Transit d'OpenBao (2026-11-21), ou avec une version de la clé Transit antérieure à une rotation, échoue à la vérification : la faire reconstruire par `RHDemo-CI` plutôt que de passer outre. Ce redéploiement n'active pas les ServiceMonitors : ajouter `--set rhdemo.metrics.serviceMonitor.enabled=true --set postgresql-rhdemo.metrics.serviceMonitor.enabled=true` si Prometheus Operator est installé.
 
 ### Vérifier le déploiement
 

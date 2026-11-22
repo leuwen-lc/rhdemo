@@ -67,7 +67,7 @@ Création des credentials : commentaires de `jenkins-casc.yaml`, section CREDENT
 | `rhdemo-api`, manager `jenkins` → `enabled: false` | Image applicative et plugins Jenkins exclus |
 | `osvVulnerabilityAlerts`, `rebaseWhen: "behind-base-branch"` | Alertes de vulnérabilité OSV ; rebase par Renovate quand la PR est en retard |
 
-Les `customManagers` suivent ce que les managers natifs ne voient pas : images épinglées dans `Jenkinsfile-CI`, `values.yaml` et `kind-config.yaml` ; charts des composants système (`scripts/components/install-or-upgrade-*.sh`) ; Node et npm de `frontend-maven-plugin` ; Maven, SOPS, Helm et Cosign de `Dockerfile.agent` ; image de Renovate. Format des annotations : [IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md).
+Les `customManagers` suivent ce que les managers natifs ne voient pas : images épinglées dans `Jenkinsfile-CI`, `values.yaml` et `kind-config.yaml` ; charts des composants système (`scripts/components/install-or-upgrade-*.sh`) ; Node et npm de `frontend-maven-plugin` ; Maven, Helm et Cosign de `Dockerfile.agent` ; image de Renovate. Format des annotations : [IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md).
 
 La branche d'évolution est écrite en dur à trois endroits : `BASE_BRANCH` de `Jenkinsfile-Renovate`, `baseBranchPatterns` de `renovate.json` et les `branches(…)` des jobs de `jenkins-casc.yaml`. `release.sh post-merge` les met à jour au changement de branche ([GIT-PROCEDURE-RELEASE.md](GIT-PROCEDURE-RELEASE.md)).
 

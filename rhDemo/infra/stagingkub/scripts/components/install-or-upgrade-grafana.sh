@@ -31,17 +31,12 @@ NC='\033[0m'
 
 echo -e "${YELLOW}▶ Installation/mise à jour de Grafana ${GRAFANA_VERSION}...${NC}"
 
-[ -f "${VALUES_DIR}/grafana-values.yaml" ] || { echo -e "${RED}❌ Fichier grafana-values.yaml manquant${NC}"; exit 1; }
-
-GRAFANA_PASSWORD=$(grep "^adminPassword:" "${VALUES_DIR}/grafana-values.yaml" | awk '{print $2}' | tr -d '"')
-if [ -z "$GRAFANA_PASSWORD" ] || [ "$GRAFANA_PASSWORD" = '""' ]; then
-    echo -e "${RED}❌ Le mot de passe Grafana n'est pas configuré dans ${VALUES_DIR}/grafana-values.yaml${NC}"
-    exit 1
-fi
-# Mot de passe faible refusé : 16 caractères minimum.
-# Générer une valeur avec : openssl rand -base64 24
-if [ "${#GRAFANA_PASSWORD}" -lt 16 ]; then
-    echo -e "${RED}❌ Mot de passe Grafana trop faible dans ${VALUES_DIR}/grafana-values.yaml (16 caractères minimum, générer avec : openssl rand -base64 24)${NC}"
+# Mot de passe admin : Secret grafana-admin, créé par External Secrets Operator depuis OpenBao
+# (kv/observability/grafana, install-external-secrets.sh). grafana-values.yaml est versionné
+# et ne contient aucun secret. En validation (dry-run), le Secret n'est pas exigé.
+if [ "$HELM_DRY_RUN" != "true" ] && ! kubectl get secret grafana-admin -n "${LOKI_NS}" >/dev/null 2>&1; then
+    echo -e "${RED}❌ Secret grafana-admin absent de ${LOKI_NS} : rhDemo/scripts/openbao-setup.py observability,"
+    echo -e "   puis scripts/components/install-external-secrets.sh (docs/OPENBAO.md)${NC}"
     exit 1
 fi
 

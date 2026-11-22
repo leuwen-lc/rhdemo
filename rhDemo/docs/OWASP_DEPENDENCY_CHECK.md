@@ -300,10 +300,8 @@ echo "owasp-suppressions.xml" >> .gitignore
 ```groovy
 stage('🔒 Analyse Sécurité Dépendances (OWASP)') {
     steps {
-        sh '''
-            . rhDemo/secrets/env-vars.sh
-            cd rhDemo && ./mvnw org.owasp:dependency-check-maven:check
-        '''
+        // nvd-api-key et ossindex-credentials en withCredentials, lus par .mvn/ci-settings.xml
+        sh './mvnw -s .mvn/ci-settings.xml org.owasp:dependency-check-maven:check -DnvdApiServerId=nvd -DossIndexServerId=ossindex'
     }
     post {
         always {

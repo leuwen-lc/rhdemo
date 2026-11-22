@@ -12,8 +12,8 @@ certs/
 secrets/
 *.secret
 
-# Fichiers de configuration personnalisés avec mdp
-helm/observability/grafana-values.yaml
+# Ancienne copie locale des valeurs Grafana avec mot de passe (avant OpenBao) : à détruire
+helm/observability/*.local-avant-openbao
 
 # Logs
 *.log

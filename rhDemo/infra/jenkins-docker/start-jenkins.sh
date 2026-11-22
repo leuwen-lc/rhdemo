@@ -168,10 +168,12 @@ done
 
 # --- Build de l'image Controller ---
 if [ -f Dockerfile.jenkins ]; then
-    # Calculer le hash combiné du Dockerfile ET de plugins.txt
+    # Calculer le hash combiné du Dockerfile, de plugins.txt et de l'autorité locale
+    # (racine importée dans le truststore Java pour OpenBao, cf. Dockerfile.jenkins)
     DOCKERFILE_HASH=$(md5sum Dockerfile.jenkins | cut -d' ' -f1)
     PLUGINS_HASH=$(md5sum plugins.txt 2>/dev/null | cut -d' ' -f1 || echo "")
-    COMBINED_HASH="${DOCKERFILE_HASH}-${PLUGINS_HASH}"
+    CA_HASH=$(md5sum certs/ca/root-ca.crt 2>/dev/null | cut -d' ' -f1 || echo "sans-ca")
+    COMBINED_HASH="${DOCKERFILE_HASH}-${PLUGINS_HASH}-${CA_HASH:0:8}"
 
     # Vérifier si l'image existe déjà
     if docker image inspect rhdemo-jenkins:latest &> /dev/null; then
@@ -187,7 +189,7 @@ if [ -f Dockerfile.jenkins ]; then
             echo "🔄 Mise à jour des plugins demandée (--clean-plugins)..."
             NEED_REBUILD=true
         elif [ "$COMBINED_HASH" != "$IMAGE_HASH" ]; then
-            echo "🔄 Configuration modifiée (Dockerfile ou plugins.txt), rebuild nécessaire..."
+            echo "🔄 Configuration modifiée (Dockerfile, plugins.txt ou autorité locale), rebuild nécessaire..."
             NEED_REBUILD=true
         else
             echo "✅ Image controller à jour, pas de rebuild nécessaire"
@@ -357,6 +359,6 @@ echo ""
 echo "🔧 Prochaines étapes:"
 echo "   1. Connectez-vous à Jenkins: http://localhost:8080"
 echo "   2. Vérifiez le Docker Cloud: Manage Jenkins > Clouds > docker-local > Test Connection"
-echo "   3. Configurez les credentials (SOPS, SonarQube, etc.) - voir QUICKSTART.md"
+echo "   3. Configurez les credentials (OpenBao, SonarQube, etc.) - voir QUICKSTART.md"
 echo "   4. Lancez un build : les agents éphémères sont créés automatiquement"
 echo ""

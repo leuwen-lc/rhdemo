@@ -9,7 +9,10 @@
 #     registre est recréé (compose Jenkins). Le nœud ne résout alors plus
 #     `kind-registry` et les pods passent en ImagePullBackOff ;
 #   - le redémarrage des pods en ImagePullBackOff / ErrImagePull une fois
-#     le registre à nouveau joignable (évite d'attendre le backoff).
+#     le registre à nouveau joignable (évite d'attendre le backoff) ;
+#   - le raccordement d'OpenBao au réseau `kind` avec son IP fixe (ESO,
+#     docs/OPENBAO.md), et un rappel s'il est scellé : le déverrouillage reste
+#     manuel (infra/jenkins-docker/openbao/unseal.sh), jamais fait ici.
 #
 # Idempotent, sans effet si le cluster est sain.
 #
@@ -18,6 +21,10 @@
 # ═══════════════════════════════════════════════════════════════
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../jenkins-docker/openbao/lib.sh
+source "$SCRIPT_DIR/../../jenkins-docker/openbao/lib.sh"
 
 CLUSTER_NAME="${CLUSTER_NAME:-rhdemo}"
 NODE_CONTAINER="${CLUSTER_NAME}-control-plane"
@@ -36,6 +43,7 @@ k() { kubectl --context "$KUBE_CONTEXT" "$@"; }
 PROBLEMS=()
 FIX_CILIUM=false
 FIX_REGISTRY=false
+FIX_OPENBAO=false
 
 # 0. Conteneurs docker : nœud KinD et registre démarrés ?
 for c in "$NODE_CONTAINER" "$REGISTRY_CONTAINER"; do
@@ -69,6 +77,22 @@ if docker inspect "$REGISTRY_CONTAINER" >/dev/null 2>&1; then
     fi
 else
     PROBLEMS+=("conteneur $REGISTRY_CONTAINER introuvable (voir infra/jenkins-docker)")
+fi
+
+# 1 bis. OpenBao raccordé au réseau kind avec son IP fixe, et déverrouillé ?
+if docker inspect "$OPENBAO_CONTAINER" >/dev/null 2>&1; then
+    BAO_IP_EXPECTED=$(openbao_kind_ip || true)
+    BAO_IP_CURRENT=$(docker inspect "$OPENBAO_CONTAINER" \
+        --format "{{with index .NetworkSettings.Networks \"$KIND_NETWORK\"}}{{.IPAddress}}{{end}}")
+    if [ -n "$BAO_IP_EXPECTED" ] && [ "$BAO_IP_CURRENT" != "$BAO_IP_EXPECTED" ]; then
+        PROBLEMS+=("$OPENBAO_CONTAINER absent du réseau '$KIND_NETWORK' ou mauvaise IP (attendu $BAO_IP_EXPECTED) : ESO ne lit plus les secrets")
+        FIX_OPENBAO=true
+    fi
+    BAO_STATE=$(openbao_seal_state)
+    if [ "$BAO_STATE" != "unsealed" ]; then
+        # Pas une anomalie corrigeable ici : déverrouillage manuel (clé dans KeePassXC).
+        log "RAPPEL : OpenBao est « $BAO_STATE » → infra/jenkins-docker/openbao/unseal.sh (CI, CD et ESO en dépendent)"
+    fi
 fi
 
 # 2. IP du nœud : pods en cours d'exécution dont le hostIP est périmé
@@ -117,6 +141,11 @@ if $FIX_REGISTRY; then
     else
         log "ATTENTION : le nœud ne résout toujours pas $REGISTRY_CONTAINER"
     fi
+fi
+
+if $FIX_OPENBAO; then
+    log "Raccordement de $OPENBAO_CONTAINER au réseau $KIND_NETWORK ($BAO_IP_EXPECTED)..."
+    openbao_connect_kind
 fi
 
 if $FIX_CILIUM; then

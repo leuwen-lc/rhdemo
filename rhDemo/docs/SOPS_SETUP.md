@@ -1,11 +1,11 @@
 ---
-statut: actif
-verifie_le: 2026-10-22
+statut: historique
+verifie_le: 2026-11-21
 sources:
-  - rhDemo/secrets/secrets-rhdemo.yml
-  - rhDemo/secrets/secrets-ephemere.yml
-  - rhDemo/secrets/secrets-stagingkub.yml
+  - rhDemo/docs/OPENBAO.md
 ---
+
+> **Historique** : SOPS n'est plus utilisé depuis la migration vers OpenBao (2026-11). Les fichiers chiffrés ont été supprimés du dépôt et leurs valeurs renouvelées. Gestion actuelle des secrets : [OPENBAO.md](OPENBAO.md).
 
 # Installation et configuration de SOPS/AGE
 

@@ -1,0 +1,119 @@
+# ═══════════════════════════════════════════════════════════════
+# Network Policies du namespace external-secrets (ESO), docs/OPENBAO.md
+# ═══════════════════════════════════════════════════════════════
+# Appliqué par scripts/components/install-external-secrets.sh, qui remplace
+# __OPENBAO_IP__ par l'IP fixe d'OpenBao sur le réseau Docker kind
+# (infra/jenkins-docker/openbao/lib.sh, openbao_kind_ip).
+#
+# Flux autorisés :
+#   - contrôleur  → OpenBao (IP fixe, 8200) : lecture de kv/stagingkub/*
+#   - tous        → API Server (6443, CiliumNetworkPolicy : entité host/kube-apiserver)
+#   - API Server  → webhook (10250) : validation des ExternalSecret/SecretStore
+#   - tous        → DNS
+# Aucun autre egress : pas d'Internet.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# OpenBao est un conteneur Docker distinct du nœud KinD (réseau kind) : vu comme
+# « world » par Cilium, donc atteignable par ipBlock, contrairement à l'API Server
+# (entité host, voir networkpolicies/README.md). À vérifier au premier déploiement.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-controller-to-openbao
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: __OPENBAO_IP__/32
+      ports:
+        - protocol: TCP
+          port: 8200
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-access
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - host
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-apiserver-to-webhook
+  namespace: external-secrets
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: rhdemo-secrets
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: external-secrets-webhook
+  ingress:
+    - fromEntities:
+        - host
+        - kube-apiserver
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP

@@ -4,30 +4,11 @@
  * Bibliothèque de fonctions réutilisables pour le pipeline Jenkins rhDemo
  *
  * Cette bibliothèque contient des fonctions utilitaires pour :
- * - Gestion des secrets
  * - Healthchecks des services
  * - Scan de sécurité Trivy
  * - Gestion des réseaux Docker
  * - Publication de rapports HTML
  */
-
-/**
- * Charge les secrets depuis un fichier bash
- * @param secretsPath Chemin vers le fichier de secrets (défaut: rhDemo/secrets/env-vars.sh)
- */
-def loadSecrets(String secretsPath = 'rhDemo/secrets/env-vars.sh') {
-    echo "🔐 Chargement des secrets depuis ${secretsPath}"
-    sh """
-        set +x
-        if [ -f "${secretsPath}" ]; then
-            . ${secretsPath}
-            echo "✅ Secrets chargés"
-        else
-            echo "⚠️  Fichier de secrets non trouvé: ${secretsPath}"
-        fi
-        set -x
-    """
-}
 
 /**
  * Attend qu'un service soit disponible via healthcheck HTTP

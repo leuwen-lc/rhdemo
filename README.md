@@ -119,29 +119,12 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
 
 ## Utiliser le projet
 
-- Prérequis : un PC sur Linux avec 16Go de RAM
-- Docker et Docker compose installés dans des versions récentes (notamment syntaxe docker compose v2)
-- Git dans une version récente avec lequel on va cloner le repository
+Prérequis : un PC sous Linux avec 16 Go de RAM, Docker et Docker Compose v2 récents, Git.
 
 <pre>git clone https://github.com/leuwen-lc/rhdemo.git</pre>
 
-### En dev ou test local
-
-- Allez dans rhDemo/infra/dev puis suivez les instructions du README.md pour installer Postgresql et Keycloak local via docker compose et initialiser la configuraiton et les données de base.
-- Depuis le répertoire rhDemo, lancez la commande ./mvnw spring-boot:run
-- Connectez vous (par défaut sur http;//localhost:9000/front)
-
-### Utiliser la chaine CI et déployer dans l'environnement ephemere
-
-- Allez dans rhDemo/infra/jenkins-docker et suivez le QUICKSTART.md et pour en savoir plus le README.md
-- Lancez le pipeline rhDemo/Jenkinsfile-CI
-
-### Utliser la chaine CD et déployer dans l'environnement stagingkub
-
-- Installez et utilisez la chaine CI (ci-dessus)
-- Installez Kind 0.33 et supérieur et des versions récentes kubectl et helm
-- Suivez les documentations fournies dans rhDemo/infra/stagingkub/README.md
-- Lancez le pipelne rhDemo/Jenkinsfile-CD
+- **Développement ou test local** : [rhDemo/infra/dev/README.md](rhDemo/infra/dev/README.md), puis `./mvnw spring-boot:run` depuis `rhDemo/` (http://localhost:9000/front).
+- **Chaîne complète** (Jenkins, OpenBao, CI et environnement ephemere, stagingkub et CD, observabilité, Renovate) : suivre l'ordre d'installation de [rhDemo/docs/INSTALLATION_COMPLETE.md](rhDemo/docs/INSTALLATION_COMPLETE.md), qui renvoie à la documentation de chaque composant.
 
 ## Changelog
 

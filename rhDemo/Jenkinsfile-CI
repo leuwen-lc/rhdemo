@@ -57,11 +57,10 @@ pipeline {
         TEST_PORT = '9000'
         TEST_PROJECT_PATH = 'rhDemoAPITestIHM'
 
-        // Fichiers de secrets SOPS
-        SECRETS_FILE = 'rhDemo/secrets/secrets-ephemere.yml'
-        // Répertoire isolé hors workspace pour les secrets déchiffrés (sécurité)
+        // Secrets d'ephemere : générés aléatoirement à chaque build (stage « Génération Secrets
+        // ephemere »), jamais stockés ; l'environnement est détruit en fin de build.
+        // Répertoire isolé hors workspace pour les secrets générés (sécurité)
         SECRETS_TMP_DIR   = "/tmp/rhdemo-secrets-${BUILD_NUMBER}"
-        SECRETS_DECRYPTED = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-decrypted.yml"
         SECRETS_ENV_VARS  = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/env-vars.sh"
         SECRETS_RHDEMO    = "/tmp/rhdemo-secrets-${BUILD_NUMBER}/secrets-rhdemo.yml"
         // Config Keycloak générée hors sources (ne jamais écrire dans rhDemoInitKeycloak/src/)
@@ -127,14 +126,11 @@ pipeline {
                 sh 'git log -1 --pretty=format:"%h - %an : %s"'
 
                 // Purge des résidus de l'ancienne convention (fichiers générés dans le workspace)
-                // Cible uniquement les fichiers générés, PAS les fichiers SOPS chiffrés versionnés
-                // (secrets-ephemere.yml, secrets-stagingkub.yml sont des fichiers Git légitimes)
+                // Cible uniquement les fichiers générés, jamais les fichiers versionnés de secrets/
                 // Évite que des fichiers shredés (remplis de null bytes) soient trouvés par Spring Boot
                 // via optional:file:./secrets/secrets-rhdemo.yml et causent une erreur YAML (0x0)
                 sh '''
                     rm -f rhDemo/secrets/secrets-rhdemo.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/secrets-decrypted.yml 2>/dev/null || true
-                    rm -f rhDemo/secrets/env-vars.sh 2>/dev/null || true
                     rm -f rhDemoInitKeycloak/src/main/resources/application-ephemere.yml 2>/dev/null || true
                     echo "✅ Résidus de secrets workspace nettoyés"
                 '''
@@ -219,96 +215,52 @@ pipeline {
             }
         }
 
-        stage('🔓 Déchiffrement Secrets SOPS') {
+        stage('🔐 Génération Secrets ephemere') {
             steps {
-                script {
-                    echo '▶ Vérification SOPS et YQ...'
-                }
+                // Environnement jetable, recréé à chaque build : valeurs aléatoires, jamais
+                // stockées (docs/OPENBAO.md). Une fuite (log, artefact) ne vaut que pour un
+                // environnement déjà détruit. Docker Compose, rhDemoInitKeycloak, Selenium et ZAP
+                // lisent ${SECRETS_ENV_VARS}.
                 sh '''
-                    sops --version
-                    yq --version
+                    set +x
+                    mkdir -p ${SECRETS_TMP_DIR}
+                    chmod 700 ${SECRETS_TMP_DIR}
+
+                    # 24 octets aléatoires en hexadécimal, préfixés d'une lettre : aucun caractère à
+                    # échapper (YAML non quoté, JDBC, variables Compose), jamais lu comme un nombre.
+                    # Aucun antislash dans ce script : Groovy interprète les échappements des chaînes à triples apostrophes.
+                    gen() { printf 'p%s' "$(od -An -N24 -tx1 /dev/urandom | tr -dc '0-9a-f')"; }
+
+                    umask 077
+                    {
+                        echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
+                        echo "{ set +x; } 2>/dev/null"
+                        echo ""
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(gen)"
+                        echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(gen)"
+                        echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(gen)"
+                        echo "export KEYCLOAK_DB_PASSWORD=$(gen)"
+                        echo "export KEYCLOAK_ADMIN_USER=admin"
+                        echo "export KEYCLOAK_ADMIN_PASSWORD=$(gen)"
+                        # Identifiants des utilisateurs de test : pas des secrets, fixes ;
+                        # mots de passe aléatoires.
+                        echo "export RHDEMO_TEST_ID_USER_ADMIN=rhdemo-admin"
+                        echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(gen)"
+                        echo "export RHDEMO_TEST_ID_USER_MAJ=rhdemo-maj"
+                        echo "export RHDEMO_TEST_PWD_USER_MAJ=$(gen)"
+                        echo "export RHDEMO_TEST_ID_USER_CONSULT=rhdemo-consult"
+                        echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(gen)"
+                    } > ${SECRETS_ENV_VARS}
+                    chmod 600 ${SECRETS_ENV_VARS}
+
+                    # Contrôle sans afficher les valeurs
+                    . ${SECRETS_ENV_VARS}
+                    for v in RHDEMO_DATASOURCE_PASSWORD_PG KEYCLOAK_DB_PASSWORD KEYCLOAK_ADMIN_PASSWORD RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET RHDEMO_TEST_PWD_USER_MAJ; do
+                        val=$(printenv "$v" || true)
+                        [ ${#val} -eq 49 ] || { echo "❌ Génération de $v en échec"; exit 1; }
+                    done
+                    echo "✅ Secrets ephemere générés dans ${SECRETS_ENV_VARS} (valeurs non affichées)"
                 '''
-
-                script {
-                    echo '▶ Déchiffrement du fichier de secrets...'
-                }
-
-                // Utiliser le credential sops-age-key de manière sécurisée
-                withCredentials([file(credentialsId: 'sops-age-key', variable: 'SOPS_AGE_KEY_FILE')]) {
-                    sh '''
-                        # Créer le répertoire temporaire isolé hors workspace (permissions strictes)
-                        mkdir -p ${SECRETS_TMP_DIR}
-                        chmod 700 ${SECRETS_TMP_DIR}
-
-                        # Déchiffrer le fichier de secrets
-                        echo "Déchiffrement de ${SECRETS_FILE}..."
-                        sops -d ${SECRETS_FILE} > ${SECRETS_DECRYPTED}
-                        chmod 600 ${SECRETS_DECRYPTED}
-
-                        # Vérifier que le fichier a été déchiffré
-                        if [ ! -f ${SECRETS_DECRYPTED} ]; then
-                            echo "❌ Échec du déchiffrement"
-                            exit 1
-                        fi
-
-                        echo "✅ Secrets déchiffrés avec succès"
-
-                        # Extraire les valeurs pour les variables d'environnement
-                        # SÉCURITÉ: Désactiver l'écho des commandes pour ne pas exposer les secrets dans les logs
-                        set +x
-
-                        # Exporter les secrets comme variables d'environnement pour les stages suivants
-                        # Utilisation de substitution de variables sans affichage dans stdout
-                        {
-                            # PROTECTION: Désactiver l'écho pour éviter l'exposition des secrets lors du sourcing
-                            echo "# SÉCURITÉ: Ce fichier contient des secrets - désactive automatiquement le tracing bash"
-                            echo "# Désactiver le tracing pour ne pas logger les secrets"
-                            echo "{ set +x; } 2>/dev/null"
-                            echo ""
-
-                            echo "export RHDEMO_DATASOURCE_PASSWORD_PG=$(yq eval '.rhdemo.datasource.password.pg' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_DATASOURCE_PASSWORD_H2=$(yq eval '.rhdemo.datasource.password.h2' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET=$(yq eval '.rhdemo.client.registration.keycloak.client.secret' ${SECRETS_DECRYPTED})"
-
-                            # Mots de passe Keycloak pour environnement ephemere
-                            echo "export KEYCLOAK_DB_PASSWORD=$(yq eval '.keycloak.db.password' ${SECRETS_DECRYPTED})"
-                            echo "export KEYCLOAK_ADMIN_PASSWORD=$(yq eval '.keycloak.admin.password' ${SECRETS_DECRYPTED})"
-                            echo "export KEYCLOAK_ADMIN_USER=$(yq eval '.keycloak.admin.user // \"admin\"' ${SECRETS_DECRYPTED})"
-
-                            # Utilisateurs et mots de passe de test (chiffrés dans SOPS)
-                            echo "export RHDEMO_TEST_ID_USER_ADMIN=$(yq eval '.rhdemo.test.iduseradmin' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_TEST_PWD_USER_ADMIN=$(yq eval '.rhdemo.test.pwduseradmin' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_TEST_ID_USER_MAJ=$(yq eval '.rhdemo.test.idusermaj' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_TEST_PWD_USER_MAJ=$(yq eval '.rhdemo.test.pwdusermaj' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_TEST_ID_USER_CONSULT=$(yq eval '.rhdemo.test.iduserconsult' ${SECRETS_DECRYPTED})"
-                            echo "export RHDEMO_TEST_PWD_USER_CONSULT=$(yq eval '.rhdemo.test.pwduserconsult' ${SECRETS_DECRYPTED})"
-
-                            # URLs des serveurs si elles existent
-                            if yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                                echo "export EPHEMERE_SERVER=$(yq eval '.rhdemo.servers.ephemere' ${SECRETS_DECRYPTED})"
-                            fi
-
-                            if yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED} > /dev/null 2>&1; then
-                                echo "export PROD_SERVER=$(yq eval '.rhdemo.servers.production' ${SECRETS_DECRYPTED})"
-                            fi
-                        } > ${SECRETS_ENV_VARS} 2>&1
-                        chmod 600 ${SECRETS_ENV_VARS}
-
-                        # Réactiver l'écho des commandes
-                        set -x
-
-                        # Afficher (sans montrer les valeurs)
-                        echo "✅ Variables d'environnement préparées dans ${SECRETS_ENV_VARS}"
-                    '''
-                }
-            }
-            post {
-                always {
-                    script {
-                        // Supprimer le fichier déchiffré pour la sécurité
-                        sh 'rm -f ${SECRETS_DECRYPTED} || true'
-                    }
-                }
             }
         }
 
@@ -1408,7 +1360,7 @@ YMLEOF
 
                         # Credentials de test (user avec ROLE_consult + ROLE_MAJ pour tester toutes les opérations)
                         # Ces variables seront passées via propriétés Maven à TestConfig
-                        # Username chargé depuis secrets-ephemere.yml (pas de valeur en dur)
+                        # Identifiants générés par le stage « Génération Secrets ephemere » (pas de valeur en dur)
                         TEST_USERNAME="\${RHDEMO_TEST_ID_USER_MAJ}"
                         TEST_PASSWORD="\${RHDEMO_TEST_PWD_USER_MAJ}"
 
@@ -1729,11 +1681,16 @@ YMLEOF
                     echo "   Image: localhost:5000/${env.DOCKER_IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                 }
 
-                withCredentials([
-                    file(credentialsId: 'cosign-private-key', variable: 'COSIGN_KEY'),
-                    string(credentialsId: 'cosign-password', variable: 'COSIGN_PASSWORD')
-                ]) {
+                // Clé Transit d'OpenBao, jamais exportée (docs/OPENBAO.md, ETUDE_OPENBAO.md §7.1) :
+                // l'AppRole jenkins-cosign ne peut que signer et lire la clé publique.
+                withCredentials([usernamePassword(credentialsId: 'openbao-cosign-approle',
+                                                  usernameVariable: 'BAO_ROLE_ID',
+                                                  passwordVariable: 'BAO_SECRET_ID')]) {
                     sh '''
+                        # Pas de trace : le jeton OpenBao n'est pas masqué par Jenkins.
+                        set +x
+                        set -eu
+
                         # Récupérer le digest de l'image pour une signature immuable
                         # Note: docker inspect utilise localhost:5000 (via Docker daemon sur l'hôte)
                         # mais cosign doit utiliser kind-registry:5000 (appels HTTPS directs depuis le conteneur Jenkins)
@@ -1747,20 +1704,39 @@ YMLEOF
 
                         echo "   Digest pour cosign: ${DIGEST}"
 
+                        # Jeton OpenBao de 10 minutes (AppRole), identifiants passés sur l'entrée
+                        # standard de curl, jamais en argument.
+                        BAO_ADDR=https://openbao:8200
+                        BAO_CA=/etc/ssl/certs/rhdemo-root-ca.crt
+                        BAO_TOKEN=$(jq -nc --arg r "$BAO_ROLE_ID" --arg s "$BAO_SECRET_ID" '{role_id:$r,secret_id:$s}' \
+                            | curl -sf --cacert "$BAO_CA" -X POST --data @- "$BAO_ADDR/v1/auth/approle/login" \
+                            | jq -r '.auth.client_token // empty') || true
+                        if [ -z "$BAO_TOKEN" ]; then
+                            echo "❌ Connexion à OpenBao refusée : OpenBao scellé (unseal.sh) ou secret_id expiré"
+                            echo "   (rotate-secrets.py openbao-approle-cosign). Voir docs/OPENBAO.md."
+                            exit 1
+                        fi
+                        revoke() {
+                            curl -sf --cacert "$BAO_CA" -X POST -H "X-Vault-Token: $BAO_TOKEN" \
+                                "$BAO_ADDR/v1/auth/token/revoke-self" >/dev/null || true
+                        }
+                        trap revoke EXIT
+
                         # Signer l'image avec Cosign
-                        # Cosign fait des appels HTTPS directs, utiliser kind-registry:5000
-                        # avec le certificat CA monté dans le conteneur Jenkins
-                        echo "▶ Signature de l'image..."
                         # --use-signing-config=false + --tlog-upload=false : pas d'envoi au journal public
                         # Rekor (pas d'Internet). cosign 3.x utilise une signing-config par défaut, incompatible
                         # avec --tlog-upload=false sans --use-signing-config=false.
-                        # SSL_CERT_FILE est exporté : un commentaire après un "\" en fin de ligne l'avait
-                        # transformé en simple variable shell, non transmise à cosign.
+                        # SSL_CERT_FILE : registry (kind-registry:5000) ; VAULT_CACERT : OpenBao (cosign lit
+                        # VAULT_CACERT, pas BAO_CACERT, vérifié le 2026-11-21).
+                        echo "▶ Signature de l'image (openbao://cosign)..."
                         export SSL_CERT_FILE=/etc/ssl/certs/registry.crt
-                        COSIGN_PASSWORD="${COSIGN_PASSWORD}" cosign sign --key "${COSIGN_KEY}" \
-                            --use-signing-config=false \
-                            --tlog-upload=false \
-                            "${DIGEST}"
+                        BAO_ADDR="$BAO_ADDR" BAO_TOKEN="$BAO_TOKEN" VAULT_CACERT="$BAO_CA" \
+                        TRANSIT_SECRET_ENGINE_PATH=cosign-transit \
+                            cosign sign --key openbao://cosign \
+                                --use-signing-config=false \
+                                --tlog-upload=false \
+                                --yes \
+                                "${DIGEST}"
 
                         echo "✅ Image signée avec succès"
                     '''
@@ -1969,7 +1945,6 @@ YMLEOF
 
                 // Supprimer les fichiers de secrets de manière sécurisée
                 lib.cleanupSecrets([
-                    env.SECRETS_DECRYPTED,
                     env.SECRETS_ENV_VARS,
                     env.SECRETS_RHDEMO,
                     env.KEYCLOAK_CONFIG_TMP

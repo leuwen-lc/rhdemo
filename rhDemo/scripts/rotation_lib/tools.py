@@ -1,38 +1,14 @@
-"""Outils locaux : SOPS (valeur passée sur l'entrée standard) et GPG (trousseau temporaire)."""
+"""Outils locaux : GPG (trousseau temporaire), kubectl, port-forward, fichier AppRole."""
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+import time
 
 from .common import RotationError
-
-AGE_KEY_FILE = os.path.expanduser(os.environ.get("SOPS_AGE_KEY_FILE", "~/.config/sops/age/keys.txt"))
-
-
-def _sops_env():
-    return {**os.environ, "SOPS_AGE_KEY_FILE": AGE_KEY_FILE}
-
-
-def sops_get(path, key_path):
-    """Valeur d'une clé d'un fichier SOPS, `key_path` au format SOPS : ["a"]["b"]."""
-    proc = subprocess.run(["sops", "decrypt", "--extract", key_path, path], capture_output=True,
-                          env=_sops_env(), check=False)
-    if proc.returncode != 0:
-        raise RotationError(f"SOPS : lecture de {key_path} dans {path} impossible")
-    return proc.stdout.decode("utf-8")
-
-
-def sops_set(path, key_path, value):
-    proc = subprocess.run(["sops", "set", "--value-stdin", path, key_path],
-                          input=json.dumps(value).encode("utf-8"), capture_output=True,
-                          env=_sops_env(), check=False)
-    if proc.returncode != 0:
-        raise RotationError(f"SOPS : écriture de {key_path} dans {path} impossible")
-    if sops_get(path, key_path) != value:
-        raise RotationError(f"SOPS : relecture de {key_path} dans {path} incohérente")
-
 
 @contextlib.contextmanager
 def gpg_home():
@@ -76,3 +52,72 @@ def gpg_generate(home, uid, algo="rsa4096", expire="2y"):
 def gpg_sign(home, fpr, text):
     return _gpg(home, "--local-user", fpr, "--armor", "--detach-sign",
                 stdin=text.encode("utf-8")).decode("ascii")
+
+
+# --- kubectl (contexte courant de l'utilisateur, jamais une valeur en argument) ------------
+
+def kubectl(*args, stdin=None, timeout=300):
+    """Lance kubectl ; une valeur secrète ne passe que par `stdin`. Renvoie stdout (texte)."""
+    proc = subprocess.run(["kubectl", *args], input=stdin.encode("utf-8") if stdin else None,
+                          capture_output=True, check=False, timeout=timeout)
+    if proc.returncode != 0:
+        err = proc.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+        raise RotationError(f"kubectl {args[0]} {args[1] if len(args) > 1 else ''} : échec ({err[0][:200]})")
+    return proc.stdout.decode("utf-8")
+
+
+
+class PortForward:
+    """`kubectl port-forward` vers un port local libre choisi par kubectl, arrêté par close()."""
+
+    def __init__(self, namespace, target, remote_port, timeout=30):
+        self.proc = subprocess.Popen(
+            ["kubectl", "port-forward", "--address", "127.0.0.1", "-n", namespace, target, f":{remote_port}"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.port = None
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            line = self.proc.stdout.readline()
+            if not line:
+                break
+            m = re.search(r"127\.0\.0\.1:(\d+)", line)
+            if m:
+                self.port = int(m.group(1))
+                return
+        err = (self.proc.stderr.read() if self.proc.poll() is not None else "").strip().splitlines()[-1:] or [""]
+        self.close()
+        raise RotationError(f"kubectl port-forward {target} : échec ({err[0][:200]})")
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.port}"
+
+    def close(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
+# --- fichier AppRole local (fixcve-auto : ~/.config/rhdemo-fixcve/openbao-approle.json) ----
+
+def approle_file_read(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError) as exc:
+        raise RotationError(f"fichier AppRole {path} illisible ({type(exc).__name__})") from None
+    if not data.get("role_id") or "secret_id" not in data:
+        raise RotationError(f"fichier AppRole {path} incomplet (role_id, secret_id)")
+    return data
+
+
+def approle_file_write(path, role_id, secret_id):
+    """Écriture atomique, mode 600."""
+    tmp = f"{path}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump({"role_id": role_id, "secret_id": secret_id}, fh)
+    os.replace(tmp, path)

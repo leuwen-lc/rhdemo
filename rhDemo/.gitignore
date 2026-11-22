@@ -15,13 +15,8 @@ scripts/**/__pycache__/
 ### Secrets ###
 # Ne pas commiter les secrets de dev local
 secrets/secrets-rhdemo.yml
-# Ne pas commiter les fichiers déchiffrés temporaires
-secrets/*-temp.yml
-secrets/*-decrypted.yml
-secrets/env-vars.sh
-# Autoriser le template et les secrets chiffrés pour CI/CD
+# Autoriser le template (dev)
 !secrets/secrets-rhdemo.yml.template
-!secrets/secrets-ephemere.yml
 # Ignorer les backups
 secrets/*.backup
 
@@ -60,5 +55,3 @@ build/
 .vscode/
 /replacegit.txt
 
-# Fichiers secrets déchiffrés (stagingkub)
-secrets/secrets-stagingkub-decrypted.yml

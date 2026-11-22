@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -I
-"""Renouvellement des secrets RHDemo (docs/ETUDE_ROTATION_SECRETS.md, phase 1).
+"""Renouvellement des secrets RHDemo (docs/ROTATION_SECRETS.md, étude : docs/ETUDE_ROTATION_SECRETS.md).
 
 Exécuté sur le poste, jamais dans Jenkins (il doit pouvoir réparer un Jenkins compromis).
 Inventaire : secrets/inventory.yaml. Journal local : ~/.config/rhdemo-rotation/journal.jsonl.
@@ -14,8 +14,9 @@ Usage :
 Options : --dry-run (montre le plan après les lectures, ne crée ni ne révoque rien),
           --no (répond non à toute confirmation : aucun token non géré n'est révoqué).
 
-Les identifiants maîtres (mot de passe admin Jenkins, mots de passe et codes TOTP des bots,
-valeurs créées à la main) sont demandés au lancement et oubliés à la fin.
+Les identifiants maîtres (mot de passe admin Jenkins, mot de passe de l'utilisateur admin
+d'OpenBao, mots de passe et codes TOTP des bots, valeurs créées à la main) sont demandés au
+lancement et oubliés à la fin ; la session OpenBao est révoquée.
 """
 import argparse
 import datetime
@@ -66,7 +67,7 @@ def cmd_check(inv, journal, today=None):
 
 def cmd_preflight(ctx):
     ok = True
-    for tool in ("sops", "gpg", "gpgconf"):
+    for tool in ("gpg", "gpgconf", "kubectl"):
         if not shutil.which(tool):
             warn(f"outil absent : {tool}")
             ok = False
@@ -154,6 +155,7 @@ def main(argv=None):
                 return cmd_preflight(ctx)
             return cmd_rotate(ctx, select(inv, args.ids, args.level))
         finally:
+            ctx.close()
             prompter.forget()
     except RotationError as exc:
         warn(str(exc))

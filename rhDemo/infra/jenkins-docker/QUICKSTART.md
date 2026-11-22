@@ -15,7 +15,8 @@ sudo systemctl restart docker
 cp .env.example .env
 nano .env   # Définir JENKINS_ADMIN_PASSWORD et JENKINS_CLAUDE_PASSWORD
 
-# 3. Démarrer Jenkins
+# 3. Démarrer Jenkins (installation neuve : créer d'abord l'autorité locale et
+#    OpenBao, étapes 1 à 5 de docs/OPENBAO.md ; voir docs/INSTALLATION_COMPLETE.md)
 ./start-jenkins.sh
 ```
 
@@ -31,12 +32,10 @@ Jenkins est accessible sur **http://localhost:8080**.
 
 | ID | Kind | Comment obtenir |
 |----|------|-----------------|
-| `sops-age-key` | Secret file | Clé age pour déchiffrer `secrets-ephemere.yml` — voir `rhDemo/docs/SOPS_SETUP.md` |
 | `jenkins-sonar-token` | Secret text | `docker start rhdemo-sonarqube-db rhdemo-sonarqube` (SonarQube est arrêté hors CI), puis http://localhost:9020 → My Account → Security → Generate Token |
 | `nvd-api-key` | Secret text | https://nvd.nist.gov/developers/request-an-api-key |
-| `cosign-private-key` | Secret file | Fichier `cosign.key` généré ci-dessous (pipeline CI) |
-| `cosign-password` | Secret text | Mot de passe saisi lors de la génération Cosign (pipeline CI) |
-| `cosign-public-key` | Secret file | Fichier `cosign.pub` généré ci-dessous (pipeline CD) |
+| `openbao-cosign-approle` | Username with password | Créé par `rhDemo/scripts/openbao-setup.py cosign-approle` (signature par la clé Transit d'OpenBao, pipeline CI) |
+| `cosign-public-key-transit` | Secret file | Fichier `certs/cosign/cosign-transit.pub` écrit par `openbao/configure-openbao.sh cosign` (pipeline CD) |
 
 ### Optionnels
 
@@ -69,19 +68,10 @@ Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus
 
 > Détail de l'étude et du RBAC : `docs/STAGINGKUB_REBUILD_PIPELINE.md` et `infra/stagingkub/rbac/README.md`.
 
-### Secrets SOPS (environnement ephemere)
+### Secrets
 
-1. Installez SOPS et créez une clé age (voir `rhDemo/docs/SOPS_SETUP.md`)
-2. Créez `secrets-ephemere.yml` depuis le template `secrets-ephemere.yml.template`
-3. Chiffrez-le avec SOPS
-
-### Clés Cosign (à générer une seule fois)
-
-```bash
-cosign generate-key-pair
-# → cosign.key  (clé privée — ne pas commiter)
-# → cosign.pub  (clé publique)
-```
+- **ephemere** : rien à créer, `Jenkinsfile-CI` génère des valeurs aléatoires à chaque build.
+- **OpenBao** (Renovate, notifications, Cosign, stagingkub) : suivre `rhDemo/docs/OPENBAO.md`.
 
 ---
 

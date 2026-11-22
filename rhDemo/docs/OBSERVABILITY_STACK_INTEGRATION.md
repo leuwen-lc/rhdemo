@@ -1,12 +1,13 @@
 ---
 statut: actif
-verifie_le: 2026-11-06
+verifie_le: 2026-11-21
 sources:
   - rhDemo/infra/stagingkub/helm/observability/
   - rhDemo/infra/stagingkub/scripts/install-observability.sh
   - rhDemo/infra/stagingkub/scripts/components/
   - rhDemo/infra/stagingkub/scripts/deploy-grafana-dashboard.sh
   - rhDemo/infra/stagingkub/networkpolicies/
+  - rhDemo/infra/stagingkub/external-secrets/observability.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/servicemonitor-rhdemo.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/servicemonitor-postgresql.yaml
 ---
@@ -22,7 +23,7 @@ Logs et métriques de l'environnement stagingkub (KinD), consultables dans Grafa
 | kube-prometheus-stack | Prometheus, Prometheus Operator, Alertmanager, node-exporter, kube-state-metrics | `monitoring` | [`prometheus-values.yaml`](../infra/stagingkub/helm/observability/prometheus-values.yaml) |
 | Loki | Stockage et requête des logs, mode SingleBinary | `loki-stack` | [`loki-modern-values.yaml`](../infra/stagingkub/helm/observability/loki-modern-values.yaml) |
 | Grafana Alloy | Collecte des logs des pods (remplace Promtail, en fin de vie depuis mars 2026) | `loki-stack` | [`alloy-values.yaml`](../infra/stagingkub/helm/observability/alloy-values.yaml) |
-| Grafana | Visualisation, datasources Loki et Prometheus, dashboards | `loki-stack` | `grafana-values.yaml`, créé localement à partir de [`grafana-values.yaml.template`](../infra/stagingkub/helm/observability/grafana-values.yaml.template) |
+| Grafana | Visualisation, datasources Loki et Prometheus, dashboards | `loki-stack` | [`grafana-values.yaml`](../infra/stagingkub/helm/observability/grafana-values.yaml) (versionné, sans secret) ; admin dans le Secret `grafana-admin` (OpenBao, via ESO) |
 
 Le chart Loki vient du fork communautaire (`grafana-community/helm-charts`) : depuis sa version 7, le dépôt Grafana Labs ne publie plus que la variante Grafana Enterprise Logs. Alloy et Grafana restent sur le dépôt Grafana Labs ; les deux dépôts partagent l'alias Helm `grafana`, d'où le `--force-update` des scripts.
 
@@ -50,7 +51,7 @@ Labels disponibles dans Loki : `namespace`, `pod`, `container`, `app`, `componen
 
 ## Installation et mise à jour
 
-**Reconstruction complète.** [`install-observability.sh`](../infra/stagingkub/scripts/install-observability.sh) installe dans l'ordre kube-prometheus-stack, Loki, Alloy et Grafana, puis applique les NetworkPolicies de `monitoring` et `loki-stack` et ajoute l'entrée Grafana dans `/etc/hosts`. Prérequis : cluster stagingkub démarré, contexte `kind-rhdemo`, Helm 4, et le fichier `grafana-values.yaml` (voir [Sécurité](#sécurité)).
+**Reconstruction complète.** [`install-observability.sh`](../infra/stagingkub/scripts/install-observability.sh) installe dans l'ordre kube-prometheus-stack, Loki, Alloy et Grafana, puis applique les NetworkPolicies de `monitoring` et `loki-stack` et ajoute l'entrée Grafana dans `/etc/hosts`. Prérequis : cluster stagingkub démarré, contexte `kind-rhdemo`, Helm 4, et le Secret `grafana-admin` dans `loki-stack` (voir [Sécurité](#sécurité)).
 
 **Un script par composant.** Chaque étape appelle `scripts/components/install-or-upgrade-<composant>.sh`, idempotent (`helm upgrade --install --rollback-on-failure --wait`). Ces scripts sont aussi utilisés par le pipeline de mise à jour en place `RHDemo-Stagingkub-Upgrade-Deploy` : les deux chemins ne peuvent pas diverger. Particularités :
 
@@ -64,7 +65,7 @@ Labels disponibles dans Loki : `namespace`, `pod`, `container`, `app`, `componen
 
 | Interface | Accès |
 | --- | --- |
-| Grafana | `https://grafana-stagingkub.intra.leuwen-lc.fr`, compte `admin`, mot de passe de `grafana-values.yaml`. Exposé par la Gateway partagée de NGF (listener HTTPS `*.intra.leuwen-lc.fr`, certificat `shared-tls-cert`) |
+| Grafana | `https://grafana-stagingkub.intra.leuwen-lc.fr`, compte `admin`, mot de passe dans OpenBao (`kv/observability/grafana`, voir [ROTATION_SECRETS.md](ROTATION_SECRETS.md)). Exposé par la Gateway partagée de NGF (listener HTTPS `*.intra.leuwen-lc.fr`, certificat `shared-tls-cert`) |
 | Prometheus | `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090` |
 | Alertmanager | `kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093` |
 | Grafana sans DNS | `kubectl port-forward -n loki-stack svc/grafana 3000:80` |
@@ -122,7 +123,7 @@ Les règles d'alerte par défaut de kube-prometheus-stack sont créées, sauf ce
 
 - **NetworkPolicies** : `default-deny-all` dans `monitoring` et `loki-stack`, puis flux autorisés un par un ([`monitoring-networkpolicies.yaml`](../infra/stagingkub/networkpolicies/monitoring-networkpolicies.yaml), [`loki-stack-networkpolicies.yaml`](../infra/stagingkub/networkpolicies/loki-stack-networkpolicies.yaml)), dont l'accès à l'API server par des `CiliumNetworkPolicy`. Côté application, les NetworkPolicies du chart `rhdemo` n'autorisent depuis `monitoring` que le port de management de l'application et le port 9187 de l'exporter. Les charts ne créent aucune NetworkPolicy : `install-observability.sh` les applique en dernier, une fois les pods prêts. Détail : [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md).
 - **RBAC** : Alloy n'a que des droits de lecture (découverte des pods), sa CRD `podlogs` n'est pas installée. Le sidecar de dashboards de Grafana est limité au namespace `loki-stack` (`rbac.namespaced: true`, `searchNamespace: loki-stack`) : pas de lecture des secrets du cluster entier. Les droits de `jenkins-infra-upgrader` : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md).
-- **Grafana** : accès anonyme et inscription désactivés, télémétrie et vérification de mises à jour coupées. Le mot de passe administrateur est dans `grafana-values.yaml`, **fichier local ignoré par Git** et non chiffré par SOPS : copier le modèle, renseigner `adminPassword` (par exemple `openssl rand -base64 32`), puis le conserver dans un gestionnaire de mots de passe. Le script de Grafana refuse de s'exécuter si le mot de passe est vide.
+- **Grafana** : accès anonyme et inscription désactivés, télémétrie et vérification de mises à jour coupées. Le compte administrateur vient du Secret `grafana-admin` (`admin.existingSecret`), créé par External Secrets Operator depuis OpenBao (`kv/observability/grafana`, rôle `eso-observability` limité à `kv/observability/*`). Création : `rhDemo/scripts/openbao-setup.py observability` puis `install-external-secrets.sh` ; rotation : `rotate-secrets.py grafana-admin` ([OPENBAO.md](OPENBAO.md)). Le script de Grafana refuse de s'exécuter si le Secret manque (sauf en validation `HELM_DRY_RUN`). Sans stockage persistant, Grafana reprend ce mot de passe à chaque démarrage : un changement fait dans l'interface est écrasé.
 - **Loki** est sans authentification (`auth_enabled: false`) : seules les NetworkPolicies limitent qui peut lui écrire ou le lire.
 
 ## Dépannage

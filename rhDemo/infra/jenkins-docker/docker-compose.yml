@@ -228,6 +228,58 @@ services:
       retries: 3
       start_period: 10s
 
+  # ═══════════════════════════════════════════════════════════════════
+  # OPENBAO - Gestionnaire de secrets (docs/OPENBAO.md)
+  # ═══════════════════════════════════════════════════════════════════
+  # Prérequis : openbao/init-local-ca.sh ca, puis openbao/init-local-ca.sh openbao.
+  # Redémarre SCELLÉ : déverrouillage manuel après chaque démarrage
+  # (openbao/unseal.sh, clé collée depuis KeePassXC). Tant qu'il est scellé, les
+  # pipelines qui lisent un credential OpenBao échouent.
+  # Raccordé au réseau kind par repair-cluster-after-restart.sh (ESO, étape 3).
+  # ═══════════════════════════════════════════════════════════════════
+  openbao:
+    image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    container_name: rhdemo-openbao
+    restart: unless-stopped
+    # Commande explicite (et non « server ») : l'entrypoint ajouterait des options du mode dev.
+    command: ["bao", "server", "-config=/openbao/rhdemo/config.hcl"]
+
+    # Boucle locale seulement (règles iptables de Docker prioritaires sur ufw, comme Jenkins).
+    # Jenkins et les agents passent par le réseau Docker (https://openbao:8200).
+    ports:
+      - "127.0.0.1:8200:8200"
+
+    volumes:
+      - openbao_data:/openbao/file
+      - openbao_audit:/openbao/logs
+      - ./openbao/config.hcl:/openbao/rhdemo/config.hcl:ro
+      - ./certs/openbao:/openbao/tls:ro
+      - ./certs/ca/root-ca.crt:/openbao/ca/root-ca.crt:ro
+
+    environment:
+      # Pour les commandes « docker exec rhdemo-openbao bao … » (unseal.sh, configure-openbao.sh)
+      - BAO_ADDR=https://127.0.0.1:8200
+      - BAO_CACERT=/openbao/ca/root-ca.crt
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID     # su-exec de l'entrypoint (root → openbao)
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+
+    networks:
+      - jenkins-network
+
+    # « unhealthy » tant qu'OpenBao est scellé : bao status renvoie 2.
+    healthcheck:
+      test: ["CMD", "bao", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 
 # ═══════════════════════════════════════════════════════════════════
 # VOLUMES PERSISTANTS
@@ -267,6 +319,16 @@ volumes:
 
   wdm_cache:
     name: rhdemo-wdm-cache
+    driver: local
+
+  # Données Raft d'OpenBao, chiffrées par la clé de déverrouillage. Sauvegarde :
+  # bao operator raft snapshot save (docs/OPENBAO.md).
+  openbao_data:
+    name: rhdemo-openbao-data
+    driver: local
+
+  openbao_audit:
+    name: rhdemo-openbao-audit
     driver: local
 
 # ═══════════════════════════════════════════════════════════════════

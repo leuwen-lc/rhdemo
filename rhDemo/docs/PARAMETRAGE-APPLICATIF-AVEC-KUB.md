@@ -1,11 +1,12 @@
 ---
 statut: actif
-verifie_le: 2026-10-22
+verifie_le: 2026-11-21
 sources:
   - rhDemo/src/main/resources/application.yml
   - rhDemo/src/main/resources/application-stagingkub.yml
   - rhDemo/infra/stagingkub/helm/rhdemo/templates/rhdemo-app-deployment.yaml
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+  - rhDemo/infra/stagingkub/external-secrets/externalsecrets.yaml
 ---
 
 # 📋 Gestion des paramètres rhDemo dans Kubernetes
@@ -84,34 +85,31 @@ management:
 
 ---
 
-## 🔐 2. Secrets (gérés par SOPS et Kubernetes Secrets)
+## 🔐 2. Secrets (OpenBao et External Secrets Operator)
 
-### 🔹 Flux des secrets dans le pipeline CD
+### 🔹 Flux des secrets
 
 ```
-secrets-stagingkub.yml (chiffré SOPS)
-    ↓ [Pipeline CD - Stage: Déchiffrement Secrets SOPS]
-secrets-decrypted.yml (temporaire)
-    ↓ [Extraction via yq]
-env-vars.sh (variables bash)
-    ↓ [Stage: Extraction secrets rhDemo]
-secrets-rhdemo.yml (fichier pour l'app)
-    ↓ [Stage: Update Kubernetes Secrets]
-Kubernetes Secret: rhdemo-app-secrets
+OpenBao (kv/stagingkub/rhdemo, kv/stagingkub/keycloak)
+    ↓ [External Secrets Operator, SecretStore « openbao »]
+Kubernetes Secrets (rhdemo-db-secret, rhdemo-app-secrets, keycloak-*)
     ↓ [Helm deploy]
 Volume monté dans /workspace/secrets/
     ↓ [Spring Boot]
 Chargé via spring.config.import
 ```
 
+Le pipeline CD ne manipule aucun secret : il vérifie seulement que les `ExternalSecret` sont prêts. Détail, création initiale et rotation : [OPENBAO.md](OPENBAO.md).
+
 ### 🔹 Contenu de secrets-rhdemo.yml
+
+Généré par le gabarit de l'`ExternalSecret` `rhdemo-app-secrets` (`infra/stagingkub/external-secrets/externalsecrets.yaml`) :
 
 ```yaml
 rhdemo:
   datasource:
     password:
       pg: <mot_de_passe_postgresql>
-      h2: <mot_de_passe_h2>
   client:
     registration:
       keycloak:
@@ -119,27 +117,14 @@ rhdemo:
           secret: <secret_client_keycloak>
 ```
 
-### 🔹 Secrets Kubernetes créés par le pipeline
+### 🔹 Secrets Kubernetes synchronisés par ESO
 
-Dans le Jenkinsfile-CD, stage **'☸️ Update Kubernetes Secrets'** :
-
-```bash
-# Secret 1: Mot de passe PostgreSQL
-kubectl create secret generic rhdemo-db-secret \
-  --from-literal=password="${RHDEMO_DATASOURCE_PASSWORD_PG}"
-
-# Secret 2: Fichier de config complet pour l'app
-kubectl create secret generic rhdemo-app-secrets \
-  --from-file=secrets-rhdemo.yml=rhDemo/secrets/secrets-rhdemo.yml
-
-# Secret 3: Admin Keycloak
-kubectl create secret generic keycloak-admin-secret \
-  --from-literal=password="${KEYCLOAK_ADMIN_PASSWORD}"
-
-# Secret 4: DB Keycloak
-kubectl create secret generic keycloak-db-secret \
-  --from-literal=password="${KEYCLOAK_DB_PASSWORD}"
-```
+| Secret | Source OpenBao |
+| --- | --- |
+| `rhdemo-db-secret` | `kv/stagingkub/rhdemo` `db_password` |
+| `rhdemo-app-secrets` | `kv/stagingkub/rhdemo` (fichier `secrets-rhdemo.yml`) |
+| `keycloak-admin-secret` | `kv/stagingkub/keycloak` `admin_password` |
+| `keycloak-db-secret` | `kv/stagingkub/keycloak` `db_password` |
 
 **Commandes utiles** :
 
@@ -277,10 +262,8 @@ Variable d'environnement:      jdbc:postgresql://postgresql-rhdemo:5432/rhdemo
 
 ### Lors du déploiement CD (Jenkinsfile-CD) :
 
-1. **Pipeline lit secrets-stagingkub.yml** (chiffré SOPS) → déchiffre avec clé AGE
-2. **Crée secrets-rhdemo.yml** (extrait uniquement les secrets pour rhDemo)
-3. **Crée les Kubernetes Secrets** dans le namespace `rhdemo-stagingkub`
-4. **Helm déploie** avec :
+1. **Vérifie les Kubernetes Secrets** synchronisés par ESO depuis OpenBao (namespace `rhdemo-stagingkub`)
+2. **Helm déploie** avec :
    - Image Docker contenant `application.yml` + `application-stagingkub.yml`
    - Variables d'environnement injectées
    - Volume secret monté
@@ -317,23 +300,7 @@ jenkins-cli build Jenkinsfile-CD -p IMAGE_TAG=1.1.0-SNAPSHOT-123
 
 ### Modifier un secret
 
-**Exemple** : Changer le mot de passe PostgreSQL
-
-1. **Modifier le fichier chiffré** :
-```bash
-cd rhDemo/secrets
-sops secrets-stagingkub.yml
-# Modifier la valeur de rhdemo.datasource.password.pg
-```
-
-2. **Commit et push** :
-```bash
-git add secrets-stagingkub.yml
-git commit -m "feat: mise à jour mot de passe PostgreSQL"
-git push
-```
-
-3. **Redéployer via pipeline CD** (qui va déchiffrer et recréer les secrets K8s)
+Tous les secrets de stagingkub se renouvellent par `rhDemo/scripts/rotate-secrets.py` (par exemple `stagingkub-rhdemo-db` pour le mot de passe PostgreSQL) : écriture dans OpenBao, synchronisation ESO forcée, application côté PostgreSQL ou Keycloak, redémarrage des pods. Liste : `rotate-secrets.py --list` ; détail : [OPENBAO.md](OPENBAO.md).
 
 ### Modifier une configuration Helm via --set
 
@@ -408,7 +375,7 @@ kubectl get secret rhdemo-app-secrets -n rhdemo-stagingkub -o jsonpath='{.data.s
 
 ✅ **Séparation secrets/config** : secrets jamais en clair dans Git
 ✅ **Flexibilité** : surcharge facile via variables d'environnement
-✅ **Sécurité** : secrets chiffrés SOPS + Kubernetes Secrets
+✅ **Sécurité** : secrets dans OpenBao (hors de Git, lectures auditées), recopiés par ESO
 ✅ **Portabilité** : même image Docker pour tous les environnements
 ✅ **Traçabilité** : config versionnée, secrets externalisés
 ✅ **Debugging facile** : Actuator expose toute la configuration
@@ -420,7 +387,7 @@ kubectl get secret rhdemo-app-secrets -n rhdemo-stagingkub -o jsonpath='{.data.s
 - [Spring Boot External Configuration](https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.external-config)
 - [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 - [Helm Values](https://helm.sh/docs/chart_template_guide/values_files/)
-- [SOPS - Secrets OPerationS](https://github.com/getsops/sops)
+- [External Secrets Operator](https://external-secrets.io/)
 
 ---
 

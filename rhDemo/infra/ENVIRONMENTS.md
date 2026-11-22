@@ -186,9 +186,9 @@ DEPLOY_ENV=stagingkub
 
 | Aspect | ephemere | stagingkub |
 |--------|----------|------------|
-| Méthode | Variables env + docker cp | Kubernetes Secrets |
-| Chiffrement | SOPS | SOPS → K8s Secrets |
-| Rotation | Redémarrage conteneurs | Rolling update |
+| Source | Valeurs aléatoires générées à chaque build (jamais stockées) | OpenBao, recopiés par External Secrets Operator |
+| Injection | Variables env + docker cp | Kubernetes Secrets |
+| Rotation | Nouveau build | `rotate-secrets.py` (KV, synchronisation ESO, redémarrage) |
 
 ### Réseau
 
@@ -235,9 +235,9 @@ Oui, ephemere utilise le port 58443 et stagingkub utilise le port 443.
 
 ### Les secrets sont-ils les mêmes ?
 
-Non, les deux environnements utilisent chacun leur fichier secrets sources (SOPS) :
-- **ephemere** : Injectés via variables d'environnement et `docker cp`
-- **stagingkub** : Stockés dans Kubernetes Secrets
+Non, aucune valeur n'est partagée :
+- **ephemere** : tirés au hasard à chaque build par `Jenkinsfile-CI`, injectés via variables d'environnement et `docker cp`
+- **stagingkub** : stockés dans OpenBao, recopiés en Kubernetes Secrets par ESO ([OPENBAO.md](../docs/OPENBAO.md))
 
 ---
 

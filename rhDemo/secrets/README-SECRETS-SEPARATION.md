@@ -1,71 +1,35 @@
-# Séparation des Secrets : ephemere vs stagingkub
+# Secrets par environnement
 
 ## 📋 Vue d'ensemble
 
-Les environnements `ephemere` (Docker Compose) et `stagingkub` (Kubernetes) utilisent des fichiers de secrets **complètement séparés** pour permettre une gestion indépendante et éviter les conflits.
+Chaque environnement a ses propres secrets, sans valeur partagée : la compromission de l'un n'affecte pas les autres. Aucun secret n'est versionné dans Git. Les fichiers de ce répertoire sont des modèles ou des fichiers locaux ignorés par Git, plus l'inventaire.
 
-## 📁 Fichiers de secrets
+| Environnement | Où vivent les secrets | Création | Renouvellement |
+|---------------|------------------------|----------|----------------|
+| **ephemere** (Docker Compose, CI) | Nulle part : tirés au hasard à chaque build | Stage « Génération Secrets ephemere » de `Jenkinsfile-CI` | Rien à faire, l'environnement est détruit en fin de build |
+| **stagingkub** (Kubernetes, CD) | OpenBao (`kv/stagingkub/*`), recopiés dans le cluster par External Secrets Operator | `scripts/openbao-setup.py stagingkub` (valeurs générées) | `scripts/rotate-secrets.py` |
+| **dev** (poste) | `secrets-rhdemo.yml`, local, ignoré par Git | Copie de `secrets-rhdemo.yml.template` | À la main |
 
-| Fichier | Environnement | Utilisation | Chiffrement |
-|---------|---------------|-------------|-------------|
-| `secrets-ephemere.yml` | **ephemere** (Docker Compose CI) | Environnement éphémère pour tests CI | SOPS/Age |
-| `secrets-stagingkub.yml` | **stagingkub** (Kubernetes CD) | Environnement permanent Kubernetes | SOPS/Age |
-| `secrets-rhdemo.yml` | **local** | Test local | Non chiffré, non commité |
+Pipelines et outils (Jenkins, Renovate, fixcve-auto) : secrets dans OpenBao également (`kv/jenkins/*`, `kv/fixcve/*`).
 
-## 🔐 Gestion des secrets
+## 📁 Fichiers de ce répertoire
 
-### Pour l'environnement ephemere (Docker Compose)
-
-**Fichier source**: `secrets/secrets-ephemere.yml`
-
-**Utilisé par**:
-- `Jenkinsfile` (pipeline monolithique)
-- `Jenkinsfile-CI` (pipeline CI moderne)
-- Tests locaux avec Docker Compose
-
-**Déchiffrement**:
-```bash
-# Éditer les secrets
-SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-ephemere.yml
-
-# Déchiffrer pour inspection
-sops -d secrets-ephemere.yml > secrets-ephemere-decrypted.yml
-```
-
-### Pour l'environnement stagingkub (Kubernetes)
-
-**Fichier source**: `secrets/secrets-stagingkub.yml`
-
-**Utilisé par**:
-- `Jenkinsfile-CD` (pipeline CD Kubernetes)
-- Déploiements manuels vers KinD
-
-**Déchiffrement**:
-```bash
-# Éditer les secrets
-SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops secrets-stagingkub.yml
-
-# Déchiffrer pour inspection
-sops -d secrets-stagingkub.yml > secrets-stagingkub-decrypted.yml
-```
-
-## 🎯 Avantages de la séparation
-
-✅ **Sécurité** : Compromission d'un environnement n'affecte pas l'autre
-✅ **Isolation** : Pas de conflit entre CI (éphémère) et CD (permanent)
-✅ **Flexibilité** : Possibilité d'avoir des configurations différentes
-✅ **Auditabilité** : Changements de secrets tracés par environnement
+| Fichier | Rôle |
+|---------|------|
+| `inventory.yaml` | Inventaire de tous les secrets du projet (aucune valeur) : où ils vivent, comment les renouveler. Lu par `rotate-secrets.py` |
+| `secrets-rhdemo.yml.template` | Modèle du fichier de secrets de l'environnement dev |
+| `secrets-rhdemo.yml` | Secrets dev, local, jamais commité |
 
 ## 📝 Bonnes pratiques
 
-1. **Ne jamais** commiter les fichiers déchiffrés
-2. **Toujours** utiliser SOPS pour éditer les secrets
-3. **Régénérer** les secrets lors de rotations de sécurité
-4. **Documenter** les changements de secrets dans les commits
+1. **Ne jamais** commiter un secret en clair, ni le passer en argument de commande (visible dans `ps`) : entrée standard ou variable d'environnement.
+2. Renouveler par `rotate-secrets.py` (`--check` signale les secrets à renouveler) : [ROTATION_SECRETS.md](../docs/ROTATION_SECRETS.md).
+3. Garder `inventory.yaml` à jour à chaque ajout de secret.
 
 ## 🔗 Références
 
-- [Documentation SOPS](https://github.com/mozilla/sops)
+- [OpenBao : installation, déverrouillage, rotation](../docs/OPENBAO.md)
+- [Secrets au quotidien : tâches récurrentes, rotation d'urgence, accès](../docs/ROTATION_SECRETS.md)
 - [Pipeline CI (Jenkinsfile-CI)](../Jenkinsfile-CI)
 - [Pipeline CD (Jenkinsfile-CD)](../Jenkinsfile-CD)
 - [Environnements](../infra/ENVIRONMENTS.md)

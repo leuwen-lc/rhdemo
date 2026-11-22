@@ -34,6 +34,7 @@ htmlpublisher:429                                   # publishHTML([...]) pour Tr
 
 # Sécurité
 dependency-check-jenkins-plugin:5.6.5               # OWASP Dependency-Check tool config
+hashicorp-vault-plugin:384.vda_86ec66c537           # Credentials lus dans OpenBao (AppRole, KV v2), cf. docs/OPENBAO.md
 
 # Docker
 docker-plugin:1336.v3711dec712de                 # Agents éphémères Docker (Docker Cloud)

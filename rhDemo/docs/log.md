@@ -295,3 +295,44 @@ Déverrouillage retenu : clé gardée dans KeePassXC et collée à la main dans 
 ## [2026-11-21] ingest | ETUDE_OPENBAO : autorité locale et certificats TLS
 
 L'étude supposait une « autorité locale du registry » inexistante : tous les certificats sont auto-signés (registry pour 10 ans). Ajouts : ligne TLS au §1, ligne #18 détaillée au §2, nouveau §4.3 (autorité locale créée dès l'étape 1 avec racine hors ligne, certificat d'OpenBao émis hors d'OpenBao ; à l'étape 5, intermédiaire dans le moteur PKI, `shared-tls-cert` par cert-manager à durée courte, registry pour un an, ephemere inchangé ; distribution de l'autorité). §4.1, §7 (étape 5 portée à 2 jours, total 6,5 jours), §7.2 et §8 alignés. Sources du frontmatter complétées. L'étude reste au statut `proposition`.
+
+## [2026-11-21] ingest | OPENBAO : étapes 1 à 4 codées (branche evolution_openbao)
+
+Nouveau `OPENBAO.md` (actif) : architecture, installation dans l'ordre, déverrouillage, rotation, sauvegarde, retour arrière, points vérifiés sur un OpenBao et un Jenkins jetables et points à valider au premier déploiement (ESO, NetworkPolicy Cilium vers OpenBao, rotation PostgreSQL réelle). Code : conteneur OpenBao et autorité locale dans `infra/jenkins-docker/openbao/`, plugin Jenkins et truststore, `openbao-migrate.py`, cibles et méthodes OpenBao de `rotate-secrets.py`, signature Cosign par Transit dans la CI et double clé dans la CD, ESO dans stagingkub (la CD ne déchiffre plus `secrets-stagingkub.yml`), lecture des credentials de fixcve-auto par AppRole. Mis à jour : statut d'`ETUDE_OPENBAO.md`, `DECISIONS.md` (« Pourquoi OpenBao en plus de SOPS »), `PIPELINES_CI_CD.md`, `FIXCVE_AUTO.md`, invariant Secrets de `CLAUDE.md`, `index.md`.
+
+## [2026-11-21] ingest | Ephemere : secrets générés à chaque build, plus de SOPS
+
+`Jenkinsfile-CI` ne déchiffre plus `secrets-ephemere.yml` : le stage « Génération Secrets ephemere » tire des valeurs aléatoires (environnement jetable) et écrit le même fichier de variables. Le credential `sops-age-key` n'est plus utilisé par aucun pipeline. Mis à jour : `OPENBAO.md` (section Ephemere, retour arrière), `PIPELINES_CI_CD.md`, `QUICKSTART.md` de Jenkins, `secrets/README-SECRETS-SEPARATION.md`, `inventory.yaml` (#16), commentaire JCasC, invariant Secrets de `CLAUDE.md`. `secrets-ephemere.yml` reste dans le dépôt jusqu'à l'abandon de SOPS.
+
+## [2026-11-21] ingest | OPENBAO : Name Constraints sur l'autorité locale
+
+`init-local-ca.sh` ajoute des *Name Constraints* critiques à la racine et à l'intermédiaire (noms internes et plages privées seulement) : une clé d'autorité volée ne permet plus d'émettre un certificat accepté pour un nom externe. Vérifié avec OpenSSL, Java et Go (certificats internes acceptés, `codeberg.org`, nom imposteur et IP publique refusés). `OPENBAO.md` complété (architecture, installation, points vérifiés).
+
+## [2026-11-21] ingest | OPENBAO : CI et CD vertes, rotation scriptée des secrets Keycloak
+
+`RHDemo-CI` et `RHDemo-CD` vertes sur la branche : secrets d'ephemere générés, signature par la clé Transit, vérification par la CD, `ExternalSecret` prêts. La procédure manuelle `stagingkub-app-secrets` est remplacée par trois méthodes de `rotate-secrets.py` (`keycloak-client-secret`, `keycloak-admin`, `keycloak-users`), qui passent par l'API d'administration de Keycloak (`rotation_lib/keycloak.py`) ; l'ancienne procédure était inexacte (`init-keycloak` ne modifie pas un utilisateur existant, `KEYCLOAK_ADMIN_PASSWORD` ne sert qu'au premier démarrage). `rhDemoInitKeycloak` n'écrit plus le secret du client dans ses logs. `OPENBAO.md` et `inventory.yaml` mis à jour.
+
+## [2026-11-21] restructure | OPENBAO : fin de la migration, abandon de SOPS
+
+Branche `evolutions_openbao_postmigration`. Valeurs héritées de SOPS renouvelées (rotations PostgreSQL et Keycloak validées sur le vrai cluster), puis tout ce qui ne servait qu'à la migration est retiré :
+- fichiers `secrets-ephemere.yml`, `secrets-stagingkub.yml` et `secrets-env.yml.template` supprimés ; SOPS retiré de `Dockerfile.agent`, de `rotation_lib` (cible `sops`), de `fixcve-auto-poll.sh` et de `fixcve-install.sh` ; entrée `sops-age-key` retirée de l'inventaire ;
+- `openbao-migrate.py` devient `openbao-setup.py` : `stagingkub` génère les valeurs, `fixcve` demande le token Jenkins et émet le token Codeberg, nouvelle commande `fixcve-nvd` ; idempotent ;
+- `Jenkinsfile-CD` ne vérifie plus qu'avec `cosign-public-key-transit` (plus d'image signée par l'ancienne clé à redéployer) ;
+- `configure-openbao.sh generate-root` : jeton root ponctuel depuis la clé de déverrouillage, OTP jamais affiché ni passé en argument.
+
+`OPENBAO.md` réécrit pour une installation à blanc. `SOPS_SETUP.md` et `ETUDE_OPENBAO.md` reclassés `historique`. Mis à jour : `DECISIONS.md`, `PIPELINES_CI_CD.md`, `FIXCVE_AUTO.md`, `PARAMETRAGE-APPLICATIF-AVEC-KUB.md`, `INVENTAIRE_COMPOSANTS_OPEN_SOURCE.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `RENOVATE_AUTOMERGE_CI.md`, README de `secrets/`, `jenkins-docker` (README, QUICKSTART), `stagingkub` (README, README-INIT-KEYCLOAK), `infra/dev/README.md`, `ENVIRONMENTS.md`.
+
+## [2026-11-21] ingest | INSTALLATION_COMPLETE : ordre d'installation depuis une machine vide
+
+Nouveau guide `INSTALLATION_COMPLETE.md` : séquence d'installation de toute la chaîne (dev, Jenkins et registry, OpenBao, CI et ephemere, stagingkub, CD et Keycloak, observabilité, Renovate, fixcve-auto, fin d'installation, routine après redémarrage), qui renvoie à la documentation de chaque composant. Il explicite deux dépendances d'ordre : l'autorité locale d'OpenBao avant le premier démarrage de Jenkins, et la réémission du certificat d'OpenBao après la création du cluster KinD. La section « Utiliser le projet » du `README.md` racine y renvoie désormais ; note ajoutée dans le `QUICKSTART.md` de Jenkins.
+
+## [2026-11-21] ingest | ROTATION_SECRETS : guide d'exploitation, étude de rotation mise à jour
+
+Nouveau guide `ROTATION_SECRETS.md` : tâches récurrentes (déverrouillage, `--check` en cron, `secret_id` AppRole avant 100 jours, certificat d'OpenBao annuel, intermédiaire à 5 ans, GPG et token SonarQube), usage de `rotate-secrets.py`, ordre de rotation d'urgence, lecture d'une valeur dans OpenBao et tableau des identifiants (Keycloak, profils de l'application, Grafana, Jenkins, ephemere). Renvoie à `OPENBAO.md` pour le détail des rotations.
+
+`ETUDE_ROTATION_SECRETS.md` mis à jour pour OpenBao (stockage, Cosign par Transit sans re-signature, stagingkub réalisé, AGE sans objet, nouveaux secrets #20 à #24) ; reste `proposition` : kubeconfigs à automatiser, mode `--emergency`, rappel par cron, tokens Codeberg restreints au dépôt. Kubeconfigs (#8, #9) passés de `planned` à une procédure manuelle dans l'inventaire.
+
+## [2026-11-21] ingest | OPENBAO : mot de passe admin de Grafana dans OpenBao
+
+Le mot de passe admin de Grafana passe du fichier local `grafana-values.yaml` (ignoré par Git, donc absent du checkout Jenkins : les pipelines Renovate et Upgrade-Deploy de Grafana ne pouvaient pas aboutir) à OpenBao (`kv/observability/grafana`). ESO le recopie dans le Secret `grafana-admin` de `loki-stack` (`external-secrets/observability.yaml`, rôle OpenBao `eso-observability` limité à `kv/observability/*`), lu par Grafana via `admin.existingSecret`. `grafana-values.yaml` devient versionné, le modèle disparaît. Nouvelle commande `openbao-setup.py observability`, rotation automatisée `rotate-secrets.py grafana-admin` (synchronisation, redémarrage, connexion de vérification, retour arrière). Mis à jour : `OPENBAO.md`, `ROTATION_SECRETS.md`, `OBSERVABILITY_STACK_INTEGRATION.md`, `INSTALLATION_COMPLETE.md`, `ETUDE_ROTATION_SECRETS.md`. Les mots de passe de `.env` (Jenkins, base SonarQube) restent hors d'OpenBao par choix (démarrage de Jenkins sans dépendre d'OpenBao).
+

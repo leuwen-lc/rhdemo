@@ -644,7 +644,9 @@ jobs:
             strategy {
               logRotator {
                 numToKeepStr('300')
+                daysToKeepStr('90')
                 artifactNumToKeepStr('100')
+                artifactDaysToKeepStr('90')
               }
             }
           }

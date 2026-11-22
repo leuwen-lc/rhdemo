@@ -1,10 +1,10 @@
 # Ignore environment configuration
 .env
 
-# Ignore SSL certificates
-nginx/ssl/*.crt
-nginx/ssl/*.key
-nginx/ssl/*.pem
+# Certificats et clés générés par generate-certs.sh (jamais versionnés)
+certs/*
+# Ancien emplacement (nginx/generate-certs.sh supprimé)
+nginx/ssl/
 
 # Ignore backups
 *.backup

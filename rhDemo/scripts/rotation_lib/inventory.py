@@ -8,6 +8,7 @@ from .common import RotationError
 DEFAULT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "secrets",
                                             "inventory.yaml"))
 LEVELS = ("C", "H", "M")
+LEVEL_LABELS = {"C": "critique", "H": "élevée", "M": "moyenne"}
 EXPOSURES = ("internet", "lan", "local")
 EXPOSURE_ORDER = {e: i for i, e in enumerate(EXPOSURES)}
 TARGET_KEYS = {"jenkins": {"credential", "type"},
@@ -31,9 +32,25 @@ METHOD_KEYS = {
     "planned": {"phase"},
     "per-build": {"note"},
 }
+# Sorte de rotation affichée par --list (vocabulaire de docs/ROTATION_SECRETS.md) : toute méthode
+# de METHOD_KEYS doit y figurer (contrôlé par les tests).
+METHOD_KINDS = {
+    "forgejo-token": "automatique", "forgejo-gpg": "automatique",
+    "openbao-approle": "automatique", "postgres-password": "automatique",
+    "keycloak-client-secret": "automatique", "keycloak-admin": "automatique",
+    "keycloak-users": "automatique", "grafana-admin": "automatique",
+    "manual-value": "semi-manuelle",
+    "manual": "manuelle",
+    "per-build": "à chaque build",
+    "planned": "prévue",
+}
 NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}
 # Secrets régénérés à chaque build (ephemere) : rien à renouveler, rien à tracer, aucune cible.
 NO_ROTATION = {"per-build"}
+# Secret bloquant (blocking: true) : il cesse de fonctionner s'il n'est pas renouvelé à temps
+# (durée de vie imposée par le fournisseur, lifetime_days si elle est connue). --check le
+# signale en retard EXPIRY_MARGIN_DAYS jours avant son expiration.
+EXPIRY_MARGIN_DAYS = 14
 
 
 def load(path=DEFAULT_PATH):
@@ -76,6 +93,16 @@ def validate(inv):
             errors.append(f"{sid} : vérification {e['rotation']['verify']} inconnue")
         if e["rotation"].get("verify") == "smtp" and "smtp_credential" not in e["rotation"]:
             errors.append(f"{sid} : verify smtp exige smtp_credential")
+        if not isinstance(e.get("blocking", False), bool):
+            errors.append(f"{sid} : blocking doit valoir true ou false")
+        life = e.get("lifetime_days")
+        if life is not None:
+            if isinstance(life, bool) or not isinstance(life, int) or life <= EXPIRY_MARGIN_DAYS:
+                errors.append(f"{sid} : lifetime_days doit être un entier > {EXPIRY_MARGIN_DAYS}")
+            if e.get("blocking") is not True:
+                errors.append(f"{sid} : lifetime_days exige blocking: true")
+        if method in NO_ROTATION and e.get("blocking"):
+            errors.append(f"{sid} : {method} ne peut pas être bloquant")
         targets = e.get("targets") or []
         if method in NEEDS_TARGETS and not targets:
             errors.append(f"{sid} : {method} exige au moins une cible")

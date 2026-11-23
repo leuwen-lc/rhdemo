@@ -1,6 +1,6 @@
 ---
 statut: proposition
-verifie_le: 2026-11-21
+verifie_le: 2026-11-23
 sources:
   - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
   - rhDemo/infra/jenkins-docker/QUICKSTART.md
@@ -24,7 +24,7 @@ sources:
 
 **Hors périmètre** (demande explicite) : les jetons qui n'ouvrent qu'un quota de lecture. Ils sont listés en fin d'inventaire pour mémoire.
 
-**Statut** : proposition. Phases 0 et 1 réalisées le 2026-11-17 (§3.4). L'adoption d'OpenBao ([ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), [OPENBAO.md](OPENBAO.md)) a changé plusieurs options : les secrets sont stockés et propagés par OpenBao au lieu de SOPS et des credentials Jenkins, la clé Cosign est une clé Transit, les secrets de stagingkub sont renouvelés par le script, SOPS et sa clé AGE sont abandonnés (2026-11-21). Ce qui reste ouvert est listé au §5. Usage courant du script et tâches récurrentes : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
+**Statut** : proposition. Phases 0 et 1 réalisées le 2026-11-17 (§3.4), phase 2 en grande partie par OpenBao (2026-11-21). État au 2026-11-23 et reste à faire : §5. L'adoption d'OpenBao ([ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), [OPENBAO.md](OPENBAO.md)) a changé plusieurs options : les secrets sont stockés et propagés par OpenBao au lieu de SOPS et des credentials Jenkins, la clé Cosign est une clé Transit, les secrets de stagingkub sont renouvelés par le script, SOPS et sa clé AGE sont abandonnés (2026-11-21). Usage courant du script et tâches récurrentes : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
 
 ---
 
@@ -44,7 +44,7 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 
 | # | Secret | Où il est stocké | Ce qu'il permet en cas de fuite | Crit. | Expo. |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Clé privée AGE (SOPS) | *Abandonnée avec SOPS le 2026-11-21, retirée de l'inventaire* | Déchiffrait tous les fichiers SOPS, historique Git public compris ; les valeurs concernées ont été renouvelées | — | — |
+| 1 | Clé privée AGE (SOPS) | *Abandonnée avec SOPS le 2026-11-21, retirée de l'inventaire ; fichier encore présent sur le poste (§4.6)* | Déchiffrait tous les fichiers SOPS, historique Git public compris ; les valeurs concernées ont été renouvelées | — | — |
 | 2 | Clé Cosign | Clé Transit d'OpenBao, non exportable (publique : credential `cosign-public-key-transit`) | Faire signer une image malveillante par OpenBao, avec l'AppRole `jenkins-cosign` (encore faut-il la pousser dans le registry local) | C | Local |
 | 3 | Token Codeberg `ci-bot-forgejo-token` (compte `cibot-leuwen-lc`) | OpenBao `kv/jenkins/ci-bot-forgejo-token`, lu par un credential Jenkins de même identifiant | Push et merge sur `rhdemo` (Write), commentaires | C | Internet |
 | 4 | Token Codeberg `renovate-forgejo-token` (bot Renovate) | OpenBao `kv/jenkins/renovate-forgejo-token` | Push de branches, ouverture de PR, scope `user` (gestion des clés du compte bot) | H | Internet |
@@ -84,7 +84,7 @@ Les constats corrigés les 2026-11-16 et 2026-11-17 (Grafana, défauts `sonar123
 
 | Fournisseur | Créer un nouveau secret | Révoquer l'ancien | Ce qui reste manuel |
 | --- | --- | --- | --- |
-| **Codeberg (Forgejo)** | `POST /api/v1/users/{user}/tokens` (nom, scopes) | `DELETE /api/v1/users/{user}/tokens/{id}` | La création exige une **authentification par mot de passe** (pas par token) et, avec la 2FA, l'en-tête `X-Forgejo-OTP`. Saisie interactive du mot de passe et du code TOTP du bot. Les bots n'ont pas la 2FA aujourd'hui : l'activer d'abord (§4.1). |
+| **Codeberg (Forgejo)** | `POST /api/v1/users/{user}/tokens` (nom, scopes) | `DELETE /api/v1/users/{user}/tokens/{id}` | La création exige une **authentification par mot de passe** (pas par token) et, avec la 2FA, l'en-tête `X-Forgejo-OTP`. Saisie interactive du mot de passe et du code TOTP du bot (2FA active sur les trois bots depuis le 2026-11-17). |
 | **Codeberg, clés GPG/SSH** | `POST /api/v1/user/gpg_keys`, `POST /api/v1/user/keys` | `DELETE /api/v1/user/gpg_keys/{id}`, `.../keys/{id}` | Rien si le token a le scope `write:user` (cas du token Renovate) |
 | **Jenkins, credentials** | CLI `update-credentials-by-xml system::system::jenkins _ <id>` (ou `POST .../credential/<id>/config.xml`) | Remplacement en place | Authentification admin (mot de passe saisi, ou token admin éphémère) |
 | **Jenkins, token API d'un utilisateur** | `POST /user/<id>/descriptorByName/jenkins.security.ApiTokenProperty/generateNewToken` | `.../revoke?tokenUuid=…` | Depuis Jenkins 2.129, un admin ne peut pas générer de token pour un autre utilisateur par défaut : il faut s'authentifier **en tant que** `claude` (mot de passe + crumb) *à vérifier sur la version installée* |
@@ -126,11 +126,11 @@ Fichier versionné `rhDemo/secrets/inventory.yaml` : une entrée par secret du �
 ```text
 rotate-secrets.py <id>            # un secret
 rotate-secrets.py --level C       # tous les secrets critiques
-rotate-secrets.py --emergency     # tout le périmètre, dans l'ordre d'urgence (phase 3)
+rotate-secrets.py --emergency     # tout le périmètre, dans l'ordre d'urgence (phase 3, non réalisé)
 rotate-secrets.py --check         # âge des secrets, secrets en retard sur leur période
 ```
 
-Un module par fournisseur dans `scripts/rotation_lib/` (`forgejo.py`, `jenkins.py`, `smtp.py`, puis `openbao.py` et `keycloak.py` avec OpenBao). Chaque rotation suit le même cycle :
+Un module par fournisseur dans `scripts/rotation_lib/` (`forgejo.py`, `jenkins.py`, `smtp.py`, puis `openbao.py` et `keycloak.py` avec OpenBao ; Grafana et PostgreSQL dans `rotations.py`). Chaque rotation suit le même cycle :
 
 1. **Contrôler les cibles** avant toute création (credential Jenkins existant et du bon type, chemin OpenBao présent) ;
 2. **Créer** le nouveau secret (API du fournisseur) ;
@@ -159,7 +159,7 @@ Principe : révoquer d'abord ce qui est **exploitable depuis Internet** (colonne
 
 ### 3.4 Utilisation (phase 1)
 
-Automatisés : tokens des trois bots Codeberg (#3, #4, #5), clé GPG de Renovate (#7). Semi-manuels (méthode `manual-value` : valeur créée à la main, saisie, vérifiée si possible, puis propagée) : mot de passe SMTP (#12, testé en SMTP avant la mise à jour de Jenkins), token SonarQube (#14). Les autres secrets affichent leur procédure manuelle ou leur phase prévue. Une rotation faite à la main se trace avec `--record <id>`.
+Rotation automatique : tokens des trois bots Codeberg (#3, #4, #5), clé GPG de Renovate (#7). Semi-manuelle (méthode `manual-value` : valeur créée à la main, saisie, vérifiée si possible, puis propagée) : mot de passe SMTP (#12, testé en SMTP avant la mise à jour de Jenkins), token SonarQube (#14). Les autres secrets affichent leur procédure manuelle ou leur phase prévue. Une rotation faite à la main se trace avec `--record <id>`.
 
 Avant la première rotation réelle :
 
@@ -174,7 +174,7 @@ Comportements à connaître :
 - **Codes TOTP** : un code saisi est réutilisé pendant 25 secondes (Forgejo ne refuse pas sa réutilisation sur l'API). Si Codeberg répond 401, le script en redemande un.
 - **Clé GPG** : RSA 4096, valable 2 ans, avec la même identité que l'actuelle (« Renovate Bot » et l'adresse du compte bot). Le script la génère dans un trousseau jetable en mémoire (`/dev/shm`), prouve sa possession à Codeberg (jeton signé), puis retire les anciennes clés du compte bot. Les anciens commits de Renovate apparaissent ensuite « non vérifiés » : c'est le prix de la révocation.
 - **SMTP (#12)** : le script lit l'adresse dans le credential Jenkins, teste la connexion SMTP avec le mot de passe collé, et ne met à jour Jenkins que si elle réussit. Il rappelle ensuite de supprimer l'ancien appareil dans le Manager.
-- **Code retour de `--check`** : 1 si un secret est en retard ou n'a jamais été tracé, ce qui permet un rappel par cron (phase 4).
+- **Code retour de `--check`** : 1 si un secret est en retard ou n'a jamais été tracé, ce qui permet un rappel par cron (phase 4). Les secrets à expiration imposée (`secret_id` AppRole, clé GPG, token SonarQube) sont marqués « (bloquant) » et signalés 14 jours avant leur expiration (2026-11-23, [ROTATION_SECRETS.md](ROTATION_SECRETS.md)).
 
 Tests : `scripts/tests/test_rotation.py` (lancé par `run-all.sh`), avec de faux Codeberg et Jenkins et le vrai `gpg` sur des clés jetables (les méthodes OpenBao et Keycloak : `test_openbao.py`, `test_keycloak_rotation.py`). Les routes Codeberg ont été vérifiées dans la spécification Swagger de Codeberg (Forgejo 17), puis validées sur le vrai compte fixcve.
 
@@ -190,7 +190,7 @@ Corrections issues du premier essai réel : Jenkins renvoie parfois le XML des c
 
 Le script demande le mot de passe et le code TOTP du bot, crée un token aux **mêmes scopes** que l'ancien (lus dans l'inventaire), le vérifie, l'écrit dans OpenBao (`kv/jenkins/…`), puis supprime l'ancien par son identifiant (`GET /api/v1/users/{user}/tokens` pour le retrouver par son nom). Nommer les tokens avec la date (`jenkins-ci-2026-11-16`) facilite la révocation ciblée.
 
-**Prérequis : activer la 2FA (TOTP) sur les trois comptes bots.** Aujourd'hui, sans 2FA, le mot de passe d'un bot (#6b) suffit pour créer des tokens par API. Avec la 2FA, il faut aussi le code TOTP, qui reste sur le téléphone de l'utilisateur. Après activation, vérifier que le Git de Jenkins et de fixcve s'authentifie bien par token : les tokens ne sont pas concernés par la 2FA.
+**2FA (TOTP) sur les trois comptes bots** : activée le 2026-11-17 (phase 0). Sans elle, le mot de passe d'un bot (#6b) suffisait pour créer des tokens par API ; il faut désormais aussi le code TOTP, qui reste sur le téléphone de l'utilisateur. Les tokens ne sont pas concernés par la 2FA : le Git de Jenkins et de fixcve continue de s'authentifier par token. Rotations faites : 2026-11-17 (première rotation, révocation des tokens créés à la main), puis 2026-11-22 (écriture dans OpenBao).
 
 Le compte personnel (#6) est hors script. Contrôle manuel conseillé en rotation d'urgence : réglages Codeberg > Applications (tokens et applications OAuth autorisées) et clés SSH/GPG.
 
@@ -218,7 +218,7 @@ Ephemere (#16) n'a plus de secrets stockés : valeurs tirées au hasard à chaqu
 
 ### 4.6 Clé AGE (#1)
 
-Sans objet : SOPS est abandonné (2026-11-21), les valeurs qu'il protégeait ont été renouvelées. Reste à détruire la clé et le credential `sops-age-key`.
+Sans objet : SOPS est abandonné (2026-11-21), les valeurs qu'il protégeait ont été renouvelées. Reste à détruire la clé : le fichier `~/.config/sops/age/keys.txt` est toujours sur le poste (constaté le 2026-11-23). Le credential `sops-age-key` n'est plus déclaré dans `jenkins-casc.yaml` ; vérifier dans la console Jenkins qu'il n'y subsiste pas. La détruire ne présente aucun risque : rien ne la lit plus, et l'historique Git qu'elle déchiffre ne contient que des valeurs renouvelées.
 
 ### 4.7 Claude (#13)
 
@@ -254,20 +254,34 @@ Limite : le mot de passe d'un appareil permet aussi de **lire** la boîte (IMAP)
 | Phase | Contenu | Effort estimé |
 | --- | --- | --- |
 | 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
-| 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). Essai réel réussi sur `fixcve-forgejo-token` ; #12 renouvelé (semi-manuel) ; restent #3, #4, #7.* | 1,5 jour |
+| 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). #3, #4, #5, #7 et #12 renouvelés le 2026-11-17, puis #3, #4, #5 et #7 de nouveau le 2026-11-22 lors de leur passage dans OpenBao.* | 1,5 jour |
 | 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub. *Cosign et stagingkub réalisés par OpenBao (2026-11-21), sans re-signature (§4.3). Kubeconfigs : procédure manuelle, automatisation ouverte.* | 1 à 2 jours |
 | 3 | Module AGE, mode `--emergency`. *Module AGE sans objet (SOPS abandonné). `--emergency` ouvert ; en attendant, ordre d'urgence dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).* | 1 jour |
 | 4 | Tokens Kubernetes à durée limitée, rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse). *Ouvert.* | 0,5 jour |
 
 Tests : comme pour fixcve-auto, un bac à sable avec un faux Forgejo et un faux Jenkins valide les modules sans toucher aux vrais comptes. Le module Kubernetes se teste sur le cluster KinD. Le code est sous `scripts/`, donc hors couverture Sonar Java ; les modules Python suivent la règle `python3 -I`.
 
+### État au 2026-11-23
+
+Relevé par `rotate-secrets.py --check` et le journal local des rotations.
+
+**Renouvelés et tracés** : tokens Codeberg des trois bots (#3, #4, #5) et clé GPG de Renovate (#7) le 2026-11-22 ; SMTP (#12) le 2026-11-17 ; secrets applicatifs stagingkub (#15 à #15d) et Grafana (#17) le 2026-11-21 ; `secret_id` AppRole de Jenkins (#20) le 2026-11-22. Ephemere (#16) est régénéré à chaque build.
+
+**Sans rotation journalisée** (13 secrets, `--check` sort en code 1) :
+
+- créés neufs à l'installation d'OpenBao (2026-11-21 et 22) mais non tracés : clé Cosign Transit (#2), mot de passe `admin` (#23) et clé de déverrouillage (#24) d'OpenBao, `secret_id` AppRole de Cosign (#21, journalisé sous un ancien identifiant, `openbao-approle-jenkins-cosign`, que `--check` ne reconnaît pas) ;
+- jamais renouvelés depuis l'inventaire du 2026-11-16, ou sans trace : mot de passe `admin` Jenkins (#10), compte Jenkins `claude` (#11), token SonarQube (#14), kubeconfigs (#8, #9), clés TLS (#18), mots de passe des bots Codeberg (#6b), session Claude (#13), contrôle du compte personnel (#6).
+
 ### Reste à faire
 
-1. Kubeconfigs (#8, #9) : automatiser la procédure manuelle, puis passer à des tokens à durée limitée (phase 4).
-2. Mode `--emergency` (phase 3).
-3. Rappel périodique : `--check` en cron (phase 4).
-4. Piste : tokens Codeberg restreints au dépôt `rhdemo` (§3.4).
-5. Points marqués *à vérifier* (token Jenkins de `claude`, déconnexion des sessions Claude, plafond de facturation).
+1. **Rattraper le journal** des secrets neufs non tracés (#2, #21, #23, #24) par `--record`. Urgent pour #21 : son `secret_id` expire au bout de 100 jours (`SECRET_ID_TTL` de `configure-openbao.sh`), vers le 2027-03-01, et sans trace `--check` ne préviendra pas ; à l'échéance, la signature Cosign de la CI échouerait.
+2. **Renouveler les secrets jamais renouvelés**, par criticité : #10 et #6b (C) d'abord, puis #8, #9 et #13 (H), puis #11, #14 et #18 (M) ; tracer chaque rotation manuelle par `--record`.
+3. **Détruire la clé AGE** (§4.6) et vérifier l'absence du credential `sops-age-key` dans Jenkins.
+4. **Kubeconfigs (#8, #9)** : automatiser la procédure manuelle, puis passer à des tokens à durée limitée (phase 4). Les tokens actuels sont des Secrets `service-account-token` sans expiration (`infra/stagingkub/rbac/`).
+5. **Mode `--emergency`** (phase 3) ; en attendant, ordre d'urgence manuel dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
+6. **Rappel périodique** : la ligne cron de `--check` documentée dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md) n'est pas installée sur le poste (seule la rotation du journal d'audit d'OpenBao l'est). Tant que le point 1 n'est pas fait, le rappel signalerait 13 secrets en permanence.
+7. **Piste** : tokens Codeberg restreints au dépôt `rhdemo` (§3.4), non implémentée.
+8. Points marqués *à vérifier* (token Jenkins de `claude`, déconnexion des sessions Claude, plafond de facturation).
 
 ### Périodes de rotation proposées
 

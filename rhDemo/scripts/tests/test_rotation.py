@@ -503,6 +503,69 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(mod.cmd_check(inv, journal, today=soon), 0)
         self.assertEqual(os.stat(journal.path).st_mode & 0o777, 0o600)
 
+    def test_bloquant_signale_et_en_retard_avant_expiration(self):
+        mod = _load_cli()
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        journal = Journal(os.path.join(tmp, "j.jsonl"))
+        inv = {"periods": {"C": 90, "H": 180, "M": 365}, "secrets": [
+            {"id": "s", "num": "14", "label": "", "criticality": "M", "exposure": "local",
+             "blocking": True, "lifetime_days": 100, "rotation": {"method": "manual"}},
+            {"id": "h", "num": "1", "label": "", "criticality": "M", "exposure": "local",
+             "rotation": {"method": "manual"}}]}
+        journal.append("s", "recorded", "")
+        journal.append("h", "recorded", "")
+        now = datetime.datetime.now().astimezone()
+
+        def run(days):
+            with mock.patch.object(mod, "log") as log:
+                rc = mod.cmd_check(inv, journal, today=now + datetime.timedelta(days=days))
+            lines = [c.args[0] for c in log.call_args_list]
+            return rc, next(line for line in lines if " s " in line), lines[-1]
+
+        rc, line, total = run(10)                       # limite : 100 - 14 = 86 j
+        self.assertEqual(rc, 0)
+        self.assertTrue(line.endswith("ok, 76 j restants (bloquant)"), line)
+        rc, line, total = run(90)                       # dans la marge, avant l'expiration
+        self.assertEqual(rc, 1)
+        self.assertIn("EN RETARD (expire dans 10 j) (bloquant)", line)
+        self.assertIn("1 secret(s) en retard", total)
+        self.assertIn("dont 1 bloquant(s)", total)
+        rc, line, _ = run(120)
+        self.assertIn("EXPIRÉ (120 j > 100 j) (bloquant)", line)
+
+    def test_chaque_methode_a_une_sorte(self):
+        self.assertEqual(set(inv_mod.METHOD_KINDS), set(inv_mod.METHOD_KEYS))
+        self.assertEqual(inv_mod.METHOD_KINDS["manual-value"], "semi-manuelle")
+
+    def test_list_affiche_sorte_methode_et_bloquant(self):
+        mod = _load_cli()
+        inv = {"secrets": [
+            {"id": "s", "num": "14", "label": "", "criticality": "M", "exposure": "local",
+             "blocking": True, "rotation": {"method": "manual-value"}},
+            {"id": "p", "num": "9", "label": "", "criticality": "H", "exposure": "local",
+             "rotation": {"method": "planned", "phase": 4}}]}
+        with mock.patch.object(mod, "log") as log:
+            mod.cmd_list(inv)
+        lines = [c.args[0] for c in log.call_args_list]
+        self.assertTrue(lines[0].endswith("rotation"))
+        self.assertTrue(any(line.endswith("semi-manuelle (manual-value), bloquant") for line in lines), lines)
+        self.assertTrue(any(line.endswith("prévue (planned, phase 4)") for line in lines), lines)
+
+    def test_inventaire_bloquant_valide(self):
+        base = {"periods": {}, "services": {}, "secrets": []}
+
+        def errors(**extra):
+            e = {"id": "x", "num": "1", "label": "", "criticality": "M", "exposure": "local",
+                 "rotation": {"method": "manual", "procedure": "p"}, **extra}
+            return inv_mod.validate({**base, "secrets": [e]})
+
+        self.assertEqual(errors(blocking=True, lifetime_days=100), [])
+        self.assertEqual(errors(blocking=True), [])
+        self.assertTrue(errors(lifetime_days=100))                 # sans blocking: true
+        self.assertTrue(errors(blocking=True, lifetime_days=10))   # pas plus long que la marge
+        self.assertTrue(errors(blocking="oui"))
+
     def test_per_build_jamais_en_retard_ni_tracable(self):
         mod = _load_cli()
         tmp = tempfile.mkdtemp()

@@ -36,37 +36,52 @@ from rotation_lib.rotations import METHODS, Context, check_targets  # noqa: E402
 
 
 def cmd_list(inv):
-    log(f"{'#':<4}{'id':<38}{'crit':<6}{'expo':<10}méthode")
+    log(f"{'#':<4}{'id':<38}{'criticité':<11}{'expo':<10}rotation")
     for e in inv_mod.ordered(inv["secrets"]):
-        m = e["rotation"]["method"]
-        if m == "planned":
-            m = f"planned (phase {e['rotation']['phase']})"
-        log(f"{e['num']:<4}{e['id']:<38}{e['criticality']:<6}{e['exposure']:<10}{m}")
+        method = e["rotation"]["method"]
+        detail = f"{method}, phase {e['rotation']['phase']}" if method == "planned" else method
+        m = f"{inv_mod.METHOD_KINDS[method]} ({detail})"
+        if e.get("blocking"):
+            m += ", bloquant"
+        crit = inv_mod.LEVEL_LABELS[e["criticality"]]
+        log(f"{e['num']:<4}{e['id']:<38}{crit:<11}{e['exposure']:<10}{m}")
 
 
 def cmd_check(inv, journal, today=None):
     today = today or datetime.datetime.now().astimezone()
     last = journal.last_rotations()
-    late = 0
-    log(f"{'#':<4}{'id':<38}{'crit':<6}{'dernière rotation':<20}état")
+    late = late_blocking = 0
+    log(f"{'#':<4}{'id':<38}{'criticité':<11}{'dernière rotation':<20}état")
     for e in inv_mod.ordered(inv["secrets"]):
         period = inv["periods"][e["criticality"]]
+        life = e.get("lifetime_days")
+        # Un secret bloquant doit être renouvelé avant son expiration, marge comprise.
+        limit = min(period, life - inv_mod.EXPIRY_MARGIN_DAYS) if life else period
         ts = last.get(e["id"])
+        is_late = True
         if e["rotation"]["method"] in inv_mod.NO_ROTATION:
-            state, when = "régénéré à chaque build", "-"
+            state, when, is_late = "régénéré à chaque build", "-", False
         elif ts is None:
             state, when = "aucune rotation journalisée", "-"
-            late += 1
         else:
             age = (today - ts).days
             when = ts.strftime("%Y-%m-%d")
-            if age > period:
-                state = f"EN RETARD ({age} j > {period} j)"
-                late += 1
+            if life and age > life:
+                state = f"EXPIRÉ ({age} j > {life} j)"
+            elif age > limit:
+                state = (f"EN RETARD ({age} j > {limit} j)" if limit == period
+                         else f"EN RETARD (expire dans {life - age} j)")
             else:
-                state = f"ok, {period - age} j restants"
-        log(f"{e['num']:<4}{e['id']:<38}{e['criticality']:<6}{when:<20}{state}")
-    log(f"\n{late} secret(s) en retard ou sans rotation journalisée.")
+                state, is_late = f"ok, {limit - age} j restants", False
+        if e.get("blocking"):
+            state += " (bloquant)"
+        if is_late:
+            late += 1
+            late_blocking += bool(e.get("blocking"))
+        crit = inv_mod.LEVEL_LABELS[e["criticality"]]
+        log(f"{e['num']:<4}{e['id']:<38}{crit:<11}{when:<20}{state}")
+    log(f"\n{late} secret(s) en retard ou sans rotation journalisée, dont {late_blocking} bloquant(s) : "
+        "ils cessent de fonctionner s'ils ne sont pas renouvelés à temps.")
     return 1 if late else 0
 
 

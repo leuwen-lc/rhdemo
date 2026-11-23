@@ -411,3 +411,23 @@ Manifest `sha256:a01e4457…` supprimé à la main du registre : il portait l'an
 ## [2026-11-23] ingest | fixcve-auto après le passage dans Jenkins
 
 Restes de l'ancien mode local retirés : section « Bascule depuis l'ancien cron » de [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (revérifié), section « fixcve-auto : nettoyage de l'ancien mode » d'[OPENBAO.md](OPENBAO.md), avis de fin de `fixcve-install.sh`, mentions du cron dans le README racine et les commentaires du poller, AppRole `fixcve` pris en exemple dans `tests/test_openbao.py`. Les docs `historique` et l'étude [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) sont inchangés.
+
+## [2026-11-23] lint | état de la rotation des secrets
+
+[ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) revérifié avec `rotate-secrets.py --check`, le journal local des rotations et les commits depuis le 2026-11-16. Mentions périmées corrigées (2FA des bots activée le 2026-11-17, #3, #4 et #7 renouvelés le 2026-11-17 puis le 2026-11-22 dans OpenBao, modules de `rotation_lib/`). Nouvelle section « État au 2026-11-23 » : 13 secrets sans rotation journalisée, dont 4 créés neufs avec OpenBao mais non tracés (le `secret_id` Cosign #21 l'est sous un ancien identifiant, alors qu'il expire au bout de 100 jours). Reste à faire complété : rattrapage du journal, renouvellement des secrets jamais renouvelés, clé AGE encore présente sur le poste, cron de `--check` non installé.
+
+## [2026-11-23] ingest | secrets bloquants dans `rotate-secrets.py --check`
+
+`--check` et `--list` ajoutent « (bloquant) » aux secrets qui cessent de fonctionner faute de rotation à temps : champs `blocking` et `lifetime_days` de `secrets/inventory.yaml`, posés sur les `secret_id` AppRole (#20, #21, 100 jours), la clé GPG de Renovate (#7, 2 ans) et le token SonarQube (#14, 1 an, procédure fixant cette durée). Un secret bloquant de durée connue passe en retard 14 jours avant son expiration si elle précède la période de sa criticité, puis « EXPIRÉ » ; la dernière ligne compte les bloquants en retard. Validation de l'inventaire et tests ajoutés. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) revérifié, [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) complété.
+
+## [2026-11-23] ingest | contenu de KeePassXC
+
+[ROTATION_SECRETS.md](ROTATION_SECRETS.md), « Où vivent les secrets » : la ligne KeePassXC ajoute les codes de récupération 2FA des bots et du compte personnel, le mot de passe de l'interface admin de SonarQube (changé en phase 0, emplacement jamais documenté), la copie papier de la clé de déverrouillage, et précise que le jeton root d'OpenBao n'y est pas gardé. [OPENBAO.md](OPENBAO.md), installation à blanc : le jeton root copié dans KeePassXC à l'étape 4 est à supprimer après `revoke-root` (étape 11).
+
+## [2026-11-23] ingest | rotation des kubeconfigs et des certificats TLS
+
+[ROTATION_SECRETS.md](ROTATION_SECRETS.md) : nouvelle section « Kubeconfigs et certificats », qui enchaîne en un seul passage d'`init-stagingkub.sh` les deux kubeconfigs de Jenkins et le certificat du Gateway (suppression préalable de `certs/tls.*`, sans quoi le certificat est conservé), plus la procédure du certificat du registry, non encore éprouvée (copie dans `/etc/docker/certs.d`, redémarrage du registry, recopie dans le nœud kind). Procédure `tls-keys` de `secrets/inventory.yaml` corrigée (elle ne disait pas de supprimer les certificats existants) ; procédures des kubeconfigs renvoyant au passage commun.
+
+## [2026-11-23] ingest | sortes de rotation dans `rotate-secrets.py --list`
+
+`--list` affiche la criticité en toutes lettres et une colonne « rotation » : sorte (automatique, semi-manuelle, manuelle, à chaque build, prévue), méthode de l'inventaire entre parenthèses, « , bloquant » le cas échéant. Correspondance unique `METHOD_KINDS` dans `rotation_lib/inventory.py`, contrôlée par un test (toute méthode doit avoir une sorte) ; commentaire de `secrets/inventory.yaml` aligné. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) et §3.4 d'[ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) emploient les mêmes termes ; corrigé au passage : `--list` n'affiche pas les procédures manuelles, c'est `rotate-secrets.py <id>` qui le fait.

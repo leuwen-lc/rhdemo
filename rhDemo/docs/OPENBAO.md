@@ -95,7 +95,7 @@ Depuis `rhDemo/infra/jenkins-docker/` :
 1. `openbao/init-local-ca.sh ca` : racine et intermédiaire, avec leurs *Name Constraints* (ajouter un nom interne plus tard impose de recréer l'autorité). Ranger `certs/ca/root-ca.key` (chiffrée) et sa phrase de passe dans KeePassXC, puis `shred -u` la clé.
 2. `openbao/init-local-ca.sh openbao` : certificat d'OpenBao. L'IP fixe d'OpenBao sur le réseau Docker `kind` doit y figurer : si le cluster KinD n'existe pas encore, refaire cette étape après l'étape 10 et redémarrer OpenBao (`install-external-secrets.sh` le signale).
 3. `docker compose up -d openbao`
-4. `openbao/configure-openbao.sh init` : copier la clé de déverrouillage et le jeton root dans KeePassXC (et la clé sur papier). Rien n'est écrit sur le disque.
+4. `openbao/configure-openbao.sh init` : copier la clé de déverrouillage et le jeton root dans KeePassXC (et la clé sur papier). Rien n'est écrit sur le disque. Le jeton root n'y reste que le temps de l'installation : il est révoqué à l'étape 11.
 5. `openbao/unseal.sh`, puis `openbao/configure-openbao.sh base` (jeton root ; choisir le mot de passe de l'utilisateur `admin`, à ranger dans KeePassXC).
 6. `./start-jenkins.sh` : construit le contrôleur (plugin, autorité dans le truststore Java). Recharger JCasC.
 7. Credentials Jenkins, depuis `rhDemo/scripts/` :
@@ -105,7 +105,7 @@ Depuis `rhDemo/infra/jenkins-docker/` :
 8. Cosign : `openbao/configure-openbao.sh cosign` (écrit la clé publique dans `certs/cosign/cosign-transit.pub`), créer le credential **Secret file** `cosign-public-key-transit` avec ce fichier (un Secret text tient sur une ligne et casserait le PEM), puis `./openbao-setup.py cosign-approle`.
 9. fixcve-auto : rien de plus côté OpenBao, ses deux credentials sont créés à l'étape 7 ; job `RHDemo-FixCVE` dans JCasC ([FIXCVE_AUTO.md](FIXCVE_AUTO.md), « Installation »).
 10. stagingkub : `./openbao-setup.py stagingkub` **avant le premier déploiement** (PostgreSQL ne prend son mot de passe qu'à l'initialisation de sa base, Keycloak son administrateur au premier démarrage). Les valeurs sont générées, jamais saisies. Puis `infra/stagingkub/scripts/init-stagingkub.sh` (authentification Kubernetes d'OpenBao, ESO, `ExternalSecret`), le premier déploiement, et `init-keycloak-stagingkub.sh`. Sur un cluster existant : `openbao/configure-openbao.sh kubernetes` suivi de `infra/stagingkub/scripts/components/install-external-secrets.sh`. La CD lit les `ExternalSecret` grâce à `infra/stagingkub/rbac/jenkins-role.yaml`. Pour l'observabilité, `./openbao-setup.py observability` (admin de Grafana) avant `install-external-secrets.sh`, qui crée aussi le Secret `grafana-admin` de `loki-stack`.
-11. `openbao/configure-openbao.sh revoke-root`.
+11. `openbao/configure-openbao.sh revoke-root`, puis supprimer le jeton root de KeePassXC : révoqué, il ne sert plus, et `generate-root` en recrée un depuis la clé de déverrouillage (« Jeton root ponctuel »).
 
 Toutes les commandes de `openbao-setup.py` sont idempotentes : une valeur déjà présente dans OpenBao n'est jamais écrasée (la renouveler : `rotate-secrets.py`).
 

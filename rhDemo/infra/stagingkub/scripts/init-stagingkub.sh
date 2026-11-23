@@ -443,32 +443,32 @@ if [ -d "$RBAC_DIR" ]; then
 
     # Vérification des permissions clés (accordées)
     echo -e "${YELLOW}  - Vérification des permissions RBAC jenkins-infra-upgrader...${NC}"
-    if kubectl auth can-i update daemonsets/cilium -n cilium-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if kubectl auth can-i update daemonsets/cilium -n cilium-system --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Mise à jour du DaemonSet cilium (cilium-system)${NC}"
     else
         echo -e "${RED}    ✗ Mise à jour du DaemonSet cilium refusée${NC}"
     fi
 
-    if kubectl auth can-i create deployments -n nginx-gateway --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if kubectl auth can-i create deployments -n nginx-gateway --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Gestion des Deployments (nginx-gateway)${NC}"
     else
         echo -e "${RED}    ✗ Gestion des Deployments (nginx-gateway) refusée${NC}"
     fi
 
-    if kubectl auth can-i update customresourcedefinitions/httproutes.gateway.networking.k8s.io --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if kubectl auth can-i update customresourcedefinitions/httproutes.gateway.networking.k8s.io --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Mise à jour de la CRD httproutes.gateway.networking.k8s.io (nommée)${NC}"
     else
         echo -e "${RED}    ✗ Mise à jour de la CRD httproutes.gateway.networking.k8s.io refusée${NC}"
     fi
 
-    if kubectl auth can-i list secrets -n cilium-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if kubectl auth can-i list secrets -n cilium-system --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Gestion des secrets (cilium-system, namespace dédié)${NC}"
     else
         echo -e "${RED}    ✗ Gestion des secrets (cilium-system) refusée${NC}"
     fi
 
     # Vérification des refus attendus (garde-fous)
-    if ! kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if ! kubectl auth can-i get pods -n rhdemo-stagingkub --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès à rhdemo-stagingkub (aucun composant géré n'y vit — sécurité OK)${NC}"
     else
         echo -e "${YELLOW}    ⚠ Accès à rhdemo-stagingkub détecté (inattendu)${NC}"
@@ -479,25 +479,25 @@ if [ -d "$RBAC_DIR" ]; then
     # prometheus-kube-prometheus-coredns, cf.
     # jenkins-infra-upgrader-kube-system-role.yaml) — plus aucun accès
     # générique (pods/pods-log, secrets) n'y est nécessaire.
-    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if ! kubectl auth can-i get pods -n kube-system --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès générique aux pods de kube-system (sécurité OK)${NC}"
     else
         echo -e "${YELLOW}    ⚠ Accès générique aux pods de kube-system détecté (inattendu)${NC}"
     fi
 
-    if ! kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if ! kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'accès générique aux secrets de kube-system (sécurité OK)${NC}"
     else
         echo -e "${YELLOW}    ⚠ Accès générique aux secrets de kube-system détecté (inattendu)${NC}"
     fi
 
-    if ! kubectl auth can-i create customresourcedefinitions --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if ! kubectl auth can-i create customresourcedefinitions --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas de création libre de CRD (sécurité OK)${NC}"
     else
         echo -e "${YELLOW}    ⚠ Création libre de CRD détectée (inattendu)${NC}"
     fi
 
-    if ! kubectl auth can-i update clusterroles/jenkins-infra-upgrader-cluster-role --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
+    if ! kubectl auth can-i update clusterroles/jenkins-infra-upgrader-cluster-role --as=system:serviceaccount:jenkins-infra:jenkins-infra-upgrader > /dev/null 2>&1; then
         echo -e "${GREEN}    ✓ Pas d'auto-modification de son propre ClusterRole (sécurité OK)${NC}"
     else
         echo -e "${RED}    ✗ Auto-modification de son propre ClusterRole possible — À CORRIGER${NC}"

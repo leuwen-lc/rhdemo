@@ -578,6 +578,7 @@ RENOVATE_SCAN_EOF
                         }
 
                         def ciStatus
+                        def gateRefused = false
                         if (isInfraComponentPr) {
                             def componentFile = changedFiles.split('\n').find {
                                 it ==~ /rhDemo\/infra\/stagingkub\/scripts\/components\/install-or-upgrade-.*\.sh/
@@ -585,38 +586,60 @@ RENOVATE_SCAN_EOF
                             env.RENOVATE_TARGET_COMPONENT = componentFile ?
                                 (componentFile =~ /install-or-upgrade-(.+)\.sh/)[0][1] : ''
 
-                            // Le même kubeconfig RBAC que l'étape post-merge est utilisé ici : un
-                            // --dry-run=server exige les mêmes autorisations qu'une exécution réelle
-                            // (Kubernetes vérifie l'autorisation avant d'évaluer le drapeau dry-run) —
-                            // la garantie de sécurité vient de l'absence de persistance, pas d'un
-                            // credential moins privilégié. FORGEJO_TOKEN reste volontairement absent
-                            // de ce bloc : le script exécuté vient d'une PR non revue (même
-                            // raisonnement supply-chain que pour le bloc Maven ci-dessous).
-                            ciStatus = withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
-                                sh(
-                                    script: '''
-                                        set -e
-                                        mkdir -p $HOME/.kube
-                                        cp "$KUBECONFIG_FILE" $HOME/.kube/config
-                                        chmod 600 $HOME/.kube/config
-                                        # "kubectl cluster-info" interroge en interne les Services de
-                                        # kube-system (list, label kubernetes.io/cluster-service=true)
-                                        # pour afficher les adresses KubeDNS/etc. — jenkins-infra-upgrader
-                                        # n'a délibérément pas ce droit (cf. rbac/README.md). Utiliser
-                                        # "config current-context" à la place (purement local, lit le
-                                        # kubeconfig, aucun appel API) : même vérification de sanité que
-                                        # Jenkinsfile-Stagingkub-Upgrade-Deploy, sans ce faux-positif RBAC.
-                                        kubectl config current-context > /dev/null
+                            // Garde avant le credential d'infra. Le même kubeconfig RBAC que l'étape
+                            // post-merge est utilisé ci-dessous : un --dry-run=server exige les mêmes
+                            // autorisations qu'une exécution réelle. Or ce credential est équivalent
+                            // administrateur du cluster, et le script vient d'une PR non revue : du shell
+                            // arbitraire qui détient le kubeconfig peut se passer du --dry-run. Il n'est
+                            // donc exécuté que si le diff se limite à ce que Renovate produit (lignes de
+                            // version, manifeste officiel des CRD Gateway API pour NGF), contrôlé par
+                            // renovate-infra-gate.sh pris sur la BASE, comme le script de vendoring qu'il
+                            // utilise. Sinon : pas d'exécution, pas de fusion automatique (elle
+                            // déclencherait RHDemo-Stagingkub-Upgrade-Deploy avec ce credential), revue
+                            // humaine. Détail : docs/RENOVATE_AUTOMERGE_CI.md, « Garde des PR d'infra ».
+                            // FORGEJO_TOKEN reste volontairement absent de ce bloc (même raisonnement
+                            // supply-chain que pour le bloc Maven ci-dessous).
+                            gateRefused = sh(
+                                script: '''#!/bin/bash
+                                    set -euo pipefail
+                                    G="$(mktemp -d)"
+                                    trap 'rm -rf "$G"' EXIT
+                                    mkdir -p "$G/scripts"
+                                    git show "origin/${BASE_BRANCH}:rhDemo/infra/stagingkub/scripts/renovate-infra-gate.sh" > "$G/gate.sh"
+                                    git show "origin/${BASE_BRANCH}:rhDemo/infra/stagingkub/scripts/vendor-gateway-api-crds.sh" > "$G/scripts/vendor-gateway-api-crds.sh"
+                                    VENDOR_SCRIPT="$G/scripts/vendor-gateway-api-crds.sh" bash "$G/gate.sh" "origin/${BASE_BRANCH}" HEAD
+                                ''',
+                                returnStatus: true
+                            ) != 0
+                            if (gateRefused) {
+                                ciStatus = 1
+                            } else {
+                                ciStatus = withCredentials([file(credentialsId: 'kubeconfig-stagingkub-infra-upgrader', variable: 'KUBECONFIG_FILE')]) {
+                                    sh(
+                                        script: '''
+                                            set -e
+                                            mkdir -p $HOME/.kube
+                                            cp "$KUBECONFIG_FILE" $HOME/.kube/config
+                                            chmod 600 $HOME/.kube/config
+                                            # "kubectl cluster-info" interroge en interne les Services de
+                                            # kube-system (list, label kubernetes.io/cluster-service=true)
+                                            # pour afficher les adresses KubeDNS/etc. — jenkins-infra-upgrader
+                                            # n'a délibérément pas ce droit (cf. rbac/README.md). Utiliser
+                                            # "config current-context" à la place (purement local, lit le
+                                            # kubeconfig, aucun appel API) : même vérification de sanité que
+                                            # Jenkinsfile-Stagingkub-Upgrade-Deploy, sans ce faux-positif RBAC.
+                                            kubectl config current-context > /dev/null
 
-                                        SCRIPT="''' + componentFile + '''"
-                                        chmod +x "$SCRIPT"
-                                        # CHART_IMAGES_FILE : le préflight RBAC du script y écrit les
-                                        # images rendues par le chart (cf. rbac-preflight-check.sh).
-                                        rm -f "$WORKSPACE/chart-images.txt"
-                                        CHART_IMAGES_FILE="$WORKSPACE/chart-images.txt" HELM_DRY_RUN=true "$SCRIPT"
-                                    ''',
-                                    returnStatus: true
-                                )
+                                            SCRIPT="''' + componentFile + '''"
+                                            chmod +x "$SCRIPT"
+                                            # CHART_IMAGES_FILE : le préflight RBAC du script y écrit les
+                                            # images rendues par le chart (cf. rbac-preflight-check.sh).
+                                            rm -f "$WORKSPACE/chart-images.txt"
+                                            CHART_IMAGES_FILE="$WORKSPACE/chart-images.txt" HELM_DRY_RUN=true "$SCRIPT"
+                                        ''',
+                                        returnStatus: true
+                                    )
+                                }
                             }
 
                             // Scan Trivy des images que la nouvelle version du chart déploierait (mêmes
@@ -836,7 +859,8 @@ RENOVATE_SCAN_EOF
                             } else {
                                 echo "CI KO pour PR #${prNumber} — PR conservée ouverte"
                                 failures << prNumber
-                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber,
+                                lib.postForgejoComment(FORGEJO_API, REPO, prNumber, gateRefused ?
+                                    "Diff hors du périmètre d'une montée Renovate (lignes de version des scripts d'infra, manifeste officiel des CRD Gateway API) : le script de la PR n'a pas été exécuté avec le credential d'infra. Revue et fusion manuelles requises (la fusion déclenche RHDemo-Stagingkub-Upgrade-Deploy). Build : ${env.BUILD_URL}" :
                                     "CI Jenkins échouée — voir build ${env.BUILD_URL}. Mise à jour à revoir manuellement.")
                             }
                         }

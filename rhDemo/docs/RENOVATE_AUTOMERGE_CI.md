@@ -1,8 +1,9 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-23
 sources:
   - rhDemo/Jenkinsfile-Renovate
+  - rhDemo/infra/stagingkub/scripts/renovate-infra-gate.sh
   - renovate.json
   - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
 ---
@@ -135,7 +136,14 @@ Un seul job liste, valide et merge : un second job séparé aurait dupliqué le 
 
 ### 1. Composant système de stagingkub
 
-Ces scripts pilotent Cilium, NGF, kube-prometheus-stack, Loki, Alloy et Grafana. Le job exécute le script modifié avec `HELM_DRY_RUN=true` contre le cluster réel, avec le kubeconfig de `jenkins-infra-upgrader`. Un `--dry-run=server` exige les mêmes droits qu'une exécution réelle : la protection vient de l'absence de persistance, pas d'un compte moins privilégié. `FORGEJO_TOKEN` n'est pas exposé à ce bloc, qui exécute un script venu d'une PR non revue.
+Ces scripts pilotent Cilium, NGF, kube-prometheus-stack, Loki, Alloy et Grafana. Après la garde décrite ci-dessous, le job exécute le script modifié avec `HELM_DRY_RUN=true` contre le cluster réel, avec le kubeconfig de `jenkins-infra-upgrader`. Un `--dry-run=server` exige les mêmes droits qu'une exécution réelle. `FORGEJO_TOKEN` n'est pas exposé à ce bloc, qui exécute un script venu d'une PR non revue.
+
+**Garde des PR d'infra.** `jenkins-infra-upgrader` est équivalent à un administrateur du cluster (il met à jour Cilium, et ses règles miroir des charts couvrent les Secrets et les StatefulSets de tout le cluster, voir [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md), « Limite connue »). Le `--dry-run` ne protège rien : un script modifié qui détient le kubeconfig peut s'en passer, et les manifestes qu'il applique peuvent contenir n'importe quel objet. Avant d'ouvrir ce credential, le job exécute donc `infra/stagingkub/scripts/renovate-infra-gate.sh`, **pris sur la branche de base** (`git show origin/<base>:…`), comme le script de vendoring qu'il utilise. Il n'accepte que ce que Renovate produit pour une montée de composant :
+
+- dans les `install-or-upgrade-*.sh`, des lignes `VAR="version"` seulement : valeur limitée à `[A-Za-z0-9._+-]` (pas de substitution de commande), une ligne retirée pour une ligne ajoutée, même variable, commentaire de fin inchangé ;
+- pour NGF, le manifeste `gateway-api-crds/v<nouvelle NGF_VERSION>/crds.yaml`, **identique octet pour octet** à celui que produit `vendor-gateway-api-crds.sh` de la base depuis les sources officielles (téléchargement pendant la garde), et la suppression des manifestes précédents.
+
+Tout autre changement, ou un vendoring de référence impossible (réseau), fait refuser la PR : le script n'est pas exécuté, la PR n'est pas fusionnée et reste ouverte avec un commentaire. La fusion automatique est exclue dans ce cas, car elle déclencherait `RHDemo-Stagingkub-Upgrade-Deploy` avec le même credential : une revue humaine décide. Les montées passées (Loki, Alloy, Cilium, kube-prometheus-stack, Grafana : une ligne ; NGF 2.8.0 et 2.8.1 : une ligne plus le manifeste) passent la garde, vérifié sur l'historique. Faux refus possibles : changement de la configuration Renovate qui produirait d'autres lignes (épinglage par digest), nouveau composant à ajouter aux motifs du script. Tests : `scripts/tests/test_renovate_infra_gate.py`.
 
 Pendant le dry-run, `record_chart_images` (`rbac-preflight-check.sh`) écrit dans `CHART_IMAGES_FILE` les images rendues par `helm template`, avec les mêmes options que l'installation. Si le dry-run passe, ces images sont scannées par Trivy (seuil CRITICAL et `.trivyignore.yaml` identiques à `RHDemo-CI`, rapports dans `trivy-reports-pr<N>/`). Comportement fermé : aucune image listée, ou une référence au format inattendu, et la PR est refusée. Seuls les champs `image:` sont lus : une image passée en argument de conteneur (le config-reloader de prometheus-operator par exemple) n'est pas vue, et une image que le chart n'épingle pas par digest (NGF) est scannée sur son tag du moment. `kind-config.yaml` n'a pas de script composant : seul son changement de version déclenche ce chemin, et il exige de toute façon une approbation manuelle. External Secrets Operator (`install-external-secrets.sh`) ne passe pas par ce chemin : hors du motif `install-or-upgrade-*.sh`, sa PR est validée directement (chemin 4), puis la montée est appliquée à la main ([IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md#composants-système-de-stagingkub)).
 
@@ -187,6 +195,7 @@ Renovate tournait sur Codeberg Actions jusqu'à ce que le pool de runners `codeb
 - Les montées majeures n'arrivent pas jusqu'au job sans approbation dans le tableau de bord.
 - Délai avant installation : 7 jours pour une version (statut Renovate vérifié avant merge), 48 h pour un digest d'image.
 - Renovate ne peut exécuter qu'une commande, le vendoring des CRDs de NGF (`RENOVATE_ALLOWED_COMMANDS`, option globale fixée dans le pipeline et non modifiable par `renovate.json`).
+- Le credential d'infra (équivalent administrateur du cluster) n'est ouvert au script d'une PR qu'après la garde des PR d'infra (chemin 1), exécutée depuis la branche de base.
 - Tous les tokens sont des credentials Jenkins, dont la plupart référencent OpenBao (chaque lecture y est journalisée) ; aucun n'est en clair dans le dépôt.
 
 ## Limites connues

@@ -53,7 +53,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: jenkins-infra-upgrader
-    namespace: rhdemo-stagingkub
+    namespace: jenkins-infra
 roleRef:
   kind: Role
   name: jenkins-infra-upgrader-loki-stack-role

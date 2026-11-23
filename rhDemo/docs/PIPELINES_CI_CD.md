@@ -334,8 +334,8 @@ idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.
 
 ### Points clés
 
-- La **validation avant merge** est faite dans la boucle étendue de `Jenkinsfile-Renovate` par un `helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`, **sans jamais muter le cluster**.
-- ServiceAccount Kubernetes **dédié** `jenkins-infra-upgrader` (RBAC de moindre privilège, credential `kubeconfig-stagingkub-infra-upgrader`), distinct de `jenkins-deployer` utilisé par RHDemo-CD.
+- La **validation avant merge** est faite dans la boucle étendue de `Jenkinsfile-Renovate` par un `helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`, après une garde qui limite le diff de la PR aux lignes de version et au manifeste officiel des CRD : le script modifié détient un credential capable de muter le cluster, le dry-run seul ne le garantit pas.
+- ServiceAccount Kubernetes **dédié** `jenkins-infra-upgrader` (namespace `jenkins-infra`, credential `kubeconfig-stagingkub-infra-upgrader`), distinct de `jenkins-deployer` utilisé par RHDemo-CD. Ses droits en font l'équivalent d'un administrateur du cluster : `RHDemo-Renovate` n'exécute le script d'une PR avec ce credential qu'après la garde des PR d'infra ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
 - Agent éphémère standard (pas de `docker.sock`, pas de `kind`).
 - `kindest/node` (version Kubernetes) reste **hors périmètre** : toute montée K8s passe par une reconstruction complète du cluster (cf. [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md)).
 

@@ -10,6 +10,12 @@ distinctes :
 | `jenkins-deployer` | `Jenkinsfile-CD` (déploiement applicatif) | Namespace `rhdemo-stagingkub` + lecture/écriture ServiceMonitors dans `monitoring` + PersistentVolumes (cluster-scoped) |
 | `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `cilium-system` (namespace dédié Cilium, RBAC large), `kube-system` (un seul objet nommé, Prometheus/CoreDNS), + CRDs/ClusterRoles cluster-scoped nommés |
 
+`jenkins-infra-upgrader` vit dans le namespace dédié `jenkins-infra` (créé par
+`jenkins-infra-upgrader-serviceaccount.yaml`, Pod Security `restricted` en
+`enforce`, aucune charge) : `jenkins-deployer`, qui crée des Secrets et des
+workloads dans `rhdemo-stagingkub`, ne doit pas pouvoir y obtenir son token. Les
+bindings de ce compte désignent donc `namespace: jenkins-infra`.
+
 Les deux credentials Jenkins correspondants (`kubeconfig-stagingkub` et
 `kubeconfig-stagingkub-infra-upgrader`) sont créés et renouvelés par
 `rhDemo/scripts/rotate-secrets.py` (appelé par `scripts/init-stagingkub.sh`) et **ne se substituent jamais l'un à l'autre** :

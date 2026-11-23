@@ -524,7 +524,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: jenkins-infra-upgrader
-    namespace: rhdemo-stagingkub
+    namespace: jenkins-infra
 roleRef:
   kind: ClusterRole
   name: jenkins-infra-upgrader-cluster-role

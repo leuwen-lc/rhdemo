@@ -222,12 +222,13 @@ Comparer avec les ressources autorisées dans le Role.
 
 ### Limite connue : création de tokens par Secret (constat du 2026-11-23)
 
-Le droit `create secrets` permet de créer un Secret `service-account-token` pour **n'importe quel ServiceAccount du même namespace**, et donc d'obtenir son token. Constaté par `kubectl auth can-i`, sans exploitation :
+Le droit de créer des Secrets ou des workloads dans un namespace permet d'obtenir le token de **n'importe quel ServiceAccount de ce namespace** (Secret `service-account-token`, ou pod avec `serviceAccountName`). Constaté par `kubectl auth can-i`, sans exploitation :
 
-- `jenkins-deployer` peut créer des Secrets dans `rhdemo-stagingkub`, où vit aussi `jenkins-infra-upgrader` : il peut obtenir les droits de ce dernier ;
-- `jenkins-infra-upgrader` détient `secrets` sur tout le cluster (règles miroir des charts, voir [rbac/README.md](../infra/stagingkub/rbac/README.md)) : il peut créer un token pour un compte de `kube-system` aux droits étendus (par exemple `clusterrole-aggregation-controller`, qui a `escalate` sur les ClusterRoles).
+- **Corrigé le 2026-11-23** : `jenkins-deployer`, qui crée des Secrets et des Deployments dans `rhdemo-stagingkub`, pouvait y obtenir le token de `jenkins-infra-upgrader`. Ce dernier vit désormais dans le namespace dédié `jenkins-infra` (Pod Security `restricted` en `enforce`, aucune charge), où `jenkins-deployer` n'a aucun droit.
+- **Irréductible** : `jenkins-infra-upgrader` est équivalent à un administrateur du cluster. Il met à jour le DaemonSet privilégié de Cilium, et ses règles miroir des charts (`secrets` et `statefulsets` sur tout le cluster, exigées par la protection RBAC contre l'escalade, voir [rbac/README.md](../infra/stagingkub/rbac/README.md)) lui permettent d'obtenir le token d'un compte de `kube-system` aux droits étendus. Les retirer ferait échouer les montées de composants. La protection porte donc sur son credential : `RHDemo-Renovate` n'exécute le script d'une PR avec ce credential qu'après une garde qui limite le diff à des lignes de version et au manifeste officiel des CRD ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md), « Garde des PR d'infra »).
+- **Ouvert** : Pod Security n'est qu'en `warn`/`audit` sur `rhdemo-stagingkub`. `jenkins-deployer` pourrait y lancer un pod privilégié ou avec `hostPath`, donc atteindre le nœud. Passer en `enforce` exige d'abord de mettre PostgreSQL (exécuté en root) et les CronJobs de sauvegarde (`hostPath`) en conformité, et d'empêcher `jenkins-deployer` de retirer le label (il peut modifier les namespaces).
 
-Un pipeline compromis pourrait donc remonter jusqu'à l'administration du cluster, contrairement au principe « pas d'accès admin au cluster ». Pistes de correction, non appliquées : une ValidatingAdmissionPolicy qui refuse la création de Secrets `service-account-token` à tout autre que l'administrateur du cluster, et `jenkins-infra-upgrader` dans un namespace où `jenkins-deployer` n'a aucun droit.
+Défense en profondeur possible, non appliquée : une ValidatingAdmissionPolicy qui refuse la création de Secrets `service-account-token` à tout autre que l'administrateur du cluster (aucun chart installé n'en crée).
 
 ## Migration depuis accès admin
 

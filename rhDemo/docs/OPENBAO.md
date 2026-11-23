@@ -171,20 +171,6 @@ Les rotations Keycloak passent par un `kubectl port-forward` vers le pod Keycloa
 
 Plus de secrets stockés : le stage « Génération Secrets ephemere » de `Jenkinsfile-CI` tire des valeurs aléatoires à chaque build (environnement détruit en fin de build) et les écrit dans un fichier de variables lu par Docker Compose, `rhDemoInitKeycloak`, Selenium et ZAP. Les identifiants des utilisateurs de test sont fixes (`rhdemo-admin`, `rhdemo-maj`, `rhdemo-consult`), leurs mots de passe aléatoires.
 
-## fixcve-auto : nettoyage de l'ancien mode
-
-Jusqu'au 2026-11-22, fixcve-auto tournait sur le poste avec son propre AppRole (`fixcve`) et ses secrets dans `kv/fixcve/*`. Il tourne désormais dans Jenkins ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)). Une fois `RHDemo-FixCVE` validé, avec le jeton de l'utilisateur `admin` (sa politique couvre `auth/*`, les politiques et `kv/*`) :
-
-```bash
-source rhDemo/infra/jenkins-docker/openbao/lib.sh && openbao_admin_login
-docker exec -e BAO_TOKEN rhdemo-openbao bao delete auth/approle/role/fixcve
-docker exec -e BAO_TOKEN rhdemo-openbao bao policy delete fixcve
-for p in jenkins codeberg nvd; do docker exec -e BAO_TOKEN rhdemo-openbao bao kv metadata delete -mount=kv fixcve/$p; done
-openbao_admin_logout
-```
-
-Révoquer aussi l'ancien token Codeberg du bot s'il n'a pas été remplacé par `openbao-setup.py jenkins fixcve-forgejo-token`.
-
 ## Jeton root ponctuel
 
 Le jeton root est révoqué en fin d'installation. Seul `configure-openbao.sh base` l'exige (il crée l'utilisateur `admin`) : il ne sert que pour réinstaller ou modifier ce socle, par exemple la politique `admin`.

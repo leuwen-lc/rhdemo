@@ -407,3 +407,7 @@ Stage `🧹 Nettoyage Registry SNAPSHOT` de `Jenkinsfile-CI` corrigé, trois dé
 Testé sur le registre réel avec suppressions et garbage collection neutralisés. `PIPELINES_CI_CD.md` mis à jour.
 
 Manifest `sha256:a01e4457…` supprimé à la main du registre : il portait l'ancien tag `latest` (plus publié par la CI) et `1.1.2-RELEASE` (non signée, trop ancienne pour servir). Ses blobs seront libérés par le garbage collection du prochain build CI.
+
+## [2026-11-23] ingest | fixcve-auto après le passage dans Jenkins
+
+Restes de l'ancien mode local retirés : section « Bascule depuis l'ancien cron » de [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (revérifié), section « fixcve-auto : nettoyage de l'ancien mode » d'[OPENBAO.md](OPENBAO.md), avis de fin de `fixcve-install.sh`, mentions du cron dans le README racine et les commentaires du poller, AppRole `fixcve` pris en exemple dans `tests/test_openbao.py`. Les docs `historique` et l'étude [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) sont inchangés.

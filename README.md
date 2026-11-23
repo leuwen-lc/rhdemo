@@ -80,7 +80,7 @@ Ce dépôt contient un projet école servant de preuve de concept sur un ensembl
   - une CI éxécutant le build, tests unitaires, tests d'intégration au sens Spring Boot, toutes les vérifications de qualité et sécurité, déploiement sur un environnement ephemere (Docker Compose) et tests Selenium, publication du l'image applicative sur le dépot Docker local.
   - une CD reprenant l'image applicative pour la déployer sur un cluster kubernetes léger KinD avec Helm
 - Chaine Jenkins Renovate Automerge pour mise à jour des versions, et Stagingkub Update Deploy pour application de maj sur l'infra staging
-- Chaine Fixcve-auto de remédiation automatique et déterministe (scripts testés, sans IA) des pipelines CI échoués sur les phases Owasp-DC ou Trivy : montée de version corrigée ou suppression temporaire documentée (polling Jenkins par cron).
+- Chaine Fixcve-auto de remédiation automatique et déterministe (scripts testés, sans IA) des pipelines CI échoués sur les phases Owasp-DC ou Trivy : montée de version corrigée ou suppression temporaire documentée (job Jenkins lancé à la fin de chaque build CI).
 
 ## Tests
 

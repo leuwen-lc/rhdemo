@@ -29,7 +29,7 @@ class FakeBao:
         self.sealed = False
         self.kv = {}            # path -> list de versions (dict)
         self.tokens = {"root-token"}
-        self.role_ids = {"fixcve": "role-fixcve", "jenkins": "role-jenkins"}
+        self.role_ids = {"jenkins-cosign": "role-cosign", "jenkins": "role-jenkins"}
         self.secret_ids = {}    # accessor -> (role, secret_id)
         self.requests = []
 
@@ -154,10 +154,10 @@ class Base(unittest.TestCase):
 class ClientTest(Base):
     def test_kv_set_conserve_les_autres_cles(self):
         ob = self.admin()
-        ob.kv_put("fixcve/codeberg", {"user": "bot", "token": "old"})
-        ob.kv_set("fixcve/codeberg", "token", "new")
-        self.assertEqual(ob.kv_read("fixcve/codeberg"), {"user": "bot", "token": "new"})
-        writes = [r for r in self.st.requests if r[0] == "POST" and r[1] == "/v1/kv/data/fixcve/codeberg"]
+        ob.kv_put("jenkins/ci-bot", {"user": "bot", "token": "old"})
+        ob.kv_set("jenkins/ci-bot", "token", "new")
+        self.assertEqual(ob.kv_read("jenkins/ci-bot"), {"user": "bot", "token": "new"})
+        writes = [r for r in self.st.requests if r[0] == "POST" and r[1] == "/v1/kv/data/jenkins/ci-bot"]
         self.assertEqual(writes[-1][2]["options"]["cas"], 1)              # contrôle de version
 
     def test_kv_set_chemin_absent_cree(self):
@@ -200,14 +200,14 @@ class TargetsTest(Base):
 
 class ApproleRotationTest(Base):
     def entry(self, path):
-        return {"id": "openbao-approle-fixcve", "rotation": {"method": "openbao-approle", "role": "fixcve"},
+        return {"id": "openbao-approle-cosign", "rotation": {"method": "openbao-approle", "role": "jenkins-cosign"},
                 "targets": [{"kind": "approle-file", "file": path}]}
 
     def test_rotation_complete(self):
         ob = self.admin()
-        old_sid, old_acc = ob.new_secret_id("fixcve")
+        old_sid, old_acc = ob.new_secret_id("jenkins-cosign")
         path = os.path.join(self.tmp, "ar.json")
-        tools.approle_file_write(path, "role-fixcve", old_sid)
+        tools.approle_file_write(path, "role-cosign", old_sid)
         detail = rotations.rotate_openbao_approle(self.ctx(), self.entry(path))
         data = tools.approle_file_read(path)
         self.assertNotEqual(data["secret_id"], old_sid)
@@ -224,7 +224,7 @@ class ApproleRotationTest(Base):
 
     def test_dry_run(self):
         path = os.path.join(self.tmp, "ar.json")
-        tools.approle_file_write(path, "role-fixcve", "x")
+        tools.approle_file_write(path, "role-cosign", "x")
         self.assertIsNone(rotations.rotate_openbao_approle(self.ctx(dry_run=True), self.entry(path)))
         self.assertEqual(self.st.secret_ids, {})
 
@@ -404,13 +404,10 @@ class SetupFixcveTest(unittest.TestCase):
         m = load_setup()
         self.assertEqual(m.JENKINS_CREDENTIALS["fixcve-forgejo-token"][0], "string")
         self.assertEqual(m.JENKINS_CREDENTIALS["fixcve-jenkins-api"][0], "username-password")
-        self.assertFalse(hasattr(m, "cmd_fixcve"))
 
     def test_token_codeberg_cible_kv_jenkins(self):
         e = inv_mod.by_id(inv_mod.load(), "fixcve-forgejo-token")
         self.assertEqual(e["targets"], [{"kind": "openbao", "path": "jenkins/fixcve-forgejo-token", "key": "value"}])
-        ids = {x["id"] for x in inv_mod.load()["secrets"]}
-        self.assertNotIn("openbao-approle-fixcve", ids)
 
 
 class InventoryOpenBaoTest(unittest.TestCase):

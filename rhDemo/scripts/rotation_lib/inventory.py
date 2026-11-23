@@ -29,6 +29,7 @@ METHOD_KEYS = {
     "keycloak-users": {"kv_path", "realm", "users"},
     "grafana-admin": {"kv_path", "kv_key", "user_key", "namespace", "external_secrets", "k8s_secret",
                       "k8s_key", "restart", "service"},
+    "k8s-sa-token": {"namespace", "service_account", "secret_prefix", "server", "cluster"},
     "planned": {"phase"},
     "per-build": {"note"},
 }
@@ -38,13 +39,13 @@ METHOD_KINDS = {
     "forgejo-token": "automatique", "forgejo-gpg": "automatique",
     "openbao-approle": "automatique", "postgres-password": "automatique",
     "keycloak-client-secret": "automatique", "keycloak-admin": "automatique",
-    "keycloak-users": "automatique", "grafana-admin": "automatique",
+    "keycloak-users": "automatique", "grafana-admin": "automatique", "k8s-sa-token": "automatique",
     "manual-value": "semi-manuelle",
     "manual": "manuelle",
     "per-build": "à chaque build",
     "planned": "prévue",
 }
-NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle"}
+NEEDS_TARGETS = {"forgejo-token", "forgejo-gpg", "manual-value", "openbao-approle", "k8s-sa-token"}
 # Secrets régénérés à chaque build (ephemere) : rien à renouveler, rien à tracer, aucune cible.
 NO_ROTATION = {"per-build"}
 # Secret bloquant (blocking: true) : il cesse de fonctionner s'il n'est pas renouvelé à temps
@@ -106,6 +107,12 @@ def validate(inv):
         targets = e.get("targets") or []
         if method in NEEDS_TARGETS and not targets:
             errors.append(f"{sid} : {method} exige au moins une cible")
+        if method == "k8s-sa-token":
+            if any(t.get("kind") != "jenkins" or t.get("type") != "file" for t in targets):
+                errors.append(f"{sid} : {method} n'admet que des cibles jenkins de type file")
+            for k in ("allowed", "denied"):
+                if not all(isinstance(c, str) and c.strip() for c in e["rotation"].get(k, [])):
+                    errors.append(f"{sid} : {k} doit être une liste de vérifications auth can-i")
         if method in NO_ROTATION and targets:
             errors.append(f"{sid} : {method} n'admet aucune cible")
         for t in targets:

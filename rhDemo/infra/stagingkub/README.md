@@ -182,7 +182,7 @@ Si le conteneur du nœud KinD change d'IP sur le réseau docker `kind` après un
 - **GatewayClass** : `nginx`
 - **shared-gateway** : Gateway partagé dans `nginx-gateway` (point d'entrée unique)
 - **shared-tls-cert** : Certificat TLS auto-signé dans `nginx-gateway`
-- **RBAC Jenkins** : deux ServiceAccounts distincts — `jenkins-deployer` (déploiement applicatif, `RHDemo-CD`) et `jenkins-infra-upgrader` (mise à jour en place de Cilium/NGF/observabilité, `RHDemo-Stagingkub-Upgrade-Deploy`), chacun avec son propre kubeconfig généré dans `jenkins-kubeconfig/` — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) et `rbac/README.md`
+- **RBAC Jenkins** : deux ServiceAccounts distincts — `jenkins-deployer` (déploiement applicatif, `RHDemo-CD`) et `jenkins-infra-upgrader` (mise à jour en place de Cilium/NGF/observabilité, `RHDemo-Stagingkub-Upgrade-Deploy`), chacun avec son propre token et son credential Jenkins, créés et renouvelés par `rhDemo/scripts/rotate-secrets.py` — voir [§ Mise à jour en place](#-mise-à-jour-en-place-de-linfrastructure) et `rbac/README.md`
 
 **Application (par Helm chart) :**
 
@@ -233,7 +233,7 @@ Ce script :
 - ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Installe External Secrets Operator, qui crée les secrets Kubernetes depuis OpenBao
-- ✅ Configure le RBAC pour Jenkins : `jenkins-deployer` (déploiement applicatif) **et** `jenkins-infra-upgrader` (mise à jour en place de l'infra, ServiceAccount dédié) — génère les deux kubeconfigs correspondants dans `jenkins-kubeconfig/`
+- ✅ Configure le RBAC pour Jenkins : `jenkins-deployer` (déploiement applicatif) **et** `jenkins-infra-upgrader` (mise à jour en place de l'infra, ServiceAccount dédié) — crée leurs tokens et pousse les deux kubeconfigs dans les credentials Jenkins (`rotate-secrets.py --if-missing`, rien sur le disque)
 - ✅ Génère les certificats SSL
 - ✅ Ajoute les entrées DNS à `/etc/hosts`
 
@@ -708,7 +708,7 @@ kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 - [ ] shared-gateway créé dans `nginx-gateway` (par init-stagingkub.sh)
 - [ ] NodePort 32616 configuré sur `shared-gateway-nginx`
 - [ ] Certificat TLS `shared-tls-cert` créé
-- [ ] RBAC `jenkins-deployer` **et** `jenkins-infra-upgrader` appliqué, deux kubeconfigs générés dans `jenkins-kubeconfig/`
+- [ ] RBAC `jenkins-deployer` **et** `jenkins-infra-upgrader` appliqué, credentials Jenkins `kubeconfig-stagingkub` et `kubeconfig-stagingkub-infra-upgrader` créés
 - [ ] Secrets créés dans le namespace `rhdemo-stagingkub`
 - [ ] `/etc/hosts` mis à jour
 - [ ] Image Docker construite et poussée vers le registry

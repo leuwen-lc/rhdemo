@@ -156,6 +156,12 @@ def make_handler(state):
                 return self.reply(200, {"authenticated": True, "anonymous": False, "name": "admin"})
             if path == "/crumbIssuer/api/json":
                 return self.send_crumb()
+            if path == "/credentials/store/system/domain/_/createCredentials" and method == "POST":
+                if state.fail_post:
+                    return self.reply(500, "boom")
+                xml = re.sub(r"^<\?xml[^>]*\?>\s*", "", raw.decode("utf-8"))
+                state.creds[ET.fromstring(xml).find("id").text] = xml
+                return self.reply(200, "")
             m = re.match(r"^/credentials/store/system/domain/_/credential/([^/]+)/config.xml$", path)
             if not m or m.group(1) not in state.creds:
                 return self.reply(404, "")

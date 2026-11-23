@@ -70,9 +70,9 @@ Le script tourne sur le poste, jamais dans Jenkins (il doit pouvoir réparer un 
 
 Quatre sortes de rotation, affichées par `--list` (colonne « rotation », méthode de l'inventaire entre parenthèses) :
 
-- **automatique** (tokens et clé GPG Codeberg, `secret_id` AppRole, mots de passe PostgreSQL, secrets Keycloak de stagingkub, admin Grafana) : le script crée la nouvelle valeur, la vérifie, la propage puis révoque l'ancienne. Ce que fait chaque méthode : [OPENBAO.md](OPENBAO.md), « Rotation » ;
+- **automatique** (tokens et clé GPG Codeberg, `secret_id` AppRole, mots de passe PostgreSQL, secrets Keycloak de stagingkub, admin Grafana, kubeconfigs de Jenkins) : le script crée la nouvelle valeur, la vérifie, la propage puis révoque l'ancienne. Ce que fait chaque méthode : [OPENBAO.md](OPENBAO.md), « Rotation » ;
 - **semi-manuelle** (`manual-value` : SMTP, token SonarQube) : la valeur est créée à la main chez le fournisseur, collée quand le script la demande, testée si possible, puis propagée ;
-- **manuelle** (`manual` : mots de passe des comptes Jenkins, clé Cosign, kubeconfigs, mot de passe `admin` et clé de déverrouillage d'OpenBao…) : `rotate-secrets.py <id>` affiche la procédure, sans rien modifier ; une fois faite, `--record <id>` la trace pour `--check` ;
+- **manuelle** (`manual` : mots de passe des comptes Jenkins, clé Cosign, clés TLS, mot de passe `admin` et clé de déverrouillage d'OpenBao…) : `rotate-secrets.py <id>` affiche la procédure, sans rien modifier ; une fois faite, `--record <id>` la trace pour `--check` ;
 - **à chaque build** (`per-build` : secrets d'ephemere) : rien à renouveler. `--check` les affiche (« régénéré à chaque build ») sans les compter en retard ; la rotation et `--record` les refusent, pour que le journal ne contienne pas de fausse trace.
 
 « (bloquant) » à la fin de l'état dans `--check` (« , bloquant » après la méthode dans `--list`) marque un secret qui **cesse de fonctionner** s'il n'est pas renouvelé à temps : `secret_id` AppRole (100 jours), clé GPG de Renovate (2 ans), token SonarQube (1 an). Les autres secrets en retard ne posent qu'une question d'hygiène. Pour un secret bloquant de durée de vie connue (`blocking` et `lifetime_days` dans l'inventaire), les jours restants sont comptés jusqu'à 14 jours avant l'expiration si cette échéance précède la période de sa criticité (`secret_id` AppRole : 86 jours) ; au-delà, l'état devient « EN RETARD (expire dans N j) », puis « EXPIRÉ ». La dernière ligne compte les secrets bloquants parmi ceux en retard.
@@ -87,18 +87,22 @@ Conseils : `--dry-run` d'abord, un secret à la fois pour une première rotation
 
 ### Kubeconfigs et certificats
 
-Les deux kubeconfigs de Jenkins (`kubeconfig-stagingkub`, `kubeconfig-stagingkub-infra-upgrader`) et le certificat du Gateway de stagingkub (`tls-keys`) se renouvellent en un seul passage d'`init-stagingkub.sh`, qui réutilise un cluster existant. Depuis `rhDemo/` :
+Les deux kubeconfigs de Jenkins sont à rotation automatique (méthode `k8s-sa-token`), sans interruption de la CD : nouveau token créé et vérifié (identité, droits attendus), poussé dans le credential Jenkins, puis anciens tokens supprimés. Cluster démarré et contexte `kind-rhdemo` exigés ; aucun kubeconfig n'est écrit sur le disque. Détail : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md), « Token et kubeconfig ».
 
 ```bash
-kubectl delete secret jenkins-deployer-token jenkins-infra-upgrader-token -n rhdemo-stagingkub
-rm infra/stagingkub/certs/tls.crt infra/stagingkub/certs/tls.key
-infra/stagingkub/scripts/init-stagingkub.sh
+rhDemo/scripts/rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader
 ```
 
-- Les anciens tokens sont invalides dès la suppression des Secrets : la CD échoue jusqu'à la mise à jour des credentials.
-- Sans le `rm`, le script garde le certificat existant et se contente de recréer `shared-tls-cert` à l'identique.
-- Dans Jenkins (Credentials), remplacer le fichier des credentials « Secret file » : `kubeconfig-stagingkub` par `infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml`, `kubeconfig-stagingkub-infra-upgrader` par `kubeconfig-jenkins-infra-upgrader-rbac.yaml` (même dossier).
-- Vérifier par un `RHDemo-CD`, puis `--record` pour les secrets renouvelés. Le navigateur redemande une exception (certificat auto-signé, voir [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md)).
+Après la première rotation, supprimer les anciens fichiers `rhDemo/infra/stagingkub/jenkins-kubeconfig/*.yaml` (écrits par les anciennes versions d'`init-stagingkub.sh`, leurs tokens sont alors invalides).
+
+Certificat du Gateway de stagingkub (moitié de `tls-keys`) : le script réutilise un certificat existant, d'où la suppression préalable. Depuis `rhDemo/` :
+
+```bash
+rm infra/stagingkub/certs/tls.crt infra/stagingkub/certs/tls.key
+infra/stagingkub/scripts/init-stagingkub.sh     # cluster réutilisé : recrée shared-tls-cert
+```
+
+Le navigateur redemande une exception (certificat auto-signé, voir [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md)).
 
 Certificat du registry (10 ans, l'autre moitié de `tls-keys`), *procédure non encore éprouvée* :
 
@@ -116,7 +120,7 @@ Pas encore de mode `--emergency` : enchaîner à la main, dans cet ordre (raison
 1. **Si Jenkins ou le poste sont compromis**, d'abord : mot de passe `admin` de Jenkins (`jenkins-admin-password`, redémarrage du conteneur pour couper les sessions), puis `rotate-secrets.py openbao-approle-jenkins`.
 2. Exposés sur Internet : `rotate-secrets.py ci-bot-forgejo-token renovate-forgejo-token fixcve-forgejo-token renovate-gpg-key`, mots de passe des bots et contrôle du compte personnel (procédures `codeberg-bot-passwords`, `codeberg-personal`), SMTP (`smtp-infomaniak`), session Claude (`claude-subscription`).
 3. Exposés sur le réseau local : `rotate-secrets.py stagingkub-oidc-client stagingkub-keycloak-admin stagingkub-test-users stagingkub-rhdemo-db stagingkub-keycloak-db grafana-admin`, clés TLS.
-4. Locaux : `secret_id` AppRole restants, mot de passe `admin` d'OpenBao, clé de déverrouillage si elle a pu fuir, clé Cosign, kubeconfigs, compte Jenkins `claude`, token SonarQube.
+4. Locaux : `secret_id` AppRole restants, mot de passe `admin` d'OpenBao, clé de déverrouillage si elle a pu fuir, clé Cosign, kubeconfigs (`rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader`), compte Jenkins `claude`, token SonarQube.
 
 ## Retrouver un secret
 

@@ -101,7 +101,6 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [infra/stagingkub/rbac/README.md](../infra/stagingkub/rbac/README.md) | actif | RBAC Jenkins : `jenkins-deployer` et `jenkins-infra-upgrader` |
 | [infra/stagingkub/networkpolicies/README.md](../infra/stagingkub/networkpolicies/README.md) | actif | NetworkPolicies des namespaces externes |
 | [infra/stagingkub/helm/rhdemo/README.md](../infra/stagingkub/helm/rhdemo/README.md) | actif | Documentation du chart Helm rhdemo |
-| [infra/stagingkub/jenkins-kubeconfig/README.md](../infra/stagingkub/jenkins-kubeconfig/README.md) | actif | Kubeconfigs RBAC de Jenkins |
 | [infra/stagingkub/scripts/README-INIT-KEYCLOAK.md](../infra/stagingkub/scripts/README-INIT-KEYCLOAK.md) | actif | Initialisation de Keycloak sur stagingkub |
 | [infra/stagingkub/scripts/README-helm-unlock.md](../infra/stagingkub/scripts/README-helm-unlock.md) | actif | Déblocage d'une release Helm en échec |
 | [rhDemoInitKeycloak/README.md](../../rhDemoInitKeycloak/README.md) | actif | Outil de chargement initial des données Keycloak |
@@ -136,7 +135,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
 | [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) | proposition | Faisabilité de l'exécution de fixcve-auto par un pipeline Jenkins au lieu du cron local : points durs et décisions du 2026-11-22 (Jenkinsfile lu sur la branche sans épinglage, agent dédié avec volume d'état, déclenchement à chaque fin de CI, mode local retiré) ; mis en œuvre le 2026-11-22, validation dans Jenkins en attente |
-| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), état au 2026-11-23 : 13 secrets sans rotation journalisée, restent kubeconfigs automatisés, mode urgence, rappel périodique et destruction de la clé AGE |
+| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), kubeconfigs automatisés le 2026-11-23 ; restent mode urgence, rappel périodique, clé AGE et la création de tokens par Secret (remontée vers l'administration du cluster) |
 
 ---
 

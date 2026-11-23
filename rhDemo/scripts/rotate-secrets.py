@@ -11,6 +11,8 @@ Usage :
   rotate-secrets.py <id> [<id>...]          renouveler ces secrets
   rotate-secrets.py --level C|H|M           renouveler les secrets automatisés de ce niveau et au-dessus
   rotate-secrets.py --record <id>           tracer une rotation faite à la main (méthodes manual)
+  rotate-secrets.py --if-missing <id>...    k8s-sa-token : créer le token seulement s'il n'en
+                                            existe aucun (appelé par init-stagingkub.sh)
 
 Les secrets de méthode per-build (ephemere) sont régénérés à chaque build : --check les affiche
 sans les compter en retard, la rotation et --record les refusent.
@@ -30,8 +32,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from rotation_lib import inventory as inv_mod  # noqa: E402
-from rotation_lib.common import (Journal, Prompter, RotationError, log,  # noqa: E402
-                                 redact, warn)
+from rotation_lib.common import (Journal, Prompter, RotationError, Skipped,  # noqa: E402
+                                 log, redact, warn)
 from rotation_lib.rotations import METHODS, Context, check_targets  # noqa: E402
 
 
@@ -134,7 +136,9 @@ def cmd_rotate(ctx, entries):
             ctx.journal.append(e["id"], "failed", redact(str(exc))[:200])
             failures += 1
             continue
-        if ctx.dry_run:
+        if isinstance(detail, Skipped):
+            log(f"  {detail}")
+        elif ctx.dry_run:
             log("  (dry-run : rien n'a été modifié)")
         else:
             ctx.journal.append(e["id"], "rotated", detail)
@@ -153,6 +157,7 @@ def main(argv=None):
     g.add_argument("--record", metavar="ID")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no", action="store_true")
+    p.add_argument("--if-missing", action="store_true")
     p.add_argument("--inventory", default=inv_mod.DEFAULT_PATH)
     args = p.parse_args(argv)
 
@@ -174,8 +179,14 @@ def main(argv=None):
             return 0
         if not args.ids and not args.level and not args.preflight:
             p.error("indiquer un ou plusieurs identifiants, --level, --check, --list ou --preflight")
+        if args.if_missing:
+            others = [e["id"] for e in select(inv, args.ids, None)
+                      if e["rotation"]["method"] != "k8s-sa-token"] if args.ids else []
+            if others or not args.ids or args.level:
+                raise RotationError("--if-missing ne s'applique qu'à des identifiants de méthode "
+                                    f"k8s-sa-token{' (pas : ' + ', '.join(others) + ')' if others else ''}")
         prompter = Prompter(assume_no=args.no)
-        ctx = Context(inv, prompter, journal, dry_run=args.dry_run)
+        ctx = Context(inv, prompter, journal, dry_run=args.dry_run, if_missing=args.if_missing)
         try:
             if args.preflight:
                 return cmd_preflight(ctx)

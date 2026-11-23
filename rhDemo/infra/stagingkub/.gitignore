@@ -17,3 +17,7 @@ helm/observability/*.local-avant-openbao
 
 # Logs
 *.log
+
+# Anciens kubeconfigs de Jenkins écrits par init-stagingkub.sh (tokens en clair) : plus générés
+# depuis la rotation par rotate-secrets.py, à détruire après la première rotation
+jenkins-kubeconfig/

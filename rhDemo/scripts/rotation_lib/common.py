@@ -13,6 +13,10 @@ import urllib.request
 STATE_DIR = os.path.expanduser(os.environ.get("ROTATION_STATE_DIR", "~/.config/rhdemo-rotation"))
 
 
+class Skipped(str):
+    """Résultat d'une méthode qui n'avait rien à faire (--if-missing) : rien n'est journalisé."""
+
+
 class RotationError(Exception):
     """Échec d'une rotation : le message ne contient jamais de valeur secrète."""
 

@@ -205,7 +205,8 @@ tool:
 #    - Type: Secret file
 #    - ID: kubeconfig-stagingkub
 #    - Contient le token de connexion Jenkins à l'environnement stagingkub (controles RBAC)
-#    - Pointer sur rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml
+#    - Créé et renouvelé par rhDemo/scripts/rotate-secrets.py (appelé par init-stagingkub.sh),
+#      comme kubeconfig-stagingkub-infra-upgrader : rien à téléverser à la main
 #
 # 5. ci-bot-forgejo-token [OpenBao]
 #    - Type: Vault Secret Text Credential (kv/jenkins/ci-bot-forgejo-token)

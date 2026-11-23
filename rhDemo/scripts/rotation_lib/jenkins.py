@@ -128,6 +128,16 @@ class Jenkins:
         if status != 200:
             raise RotationError(f"Jenkins : création de credential refusée ({status}) {short(body)}")
 
+    def create_file(self, cred_id, description, file_name, content):
+        """Crée un credential « Secret file » (installation : credential encore absent)."""
+        root = ET.Element(CRED_TYPES["file"][0])
+        for tag, text in (("scope", "GLOBAL"), ("id", cred_id), ("description", description),
+                          ("fileName", file_name)):
+            ET.SubElement(root, tag).text = text
+        raw = content if isinstance(content, bytes) else content.encode("utf-8")
+        ET.SubElement(root, "secretBytes").text = base64.b64encode(raw).decode("ascii")
+        self.create(ET.tostring(root, encoding="unicode"))
+
     def username(self, cred_id):
         node = self.read(cred_id, "username-password").find("username")
         return node.text if node is not None else None

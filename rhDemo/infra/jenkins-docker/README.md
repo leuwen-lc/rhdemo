@@ -797,11 +797,11 @@ Le pipeline `RHDemo-Renovate` (job JCasC, déclenchement quotidien) scanne les d
 
 Pour les PRs Renovate qui touchent un composant d'infrastructure (`rhDemo/infra/stagingkub/scripts/components/*.sh` ou `kind-config.yaml`), `RHDemo-Renovate` bascule automatiquement sur une validation Kubernetes (`helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`) au lieu du build Maven+OWASP, puis déclenche `RHDemo-Stagingkub-Upgrade-Deploy` après le merge pour appliquer réellement la mise à jour sur le cluster.
 
-**Credential Jenkins à créer** (Manage Jenkins → Manage Credentials → (global) → Add Credentials) :
+**Credential Jenkins** (créé par `init-stagingkub.sh` si Jenkins tourne, sinon `rhDemo/scripts/rotate-secrets.py --if-missing kubeconfig-stagingkub-infra-upgrader`) :
 
 | ID | Kind | Contenu | Utilisé par |
 |----|------|---------|-------------|
-| `kubeconfig-stagingkub-infra-upgrader` | Secret file | Fichier `jenkins-kubeconfig/kubeconfig-jenkins-infra-upgrader-rbac.yaml`, généré par `init-stagingkub.sh` | `RHDemo-Renovate` (validation dry-run) + `RHDemo-Stagingkub-Upgrade-Deploy` (application réelle) |
+| `kubeconfig-stagingkub-infra-upgrader` | Secret file | Créé directement dans Jenkins par `rhDemo/scripts/rotate-secrets.py`, appelé par `init-stagingkub.sh` | `RHDemo-Renovate` (validation dry-run) + `RHDemo-Stagingkub-Upgrade-Deploy` (application réelle) |
 
 Ce credential porte les droits du ServiceAccount **dédié** `jenkins-infra-upgrader` — distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`, qui ne gagne aucun droit supplémentaire de ce fait. Détail du RBAC et de l'étude ayant motivé cette séparation : [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [infra/stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 

@@ -1,9 +1,11 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-23
 sources:
   - rhDemo/infra/stagingkub/rbac/
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/scripts/rotation_lib/k8s.py
+  - rhDemo/secrets/inventory.yaml
 ---
 
 # Configuration RBAC pour Jenkins - Stagingkub
@@ -49,43 +51,38 @@ Ce document porte sur `jenkins-deployer`, utilisé par `RHDemo-CD`. Les montées
 
 | Fichier | Description |
 |---------|-------------|
-| `jenkins-serviceaccount.yaml` | ServiceAccount `jenkins-deployer` et son Secret token |
+| `jenkins-serviceaccount.yaml` | ServiceAccount `jenkins-deployer` (sans Secret de token : voir « Token et kubeconfig ») |
 | `jenkins-role.yaml` | Role avec permissions namespace-scoped |
 | `jenkins-rolebinding.yaml` | RoleBinding liant le ServiceAccount au Role |
 | `jenkins-clusterrole.yaml` | ClusterRole pour ressources cluster-wide (PV, namespaces) |
 | `jenkins-clusterrolebinding.yaml` | ClusterRoleBinding pour le ClusterRole |
 | `jenkins-monitoring-role.yaml` | Role et RoleBinding pour le namespace `monitoring` |
-| `setup-jenkins-rbac.sh` | Script d'installation automatique |
 
 ## Installation
 
-### Option 1 : Script automatique (recommandé)
+`init-stagingkub.sh` applique les manifestes de `rbac/` (les deux ServiceAccounts, leurs Roles et ClusterRoles), contrôle quelques droits par impersonation, puis délègue le token et le kubeconfig à `rotate-secrets.py --if-missing` (section suivante). Application manuelle des seuls manifestes de `jenkins-deployer` :
 
 ```bash
-cd rhDemo/infra/stagingkub/rbac
-
-# Installation des ressources RBAC
-./setup-jenkins-rbac.sh
-
-# Installation + génération du kubeconfig pour Jenkins
-./setup-jenkins-rbac.sh --generate-kubeconfig
-```
-
-### Option 2 : Installation manuelle
-
-```bash
-# Créer le namespace si nécessaire
 kubectl create namespace rhdemo-stagingkub
 kubectl create namespace monitoring
-
-# Appliquer les ressources RBAC
-kubectl apply -f jenkins-serviceaccount.yaml
-kubectl apply -f jenkins-role.yaml
-kubectl apply -f jenkins-rolebinding.yaml
-kubectl apply -f jenkins-clusterrole.yaml
-kubectl apply -f jenkins-clusterrolebinding.yaml
-kubectl apply -f jenkins-monitoring-role.yaml
+kubectl apply -f jenkins-serviceaccount.yaml -f jenkins-role.yaml -f jenkins-rolebinding.yaml \
+  -f jenkins-clusterrole.yaml -f jenkins-clusterrolebinding.yaml -f jenkins-monitoring-role.yaml
 ```
+
+## Token et kubeconfig
+
+Le token de chaque ServiceAccount est porté par un Secret `kubernetes.io/service-account-token` **daté** (`jenkins-deployer-token-<AAAAMMJJ-HHMMSS>`), créé par `rhDemo/scripts/rotate-secrets.py` (méthode `k8s-sa-token`, entrées `kubeconfig-stagingkub` et `kubeconfig-stagingkub-infra-upgrader` de `secrets/inventory.yaml`). Le script :
+
+1. crée le nouveau Secret ; le contrôleur de tokens y dépose un token, l'ancien reste valide ;
+2. vérifie le nouveau token depuis le poste : identité (`kubectl auth whoami`) et droits attendus (`allowed` et `denied` de l'inventaire, par `kubectl auth can-i`) ;
+3. construit le kubeconfig en mémoire (serveur `https://rhdemo-control-plane:6443`, vu des agents Jenkins) et le pousse dans le credential Jenkins « Secret file », qu'il crée s'il n'existe pas ;
+4. supprime les anciens Secrets de token du même compte, ce qui invalide leurs tokens.
+
+Un échec en 2 ou 3 supprime le nouveau Secret : rien n'a changé. Aucun kubeconfig n'est écrit sur le disque (le fichier de vérification vit en mémoire, dans `/dev/shm`, le temps des contrôles).
+
+Le manifeste du ServiceAccount ne déclare plus de Secret au nom fixe : chaque `kubectl apply` en recréerait un, donc un token valide que personne ne suit. `init-stagingkub.sh` appelle `rotate-secrets.py --if-missing`, qui ne fait rien si un token existe déjà (cluster réutilisé) et sinon crée le premier (mot de passe admin de Jenkins demandé). Jenkins arrêté : l'étape échoue avant toute création, le script le signale et la commande est à relancer plus tard.
+
+Renouvellement (période de 180 jours, ou en urgence) : `rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader` ([ROTATION_SECRETS.md](ROTATION_SECRETS.md)).
 
 ## Permissions accordées
 
@@ -134,33 +131,9 @@ kubectl apply -f jenkins-monitoring-role.yaml
 
 ### Prérequis
 
-**IMPORTANT** : Le binaire `kind` n'est **PAS installé** dans l'image Jenkins pour des raisons de sécurité.
-Cela empêche Jenkins de générer un kubeconfig admin et force l'utilisation du kubeconfig RBAC.
+Jenkins démarré, avant le premier passage d'`init-stagingkub.sh` : le credential `kubeconfig-stagingkub` est alors créé directement (section « Token et kubeconfig »). Sinon, relancer `rhDemo/scripts/rotate-secrets.py --if-missing kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader` une fois Jenkins disponible.
 
-### Étape 1 : Initialiser le cluster (génère le kubeconfig RBAC)
-
-Le script `init-stagingkub.sh` crée automatiquement les ressources RBAC et génère le kubeconfig :
-
-```bash
-cd rhDemo/infra/stagingkub/scripts
-./init-stagingkub.sh
-```
-
-Le kubeconfig RBAC est généré dans :
-`rhDemo/infra/stagingkub/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml`
-
-### Étape 2 : Configurer le credential Jenkins
-
-1. Accédez à **Jenkins > Manage Jenkins > Credentials**
-2. Sélectionnez le domaine approprié (ou Global)
-3. Cliquez sur **Add Credentials**
-4. Configurez :
-   - **Kind** : Secret file
-   - **File** : Uploadez `kubeconfig-jenkins-rbac.yaml`
-   - **ID** : `kubeconfig-stagingkub`
-   - **Description** : Kubeconfig RBAC pour stagingkub
-
-### Étape 3 : Utilisation dans le pipeline
+### Utilisation dans le pipeline
 
 Le `Jenkinsfile-CD` utilise automatiquement ce credential :
 
@@ -197,30 +170,15 @@ kubectl auth can-i get pods -n kube-system \
 
 ## Régénérer le kubeconfig
 
-Si le token expire ou si vous devez régénérer le kubeconfig :
-
-```bash
-# Option 1 : Réexécuter init-stagingkub.sh (régénère tout)
-./scripts/init-stagingkub.sh
-
-# Option 2 : Utiliser le script setup-jenkins-rbac.sh
-cd rbac
-./setup-jenkins-rbac.sh --generate-kubeconfig
-# Le kubeconfig est généré dans : rbac/jenkins-kubeconfig.yaml
-```
-
-Après régénération, mettez à jour le credential Jenkins.
+`rhDemo/scripts/rotate-secrets.py kubeconfig-stagingkub` (section « Token et kubeconfig »). Les tokens n'expirent pas : la rotation est périodique (180 jours) ou d'urgence.
 
 ## Dépannage
 
 ### Le token n'est pas généré
 
 ```bash
-# Vérifier le secret
-kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o yaml
-
-# Le token devrait être présent dans .data.token
-# Si absent, vérifier que le ServiceAccount existe
+# Secrets de token du compte (aucun : relancer rotate-secrets.py --if-missing)
+kubectl get secrets -n rhdemo-stagingkub --field-selector type=kubernetes.io/service-account-token
 kubectl get sa jenkins-deployer -n rhdemo-stagingkub
 ```
 
@@ -262,6 +220,15 @@ Comparer avec les ressources autorisées dans le Role.
 - Modifier la configuration du cluster
 - Supprimer des nodes
 
+### Limite connue : création de tokens par Secret (constat du 2026-11-23)
+
+Le droit `create secrets` permet de créer un Secret `service-account-token` pour **n'importe quel ServiceAccount du même namespace**, et donc d'obtenir son token. Constaté par `kubectl auth can-i`, sans exploitation :
+
+- `jenkins-deployer` peut créer des Secrets dans `rhdemo-stagingkub`, où vit aussi `jenkins-infra-upgrader` : il peut obtenir les droits de ce dernier ;
+- `jenkins-infra-upgrader` détient `secrets` sur tout le cluster (règles miroir des charts, voir [rbac/README.md](../infra/stagingkub/rbac/README.md)) : il peut créer un token pour un compte de `kube-system` aux droits étendus (par exemple `clusterrole-aggregation-controller`, qui a `escalate` sur les ClusterRoles).
+
+Un pipeline compromis pourrait donc remonter jusqu'à l'administration du cluster, contrairement au principe « pas d'accès admin au cluster ». Pistes de correction, non appliquées : une ValidatingAdmissionPolicy qui refuse la création de Secrets `service-account-token` à tout autre que l'administrateur du cluster, et `jenkins-infra-upgrader` dans un namespace où `jenkins-deployer` n'a aucun droit.
+
 ## Migration depuis accès admin
 
 Si vous migrez depuis une version antérieure où Jenkins avait un accès admin :
@@ -281,9 +248,7 @@ Si vous migrez depuis une version antérieure où Jenkins avait un accès admin 
    ./init-stagingkub.sh
    ```
 
-3. **Configurer le credential Jenkins** :
-   - Uploadez `jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml` comme credential
-   - ID : `kubeconfig-stagingkub`
+3. **Credential Jenkins** : créé par `init-stagingkub.sh` si Jenkins tourne, sinon `rhDemo/scripts/rotate-secrets.py --if-missing kubeconfig-stagingkub`.
 
 4. **Valider un déploiement** :
    - Lancez le pipeline CD

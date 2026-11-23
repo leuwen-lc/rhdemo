@@ -330,8 +330,6 @@ OPENBAO_DIR="$(cd "$STAGINGKUB_DIR/../jenkins-docker/openbao" && pwd)"
 echo -e "${YELLOW}▶ Configuration RBAC pour Jenkins...${NC}"
 
 RBAC_DIR="$STAGINGKUB_DIR/rbac"
-JENKINS_KUBECONFIG_DIR="$STAGINGKUB_DIR/jenkins-kubeconfig"
-mkdir -p "$JENKINS_KUBECONFIG_DIR"
 
 if [ -d "$RBAC_DIR" ]; then
     # Créer le namespace monitoring si nécessaire (pour les ServiceMonitors)
@@ -358,65 +356,6 @@ if [ -d "$RBAC_DIR" ]; then
     kubectl apply -f "$RBAC_DIR/jenkins-monitoring-role.yaml"
 
     echo -e "${GREEN}✅ Ressources RBAC appliquées${NC}"
-
-    # Attendre que le token du ServiceAccount soit créé
-    echo -e "${YELLOW}  - Attente du token du ServiceAccount...${NC}"
-    for i in {1..30}; do
-        SA_TOKEN=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
-        if [ -n "$SA_TOKEN" ]; then
-            break
-        fi
-        sleep 1
-    done
-
-    if [ -z "$SA_TOKEN" ]; then
-        echo -e "${RED}❌ Impossible de récupérer le token du ServiceAccount après 30 secondes${NC}"
-        exit 1
-    fi
-
-    # Récupérer le certificat CA
-    CA_CERT=$(kubectl get secret jenkins-deployer-token -n rhdemo-stagingkub -o jsonpath='{.data.ca\.crt}')
-
-    # Récupérer l'URL du serveur API
-    API_SERVER="https://rhdemo-control-plane:6443"
-
-    # Générer le kubeconfig RBAC pour Jenkins
-    JENKINS_KUBECONFIG="$JENKINS_KUBECONFIG_DIR/kubeconfig-jenkins-rbac.yaml"
-    cat > "$JENKINS_KUBECONFIG" <<KUBECONFIG_EOF
-# Kubeconfig RBAC pour Jenkins
-# Ce fichier contient un token avec des permissions limitées au namespace rhdemo-stagingkub
-# Généré automatiquement par init-stagingkub.sh
-#
-# IMPORTANT: Ce fichier doit être ajouté comme credential Jenkins
-# de type "Secret file" avec l'ID: kubeconfig-stagingkub
-#
-apiVersion: v1
-kind: Config
-preferences: {}
-
-clusters:
-  - name: kind-rhdemo
-    cluster:
-      certificate-authority-data: $CA_CERT
-      server: $API_SERVER
-
-contexts:
-  - name: kind-rhdemo
-    context:
-      cluster: kind-rhdemo
-      namespace: rhdemo-stagingkub
-      user: jenkins-deployer
-
-current-context: kind-rhdemo
-
-users:
-  - name: jenkins-deployer
-    user:
-      token: $SA_TOKEN
-KUBECONFIG_EOF
-
-    chmod 600 "$JENKINS_KUBECONFIG"
-    echo -e "${GREEN}✅ Kubeconfig RBAC généré : $JENKINS_KUBECONFIG${NC}"
 
     # Vérifier les permissions du ServiceAccount
     echo -e "${YELLOW}  - Vérification des permissions RBAC...${NC}"
@@ -502,59 +441,6 @@ KUBECONFIG_EOF
     kubectl apply -f "$RBAC_DIR/jenkins-infra-upgrader-clusterrole.yaml"
     echo -e "${GREEN}✅ Ressources RBAC jenkins-infra-upgrader appliquées${NC}"
 
-    echo -e "${YELLOW}  - Attente du token du ServiceAccount jenkins-infra-upgrader...${NC}"
-    for i in {1..30}; do
-        INFRA_SA_TOKEN=$(kubectl get secret jenkins-infra-upgrader-token -n rhdemo-stagingkub -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
-        if [ -n "$INFRA_SA_TOKEN" ]; then
-            break
-        fi
-        sleep 1
-    done
-
-    if [ -z "$INFRA_SA_TOKEN" ]; then
-        echo -e "${RED}❌ Impossible de récupérer le token du ServiceAccount jenkins-infra-upgrader après 30 secondes${NC}"
-        exit 1
-    fi
-
-    INFRA_CA_CERT=$(kubectl get secret jenkins-infra-upgrader-token -n rhdemo-stagingkub -o jsonpath='{.data.ca\.crt}')
-
-    INFRA_JENKINS_KUBECONFIG="$JENKINS_KUBECONFIG_DIR/kubeconfig-jenkins-infra-upgrader-rbac.yaml"
-    cat > "$INFRA_JENKINS_KUBECONFIG" <<KUBECONFIG_EOF
-# Kubeconfig RBAC pour jenkins-infra-upgrader (mise à jour en place des
-# composants d'infra — distinct de kubeconfig-jenkins-rbac.yaml/jenkins-deployer)
-# Généré automatiquement par init-stagingkub.sh
-#
-# IMPORTANT: Ce fichier doit être ajouté comme credential Jenkins
-# de type "Secret file" avec l'ID: kubeconfig-stagingkub-infra-upgrader
-#
-apiVersion: v1
-kind: Config
-preferences: {}
-
-clusters:
-  - name: kind-rhdemo
-    cluster:
-      certificate-authority-data: $INFRA_CA_CERT
-      server: $API_SERVER
-
-contexts:
-  - name: kind-rhdemo
-    context:
-      cluster: kind-rhdemo
-      namespace: rhdemo-stagingkub
-      user: jenkins-infra-upgrader
-
-current-context: kind-rhdemo
-
-users:
-  - name: jenkins-infra-upgrader
-    user:
-      token: $INFRA_SA_TOKEN
-KUBECONFIG_EOF
-
-    chmod 600 "$INFRA_JENKINS_KUBECONFIG"
-    echo -e "${GREEN}✅ Kubeconfig RBAC jenkins-infra-upgrader généré : $INFRA_JENKINS_KUBECONFIG${NC}"
-
     # Vérification des permissions clés (accordées)
     echo -e "${YELLOW}  - Vérification des permissions RBAC jenkins-infra-upgrader...${NC}"
     if kubectl auth can-i update daemonsets/cilium -n cilium-system --as=system:serviceaccount:rhdemo-stagingkub:jenkins-infra-upgrader > /dev/null 2>&1; then
@@ -615,6 +501,19 @@ KUBECONFIG_EOF
         echo -e "${GREEN}    ✓ Pas d'auto-modification de son propre ClusterRole (sécurité OK)${NC}"
     else
         echo -e "${RED}    ✗ Auto-modification de son propre ClusterRole possible — À CORRIGER${NC}"
+    fi
+
+    # Tokens des ServiceAccounts et credentials Jenkins des kubeconfigs : délégués à
+    # rotate-secrets.py, même code que la rotation (Secret de token daté, vérification des
+    # droits, credential « Secret file » mis à jour ou créé, aucun kubeconfig sur le disque).
+    # Ne fait rien si un token existe déjà ; sinon demande le mot de passe admin de Jenkins.
+    echo -e "${YELLOW}  - Tokens et kubeconfigs Jenkins (rotate-secrets.py --if-missing)...${NC}"
+    ROTATE_SECRETS="$(cd "$STAGINGKUB_DIR/../.." && pwd)/scripts/rotate-secrets.py"
+    if "$ROTATE_SECRETS" --if-missing kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader; then
+        echo -e "${GREEN}✅ Tokens et kubeconfigs Jenkins en place${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Kubeconfigs Jenkins non créés (Jenkins arrêté ?), à relancer plus tard :${NC}"
+        echo -e "${YELLOW}   $ROTATE_SECRETS --if-missing kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader${NC}"
     fi
 else
     echo -e "${YELLOW}⚠️  Dossier RBAC non trouvé : $RBAC_DIR${NC}"
@@ -725,15 +624,11 @@ echo -e "  • Voir les images : ${BLUE}curl http://localhost:5000/v2/_catalog${
 echo -e "  • Voir les tags : ${BLUE}curl http://localhost:5000/v2/rhdemo-api/tags/list${NC}"
 echo ""
 echo -e "${YELLOW}🔐 Configuration Jenkins (RBAC) :${NC}"
-echo -e "  Deux kubeconfigs RBAC ont été générés, avec des permissions limitées et distinctes."
-echo -e "  Pour configurer Jenkins :"
-echo -e ""
-echo -e "  1. ${BLUE}Accédez à Jenkins > Manage Jenkins > Credentials${NC}"
-echo -e "  2. ${BLUE}Ajoutez un credential de type 'Secret file'${NC}"
-echo -e "  3. ${BLUE}ID: kubeconfig-stagingkub${NC} (déploiement applicatif, RHDemo-CD)"
-echo -e "     ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-rbac.yaml${NC}"
-echo -e "  4. ${BLUE}ID: kubeconfig-stagingkub-infra-upgrader${NC} (mise à jour en place de l'infra, RHDemo-Stagingkub-Upgrade-Deploy)"
-echo -e "     ${BLUE}Fichier: $STAGINGKUB_DIR/jenkins-kubeconfig/kubeconfig-jenkins-infra-upgrader-rbac.yaml${NC}"
+echo -e "  Deux ServiceAccounts aux droits limités et distincts : jenkins-deployer (RHDemo-CD) et"
+echo -e "  jenkins-infra-upgrader (mise à jour en place de l'infra). Leurs kubeconfigs sont poussés"
+echo -e "  directement dans les credentials Jenkins kubeconfig-stagingkub et"
+echo -e "  kubeconfig-stagingkub-infra-upgrader par rotate-secrets.py (rien n'est écrit sur le disque)."
+echo -e "  Renouvellement : ${BLUE}rhDemo/scripts/rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader${NC}"
 echo ""
 echo -e "  Documentation: ${BLUE}$RBAC_DIR/README.md${NC}"
 echo ""

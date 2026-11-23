@@ -80,7 +80,7 @@ Lancer le job `RHDemo-CI`. Il construit et teste l'application, monte l'environn
    ```
 
 4. Contrôle : `rhDemo/infra/stagingkub/scripts/validate-stagingkub.sh`.
-5. Credentials Jenkins des kubeconfigs générés dans `rhDemo/infra/stagingkub/jenkins-kubeconfig/` : `kubeconfig-stagingkub` (CD) et `kubeconfig-stagingkub-infra-upgrader` (mise à jour en place). Liste commentée : `casc/jenkins-casc.yaml` ; droits : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md).
+5. Credentials Jenkins des kubeconfigs `kubeconfig-stagingkub` (CD) et `kubeconfig-stagingkub-infra-upgrader` (mise à jour en place) : créés par `init-stagingkub.sh` (mot de passe admin de Jenkins demandé). Jenkins indisponible à ce moment : `rhDemo/scripts/rotate-secrets.py --if-missing kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader`. Liste commentée : `casc/jenkins-casc.yaml` ; droits : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md).
 
 Certificats de la Gateway (auto-signés par défaut, Let's Encrypt possible) : [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md). Flux réseau autorisés : [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md).
 

@@ -16,6 +16,7 @@ sources:
   - rhDemo/scripts/rotation_lib/
   - rhDemo/scripts/openbao-setup.py
   - rhDemo/infra/jenkins-docker/openbao/
+  - rhDemo/infra/stagingkub/rbac/jenkins-serviceaccount.yaml
 ---
 
 # Étude : renouvellement rapide des secrets de RHDemo
@@ -52,8 +53,8 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 | 6 | Token(s) Codeberg et clés SSH du compte personnel `leuwen-lc` | Poste de travail (credential helper Git, `~/.ssh`) | Admin du dépôt : réglages, protections de branche, suppression | C | Internet |
 | 6b | Mots de passe des comptes bots Codeberg (`cibot-leuwen-lc`, bot Renovate, `fixcvebot-leuwen-lc`) | Gestionnaire de mots de passe de l'utilisateur | Avec la 2FA, insuffisant seul pour créer des tokens ; reste la porte d'entrée du compte | C | Internet |
 | 7 | Clé GPG `renovate-gpg-key` | OpenBao `kv/jenkins/renovate-gpg-key`, clé publique sur le compte bot Codeberg | Commits « vérifiés » au nom de Renovate | H | Internet |
-| 8 | Kubeconfig `kubeconfig-stagingkub-infra-upgrader` | Credential Jenkins, fichier local non versionné | Upgrades Helm de l'infra du cluster (Cilium, NGF, observabilité) | H | Local |
-| 9 | Kubeconfig `kubeconfig-stagingkub` (`jenkins-deployer`) | Credential Jenkins, fichier local non versionné | Déploiement et lecture des Secrets du namespace `rhdemo-stagingkub` | H | Local |
+| 8 | Kubeconfig `kubeconfig-stagingkub-infra-upgrader` | Credential Jenkins (plus de fichier local depuis le 2026-11-23) | Upgrades Helm de l'infra du cluster (Cilium, NGF, observabilité) | H | Local |
+| 9 | Kubeconfig `kubeconfig-stagingkub` (`jenkins-deployer`) | Credential Jenkins (plus de fichier local depuis le 2026-11-23) | Déploiement et lecture des Secrets du namespace `rhdemo-stagingkub` | H | Local |
 | 10 | Mot de passe `admin` Jenkins | `infra/jenkins-docker/.env` (en clair), appliqué par JCasC | Tout : lecture de tous les credentials, **dont les secrets Internet #3, #4, #7, #12**, exécution de code | C | Local |
 | 11 | Mot de passe et token API du compte Jenkins `claude` | `.env` (mot de passe), OpenBao `kv/jenkins/fixcve-jenkins-api` (token) | Lecture des builds et des logs (lecture seule) | M | Local |
 | 12 | Mot de passe de l'appareil « Jenkins » de la boîte des notifications | Credential Jenkins `smtp-infomaniak-credentials` | Envoyer des mails au nom de l'adresse de notification (hameçonnage), lire la boîte (IMAP) | H | Internet |
@@ -75,7 +76,8 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 
 Les constats corrigés les 2026-11-16 et 2026-11-17 (Grafana, défauts `sonar123` et `changeme`, droits des fichiers locaux, exposition de ZAP, anciens secrets Codeberg Actions) sont tracés dans [log.md](log.md).
 
-- **Les tokens Kubernetes sont de longue durée** (`type: kubernetes.io/service-account-token` dans `rbac/`). Ils n'expirent jamais.
+- **Les tokens Kubernetes sont de longue durée** (Secrets `kubernetes.io/service-account-token`) : ils n'expirent jamais. Compensé depuis le 2026-11-23 par une rotation automatisée et révocable (§4.4).
+- **Création de tokens par Secret** (constat du 2026-11-23, par `kubectl auth can-i`, sans exploitation) : `jenkins-deployer` peut créer des Secrets dans `rhdemo-stagingkub`, donc un token pour `jenkins-infra-upgrader`, qui vit dans le même namespace ; ce dernier détient `secrets` sur tout le cluster (règles miroir des charts) et peut créer un token pour un compte de `kube-system` aux droits étendus. Un pipeline compromis pourrait remonter jusqu'à l'administration du cluster. Détail et pistes : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md), « Limite connue ».
 - **La clé AGE déchiffrait l'historique** : SOPS ne protégeait que le présent, les anciens fichiers chiffrés restant dans l'historique public. Résolu par l'abandon de SOPS : les valeurs qu'ils contenaient ont été renouvelées le 2026-11-21.
 
 ---
@@ -89,7 +91,7 @@ Les constats corrigés les 2026-11-16 et 2026-11-17 (Grafana, défauts `sonar123
 | **Jenkins, credentials** | CLI `update-credentials-by-xml system::system::jenkins _ <id>` (ou `POST .../credential/<id>/config.xml`) | Remplacement en place | Authentification admin (mot de passe saisi, ou token admin éphémère) |
 | **Jenkins, token API d'un utilisateur** | `POST /user/<id>/descriptorByName/jenkins.security.ApiTokenProperty/generateNewToken` | `.../revoke?tokenUuid=…` | Depuis Jenkins 2.129, un admin ne peut pas générer de token pour un autre utilisateur par défaut : il faut s'authentifier **en tant que** `claude` (mot de passe + crumb) *à vérifier sur la version installée* |
 | **Jenkins, mots de passe locaux** | Modifier la variable, puis `POST /manage/configuration-as-code/reload` | Écrasé par JCasC | Rien |
-| **Kubernetes** | Supprimer puis réappliquer le Secret `service-account-token` (nouveau token émis), ou `kubectl create token --duration` | Suppression du Secret | Rien (admin du cluster local) |
+| **Kubernetes** | Nouveau Secret `service-account-token` daté (nouveau token émis, l'ancien reste valide) | Suppression des anciens Secrets du compte | Rien (admin du cluster local) ; méthode `k8s-sa-token` depuis le 2026-11-23 |
 | **Cosign (Transit OpenBao)** | `bao write -f cosign-transit/keys/cosign/rotate` | Nouvelle clé publique dans le credential du CD | Publier la clé publique ; les images signées avant la rotation ne sont plus déployables (§4.3) |
 | **OpenBao** | KV v2 (écriture avec contrôle de version), nouveau `secret_id` AppRole | Destruction des anciens `secret_id` | Rien (utilisateur `admin`) ; mot de passe `admin` et clé de déverrouillage à la main |
 | **SOPS / AGE** | *Sans objet : SOPS abandonné* | | |
@@ -206,9 +208,11 @@ Depuis OpenBao, la clé privée est une clé Transit non exportable : la CI fait
 
 ### 4.4 Kubeconfigs (#8, #9)
 
-Supprimer le Secret `service-account-token` du compte de service, relancer `init-stagingkub.sh` (il réapplique `rbac/`, le contrôleur émet un nouveau token, et il régénère le kubeconfig), mettre à jour le credential. L'ancien token est invalide dès la suppression du Secret. Procédure manuelle dans l'inventaire depuis le 2026-11-21 ; l'automatisation reste ouverte (§5).
+Réalisé le 2026-11-23 (méthode `k8s-sa-token`) : `rotate-secrets.py` crée un Secret de token daté pour le ServiceAccount, vérifie le nouveau token depuis le poste (identité par `kubectl auth whoami`, droits `allowed` et `denied` de l'inventaire par `kubectl auth can-i`), pousse le kubeconfig en mémoire dans le credential Jenkins « Secret file » (créé s'il manque), puis supprime les anciens Secrets du compte. La CD n'est jamais interrompue, un échec avant propagation supprime le nouveau Secret, et aucun kubeconfig n'est plus écrit sur le disque. Détail : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md), « Token et kubeconfig ».
 
-Évolution recommandée : passer à des tokens à durée limitée (`kubectl create token --duration=720h`) renouvelés par `rotate-secrets.py --check`, ce qui borne la fenêtre d'exploitation d'une fuite non détectée. La section RBAC de `SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md` serait à mettre à jour.
+`init-stagingkub.sh` délègue la création du premier token à ce même code (`--if-missing`, qui ne fait rien si un token existe) au lieu de dupliquer la génération en bash ; les manifestes des ServiceAccounts ne déclarent plus de Secret au nom fixe, qui recréerait un token non suivi à chaque `kubectl apply`. L'ancien `rbac/setup-jenkins-rbac.sh`, troisième générateur de kubeconfig, est supprimé.
+
+Tokens à durée limitée (`kubectl create token --duration`) : abandonnés (décision au §6).
 
 ### 4.5 Secrets applicatifs stagingkub (#15)
 
@@ -255,9 +259,9 @@ Limite : le mot de passe d'un appareil permet aussi de **lire** la boîte (IMAP)
 | --- | --- | --- |
 | 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
 | 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). #3, #4, #5, #7 et #12 renouvelés le 2026-11-17, puis #3, #4, #5 et #7 de nouveau le 2026-11-22 lors de leur passage dans OpenBao.* | 1,5 jour |
-| 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub. *Cosign et stagingkub réalisés par OpenBao (2026-11-21), sans re-signature (§4.3). Kubeconfigs : procédure manuelle, automatisation ouverte.* | 1 à 2 jours |
+| 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub. *Cosign et stagingkub réalisés par OpenBao (2026-11-21), sans re-signature (§4.3). Kubeconfigs automatisés le 2026-11-23 (§4.4).* | 1 à 2 jours |
 | 3 | Module AGE, mode `--emergency`. *Module AGE sans objet (SOPS abandonné). `--emergency` ouvert ; en attendant, ordre d'urgence dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).* | 1 jour |
-| 4 | Tokens Kubernetes à durée limitée, rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse). *Ouvert.* | 0,5 jour |
+| 4 | Rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse). *Ouvert. Tokens Kubernetes à durée limitée abandonnés (§6).* | 0,5 jour |
 
 Tests : comme pour fixcve-auto, un bac à sable avec un faux Forgejo et un faux Jenkins valide les modules sans toucher aux vrais comptes. Le module Kubernetes se teste sur le cluster KinD. Le code est sous `scripts/`, donc hors couverture Sonar Java ; les modules Python suivent la règle `python3 -I`.
 
@@ -270,25 +274,26 @@ Relevé par `rotate-secrets.py --check` et le journal local des rotations.
 **Sans rotation journalisée** (13 secrets, `--check` sort en code 1) :
 
 - créés neufs à l'installation d'OpenBao (2026-11-21 et 22) mais non tracés : clé Cosign Transit (#2), mot de passe `admin` (#23) et clé de déverrouillage (#24) d'OpenBao, `secret_id` AppRole de Cosign (#21, journalisé sous un ancien identifiant, `openbao-approle-jenkins-cosign`, que `--check` ne reconnaît pas) ;
-- jamais renouvelés depuis l'inventaire du 2026-11-16, ou sans trace : mot de passe `admin` Jenkins (#10), compte Jenkins `claude` (#11), token SonarQube (#14), kubeconfigs (#8, #9), clés TLS (#18), mots de passe des bots Codeberg (#6b), session Claude (#13), contrôle du compte personnel (#6).
+- jamais renouvelés depuis l'inventaire du 2026-11-16, ou sans trace : mot de passe `admin` Jenkins (#10), compte Jenkins `claude` (#11), token SonarQube (#14), kubeconfigs (#8, #9, désormais automatisés), clés TLS (#18), mots de passe des bots Codeberg (#6b), session Claude (#13), contrôle du compte personnel (#6).
 
 ### Reste à faire
 
 1. **Rattraper le journal** des secrets neufs non tracés (#2, #21, #23, #24) par `--record`. Urgent pour #21 : son `secret_id` expire au bout de 100 jours (`SECRET_ID_TTL` de `configure-openbao.sh`), vers le 2027-03-01, et sans trace `--check` ne préviendra pas ; à l'échéance, la signature Cosign de la CI échouerait.
 2. **Renouveler les secrets jamais renouvelés**, par criticité : #10 et #6b (C) d'abord, puis #8, #9 et #13 (H), puis #11, #14 et #18 (M) ; tracer chaque rotation manuelle par `--record`.
 3. **Détruire la clé AGE** (§4.6) et vérifier l'absence du credential `sops-age-key` dans Jenkins.
-4. **Kubeconfigs (#8, #9)** : automatiser la procédure manuelle, puis passer à des tokens à durée limitée (phase 4). Les tokens actuels sont des Secrets `service-account-token` sans expiration (`infra/stagingkub/rbac/`).
-5. **Mode `--emergency`** (phase 3) ; en attendant, ordre d'urgence manuel dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
-6. **Rappel périodique** : la ligne cron de `--check` documentée dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md) n'est pas installée sur le poste (seule la rotation du journal d'audit d'OpenBao l'est). Tant que le point 1 n'est pas fait, le rappel signalerait 13 secrets en permanence.
-7. **Piste** : tokens Codeberg restreints au dépôt `rhdemo` (§3.4), non implémentée.
-8. Points marqués *à vérifier* (token Jenkins de `claude`, déconnexion des sessions Claude, plafond de facturation).
+4. ~~Kubeconfigs (#8, #9)~~ : automatisés le 2026-11-23 (§4.4). Reste à faire la **première rotation** (`rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader`), qui remplace les Secrets historiques au nom fixe, puis à supprimer les anciens fichiers `infra/stagingkub/jenkins-kubeconfig/*.yaml`.
+5. **Création de tokens par Secret** (§1.3) : fermer la remontée de `jenkins-deployer` vers `jenkins-infra-upgrader` puis vers l'administration du cluster (ValidatingAdmissionPolicy sur les Secrets `service-account-token`, namespace dédié pour `jenkins-infra-upgrader`).
+6. **Mode `--emergency`** (phase 3) ; en attendant, ordre d'urgence manuel dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
+7. **Rappel périodique** : la ligne cron de `--check` documentée dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md) n'est pas installée sur le poste (seule la rotation du journal d'audit d'OpenBao l'est). Tant que le point 1 n'est pas fait, le rappel signalerait 13 secrets en permanence.
+8. **Piste** : tokens Codeberg restreints au dépôt `rhdemo` (§3.4), non implémentée.
+9. Points marqués *à vérifier* (token Jenkins de `claude`, déconnexion des sessions Claude, plafond de facturation).
 
 ### Périodes de rotation proposées
 
 | Criticité | Période | Exemples |
 | --- | --- | --- |
 | C | 90 jours, et immédiatement en cas de doute | Cosign, `secret_id` AppRole, `admin` Jenkins et OpenBao, tokens Codeberg Write |
-| H | 180 jours | kubeconfigs (30 jours s'ils passent à durée limitée), GPG, SMTP, secrets stagingkub |
+| H | 180 jours | kubeconfigs, GPG, SMTP, secrets stagingkub |
 | M | 1 an | SonarQube, Grafana, compte Jenkins `claude` |
 
 ---
@@ -306,5 +311,6 @@ Relevé par `rotate-secrets.py --check` et le journal local des rotations.
 | Re-signer les images après rotation de Cosign ? (2026-11-21) | Non | Les images signées avant la rotation ne sont plus déployables ; relancer la CI |
 | Admin Grafana dans OpenBao ? (2026-11-21) | Oui | `kv/observability/grafana`, recopié dans `loki-stack` par ESO (rôle `eso-observability` limité à `kv/observability/*`), rotation `rotate-secrets.py grafana-admin` avec vérification de connexion et retour arrière. Aucune dépendance de démarrage nouvelle : Grafana ne sert pas à accéder à OpenBao, et ESO était déjà en place pour stagingkub. Contrepartie : Grafana ne démarre pas tant que le Secret n'existe pas (OpenBao déverrouillé à l'installation) ; un changement de mot de passe fait dans l'interface est écrasé au redémarrage. |
 | Mots de passe Jenkins (`admin`, `claude`) et base SonarQube dans OpenBao ? (2026-11-21) | Non, restent dans le fichier local de `jenkins-docker` (600, copie dans KeePassXC) | 1. **Démarrage** : ces valeurs sont lues par Docker Compose et JCasC au lancement des conteneurs. Les tirer d'OpenBao imposerait OpenBao déverrouillé et une connexion `admin` à chaque démarrage de Jenkins ou de SonarQube, alors qu'OpenBao est scellé après chaque redémarrage du poste. 2. **Racines de confiance séparées** : le mot de passe `admin` de Jenkins est un identifiant maître du script de rotation (§3.2), qui doit pouvoir réparer Jenkins quand OpenBao est perdu ou compromis, et inversement ; les mettre dans OpenBao ferait d'une compromission d'OpenBao une compromission de Jenkins. 3. **Gain faible** : la valeur finit de toute façon dans l'environnement du conteneur (lisible par `docker inspect` avec le même compte unix que le fichier) ; OpenBao n'en réduirait pas l'exposition locale, il unifierait seulement la gestion. 4. **Exposition** : locale (#10, #11, #14), contre LAN pour Grafana. Rotation manuelle conservée (`--list`, puis `--record`). |
+| Kubeconfigs : tokens à durée limitée ou rotation automatisée ? (2026-11-23) | Rotation automatisée des tokens portés par Secret ; durée limitée abandonnée | Un token émis par `kubectl create token` n'est pas révocable un à un (il faut attendre son expiration ou supprimer le compte) : recul en urgence. Il deviendrait aussi bloquant, et Jenkins ne peut pas le renouveler lui-même sans le droit `serviceaccounts/token`, qui lui permettrait d'en émettre à volonté. La rotation automatisée (§4.4) apporte l'essentiel : sans interruption, réversible, sans token en clair sur le disque. `init-stagingkub.sh` délègue à `rotate-secrets.py` plutôt que de dupliquer la génération en bash. |
 
 Points restant à vérifier avant d'implémenter : les mentions *à vérifier* de ce document.

@@ -11,8 +11,8 @@ distinctes :
 | `jenkins-infra-upgrader` | `Jenkinsfile-Renovate` (validation dry-run) + `Jenkinsfile-Stagingkub-Upgrade-Deploy` (application réelle) | `nginx-gateway`, `loki-stack`, `monitoring` (étendu), `cilium-system` (namespace dédié Cilium, RBAC large), `kube-system` (un seul objet nommé, Prometheus/CoreDNS), + CRDs/ClusterRoles cluster-scoped nommés |
 
 Les deux credentials Jenkins correspondants (`kubeconfig-stagingkub` et
-`kubeconfig-stagingkub-infra-upgrader`) sont générés par
-`scripts/init-stagingkub.sh` et **ne se substituent jamais l'un à l'autre** :
+`kubeconfig-stagingkub-infra-upgrader`) sont créés et renouvelés par
+`rhDemo/scripts/rotate-secrets.py` (appelé par `scripts/init-stagingkub.sh`) et **ne se substituent jamais l'un à l'autre** :
 `Jenkinsfile-CD` n'a et n'aura jamais les droits élargis de
 `jenkins-infra-upgrader`, et réciproquement `jenkins-infra-upgrader` n'a aucun
 droit dans `rhdemo-stagingkub` (aucun des composants qu'il gère n'y vit).
@@ -278,12 +278,16 @@ donc nécessaire pour `jenkins-infra-upgrader`.
 `scripts/init-stagingkub.sh` applique automatiquement l'ensemble des
 manifestes de ce répertoire (via `kubectl apply -f`, pas `kubectl apply -k` —
 le fichier `kustomization.yaml` local existe pour un usage manuel ponctuel :
-`kubectl apply -k rhDemo/infra/stagingkub/rbac/`) et génère les deux
-kubeconfigs dans `jenkins-kubeconfig/` :
+`kubectl apply -k rhDemo/infra/stagingkub/rbac/`), puis délègue les tokens à
+`rhDemo/scripts/rotate-secrets.py --if-missing kubeconfig-stagingkub
+kubeconfig-stagingkub-infra-upgrader`.
 
-- `kubeconfig-jenkins-rbac.yaml` → credential Jenkins `kubeconfig-stagingkub`
-- `kubeconfig-jenkins-infra-upgrader-rbac.yaml` → credential Jenkins
-  `kubeconfig-stagingkub-infra-upgrader`
-
-Ces deux fichiers contiennent des tokens et ne sont jamais commités (voir
-`jenkins-kubeconfig/.gitignore`).
+Les manifestes des ServiceAccounts ne déclarent pas de Secret de token : chaque
+token vit dans un Secret daté (`<compte>-token-<date>`) créé par le script, qui
+vérifie le token (identité, droits `allowed`/`denied` de `secrets/inventory.yaml`),
+pousse le kubeconfig directement dans le credential Jenkins (créé s'il manque),
+puis supprime les anciens Secrets du compte. Aucun kubeconfig n'est écrit sur le
+disque. Rotation : `rotate-secrets.py kubeconfig-stagingkub
+kubeconfig-stagingkub-infra-upgrader` ; détail dans
+[SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](../../../docs/SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md),
+« Token et kubeconfig ».

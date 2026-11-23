@@ -8,23 +8,25 @@ import base64
 import os
 import time
 
-from .common import SIMPLE_PUNCTUATION, RotationError, http, log, new_password, simple_password, stamp, warn
+from .common import (SIMPLE_PUNCTUATION, RotationError, Skipped, http, log, new_password,
+                     simple_password, stamp, warn)
 from .forgejo import Forgejo
 from .smtp import smtp_login
 from .jenkins import Jenkins
 from .keycloak import Keycloak
 from .openbao import OpenBao
-from . import tools
+from . import k8s, tools
 
 
 class Context:
     """Clients et paramètres partagés par les rotations d'une session (créés à la demande)."""
 
-    def __init__(self, inventory, prompter, journal, dry_run=False):
+    def __init__(self, inventory, prompter, journal, dry_run=False, if_missing=False):
         self.inv = inventory
         self.prompter = prompter
         self.journal = journal
         self.dry_run = dry_run
+        self.if_missing = if_missing   # k8s-sa-token : ne créer un token que s'il n'y en a aucun
         self._jenkins = None
         self._forgejo = None
         self._openbao = None
@@ -590,6 +592,74 @@ def rotate_grafana_admin(ctx, entry):
     return f"mot de passe {user} de Grafana renouvelé"
 
 
+def rotate_k8s_sa_token(ctx, entry):
+    """Token d'un ServiceAccount de stagingkub, propagé en kubeconfig dans un credential Jenkins
+    « Secret file » : nouveau Secret de token, vérification (identité et droits attendus), mise à
+    jour (ou création) du credential, puis suppression des anciens Secrets du même compte.
+    Aucun kubeconfig n'est écrit sur le disque. Avec --if-missing (init-stagingkub.sh), ne fait
+    rien si un token existe déjà."""
+    r = entry["rotation"]
+    ns, sa = r["namespace"], r["service_account"]
+    if r.get("kube_context") and k8s.current_context() != r["kube_context"]:
+        raise RotationError(f"contexte kubectl courant différent de {r['kube_context']} "
+                            f"(kubectl config use-context {r['kube_context']})")
+    old = k8s.token_secrets(ns, sa)
+    if ctx.if_missing and old:
+        return Skipped(f"token existant ({', '.join(old)}), rien à faire")
+    jk = ctx.jenkins()
+    missing = []
+    for t in entry["targets"]:
+        if jk.exists(t["credential"]):
+            jk.read(t["credential"], "file")
+        else:
+            missing.append(t["credential"])
+    name = f"{r['secret_prefix']}-{stamp()}"
+    log(f"  nouveau Secret {name} (ServiceAccount {sa}) → vérification → {_targets_text(entry)}"
+        + (f" (à créer : {', '.join(missing)})" if missing else ""))
+    log(f"  Secrets à supprimer ensuite : {', '.join(old) or 'aucun'}")
+    if ctx.dry_run:
+        return None
+
+    k8s.create_token_secret(ns, sa, name)
+
+    def rollback():
+        k8s.delete_secret(ns, name)
+
+    try:
+        token, ca = k8s.wait_token(ns, name)
+        probe = k8s.kubeconfig(k8s.admin_server(), ca, token, sa, ns, r["cluster"])
+        k8s.verify(probe, ns, sa, r.get("allowed", []), r.get("denied", []))
+    except RotationError:
+        rollback()
+        warn(f"Secret {name} supprimé (vérification échouée, rien d'autre n'a changé)")
+        raise
+    log(f"  ✓ token vérifié : {sa}, {len(r.get('allowed', []))} droit(s) accordé(s), "
+        f"{len(r.get('denied', []))} refusé(s) comme attendu")
+    header = (f"# Kubeconfig du ServiceAccount {sa}, généré par rotate-secrets.py "
+              f"({entry['id']}, Secret {name}).\n")
+    text = k8s.kubeconfig(r["server"], ca, token, sa, ns, r["cluster"], header)
+    updated = []
+    try:
+        for t in entry["targets"]:
+            if t["credential"] in missing:
+                jk.create_file(t["credential"], entry["label"], "kubeconfig", text)
+            else:
+                jk.update(t["credential"], "file", text)
+            updated.append(f"Jenkins {t['credential']}")
+    except RotationError:
+        if updated:
+            warn(f"propagation partielle ({', '.join(updated)}) : Secret {name} conservé, "
+                 "anciens Secrets NON supprimés, terminer à la main")
+        else:
+            rollback()
+            warn(f"Secret {name} supprimé (aucune cible modifiée)")
+        raise
+    for n in old:
+        k8s.delete_secret(ns, n)
+        log(f"  supprimé : Secret {n} (ancien token invalide)")
+    return f"Secret {name}, supprimés : {', '.join(old) or 'aucun'}"
+
+
 METHODS = {
     "forgejo-token": rotate_forgejo_token,
     "forgejo-gpg": rotate_forgejo_gpg,
@@ -600,4 +670,5 @@ METHODS = {
     "keycloak-admin": rotate_keycloak_admin,
     "keycloak-users": rotate_keycloak_users,
     "grafana-admin": rotate_grafana_admin,
+    "k8s-sa-token": rotate_k8s_sa_token,
 }

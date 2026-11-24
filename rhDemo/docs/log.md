@@ -463,3 +463,7 @@ Suite de l'incident #1097 : le correctif (Spring Boot 4.1.3) amenait Tomcat 11.0
 ## [2026-11-24] ingest | fixcve-auto : rescan local avec OSS Index
 
 Builds #1106 et #1107 : le retraitement des CVE nouvelles n'a rien vu, car le rescan Dependency-Check local de fixcve désactivait OSS Index (quota) alors que la CI l'interroge ; CVE-2026-116830 sur Tomcat 11.0.27 n'est reliée à la version que par OSS Index (fiche NVD sans plages de versions). `Jenkinsfile-FixCVE` passe désormais le credential `ossindex-credentials`, et `verify.py` active OSS Index comme en CI (`.mvn/ci-settings.xml`) quand le compte est présent. Doc : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).
+
+## [2026-11-24] lint | ETUDE_FIXCVE_DANS_JENKINS.md en historique
+
+Passage de fixcve-auto dans Jenkins validé par un cycle réel complet (builds CI #1110 et #1111, `RHDemo-FixCVE` #86 : correctif poussé par le bot puis validé par la CI). [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) passe en `historique`. Contrôle des restes de la migration : dépôt déjà nettoyé le 2026-11-23 (commit `6d8f628`), poste sans ligne fixcve dans la crontab ni répertoire `~/.config/rhdemo-fixcve`.

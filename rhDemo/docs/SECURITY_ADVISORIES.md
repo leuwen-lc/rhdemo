@@ -4,15 +4,6 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
-## org.apache.tomcat.embed:tomcat-embed-core, org.springframework.boot:spring-boot-security (build #1110)
-
-- **Date** : 2026-11-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
-- **Remédiation automatique** :
-  - `org.apache.tomcat.embed:tomcat-embed-core` 11.0.27 → 11.0.29 (CVE-2026-116830, CVSS 8.7)
-  - `org.springframework.boot:spring-boot-security` 4.1.2 → 4.1.3 (CVE-2026-59414, CVSS 9.1)
-
----
-
 ## org.springframework.boot:spring-boot-actuator, org.springframework.boot:spring-boot-security, org.springframework.security:spring-security-core, org.springframework.security:spring-security-web ... (build #1097)
 
 - **Date** : 2026-11-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

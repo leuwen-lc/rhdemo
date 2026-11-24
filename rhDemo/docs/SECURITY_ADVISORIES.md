@@ -4,6 +4,20 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## org.springframework.boot:spring-boot-actuator, org.springframework.boot:spring-boot-security, org.springframework.security:spring-security-core, org.springframework.security:spring-security-web ... (build #1097)
+
+- **Date** : 2026-11-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `org.springframework.security:spring-security-core` 7.1.2 → 7.1.3 (CVE-2026-59333, CVSS 7.4)
+  - `org.springframework.security:spring-security-web` 7.1.2 → 7.1.3 (CVE-2026-59273, CVSS 9.8)
+  - `org.springframework:spring-core` 7.0.10 → 7.0.11 (CVE-2026-59374, CVSS 7.5)
+- **Remédiation automatique — risque accepté (temporaire, en attente de correctif upstream)** :
+  - `org.springframework.boot:spring-boot-actuator` 4.1.2 (CVE-2026-59378, CVSS 7.1) — critère B, `[PENDING_UPSTREAM_FIX]`
+- **Non traité (bloqué, revue humaine requise)** :
+  - `org.springframework.boot:spring-boot-security` 4.1.2 (CVE-2026-59414, CVSS 9.1) — montee impossible a appliquer/verifier ; aucun correctif, CVSS 9.1 >= 9.0, sans critere A
+
+---
+
 ## java-21-openjdk-headless : Java4Shell et eMudhra (2026-11-19)
 
 - **Date** : 2026-11-19 — **Outil** : Trivy 0.76.1 (CI en échec, scan local de contrôle) — **Source** : revue manuelle (`fixcve` bloqué : CVSS ≥ 9 sans correctif)

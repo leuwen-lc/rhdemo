@@ -218,11 +218,36 @@ class VerifyTest(Workdir):
                              ("CVE-2026-10002", "pkg:maven/g/b@1.0.0", 8.0),
                              ("CVE-2026-10003", "pkg:maven/g/a@1.0.1", 7.5),
                              ("CVE-2026-10004", "pkg:maven/g/c@1.0.0", 9.0))
-        failed, errors = compare_odc([up, sup], {"findings": []}, report)
+        failed, errors, new = compare_odc([up, sup], {"findings": []}, report)
         self.assertEqual(failed, ["CVE-2026-10001|g:a"])
         self.assertTrue(any("suppression sans effet" in e for e in errors))
-        self.assertTrue(any("regression : CVE-2026-10003" in e for e in errors))
-        self.assertFalse(any("CVE-2026-10004" in e for e in errors), "CVE d'un paquet non touché : pas une régression")
+        # CVE nouvelles, paquet monté ou non : remontées au poller pour être traitées dans le cycle.
+        self.assertEqual({(f["finding_id"], f["package_name"], f["installed_version"]) for f in new},
+                         {("CVE-2026-10003", "g:a", "1.0.1"), ("CVE-2026-10004", "g:c", "1.0.0")})
+
+    def test_1102_cve_nouvelle_par_ricochet_retraitee(self):
+        """Montée du parent : Tomcat passe en 11.0.27 sans être une montée du cycle ; sa CVE
+        nouvelle n'est plus ignorée, elle est remontée au format detected.json."""
+        import importlib.util
+        up = classify(finding("CVE-2026-59414", "org.springframework.boot:spring-boot-security", "4.1.2",
+                              ecosystem="maven", cvss=9.1),
+                      {"fix_status": "fix_available", "target_version": "4.1.3"})
+        report = self.report(("CVE-2026-116830", "pkg:maven/org.apache.tomcat.embed/tomcat-embed-core@11.0.27", 8.7))
+        report["dependencies"][0]["vulnerabilities"][0].update(
+            description="Missing release of resource\nafter effective lifetime (HTTP/2).",
+            cvssv3={"baseScore": 8.7, "vectorString": "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"})
+        res = verify({"actions": [up], "changed_files": []}, {"findings": []}, "owasp", odc_report=report)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["errors"], [])
+        (f,) = res["new_findings"]
+        self.assertEqual((f["package_name"], f["installed_version"], f["cvss_vector"]),
+                         ("org.apache.tomcat.embed:tomcat-embed-core", "11.0.27",
+                          "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"))
+        spec = importlib.util.spec_from_file_location("vj", os.path.join(os.path.dirname(edits.__file__), "..",
+                                                                         "fixcve-validate-json.py"))
+        vj = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(vj)
+        vj.validate_detect({"jenkins_build": 1102, "stage": "owasp", "findings": res["new_findings"]})
 
     def test_syntaxe_invalide(self):
         with open("owasp-suppressions.xml", "w") as fh:

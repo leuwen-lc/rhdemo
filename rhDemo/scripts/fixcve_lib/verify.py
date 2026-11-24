@@ -10,12 +10,16 @@
      de RHDemo-CI (volume Maven monté par l'agent Jenkins, jamais deux builds à la fois) : seul le
      delta depuis le dernier build CI est téléchargé. Un rapport antérieur au scan n'est jamais relu.
 
--> {"ok", "failed_upgrades": [clés], "errors": [...], "incomplete": [...]}.
+-> {"ok", "failed_upgrades": [clés], "new_findings": [findings], "errors": [...], "incomplete": [...]}.
 Une montée en échec n'invalide que sa clé (le poller la fait basculer en « sans correctif » et
 réapplique) ; une erreur de syntaxe ou une suppression sans effet invalide le cycle.
+`new_findings` : CVE >= seuil absentes du build d'origine, sur n'importe quel paquet (une montée
+du parent ou un nettoyage change des versions par ricochet : Tomcat 11.0.27 et CVE-2026-116830,
+build #1102). Format de detected.json : le poller les ajoute au cycle et le retraite.
 """
 import json
 import os
+import re
 import xml.etree.ElementTree as ET
 
 from . import npm as npm_mod
@@ -83,6 +87,47 @@ def _score(vuln):
     return max(scores) if scores else 0.0
 
 
+_ID_RE = re.compile(r"^(CVE-\d{4}-\d{4,}|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})$")
+_VECTOR_RE = re.compile(r"^CVSS:[34]\.[0-9](/[A-Z]{1,3}:[A-Z])+$")
+_PKG_ID_RE = re.compile(r"^pkg:(maven|npm)/(.+)@([A-Za-z0-9.:+~_-]+)$")
+
+
+def _vector(vuln):
+    for k in ("cvssv3", "cvssv4"):
+        v = (vuln.get(k) or {}).get("vectorString") or ""
+        if v and not v.startswith("CVSS:"):
+            v = ("CVSS:3.1/" if k == "cvssv3" else "CVSS:4.0/") + v
+        if _VECTOR_RE.match(v):
+            return v
+    return None
+
+
+def _title(vuln):
+    text = re.sub(r"\s+", " ", vuln.get("description") or vuln.get("name") or "").strip()
+    return "".join(c for c in text if 0x20 <= ord(c) <= 0x7E)[:200]
+
+
+def odc_new_findings(report, known):
+    """Findings >= seuil du rapport ODC absents de `known` {(id, paquet)}, au format detected.json."""
+    out, seen = [], set()
+    for dep in (report or {}).get("dependencies") or []:
+        name = _odc_package_name(dep)
+        pid = next((p.get("id", "") for p in dep.get("packages") or [] if _PKG_ID_RE.match(p.get("id", ""))), "")
+        m = _PKG_ID_RE.match(pid)
+        if not name or not m:
+            continue
+        for vuln in dep.get("vulnerabilities") or []:
+            vid = vuln.get("name", "")
+            if _score(vuln) < CVSS_THRESHOLD or not _ID_RE.match(vid) or (vid, name) in known or (vid, name) in seen:
+                continue
+            seen.add((vid, name))
+            out.append({"finding_id": vid, "source": "owasp", "ecosystem": m.group(1), "image": "rhdemo-app",
+                        "package_name": name, "installed_version": m.group(3), "cvss": round(_score(vuln), 1),
+                        "cvss_vector": _vector(vuln), "fixed_version_hint": None, "fixed_versions": [],
+                        "title": _title(vuln)})
+    return out
+
+
 def odc_findings(report):
     """{(nom de vulnérabilité, paquet)} non supprimés et >= seuil, depuis le rapport JSON d'ODC."""
     found = set()
@@ -97,10 +142,10 @@ def odc_findings(report):
 
 
 def compare_odc(actions, detected, report):
-    """-> (failed_upgrades, errors) : findings traités encore présents, régressions sur paquets montés."""
+    """-> (failed_upgrades, errors, new_findings) : findings traités encore présents, findings
+    nouveaux (tout paquet)."""
     remaining = odc_findings(report)
     failed, errors = [], []
-    upgraded_packages = {a["package_name"] for a in actions if a["action"] == "upgrade"}
     known = {(i, f["package_name"]) for f in detected.get("findings", [])
              for i in [f["finding_id"], *f.get("advisory_aliases", [])]}
     for a in actions:
@@ -113,10 +158,7 @@ def compare_odc(actions, detected, report):
             failed.append(key_of(a))
         elif a["action"] in ("suppress_permanent", "suppress_temporary"):
             errors.append(f"suppression sans effet : {a['package_name']} {', '.join(a['ids'])}")
-    for vid, pkg in sorted(remaining - known):
-        if pkg in upgraded_packages:
-            errors.append(f"regression : {vid} sur {pkg} apparu apres la montee")
-    return failed, errors
+    return failed, errors, odc_new_findings(report, known)
 
 
 def run_odc():
@@ -139,15 +181,16 @@ def verify(apply_result, detected, stage, audit_doc=None, odc_report=None, run_o
     actions = apply_result["actions"]
     errors = check_syntax(apply_result["changed_files"])
     failed = check_npm(actions, audit_doc)
-    incomplete = []
+    incomplete, new = [], []
     if stage == "owasp" and not errors:
         report, why = (odc_report, None) if odc_report is not None else (run_odc() if run_odc_scan else (None, "desactive"))
         if report is None:
             incomplete.append(f"dependency_check_local:{why}")
         else:
-            f2, e2 = compare_odc(actions, detected, report)
+            f2, e2, new = compare_odc(actions, detected, report)
             failed += [k for k in f2 if k not in failed]
             errors += e2
     if stage == "trivy" and any(a["action"] == "upgrade" for a in actions):
         incomplete.append("trivy_local:non_disponible (preuve par le build CI)")
-    return {"ok": not errors and not failed, "failed_upgrades": failed, "errors": errors, "incomplete": incomplete}
+    return {"ok": not errors and not failed and not new, "failed_upgrades": failed, "new_findings": new,
+            "errors": errors, "incomplete": incomplete}

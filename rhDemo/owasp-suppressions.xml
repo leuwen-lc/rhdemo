@@ -29,10 +29,4 @@
         <vulnerabilityName>GHSA-fc5q-39xc-vjpf</vulnerabilityName>
     </suppress>
 
-    <suppress>
-        <notes>[PENDING_UPSTREAM_FIX] CVE-2026-59378 : org.springframework.boot:spring-boot-actuator 4.1.2 (CVSS 7.1). Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), CVSS &lt; 9.0 ; acceptation temporaire revérifiée à chaque cycle. Remédiation automatique build #1097.</notes>
-        <packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-actuator@.*$</packageUrl>
-        <cve>CVE-2026-59378</cve>
-    </suppress>
-
 </suppressions>

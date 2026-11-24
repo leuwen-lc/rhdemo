@@ -66,6 +66,7 @@ Le script tourne sur le poste, jamais dans Jenkins (il doit pouvoir réparer un 
 ./rotate-secrets.py <id> [<id>...]         # renouveler
 ./rotate-secrets.py --level C              # tous les secrets à rotation automatique de criticité C
 ./rotate-secrets.py --record <id>          # tracer une rotation faite à la main
+./rotate-secrets.py --emergency            # rotation d'urgence de tout le périmètre (section dédiée)
 ```
 
 Quatre sortes de rotation, affichées par `--list` (colonne « rotation », méthode de l'inventaire entre parenthèses) :
@@ -115,9 +116,26 @@ Les agents Jenkins montent `registry.crt` à leur création : rien à faire pour
 
 ## Rotation d'urgence (fuite supposée)
 
-Pas encore de mode `--emergency` : enchaîner à la main, dans cet ordre (raisons : [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md), §3.3). En urgence, révoquer l'ancien avant de vérifier le nouveau : mieux vaut une CI cassée qu'un attaquant actif.
+Depuis `rhDemo/scripts/`, OpenBao déverrouillé et le cluster stagingkub démarré :
 
-1. **Si Jenkins ou le poste sont compromis**, d'abord : mot de passe `admin` de Jenkins (`jenkins-admin-password`, redémarrage du conteneur pour couper les sessions), puis `rotate-secrets.py openbao-approle-jenkins`.
+```bash
+./rotate-secrets.py --emergency --dry-run      # plan : ordre, tokens et clés qui seraient révoqués
+./rotate-secrets.py --emergency                # fuite supposée
+./rotate-secrets.py --emergency --compromised  # Jenkins ou le poste compromis
+```
+
+Ce que fait le mode urgence, par rapport à une rotation ordinaire :
+
+- **tout le périmètre**, dans l'ordre ci-dessous (exposition Internet, réseau local, puis local, et par criticité ; raisons : [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md), §3.3), après une confirmation unique ;
+- **révocation avant création** pour les secrets qui se révoquent à part (tokens et clé GPG Codeberg, `secret_id` AppRole, tokens Kubernetes) : mieux vaut une CI cassée qu'un attaquant actif. Sur les comptes bots, **tous** les tokens sont révoqués, y compris ceux qui n'ont pas été créés par le script, sans question. Les mots de passe changés en place (PostgreSQL, Keycloak, Grafana) invalident l'ancien dès le changement ; si l'étape échoue, l'ancien est rétabli et le bilan le signale ;
+- **procédures manuelles une à une** : le script affiche la procédure et attend. Répondre `o` une fois faite (elle est tracée), sinon elle part dans les « restent à faire » du bilan. Après le mot de passe `admin` de Jenkins, le script redemande le nouveau ;
+- **bilan final** : renouvelés, en échec (à relancer par `rotate-secrets.py <id>`), restant à faire. Code retour 1 s'il reste un échec ou une procédure.
+
+`--compromised` place d'abord les secrets de `emergency_first` de l'inventaire : mot de passe `admin` de Jenkins (redémarrer le conteneur pour couper les sessions, pas seulement recharger JCasC), puis `secret_id` AppRole de Jenkins. Ils donnent accès aux secrets Internet que Jenkins lit dans OpenBao ; sans cela, l'attaquant relirait les nouveaux tokens au fur et à mesure.
+
+Ordre suivi (`--dry-run` affiche la liste exacte) :
+
+1. **Si Jenkins ou le poste sont compromis** (`--compromised`), d'abord : mot de passe `admin` de Jenkins (`jenkins-admin-password`, redémarrage du conteneur pour couper les sessions), puis `rotate-secrets.py openbao-approle-jenkins`.
 2. Exposés sur Internet : `rotate-secrets.py ci-bot-forgejo-token renovate-forgejo-token fixcve-forgejo-token renovate-gpg-key`, mots de passe des bots et contrôle du compte personnel (procédures `codeberg-bot-passwords`, `codeberg-personal`), SMTP (`smtp-infomaniak`), session Claude (`claude-subscription`).
 3. Exposés sur le réseau local : `rotate-secrets.py stagingkub-oidc-client stagingkub-keycloak-admin stagingkub-test-users stagingkub-rhdemo-db stagingkub-keycloak-db grafana-admin`, clés TLS.
 4. Locaux : `secret_id` AppRole restants, mot de passe `admin` d'OpenBao, clé de déverrouillage si elle a pu fuir, clé Cosign, kubeconfigs (`rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader`), compte Jenkins `claude`, token SonarQube.

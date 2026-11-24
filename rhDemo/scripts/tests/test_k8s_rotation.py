@@ -83,7 +83,9 @@ class FakeCluster:
         raise AssertionError(f"kubectl --kubeconfig inattendu : {args}")
 
 
-class K8sTokenTest(Base):
+class K8sBase(Base):
+    """Faux cluster et faux Jenkins, sans test (réutilisé par test_emergency_rotation)."""
+
     def setUp(self):
         super().setUp()
         self.cluster = FakeCluster()
@@ -100,6 +102,8 @@ class K8sTokenTest(Base):
     def new_secrets(self):
         return [n for n in self.cluster.secrets if n.startswith("jenkins-deployer-token-")]
 
+
+class K8sTokenTest(K8sBase):
     def test_rotation_nominale(self):
         detail = rotations.rotate_k8s_sa_token(self.ctx(), ENTRY)
         [new] = self.new_secrets()
@@ -157,7 +161,6 @@ class K8sTokenTest(Base):
         self.assertIsNone(rotations.rotate_k8s_sa_token(self.ctx(dry_run=True), ENTRY))
         self.assertEqual(self.new_secrets(), [])
         self.assertEqual(self.cred_content(), "ancien kubeconfig")
-
 
 class K8sInventoryTest(Base):
     def test_cibles_jenkins_file_seulement(self):

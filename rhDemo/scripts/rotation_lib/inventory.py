@@ -52,6 +52,9 @@ NO_ROTATION = {"per-build"}
 # (durée de vie imposée par le fournisseur, lifetime_days si elle est connue). --check le
 # signale en retard EXPIRY_MARGIN_DAYS jours avant son expiration.
 EXPIRY_MARGIN_DAYS = 14
+# rotation.session : identifiant maître de la session du script changé par cette procédure
+# manuelle ; en urgence, le script l'oublie ensuite et le redemande à la connexion suivante.
+SESSIONS = ("jenkins",)
 
 
 def load(path=DEFAULT_PATH):
@@ -102,6 +105,8 @@ def validate(inv):
                 errors.append(f"{sid} : lifetime_days doit être un entier > {EXPIRY_MARGIN_DAYS}")
             if e.get("blocking") is not True:
                 errors.append(f"{sid} : lifetime_days exige blocking: true")
+        if e["rotation"].get("session") not in (None, *SESSIONS):
+            errors.append(f"{sid} : session {e['rotation']['session']} inconnue")
         if method in NO_ROTATION and e.get("blocking"):
             errors.append(f"{sid} : {method} ne peut pas être bloquant")
         targets = e.get("targets") or []
@@ -123,7 +128,15 @@ def validate(inv):
                 errors.append(f"{sid} : cible {kind} incomplète")
             elif kind == "jenkins" and t["type"] not in JENKINS_TYPES:
                 errors.append(f"{sid} : type Jenkins {t['type']} inconnu")
-    return errors
+    return errors + _validate_emergency(inv)
+
+
+def _validate_emergency(inv):
+    ids = {e.get("id") for e in inv["secrets"]}
+    first = inv.get("emergency_first", [])
+    if not isinstance(first, list):
+        return ["emergency_first doit être une liste d'identifiants"]
+    return [f"emergency_first : secret inconnu {sid}" for sid in first if sid not in ids]
 
 
 def by_id(inv, sid):
@@ -136,3 +149,13 @@ def by_id(inv, sid):
 def ordered(entries):
     """Ordre d'urgence de l'étude (§3.3) : exposition, puis criticité."""
     return sorted(entries, key=lambda e: (EXPOSURE_ORDER[e["exposure"]], LEVELS.index(e["criticality"])))
+
+
+def emergency_order(inv, compromised=False):
+    """Tout le périmètre renouvelable dans l'ordre d'urgence. Si Jenkins ou le poste sont
+    compromis, les secrets de emergency_first d'abord (ils donnent accès aux autres)."""
+    entries = ordered(e for e in inv["secrets"] if e["rotation"]["method"] not in NO_ROTATION)
+    if not compromised:
+        return entries
+    first = [by_id(inv, sid) for sid in inv.get("emergency_first", [])]
+    return first + [e for e in entries if e not in first]

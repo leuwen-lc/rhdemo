@@ -25,7 +25,7 @@ sources:
 
 **Hors périmètre** (demande explicite) : les jetons qui n'ouvrent qu'un quota de lecture. Ils sont listés en fin d'inventaire pour mémoire.
 
-**Statut** : proposition. Phases 0 et 1 réalisées le 2026-11-17 (§3.4), phase 2 en grande partie par OpenBao (2026-11-21). État au 2026-11-23 et reste à faire : §5. L'adoption d'OpenBao ([ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), [OPENBAO.md](OPENBAO.md)) a changé plusieurs options : les secrets sont stockés et propagés par OpenBao au lieu de SOPS et des credentials Jenkins, la clé Cosign est une clé Transit, les secrets de stagingkub sont renouvelés par le script, SOPS et sa clé AGE sont abandonnés (2026-11-21). Usage courant du script et tâches récurrentes : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
+**Statut** : proposition. Phases 0 et 1 réalisées le 2026-11-17 (§3.4), phase 2 en grande partie par OpenBao (2026-11-21), mode `--emergency` le 2026-11-23. État au 2026-11-23 et reste à faire : §5. L'adoption d'OpenBao ([ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), [OPENBAO.md](OPENBAO.md)) a changé plusieurs options : les secrets sont stockés et propagés par OpenBao au lieu de SOPS et des credentials Jenkins, la clé Cosign est une clé Transit, les secrets de stagingkub sont renouvelés par le script, SOPS et sa clé AGE sont abandonnés (2026-11-21). Usage courant du script et tâches récurrentes : [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
 
 ---
 
@@ -128,7 +128,7 @@ Fichier versionné `rhDemo/secrets/inventory.yaml` : une entrée par secret du �
 ```text
 rotate-secrets.py <id>            # un secret
 rotate-secrets.py --level C       # tous les secrets critiques
-rotate-secrets.py --emergency     # tout le périmètre, dans l'ordre d'urgence (phase 3, non réalisé)
+rotate-secrets.py --emergency     # tout le périmètre, dans l'ordre d'urgence (réalisé le 2026-11-23)
 rotate-secrets.py --check         # âge des secrets, secrets en retard sur leur période
 ```
 
@@ -138,7 +138,7 @@ Un module par fournisseur dans `scripts/rotation_lib/` (`forgejo.py`, `jenkins.p
 2. **Créer** le nouveau secret (API du fournisseur) ;
 3. **Vérifier** par un appel réel avec le nouveau secret, avant de le propager (par exemple `GET /api/v1/user` et droit d'écriture sur le dépôt pour Codeberg, connexion SMTP pour le mot de passe des notifications, `kubectl auth can-i`, `cosign verify`). En cas d'échec, le nouveau secret est supprimé et rien n'a changé ;
 4. **Propager** aux consommateurs : écriture dans OpenBao (lue par Jenkins, fixcve-auto et ESO), credential Jenkins pour les secrets restés dans Jenkins, synchronisation ESO forcée puis `rollout restart` pour stagingkub. Si la propagation échoue sans avoir modifié de cible, le nouveau secret est supprimé ;
-5. **Révoquer** l'ancien, seulement si les étapes 3 et 4 ont réussi. En mode `--emergency`, la révocation passe **avant** la vérification : mieux vaut une CI cassée qu'un attaquant actif.
+5. **Révoquer** l'ancien, seulement si les étapes 3 et 4 ont réussi. En mode `--emergency`, la révocation passe **avant** la création : mieux vaut une CI cassée qu'un attaquant actif. Réalisé pour les secrets qui se révoquent à part (tokens et clé Codeberg, `secret_id` AppRole, tokens Kubernetes) ; les mots de passe changés en place invalident l'ancien dès le changement.
 6. **Tracer** : date et identifiant dans un journal local (`~/.config/rhdemo-rotation/journal.jsonl`), jamais de valeur.
 
 Règles de sécurité du script :
@@ -157,7 +157,9 @@ Principe : révoquer d'abord ce qui est **exploitable depuis Internet** (colonne
 3. Secrets LAN : applicatifs stagingkub (#15), Grafana (#17), clés TLS (#18)
 4. Secrets locaux : OpenBao (`secret_id` #20 à #22, mot de passe `admin` #23, clé de déverrouillage #24 en cas de doute), Cosign (#2), kubeconfigs (#8, #9), admin et `claude` Jenkins (#10, #11), SonarQube (#14)
 
-**Exception, compromission de Jenkins ou du poste** (code malveillant exécuté par la CI, accès à la session) : commencer par le mot de passe `admin` Jenkins (#10) et l'invalidation de ses sessions (redémarrage), puis le `secret_id` AppRole de Jenkins (#20) : ils donnent accès aux secrets Internet que Jenkins lit dans OpenBao. Sinon, l'attaquant relirait les nouveaux tokens au fur et à mesure de leur mise à jour. Enchaîner ensuite sur l'ordre ci-dessus.
+Mis en œuvre par `rotate-secrets.py --emergency` (2026-11-23) : ordre `inventory.ordered` (exposition puis criticité), procédures manuelles affichées une à une et tracées quand elles sont faites, tous les tokens des comptes bots révoqués sans question, bilan final. Usage : [ROTATION_SECRETS.md](ROTATION_SECRETS.md), « Rotation d'urgence ».
+
+**Exception, compromission de Jenkins ou du poste** (code malveillant exécuté par la CI, accès à la session), option `--compromised` (liste `emergency_first` de l'inventaire) : commencer par le mot de passe `admin` Jenkins (#10) et l'invalidation de ses sessions (redémarrage), puis le `secret_id` AppRole de Jenkins (#20) : ils donnent accès aux secrets Internet que Jenkins lit dans OpenBao. Sinon, l'attaquant relirait les nouveaux tokens au fur et à mesure de leur mise à jour. Enchaîner ensuite sur l'ordre ci-dessus.
 
 ### 3.4 Utilisation (phase 1)
 
@@ -260,7 +262,7 @@ Limite : le mot de passe d'un appareil permet aussi de **lire** la boîte (IMAP)
 | 0 | Corrections immédiates : mot de passe Grafana, défauts `sonar123` et `changeme` (ZAP), droits 600 sur les fichiers locaux, vérification des anciens secrets Codeberg Actions, **2FA sur les trois comptes bots Codeberg et sur le compte personnel**, revue manuelle des tokens et clés SSH du compte personnel. *Terminée le 2026-11-17 (aucun secret Actions restant aux niveaux dépôt, organisation et utilisateur).* | 1 h 30 |
 | 1 | `inventory.yaml`, module Jenkins générique, module Codeberg (tokens et GPG), saisie manuelle vérifiée (SMTP), `--check`. *Implémentée le 2026-11-17 (§3.4). #3, #4, #5, #7 et #12 renouvelés le 2026-11-17, puis #3, #4, #5 et #7 de nouveau le 2026-11-22 lors de leur passage dans OpenBao.* | 1,5 jour |
 | 2 | Modules Kubernetes (kubeconfigs), Cosign avec re-signature, secrets applicatifs stagingkub. *Cosign et stagingkub réalisés par OpenBao (2026-11-21), sans re-signature (§4.3). Kubeconfigs automatisés le 2026-11-23 (§4.4).* | 1 à 2 jours |
-| 3 | Module AGE, mode `--emergency`. *Module AGE sans objet (SOPS abandonné). `--emergency` ouvert ; en attendant, ordre d'urgence dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).* | 1 jour |
+| 3 | Module AGE, mode `--emergency`. *Module AGE sans objet (SOPS abandonné). `--emergency` réalisé le 2026-11-23 (§3.3), non encore exercé en conditions réelles.* | 1 jour |
 | 4 | Rotation périodique planifiée (rappel par `--check` en cron, pas de rotation silencieuse). *Ouvert. Tokens Kubernetes à durée limitée abandonnés (§6).* | 0,5 jour |
 
 Tests : comme pour fixcve-auto, un bac à sable avec un faux Forgejo et un faux Jenkins valide les modules sans toucher aux vrais comptes. Le module Kubernetes se teste sur le cluster KinD. Le code est sous `scripts/`, donc hors couverture Sonar Java ; les modules Python suivent la règle `python3 -I`.
@@ -283,7 +285,7 @@ Relevé par `rotate-secrets.py --check` et le journal local des rotations.
 3. **Détruire la clé AGE** (§4.6) et vérifier l'absence du credential `sops-age-key` dans Jenkins.
 4. ~~Kubeconfigs (#8, #9)~~ : automatisés le 2026-11-23 (§4.4). Reste à faire la **première rotation** (`rotate-secrets.py kubeconfig-stagingkub kubeconfig-stagingkub-infra-upgrader`), qui remplace les Secrets historiques au nom fixe, puis à supprimer les anciens fichiers `infra/stagingkub/jenkins-kubeconfig/*.yaml`.
 5. **Création de tokens par Secret** (§1.3) : remontée de `jenkins-deployer` vers `jenkins-infra-upgrader` fermée le 2026-11-23 (namespace dédié `jenkins-infra`), credential d'infra protégé par une garde dans `RHDemo-Renovate`. `jenkins-infra-upgrader` reste équivalent à un administrateur du cluster par construction. Ouvert : Pod Security en `enforce` sur `rhdemo-stagingkub` (mise en conformité de PostgreSQL et des sauvegardes d'abord). Détail : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md), « Limite connue ».
-6. **Mode `--emergency`** (phase 3) ; en attendant, ordre d'urgence manuel dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md).
+6. ~~Mode `--emergency`~~ (phase 3) : réalisé le 2026-11-23 (§3.3). Reste à l'exercer une fois, par exemple `--emergency --dry-run`, puis une vraie rotation d'urgence à l'occasion d'une rotation périodique.
 7. **Rappel périodique** : la ligne cron de `--check` documentée dans [ROTATION_SECRETS.md](ROTATION_SECRETS.md) n'est pas installée sur le poste (seule la rotation du journal d'audit d'OpenBao l'est). Tant que le point 1 n'est pas fait, le rappel signalerait 13 secrets en permanence.
 8. **Piste** : tokens Codeberg restreints au dépôt `rhdemo` (§3.4), non implémentée.
 9. Points marqués *à vérifier* (token Jenkins de `claude`, déconnexion des sessions Claude, plafond de facturation).

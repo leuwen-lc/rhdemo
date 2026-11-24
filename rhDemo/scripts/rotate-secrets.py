@@ -13,6 +13,15 @@ Usage :
   rotate-secrets.py --record <id>           tracer une rotation faite à la main (méthodes manual)
   rotate-secrets.py --if-missing <id>...    k8s-sa-token : créer le token seulement s'il n'en
                                             existe aucun (appelé par init-stagingkub.sh)
+  rotate-secrets.py --emergency [--compromised]
+                                            rotation d'urgence après une fuite supposée : tout
+                                            le périmètre, dans l'ordre d'urgence (Internet, LAN,
+                                            local), l'ancien secret révoqué AVANT la création du
+                                            nouveau ; les procédures manuelles sont affichées une
+                                            à une et tracées quand elles sont faites.
+                                            --compromised (Jenkins ou poste compromis) : d'abord
+                                            emergency_first de l'inventaire (admin Jenkins,
+                                            secret_id AppRole de Jenkins)
 
 Les secrets de méthode per-build (ephemere) sont régénérés à chaque build : --check les affiche
 sans les compter en retard, la rotation et --record les refusent.
@@ -114,36 +123,75 @@ def select(inv, ids, level):
     return inv_mod.ordered(entries)
 
 
+def manual_step(ctx, e):
+    """Procédure manuelle. En urgence, attend qu'elle soit faite et la trace ; renvoie True
+    si elle est faite."""
+    r = e["rotation"]
+    log(f"  manuel : {r['procedure']}")
+    if not ctx.emergency or ctx.dry_run:
+        log(f"  une fois fait : rotate-secrets.py --record {e['id']}")
+        return False
+    if not ctx.prompter.confirm("  Procédure faite (elle sera tracée) ? Non : la noter à faire et continuer"):
+        return False
+    ctx.journal.append(e["id"], "recorded", "urgence : rotation manuelle déclarée")
+    if r.get("session"):
+        ctx.forget_session(r["session"])
+    return True
+
+
 def cmd_rotate(ctx, entries):
-    failures = 0
+    urgent = bool(ctx and ctx.emergency)
+    done, failed, pending = [], [], []
     for e in entries:
         method = e["rotation"]["method"]
         log(f"\n── #{e['num']} {e['id']} ({e['label']})")
         if method == "planned":
             log(f"  pas encore automatisé (phase {e['rotation']['phase']}), voir l'étude")
+            pending.append(e["id"])
             continue
         if method in inv_mod.NO_ROTATION:
             log(f"  rien à faire : {e['rotation']['note']}")
             continue
         if method == "manual":
-            log(f"  manuel : {e['rotation']['procedure']}")
-            log(f"  une fois fait : rotate-secrets.py --record {e['id']}")
+            (done if manual_step(ctx, e) else pending).append(e["id"])
             continue
         try:
             detail = METHODS[method](ctx, e)
         except RotationError as exc:
             warn(f"{e['id']} : ÉCHEC — {exc}")
             ctx.journal.append(e["id"], "failed", redact(str(exc))[:200])
-            failures += 1
+            failed.append(e["id"])
             continue
         if isinstance(detail, Skipped):
             log(f"  {detail}")
         elif ctx.dry_run:
             log("  (dry-run : rien n'a été modifié)")
         else:
-            ctx.journal.append(e["id"], "rotated", detail)
+            ctx.journal.append(e["id"], "rotated", f"urgence : {detail}" if urgent else detail)
             log(f"  ✓ {detail}")
-    return 1 if failures else 0
+            done.append(e["id"])
+    if urgent:
+        log("\n══ Bilan de la rotation d'urgence")
+        log(f"  renouvelés : {', '.join(done) or 'aucun'}")
+        if failed:
+            warn(f"en échec : {', '.join(failed)} : l'ancien secret peut être déjà révoqué (CI "
+                 "cassée) ou encore en vigueur (mot de passe changé en place puis rétabli) ; "
+                 "relancer rotate-secrets.py <id> ou terminer à la main")
+        if pending:
+            warn(f"restent à faire : {', '.join(pending)} (puis rotate-secrets.py --record <id>)")
+        return 1 if failed or (pending and not ctx.dry_run) else 0
+    return 1 if failed else 0
+
+
+def confirm_emergency(ctx, entries, compromised):
+    log("ROTATION D'URGENCE : chaque ancien secret est révoqué AVANT la création du nouveau ;")
+    log("un échec peut laisser la CI ou stagingkub cassés jusqu'à correction (mieux qu'un")
+    log("attaquant actif). Ordre :" + (" secrets donnant accès aux autres (compromission), puis"
+                                        if compromised else "") + " Internet, LAN, local.")
+    log("  " + " ".join(e["id"] for e in entries))
+    if ctx.dry_run:
+        return True
+    return ctx.prompter.confirm("Lancer la rotation d'urgence ?")
 
 
 def main(argv=None):
@@ -155,9 +203,11 @@ def main(argv=None):
     g.add_argument("--preflight", action="store_true")
     g.add_argument("--level", choices=inv_mod.LEVELS)
     g.add_argument("--record", metavar="ID")
+    g.add_argument("--emergency", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no", action="store_true")
     p.add_argument("--if-missing", action="store_true")
+    p.add_argument("--compromised", action="store_true")
     p.add_argument("--inventory", default=inv_mod.DEFAULT_PATH)
     args = p.parse_args(argv)
 
@@ -177,8 +227,13 @@ def main(argv=None):
             journal.append(args.record, "recorded", "rotation manuelle déclarée")
             log(f"rotation de {args.record} tracée")
             return 0
-        if not args.ids and not args.level and not args.preflight:
-            p.error("indiquer un ou plusieurs identifiants, --level, --check, --list ou --preflight")
+        if args.compromised and not args.emergency:
+            p.error("--compromised ne s'emploie qu'avec --emergency")
+        if args.emergency and (args.ids or args.no or args.if_missing):
+            p.error("--emergency porte sur tout l'inventaire, sans identifiant, --no ni --if-missing")
+        if not args.ids and not args.level and not args.preflight and not args.emergency:
+            p.error("indiquer un ou plusieurs identifiants, --level, --emergency, --check, --list "
+                    "ou --preflight")
         if args.if_missing:
             others = [e["id"] for e in select(inv, args.ids, None)
                       if e["rotation"]["method"] != "k8s-sa-token"] if args.ids else []
@@ -186,10 +241,17 @@ def main(argv=None):
                 raise RotationError("--if-missing ne s'applique qu'à des identifiants de méthode "
                                     f"k8s-sa-token{' (pas : ' + ', '.join(others) + ')' if others else ''}")
         prompter = Prompter(assume_no=args.no)
-        ctx = Context(inv, prompter, journal, dry_run=args.dry_run, if_missing=args.if_missing)
+        ctx = Context(inv, prompter, journal, dry_run=args.dry_run, if_missing=args.if_missing,
+                      emergency=args.emergency)
         try:
             if args.preflight:
                 return cmd_preflight(ctx)
+            if args.emergency:
+                entries = inv_mod.emergency_order(inv, args.compromised)
+                if not confirm_emergency(ctx, entries, args.compromised):
+                    log("abandon : rien n'a été modifié")
+                    return 1
+                return cmd_rotate(ctx, entries)
             return cmd_rotate(ctx, select(inv, args.ids, args.level))
         finally:
             ctx.close()

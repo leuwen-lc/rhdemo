@@ -3,6 +3,12 @@
 Ordre retenu (mode normal) : le nouveau secret est vérifié auprès du fournisseur AVANT d'être
 propagé, et l'ancien n'est révoqué qu'après une propagation réussie. Si la vérification ou la
 propagation échoue sans qu'aucune cible n'ait été modifiée, le nouveau secret est supprimé.
+
+Mode urgence (--emergency, ctx.emergency) : pour les méthodes dont l'ancien secret se révoque à
+part (tokens et clé Codeberg, secret_id AppRole, tokens Kubernetes), la révocation passe AVANT la
+création : mieux vaut une CI cassée qu'un attaquant actif. Tous les tokens d'un compte bot sont
+alors révoqués, sans confirmation. Les mots de passe changés en place (PostgreSQL, Keycloak,
+Grafana) invalident l'ancien dès le changement ; un échec ramène l'ancien, signalé comme tel.
 """
 import base64
 import os
@@ -21,12 +27,13 @@ from . import k8s, tools
 class Context:
     """Clients et paramètres partagés par les rotations d'une session (créés à la demande)."""
 
-    def __init__(self, inventory, prompter, journal, dry_run=False, if_missing=False):
+    def __init__(self, inventory, prompter, journal, dry_run=False, if_missing=False, emergency=False):
         self.inv = inventory
         self.prompter = prompter
         self.journal = journal
         self.dry_run = dry_run
         self.if_missing = if_missing   # k8s-sa-token : ne créer un token que s'il n'y en a aucun
+        self.emergency = emergency     # révoquer l'ancien avant de créer le nouveau
         self._jenkins = None
         self._forgejo = None
         self._openbao = None
@@ -76,6 +83,13 @@ class Context:
             client.token()
             self._keycloak = client
         return self._keycloak
+
+    def forget_session(self, name):
+        """Après le changement manuel d'un identifiant maître (rotation: session), le
+        redemander à la prochaine connexion."""
+        if name == "jenkins":
+            self._jenkins = None
+            self.prompter.drop("jenkins")
 
     def close(self):
         if self._port_forward is not None:
@@ -163,6 +177,13 @@ def _propagate_or_rollback(ctx, entry, value, rollback, what):
         raise
 
 
+def _revoke_first(items, revoke, name):
+    """Urgence : révoque les anciens secrets avant toute création."""
+    for item in items:
+        revoke(item)
+        log(f"  révoqué (urgence) : {name(item)}")
+
+
 # --- méthodes ------------------------------------------------------------------------------
 
 def rotate_forgejo_token(ctx, entry):
@@ -174,14 +195,14 @@ def rotate_forgejo_token(ctx, entry):
     check_targets(ctx, entry)
     tokens = fj.list_tokens(user)
     managed = [t for t in tokens if t["name"].startswith(prefix + "-")]
-    revoke = list(managed)
+    revoke = list(tokens) if ctx.emergency else list(managed)   # urgence : tout token du bot
     for t in tokens:
-        if t in managed:
+        if t in revoke:
             continue
         if ctx.prompter.confirm(f"{user} : token non géré « {t['name']} » "
                                 f"({', '.join(t.get('scopes') or [])}), le révoquer aussi ?"):
             revoke.append(t)
-    for t in revoke:
+    for t in revoke if not ctx.emergency else []:
         old_scopes = set(t.get("scopes") or [])
         if old_scopes and old_scopes != set(scopes):
             if not ctx.prompter.confirm(f"{user} : « {t['name']} » a les portées "
@@ -190,10 +211,13 @@ def rotate_forgejo_token(ctx, entry):
                 raise RotationError(f"portées divergentes pour {user} : corriger l'inventaire")
     name = f"{prefix}-{stamp()}"
     log(f"  nouveau token {name} ({', '.join(scopes)}) → {_targets_text(entry)}")
-    log(f"  à révoquer : {', '.join(t['name'] for t in revoke) or 'aucun'}")
+    log(f"  à révoquer{' AVANT la création (urgence)' if ctx.emergency else ''} : "
+        f"{', '.join(t['name'] for t in revoke) or 'aucun'}")
     if ctx.dry_run:
         return None
 
+    if ctx.emergency:
+        _revoke_first(revoke, lambda t: fj.delete_token(user, t["id"]), lambda t: t["name"])
     token_id, value = fj.create_token(user, name, scopes)
 
     def rollback():
@@ -203,10 +227,11 @@ def rotate_forgejo_token(ctx, entry):
         fj.check_token(value, user, repo)
     except RotationError:
         rollback()
-        warn(f"token {name} supprimé (vérification échouée, rien d'autre n'a changé)")
+        state = "anciens tokens déjà révoqués" if ctx.emergency else "rien d'autre n'a changé"
+        warn(f"token {name} supprimé (vérification échouée, {state})")
         raise
     _propagate_or_rollback(ctx, entry, value, rollback, f"token {name}")
-    for t in revoke:
+    for t in revoke if not ctx.emergency else []:
         fj.delete_token(user, t["id"])
         log(f"  révoqué : {t['name']}")
     return f"token {name}, révoqués : {', '.join(t['name'] for t in revoke) or 'aucun'}"
@@ -225,9 +250,12 @@ def rotate_forgejo_gpg(ctx, entry):
     uid = f"{r.get('uid_name', user)} <{email}>"
     log(f"  nouvelle clé {r.get('algo', 'rsa4096')} pour {r.get('uid_name', user)}, "
         f"expiration {r.get('expire', '2y')} → {_targets_text(entry)}")
-    log(f"  clés à retirer de Codeberg : {', '.join(k['key_id'] for k in old_keys) or 'aucune'}")
+    log(f"  clés à retirer de Codeberg{' AVANT la création (urgence)' if ctx.emergency else ''} : "
+        f"{', '.join(k['key_id'] for k in old_keys) or 'aucune'}")
     if ctx.dry_run:
         return None
+    if ctx.emergency:
+        _revoke_first(old_keys, lambda k: fj.delete_gpg_key(user, k["id"]), lambda k: k["key_id"])
 
     with tools.gpg_home() as home:
         fpr, public, private = tools.gpg_generate(home, uid, r.get("algo", "rsa4096"),
@@ -246,7 +274,7 @@ def rotate_forgejo_gpg(ctx, entry):
 
     value = base64.b64encode(private.encode("ascii")).decode("ascii")
     _propagate_or_rollback(ctx, entry, value, rollback, f"clé {fpr[-16:]}")
-    for k in old_keys:
+    for k in old_keys if not ctx.emergency else []:
         fj.delete_gpg_key(user, k["id"])
         log(f"  retirée de Codeberg : {k['key_id']}")
     return f"clé {fpr[-16:]}, retirées : {', '.join(k['key_id'] for k in old_keys) or 'aucune'}"
@@ -270,6 +298,8 @@ def rotate_manual_value(ctx, entry):
     log(f"  → {'test SMTP, puis ' if username else ''}{_targets_text(entry)}")
     if ctx.dry_run:
         return None
+    if ctx.emergency and r.get("revoke"):
+        warn(f"urgence, à faire D'ABORD : {r['revoke']}")
     value = ctx.prompter.secret(f"value:{entry['id']}", f"Nouvelle valeur de {entry['id']}")
     if value != value.strip() or any(c.isspace() for c in value):
         warn("la valeur saisie contient des espaces : vérifier le copier-coller "
@@ -280,7 +310,7 @@ def rotate_manual_value(ctx, entry):
         ctx.smtp_check(smtp["host"], int(smtp["port"]), username, value)
         log("  ✓ connexion SMTP acceptée avec la nouvelle valeur")
     propagate(ctx, entry, value)
-    if r.get("revoke"):
+    if r.get("revoke") and not ctx.emergency:
         warn(f"à faire maintenant : {r['revoke']}")
     return "valeur saisie" + (", testée en SMTP" if username else "") + " et propagée"
 
@@ -294,9 +324,11 @@ def rotate_openbao_approle(ctx, entry):
     role_id = ob.role_id(role)
     old = ob.secret_id_accessors(role)
     log(f"  nouveau secret_id pour l'AppRole {role} → {_targets_text(entry)}")
-    log(f"  secret_id à détruire ensuite : {len(old)}")
+    log(f"  secret_id à détruire {'AVANT la création (urgence)' if ctx.emergency else 'ensuite'} : {len(old)}")
     if ctx.dry_run:
         return None
+    if ctx.emergency:
+        _revoke_first(old, lambda acc: ob.destroy_secret_id(role, acc), lambda acc: "secret_id")
     secret_id, accessor = ob.new_secret_id(role)
 
     def rollback():
@@ -309,7 +341,7 @@ def rotate_openbao_approle(ctx, entry):
         warn("secret_id détruit (connexion de vérification refusée, rien d'autre n'a changé)")
         raise
     _propagate_or_rollback(ctx, entry, secret_id, rollback, "secret_id")
-    for acc in old:
+    for acc in old if not ctx.emergency else []:
         ob.destroy_secret_id(role, acc)
     return f"secret_id renouvelé pour {role}, {len(old)} ancien(s) détruit(s)"
 
@@ -616,10 +648,13 @@ def rotate_k8s_sa_token(ctx, entry):
     name = f"{r['secret_prefix']}-{stamp()}"
     log(f"  nouveau Secret {name} (ServiceAccount {sa}) → vérification → {_targets_text(entry)}"
         + (f" (à créer : {', '.join(missing)})" if missing else ""))
-    log(f"  Secrets à supprimer ensuite : {', '.join(old) or 'aucun'}")
+    log(f"  Secrets à supprimer {'AVANT la création (urgence)' if ctx.emergency else 'ensuite'} : "
+        f"{', '.join(old) or 'aucun'}")
     if ctx.dry_run:
         return None
 
+    if ctx.emergency:
+        _revoke_first(old, lambda n: k8s.delete_secret(ns, n), lambda n: f"Secret {n}")
     k8s.create_token_secret(ns, sa, name)
 
     def rollback():
@@ -654,7 +689,7 @@ def rotate_k8s_sa_token(ctx, entry):
             rollback()
             warn(f"Secret {name} supprimé (aucune cible modifiée)")
         raise
-    for n in old:
+    for n in old if not ctx.emergency else []:
         k8s.delete_secret(ns, n)
         log(f"  supprimé : Secret {n} (ancien token invalide)")
     return f"Secret {name}, supprimés : {', '.join(old) or 'aucun'}"

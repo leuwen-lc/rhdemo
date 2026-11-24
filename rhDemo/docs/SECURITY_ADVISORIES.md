@@ -4,6 +4,14 @@ Ce document trace les vulnérabilités critiques détectées et les actions de r
 
 ---
 
+## org.springframework.boot:spring-boot-security (build #1108)
+
+- **Date** : 2026-11-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)
+- **Remédiation automatique** :
+  - `org.springframework.boot:spring-boot-security` 4.1.2 → 4.1.3 (CVE-2026-59414, CVSS 9.1)
+
+---
+
 ## org.springframework.boot:spring-boot-actuator, org.springframework.boot:spring-boot-security, org.springframework.security:spring-security-core, org.springframework.security:spring-security-web ... (build #1097)
 
 - **Date** : 2026-11-24 — **Outil** : OWASP Dependency-Check — **Source** : `fixcve-auto` (procédure déterministe)

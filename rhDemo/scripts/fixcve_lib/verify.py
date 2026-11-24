@@ -5,8 +5,12 @@
      ne signale plus la faille pour ce paquet.
   3. OWASP Dependency-Check (stage owasp, clé NVD disponible) : rescan du projet ; aucun finding
      traité ne doit subsister, aucun nouveau finding sur un paquet monté par ce cycle.
-     OSS Index désactivé (quota partagé avec RHDemo-CI) ; clé NVD lue dans l'environnement par le
-     plugin (`nvdApiKeyEnvironmentVariable`), jamais en ligne de commande. La base NVD est celle
+     OSS Index activé si son compte est dans l'environnement (OSSINDEX_USER / OSSINDEX_PASSWORD,
+     lus par .mvn/ci-settings.xml comme dans RHDemo-CI) : sans lui, une faille que seul OSS Index
+     relie à la version passe jusqu'à la CI (Tomcat 11.0.27, builds #1102 à #1107). Cache OSS
+     Index de 7 jours partagé avec la CI : les requêtes sont le plus souvent déjà en cache.
+     Clé NVD lue dans l'environnement par le plugin (`nvdApiKeyEnvironmentVariable`), jamais en
+     ligne de commande. La base NVD est celle
      de RHDemo-CI (volume Maven monté par l'agent Jenkins, jamais deux builds à la fois) : seul le
      delta depuis le dernier build CI est téléchargé. Un rapport antérieur au scan n'est jamais relu.
 
@@ -161,16 +165,27 @@ def compare_odc(actions, detected, report):
     return failed, errors, odc_new_findings(report, known)
 
 
+CI_SETTINGS = ".mvn/ci-settings.xml"
+
+
+def odc_source_args():
+    """OSS Index comme en CI (compte dans l'environnement, jamais en argument), sinon désactivé."""
+    if os.environ.get("OSSINDEX_USER") and os.environ.get("OSSINDEX_PASSWORD") and os.path.exists(CI_SETTINGS):
+        return ["-s", CI_SETTINGS, "-DossIndexServerId=ossindex"]
+    return ["-DossIndexAnalyzerEnabled=false"]
+
+
 def run_odc():
     """Rescan Dependency-Check local -> rapport JSON, ou None si impossible (raison)."""
     if not os.environ.get("NVD_API_KEY"):
         return None, "cle_nvd_absente"
+    if odc_source_args()[0] != "-s":
+        print("info: rescan local sans OSS Index (compte absent) : moins complet que RHDemo-CI")
     # Un rapport resté d'un scan antérieur serait relu comme s'il était frais : on le supprime.
     if os.path.exists(ODC_REPORT):
         os.remove(ODC_REPORT)
-    code, _, err = run(["./mvnw", "-q", "-B", "org.owasp:dependency-check-maven:check",
-                        "-DnvdApiKeyEnvironmentVariable=NVD_API_KEY", "-DossIndexAnalyzerEnabled=false",
-                        "-DfailBuildOnCVSS=11"], timeout=3600)
+    code, _, err = run(["./mvnw", "-q", "-B", *odc_source_args(), "org.owasp:dependency-check-maven:check",
+                        "-DnvdApiKeyEnvironmentVariable=NVD_API_KEY", "-DfailBuildOnCVSS=11"], timeout=3600)
     report = load_json(ODC_REPORT)
     if report is None:
         return None, f"rapport_odc_absent (code {code} : {err.strip()[-200:]})"

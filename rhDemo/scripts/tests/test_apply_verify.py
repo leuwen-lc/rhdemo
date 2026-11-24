@@ -282,6 +282,21 @@ class OdcRunTest(unittest.TestCase):
         self.assertIsNone(report)
         self.assertIn("rapport_odc_absent", why)
 
+    def test_oss_index_comme_en_ci_si_compte_present(self):
+        """#1102-#1107 : faille vue par OSS Index seul ; le compte n'est jamais en argument."""
+        os.makedirs(".mvn")
+        open(verify_mod.CI_SETTINGS, "w").close()
+        env = {"NVD_API_KEY": "x", "OSSINDEX_USER": "u", "OSSINDEX_PASSWORD": "secret-oss"}
+        with unittest.mock.patch.dict(os.environ, env), \
+                unittest.mock.patch.object(verify_mod, "run", return_value=(1, "", "")) as run:
+            verify_mod.run_odc()
+        args = run.call_args.args[0]
+        self.assertIn("-DossIndexServerId=ossindex", args)
+        self.assertNotIn("-DossIndexAnalyzerEnabled=false", args)
+        self.assertFalse(any("secret-oss" in a or "u" == a for a in args))
+        with unittest.mock.patch.dict(os.environ, {"OSSINDEX_USER": ""}):
+            self.assertEqual(verify_mod.odc_source_args(), ["-DossIndexAnalyzerEnabled=false"])
+
 
 if __name__ == "__main__":
     unittest.main()

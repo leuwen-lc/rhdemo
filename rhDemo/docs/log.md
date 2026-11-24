@@ -459,3 +459,7 @@ Incident du build #1097 : CVE-2026-59414 (`spring-boot-security` 4.1.2, CVSS 9.1
 ## [2026-11-24] ingest | fixcve-auto : CVE nouvelles du rescan local traitées dans le cycle
 
 Suite de l'incident #1097 : le correctif (Spring Boot 4.1.3) amenait Tomcat 11.0.27, touché par CVE-2026-116830 que Dependency-Check ne détecte pas sur 11.0.25. La vérification locale ne signalait une CVE nouvelle que sur un paquet monté par le cycle : rien avant le push, rollback par la CI, puis même correctif au cycle suivant. Désormais `verify.py` renvoie toute CVE nouvelle (`new_findings`, format de `detected.json`) et `fixcve-auto-poll.sh` l'ajoute au cycle, relance recherche et classification et réapplique une fois. Test : `test_apply_verify.VerifyTest.test_1102_cve_nouvelle_par_ricochet_retraitee`. Doc : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).
+
+## [2026-11-24] ingest | fixcve-auto : rescan local avec OSS Index
+
+Builds #1106 et #1107 : le retraitement des CVE nouvelles n'a rien vu, car le rescan Dependency-Check local de fixcve désactivait OSS Index (quota) alors que la CI l'interroge ; CVE-2026-116830 sur Tomcat 11.0.27 n'est reliée à la version que par OSS Index (fiche NVD sans plages de versions). `Jenkinsfile-FixCVE` passe désormais le credential `ossindex-credentials`, et `verify.py` active OSS Index comme en CI (`.mvn/ci-settings.xml`) quand le compte est présent. Doc : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).

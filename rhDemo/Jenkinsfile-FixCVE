@@ -48,7 +48,11 @@ pipeline {
                     withCredentials([
                         usernamePassword(credentialsId: 'fixcve-jenkins-api', usernameVariable: 'JENKINS_USER', passwordVariable: 'JENKINS_TOKEN'),
                         string(credentialsId: 'fixcve-forgejo-token', variable: 'CODEBERG_TOKEN'),
-                        string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
+                        string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY'),
+                        // Rescan local de la vérification avec les mêmes sources que RHDemo-CI : une faille
+                        // vue par OSS Index seul (Tomcat 11.0.27, CVE-2026-116830, builds #1102 à #1107)
+                        // passait sinon jusqu'à la CI. Cache OSS Index de 7 jours partagé (volume Maven).
+                        usernamePassword(credentialsId: 'ossindex-credentials', usernameVariable: 'OSSINDEX_USER', passwordVariable: 'OSSINDEX_PASSWORD')
                     ]) {
                         withEnv([
                             "FIXCVE_BRANCH=${branch}",

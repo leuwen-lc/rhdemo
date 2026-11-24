@@ -86,9 +86,11 @@ def build_plan(detected, lookup):
             "actions": actions, "pending_reverified": lookup.get("pending_reverified", [])}
 
 
-def downgrade_failed_upgrade(action):
+def downgrade_failed_upgrade(action, cause=None):
     """Une montée qui n'a pas pu être appliquée ou vérifiée retombe dans la branche « sans correctif »
-    de la table (A, B ou blocage) — jamais une deuxième tentative de montée dans le même cycle."""
+    de la table (A, B ou blocage) — jamais une deuxième tentative de montée dans le même cycle.
+    `cause` (raison de l'échec) reste dans le journal : un correctif publié mais inapplicable ne
+    doit jamais se lire « aucun correctif »."""
     fallback = dict(action, target_version=None, target_digest=None)
     lookup = {"fix_status": "no_fix_available", "npm_dev_only": action.get("npm_dev_only"),
               "maven_scopes": action.get("maven_scopes"), "aliases": action["ids"]}
@@ -98,7 +100,12 @@ def downgrade_failed_upgrade(action):
                "cvss_vector": action.get("cvss_vector"),
                "os_family": action.get("os_family"), "os_name": action.get("os_name")}
     redone = classify(finding, lookup)
-    fallback.update(action=redone["action"], outcome_code=redone["outcome_code"],
+    # Correctif publié mais montée impossible à appliquer : défaut de la procédure (tooling),
+    # jamais un « échec conforme » (blocked_no_fix_ge9 suppose qu'aucun correctif n'existe).
+    outcome = "tooling" if cause and redone["action"] == "blocked" else redone["outcome_code"]
+    fallback.update(action=redone["action"], outcome_code=outcome,
                     criterion=redone["criterion"],
-                    reason="montee impossible a appliquer/verifier ; " + redone["reason"])
+                    reason=(f"correctif {action.get('target_version')} publie mais montee impossible "
+                            f"({cause or 'non confirmee par la verification'}) ; "
+                            + redone["reason"].replace("aucun correctif", "traite comme sans correctif", 1)))
     return fallback

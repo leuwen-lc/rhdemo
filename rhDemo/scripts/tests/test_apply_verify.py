@@ -87,17 +87,26 @@ class MavenEditTest(Workdir):
         self.assertEqual(status, "applied")
         self.assertIn("\t\t<hibernate.version>7.4.12.Final</hibernate.version>\n\t</properties>", self.read("pom.xml"))
 
-    def test_bom_importe_version_non_publiee(self):
+    def test_bom_importe_version_non_publiee_epinglage(self):
+        """Version absente du BOM importé : l'artefact seul est épinglé (correctif unitaire)."""
         status, detail = edits.maven_upgrade("com.fasterxml.jackson.core:jackson-databind", "2.21.5", "2.21.6",
                                              ["CVE-2026-68497"], Registry({"maven:com.fasterxml.jackson:jackson-bom": ["2.21.5"]}),
                                              bom_path_pattern="bom.pom")
-        self.assertEqual(status, "failed")
-        self.assertIn("non publie", detail)
+        self.assertEqual(status, "applied", detail)
+        self.assertIn("<artifactId>jackson-databind</artifactId>\n\t\t\t\t<version>2.21.6</version>", self.read("pom.xml"))
+        self.assertNotIn("jackson-2-bom.version", self.read("pom.xml"))
 
-    def test_artefact_non_gere(self):
+    def test_artefact_non_gere_epingle(self):
         status, _ = edits.maven_upgrade("com.example:inconnu", "1.0", "1.1", ["CVE-2026-10001"], Registry({}),
                                         bom_path_pattern="bom.pom")
+        self.assertEqual(status, "applied")
+        self.assertIn("<!-- Fix CVE-2026-10001 : inconnu 1.0 -> 1.1 -->", self.read("pom.xml"))
+
+    def test_changement_de_majeure_refuse(self):
+        status, detail = edits.maven_upgrade("com.example:inconnu", "1.0", "2.0", ["CVE-2026-10001"], Registry({}),
+                                             bom_path_pattern="bom.pom")
         self.assertEqual(status, "failed")
+        self.assertIn("majeure", detail)
 
     def test_deja_a_jour(self):
         status, _ = edits.maven_upgrade("org.apache.tomcat.embed:tomcat-embed-core", "11.0.20", "11.0.21",
@@ -157,10 +166,12 @@ class ApplyTest(Workdir):
 
     def test_montee_impossible_retombe_en_suppression(self):
         f = finding("CVE-2026-10001", "com.example:inconnu", "1.0.0", ecosystem="maven", cvss=7.5)
-        result = Applier(plan_of((f, {"fix_status": "fix_available", "target_version": "1.0.1",
+        result = Applier(plan_of((f, {"fix_status": "fix_available", "target_version": "2.0.1",
                                       "maven_scopes": ["compile"]})), Registry({}), {}).run()
         action = result["actions"][0]
         self.assertEqual((action["action"], action["criterion"]), ("suppress_temporary", "B"))
+        self.assertIn("publie mais montee impossible (com.example:inconnu 2.0.1 change de version majeure",
+                      action["reason"])
         self.assertIn("[PENDING_UPSTREAM_FIX] CVE-2026-10001", self.read("owasp-suppressions.xml"))
 
     def test_downgrade_force_par_la_verification(self):

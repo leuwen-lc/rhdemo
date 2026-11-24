@@ -35,7 +35,8 @@ def key_of(action):
 
 
 class Applier:
-    def __init__(self, plan, registry, image_refs, downgrade=(), log=None):
+    def __init__(self, plan, registry, image_refs, downgrade=(), log=None,
+                 resolve_unpinned=edits.unpinned_versions):
         self.plan = plan
         self.build = plan["jenkins_build"]
         self.stage = plan["stage"]
@@ -48,6 +49,8 @@ class Applier:
         self.changed = set()
         self.final = []
         self.resolved = []
+        self.resolve_unpinned = resolve_unpinned
+        self.cleaned = []
 
     # --- montées de version --------------------------------------------------------------
     def _upgrade_group(self, group):
@@ -73,7 +76,9 @@ class Applier:
         for a in actions:
             if a["action"] != "upgrade":
                 out.append(a)
-        for gkey, group in groups.items():
+        # Modules de Spring Boot d'abord : leur montée change le parent, donc le BOM que lisent
+        # les montées suivantes du cycle.
+        for gkey, group in sorted(groups.items(), key=lambda kv: not kv[0].startswith(edits.BOOT_GROUP + ":")):
             status, detail = self._upgrade_group(group)
             self.log(f"montee {gkey} : {status} - {detail}")
             for a in group:
@@ -85,7 +90,7 @@ class Applier:
                 elif status == "already":
                     out.append(dict(a, action="already", outcome_code="already_fixed", reason=detail))
                 else:
-                    out.append(downgrade_failed_upgrade(dict(a, reason=detail)))
+                    out.append(downgrade_failed_upgrade(a, cause=detail))
         return out
 
     def _touch_for(self, action):
@@ -95,6 +100,22 @@ class Applier:
             self.changed.update(["frontend/package.json", "frontend/package-lock.json"])
         else:
             self.changed.add(edits.POM)
+
+    # --- surcharges devenues inutiles -----------------------------------------------------
+    def _cleanup_overrides(self):
+        """Seulement si le cycle modifie déjà pom.xml : le retrait est validé avec la remédiation
+        (vérification locale, CI, rollback) et jamais poussé seul."""
+        if edits.POM not in self.changed:
+            return
+        removed, warnings = edits.cleanup_stale_overrides(self.registry, self.resolve_unpinned)
+        for w in warnings:
+            self.log(f"nettoyage pom.xml : {w}")
+        for r in removed:
+            self.log(f"nettoyage pom.xml : {r}")
+        if removed:
+            self.cleaned = removed
+            self.events.append({"timestamp": _now(), "event": "stale_overrides_removed", "jenkins_build": self.build,
+                                "stage": self.stage, "removed": [clean_text(r, 200) for r in removed]})
 
     # --- suppressions --------------------------------------------------------------------
     def _apply_suppressions(self, actions):
@@ -141,7 +162,7 @@ class Applier:
                 status, detail = edits.npm_upgrade(p["package"], p["new_fixed_version"])
             else:
                 status, detail = edits.maven_upgrade(p["package"], "?", p["new_fixed_version"],
-                                                     [p["cve_id"]], self.registry)
+                                                     [p["cve_id"]], self.registry, baseline_pom=self.baseline_pom)
             if status == "failed":
                 self.log(f"cloture {p['cve_id']} {p['package']} abandonnee : {detail}")
                 continue
@@ -172,8 +193,9 @@ class Applier:
                                 "criterion": a["criterion"], "justification": clean_text(a["reason"], 300),
                                 "outcome_code": a["outcome_code"]})
         if blocked:
+            code = "tooling" if any(a["outcome_code"] == "tooling" for a in blocked) else "blocked_no_fix_ge9"
             self.events.append({"timestamp": _now(), "event": "findings_blocked", "jenkins_build": self.build,
-                                "stage": self.stage, "outcome_code": "blocked_no_fix_ge9",
+                                "stage": self.stage, "outcome_code": code,
                                 "findings": [{"cves": a["ids"], "package": a["package_name"], "cvss": a["cvss"],
                                               "reason": clean_text(a["reason"], 200)} for a in blocked]})
         if transient:
@@ -194,6 +216,9 @@ class Applier:
         if applied or self.resolved:
             names = sorted({a["package_name"].split(":")[-1] for a in applied} | {p["package"].split(":")[-1] for p in self.resolved})
             parts.append("corriger " + _short(names))
+        if self.cleaned:
+            parts.append("retirer " + _short([r.split(" ")[0] if not r.startswith("epinglage") else r.split(" ")[1]
+                                              for r in self.cleaned]) + " (surcharges perimees)")
         if accepted:
             parts.append("accepter " + _short(sorted({a["package_name"].split(":")[-1] for a in accepted})))
         return f"fix(security): {', '.join(parts)} (remédiation automatique build #{self.build})"
@@ -203,6 +228,7 @@ class Applier:
                    for a in self.plan["actions"]]
         self._apply_pending()
         actions = self._apply_upgrades(actions)
+        self._cleanup_overrides()
         self._apply_suppressions(actions)
         applied, accepted, blocked, transient = self._record(actions)
         self.final = actions

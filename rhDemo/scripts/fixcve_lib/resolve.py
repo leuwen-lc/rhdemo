@@ -61,11 +61,15 @@ class Context:
 # Accès par défaut (production)
 # ----------------------------------------------------------------------------------------------
 
-def default_maven_deps():
-    """{groupId:artifactId: [(version, scope)]} via `mvnw dependency:list` (toutes portées)."""
-    out_file = os.path.abspath(".fixcve-cycle/dependency-list.txt")
-    code, _, err = run(["./mvnw", "-q", "-B", "dependency:list", "-DincludeScope=test",
-                        f"-DoutputFile={out_file}", "-DoutputAbsoluteArtifactFilename=false"], timeout=600)
+def default_maven_deps(pom_file=None):
+    """{groupId:artifactId: [(version, scope)]} via `mvnw dependency:list` (toutes portées).
+    `pom_file` : autre pom du même projet (nettoyage des épinglages, edits.unpinned_versions)."""
+    out_file = os.path.abspath(".fixcve-cycle/dependency-list" + ("-sans-epinglages" if pom_file else "") + ".txt")
+    if os.path.exists(out_file):
+        os.remove(out_file)   # jamais la liste d'une résolution précédente
+    code, _, err = run(["./mvnw", "-q", "-B", *(["-f", pom_file] if pom_file else []), "dependency:list",
+                        "-DincludeScope=test", f"-DoutputFile={out_file}",
+                        "-DoutputAbsoluteArtifactFilename=false"], timeout=600)
     deps = {}
     if code != 0 or not os.path.exists(out_file):
         raise RegistryError(f"mvnw dependency:list en échec : {err.strip()[-300:]}")

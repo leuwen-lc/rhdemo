@@ -17,7 +17,8 @@ ALL_CODES = SUCCESS | CONFORMING | FAILURES | INFRA
 # Événements sans portée « résultat de cycle » (validation d'un cycle précédent, halte...).
 _NEUTRAL_EVENTS = {"validation_success", "validation_partial", "validation_stage_cleared",
                    "automation_halted", "local_validation_incomplete", "skipped_local_validation_nvd_sync",
-                   "validation_kept_despite_failure", "skipped_out_of_scope"}
+                   "validation_kept_despite_failure", "skipped_out_of_scope",
+                   "stale_overrides_removed"}
 
 
 def legacy_outcome(event):

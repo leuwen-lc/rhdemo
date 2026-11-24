@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-23
+verifie_le: 2026-11-24
 sources:
   - rhDemo/Jenkinsfile-FixCVE
   - rhDemo/scripts/fixcve-state.sh
@@ -69,12 +69,16 @@ Les fichiers de cycle vivent dans `rhDemo/.fixcve-cycle/` de l'espace de travail
 
 **Critère A** (inexposition objective, prime sur le CVSS) : paquet npm dont toutes les copies sont `dev` dans `package-lock.json` ; dépendance Maven du projet dont toutes les portées sont `test`/`provided` ; vecteur CVSS `AV:L`/`AV:P`. Un jugement contextuel (code vulnérable non atteint dans notre configuration) n'est **jamais** automatique : c'est une décision humaine (skill `/fixcve`, critère `A:decision_humaine`).
 
-Une montée qui ne peut pas être appliquée ou que la vérification ne confirme pas retombe **une fois** dans la branche « sans correctif » de la table (A, B ou blocage) ; le plan est réappliqué et revérifié.
+Une montée qui ne peut pas être appliquée ou que la vérification ne confirme pas retombe **une fois** dans la branche « sans correctif » de la table (A, B ou blocage) ; le plan est réappliqué et revérifié. La raison reste au journal (« correctif X publié mais montée impossible (cause) »). Un blocage qui en résulte alors qu'un correctif est publié compte comme défaut (`tooling`), jamais comme échec conforme : `blocked_no_fix_ge9` suppose qu'aucun correctif n'existe (incident du build #1097, 2026-11-24).
 
 ### Montées de version (étape 5)
 
 - **npm** : `npm update <paquet> --package-lock-only` ; à défaut `npm install` exact (dépendance directe) ou `overrides` (transitive). Retenue seulement si **toutes** les copies du lockfile atteignent la cible ; sinon fichiers restaurés (incident #845/#847, montée sans effet).
-- **Maven** : propriété du BOM Spring Boot qui gère l'artefact (lue dans `spring-boot-dependencies` de `~/.m2`, BOM importé compris, ex. `jackson-2-bom.version`), commentaire `<!-- Fix ... -->`. Artefact non géré par le BOM : pas de montée (retombe en suppression A/B ou blocage).
+- **Maven** (`edits.maven_upgrade`), selon ce que le BOM Spring Boot (`spring-boot-dependencies` de `~/.m2`, sinon Maven Central) impose pour l'artefact, commentaire `<!-- Fix ... -->` dans tous les cas :
+  - **module de Spring Boot** (version écrite en dur, celle du parent, ex. `spring-boot-security`) : version de `spring-boot-starter-parent`, même branche mineure, parent publié. Ces montées passent en premier dans le cycle : elles changent le BOM que lisent les suivantes ;
+  - **propriété du BOM** (`tomcat.version`) ou d'un **BOM importé** (`spring-framework.version`, `jackson-bom.version`), retenu seulement s'il publie la version cible et la liste réellement (pom du BOM lu sur Maven Central). Le rattachement par simple préfixe de groupe a été abandonné : il rattachait `org.springframework.boot` au BOM de Spring Framework (build #1097) ;
+  - **sinon** (dépendance hors BOM, ou version cible absente du BOM importé) : version de la dépendance directe si `pom.xml` la porte par une propriété (version écrite en dur : montée manuelle), à défaut **épinglage** dans `<dependencyManagement>`, qui impose la version même à une dépendance transitive. Jamais de changement de version majeure.
+- **Nettoyage des surcharges périmées** (`edits.cleanup_stale_overrides`), dans tout cycle qui modifie déjà `pom.xml` (validé avec la remédiation, jamais poussé seul) : retrait des propriétés « Fix » dont le BOM Spring Boot fournit une version au moins égale, et des épinglages « Fix » dont Maven résout sans eux une version au moins égale (`mvnw dependency:list` sur un pom temporaire sans épinglages), ou dont l'artefact a quitté l'arbre. La version effective ne baisse jamais ; résolution impossible : épinglages conservés. Événement `stale_overrides_removed`. Motif : après une montée du parent, une surcharge restée en place devient une rétrogradation silencieuse (Tomcat, PostgreSQL, Hibernate, Hibernate Validator constatés avec Spring Boot 4.1.3).
 - **Image tierce** (jar embarqué : Keycloak, nginx, postgres, NGF) : tag candidat issu des versions corrigées annoncées par Trivy, avec le suffixe de variante du tag courant, plus récent que lui, digest lu sur le registre ; référence `dépôt:tag@digest` remplacée dans `Jenkinsfile-CI`, les deux `docker-compose.yml`, `values.yaml` et `init-stagingkub.sh`. Un numéro de bibliothèque (bcprov 1.85) n'est jamais un tag : décision humaine.
 - **Paquet système d'image** : aucun tag corrigé déductible sans scanner l'image ; suppression A/B ou blocage selon la table.
 

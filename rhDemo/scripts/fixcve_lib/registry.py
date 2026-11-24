@@ -4,7 +4,7 @@ Hôtes, dépôts et verbes figés ici : l'appelant ne fournit qu'un identifiant 
 (groupId/artifactId, nom npm, jeton d'image d'une liste blanche), jamais une URL.
 
 Injection pour les tests : `Registry(fixtures={...})` avec les clés `maven:<g>:<a>` (liste de
-versions), `npm:<nom>` (liste de versions), `tags:<jeton>` (liste de tags), `digest:<jeton>:<tag>`
+versions), `pom:<g>:<a>:<v>` (texte d'un pom, BOM notamment), `npm:<nom>` (liste de versions), `tags:<jeton>` (liste de tags), `digest:<jeton>:<tag>`
 (digest) ; une clé absente = artefact inconnu, la valeur "error" = panne simulée.
 """
 import json
@@ -69,6 +69,17 @@ class Registry:
         # Regex plutôt qu'un parseur XML : contenu externe, 1 balise lue, aucune entité/DTD.
         versions = [v.strip() for v in re.findall(r"<version>([^<]*)</version>", body.decode("utf-8", "replace"))]
         return [v for v in versions if _VERSION_RE.match(v)]
+
+    def maven_pom(self, group_id, artifact_id, version):
+        """Texte du pom publié (BOM importé, BOM Spring Boot), ou None si absent."""
+        if not (_ID_RE.match(group_id) and _ID_RE.match(artifact_id) and _VERSION_RE.match(version or "")):
+            raise RegistryError(f"coordonnées Maven invalides : {group_id}:{artifact_id}:{version}")
+        if self.fixtures is not None:
+            return self._fixture(f"pom:{group_id}:{artifact_id}:{version}")
+        url = (f"https://repo1.maven.org/maven2/{group_id.replace('.', '/')}/{artifact_id}/"
+               f"{version}/{artifact_id}-{version}.pom")
+        body = _http_get(url)
+        return body.decode("utf-8", "replace") if body is not None else None
 
     # --- npm -----------------------------------------------------------------------------
     def npm_versions(self, name):

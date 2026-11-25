@@ -1,9 +1,8 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-25
 sources:
   - rhDemo/src/test/java/fr/leuwen/rhdemoAPI/springconfig/
-  - rhDemo/sonar-project.properties
   - rhDemo/src/test/resources/application-test.yml
 ---
 
@@ -164,7 +163,7 @@ CspPolicyBuilder builder = new CspPolicyBuilder(keycloakAuthUri, cookieSecureFla
 
 `SecurityConfig` est annotée `@Profile("!test")` : elle n'est pas chargée pendant les tests. Les tests d'intégration s'exécutent avec `TestSecurityConfig` qui réplique la matrice d'autorisation et réutilise `CspPolicyBuilder` pour la CSP.
 
-`SecurityConfig` est **exclue des métriques de couverture SonarQube** (cf. `sonar-project.properties`) : après extraction de `CspPolicyBuilder`, il ne reste que le bean `filterChain` (DSL Spring Security déclaratif), dont le test demanderait un contexte avec profil de production, disproportionné par rapport au bénéfice.
+Aucune classe n'est exclue de la mesure de couverture SonarQube. Après extraction de `CspPolicyBuilder`, il ne reste dans `SecurityConfig` que le bean `filterChain` (DSL Spring Security déclaratif), non testé directement : le tester demanderait un contexte avec profil de production, disproportionné par rapport au bénéfice. La Quality Gate porte sur la couverture du nouveau code (≥ 50 %), pas sur la couverture totale, et passe sans exclusion.
 
 Les tests d'intégration valident la **matrice d'autorisation** via `TestSecurityConfig` (qui réplique fidèlement les règles de production) :
 
@@ -246,24 +245,12 @@ Le rapport de couverture agrégé est généré dans `target/site/jacoco/index.h
 |-----------|-----|-------|------------|
 | `GrantedAuthoritiesKeyCloakMapper` | ~80 | 10 unitaires | ~100% |
 | `CspPolicyBuilder` | ~60 | 12 unitaires | 100% |
-| `SecurityConfig` | ~200 | — | **Exclu SonarQube** |
-| `SpaCsrfTokenRequestHandler` | ~20 | — | **Exclu SonarQube** |
+| `SecurityConfig` (bean `filterChain`) | ~200 | — | non testé directement (profil `!test`) |
+| `SpaCsrfTokenRequestHandler` (classe interne de `SecurityConfig`) | ~20 | 4 unitaires (`SpaCsrfTokenRequestHandlerTest`) | testé |
 
-### Exclusions SonarQube (`sonar-project.properties`)
+### Mesure SonarQube
 
-Les classes suivantes sont exclues de la **mesure de couverture** uniquement (les règles qualité/sécurité continuent de s'appliquer) :
-
-| Classe | Justification |
-|--------|---------------|
-| `RhdemoApplication` | `main()` Spring Boot — boilerplate non testable hors démarrage complet |
-| `SecurityConfig` | `@Profile("!test")` + DSL Spring Security déclaratif — la logique métier (CSP, CSRF) est extraite dans `CspPolicyBuilder` |
-| `SpaCsrfTokenRequestHandler` | Classe interne à `SecurityConfig`, même contrainte de profil |
-| `WebMvcConfig` | Mapping statique de ressources, aucune logique testable |
-| `FrontendController` | Sert `index.html` en pass-through, validé fonctionnellement par les tests Selenium |
-
-### Couverture globale estimée
-
-**> 95%** sur le périmètre mesuré — largement au-dessus du seuil SonarQube de 50%.
+Toutes les classes sont mesurées : la CI lance l'analyse par le scanner Maven (`./mvnw sonar:sonar`), sans exclusion de couverture. Le taux de couverture global se lit sur la page du projet `rhdemo-api` dans SonarQube ; la Quality Gate porte sur le nouveau code (≥ 50 %).
 
 ---
 
@@ -324,4 +311,4 @@ Les classes suivantes sont exclues de la **mesure de couverture** uniquement (le
 
 **Date de mise à jour:** 2026-05-11
 **Version:** 2.0
-**Status:** ✅ Couverture > 95% sur le périmètre mesuré (seuil SonarQube 50% largement dépassé)
+**Status:** ✅ Quality Gate SonarQube (couverture du nouveau code ≥ 50 %) respectée

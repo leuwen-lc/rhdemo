@@ -548,3 +548,8 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 
 - Les tests des scripts (`run-all.sh`) quittent `Jenkinsfile-CI` pour le job `RHDemo-Scripts` ([PIPELINES_CI_CD.md](PIPELINES_CI_CD.md)) : un défaut d'un script ne bloque plus la livraison de l'application. Analyse SonarQube non bloquante (projet `rhdemo-scripts`), couverture mesurée jusque dans les sous-processus. Avant la première analyse, issues du profil Sonar way Python corrigées (contrôles du plugin de l'image SonarQube exécutés en local), sauf la complexité cognitive (S3776).
 - Mis à jour : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), [README de jenkins-docker](../infra/jenkins-docker/README.md).
+
+## [2026-11-25] lint | TESTS_SECURITE_COUVERTURE : exclusions SonarQube jamais appliquées
+
+- `sonar-project.properties` supprimé : la CI analyse `rhdemo-api` par le scanner Maven, qui ne lit pas ce fichier (et ses exclusions `multicriteria` sans `resourceKey` auraient fait échouer l'analyse). Ses exclusions de couverture n'ont donc jamais été appliquées, la Quality Gate passant sans elles. [TESTS_REFONTE.md](etudes/TESTS_REFONTE.md) (historique) : frontmatter seul, source supprimée retirée.
+- [TESTS_SECURITE_COUVERTURE.md](TESTS_SECURITE_COUVERTURE.md) : section des exclusions remplacée par la mesure réelle, `SpaCsrfTokenRequestHandlerTest` (4 tests) ajouté au tableau, chiffre « > 95 % sur le périmètre mesuré » retiré.

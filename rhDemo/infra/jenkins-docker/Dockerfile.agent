@@ -28,6 +28,9 @@ RUN apt-get update && apt-get install -y \
     wget \
     unzip \
     jq \
+    # PyYAML : vérification locale de .trivyignore.yaml par fixcve-auto (agent « fixcve ») et
+    # tests des scripts (stage « Tests des scripts » de Jenkinsfile-CI, rotation_lib)
+    python3-yaml \
     # Node.js pour build frontend
     nodejs \
     npm \

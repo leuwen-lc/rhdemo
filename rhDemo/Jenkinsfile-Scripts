@@ -69,8 +69,8 @@ pipeline {
                             try {
                                 withSonarQubeEnv('SonarQube') {
                                     dir('rhDemo') {
-                                        // Python seul ; mêmes exclusions de sévérité que rhdemo-api
-                                        // (sonar-project.properties) : Low et Info ignorées.
+                                        // Python seul ; issues Low et Info ignorées. resourceKey est
+                                        // obligatoire pour chaque entrée multicriteria (sinon l'analyse échoue).
                                         sh '''./mvnw -B -N sonar:sonar \
                                             -Dsonar.projectKey=rhdemo-scripts \
                                             -Dsonar.projectName="RHDemo Scripts" \
@@ -84,8 +84,10 @@ pipeline {
                                             -Dsonar.python.coverage.reportPaths=scripts/coverage.xml \
                                             -Dsonar.issue.ignore.multicriteria=e1,e2 \
                                             -Dsonar.issue.ignore.multicriteria.e1.ruleKey="*" \
+                                            -Dsonar.issue.ignore.multicriteria.e1.resourceKey="**/*" \
                                             -Dsonar.issue.ignore.multicriteria.e1.severity=MINOR \
                                             -Dsonar.issue.ignore.multicriteria.e2.ruleKey="*" \
+                                            -Dsonar.issue.ignore.multicriteria.e2.resourceKey="**/*" \
                                             -Dsonar.issue.ignore.multicriteria.e2.severity=INFO'''
                                     }
                                 }
@@ -121,8 +123,8 @@ pipeline {
             script {
                 try {
                     emailext to: env.NOTIFICATION_EMAIL,
-                             subject: "❌ RHDemo-Scripts #${env.BUILD_NUMBER} : tests des scripts en échec",
-                             body: "Les tests des scripts d'exploitation (rhDemo/scripts/tests/run-all.sh) ont échoué.\n\nConsole : ${env.BUILD_URL}console"
+                             subject: "❌ RHDemo-Scripts #${env.BUILD_NUMBER} : échec",
+                             body: "Échec des tests des scripts d'exploitation (rhDemo/scripts/tests/run-all.sh) ou de l'analyse SonarQube.\n\nConsole : ${env.BUILD_URL}console"
                 } catch (Exception e) {
                     echo "⚠️  Notification email non envoyée : ${e.message}"
                 }

@@ -355,7 +355,7 @@ Tester et analyser les scripts d'exploitation (`rhDemo/scripts/` : fixcve-auto, 
 
 - **Déclenchement** : polling SCM de la branche d'évolution. Le build ne travaille que si un commit touche `rhDemo/scripts/` ou `Jenkinsfile-Scripts`, ou s'il est lancé à la main ; sinon il se termine sans allouer d'agent (`when { changeset }`, évalué avant l'agent). Le filtre n'est pas dans le polling : une restriction de chemins du plugin git exige un workspace pour sonder, ce que les agents éphémères n'ont pas. Le job charge donc son Jenkinsfile par un checkout complet (`lightweight(false)`), qui enregistre les changements.
 - **Tests** : `rhDemo/scripts/tests/run-all.sh` (hors réseau, poller fixcve-auto exécuté de bout en bout). Couverture mesurée par `coverage`, y compris dans les sous-processus `python3 -I` : configuration [`scripts/tests/.coveragerc`](../scripts/tests/.coveragerc) et `.pth` de l'image de l'agent (`Dockerfile.agent`), actif seulement si `COVERAGE_PROCESS_START` est défini.
-- **SonarQube** (paramètre `RUN_SONAR`) : projet `rhdemo-scripts`, distinct de `rhdemo-api`, Python seul, mêmes exclusions de sévérité (Low et Info ignorées). **Non bloquant** : une Quality Gate en échec rend le build UNSTABLE et envoie un mail. Agent `builder` : socket Docker nécessaire pour démarrer puis arrêter SonarQube, comme dans la CI.
+- **SonarQube** (paramètre `RUN_SONAR`) : projet `rhdemo-scripts`, distinct de `rhdemo-api`, Python seul, issues Low et Info ignorées. **Non bloquant** : une Quality Gate en échec rend le build UNSTABLE et envoie un mail. Agent `builder` : socket Docker nécessaire pour démarrer puis arrêter SonarQube, comme dans la CI.
 - Échec des tests : build en échec et mail.
 
 ---

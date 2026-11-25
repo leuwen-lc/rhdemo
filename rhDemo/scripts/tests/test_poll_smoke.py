@@ -66,15 +66,15 @@ class PollSmokeTest(unittest.TestCase):
         with open(os.path.join(self.state_dir, "state.json")) as fh:
             return json.load(fh)
 
-    def run_poll(self, routes):
+    def run_poll(self, routes, script="fixcve-auto-poll.sh", args=(), **extra_env):
         routes_file = os.path.join(self.tmp, "routes.json")
         with open(routes_file, "w") as fh:
             json.dump(routes, fh)
         env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], FAKE_JENKINS=routes_file,
                    FIXCVE_BRANCH=BRANCH, FIXCVE_STATE_DIR=self.state_dir, FIXCVE_REPO_DIR=self.repo,
                    FIXCVE_NOTIFY_FILE=self.notify, JENKINS_USER="u", JENKINS_TOKEN="t",
-                   CODEBERG_USER="u", CODEBERG_TOKEN="t", GIT_CONFIG_GLOBAL="/dev/null")
-        r = subprocess.run(["bash", os.path.join(self.repo, "rhDemo", "scripts", "fixcve-auto-poll.sh")],
+                   CODEBERG_USER="u", CODEBERG_TOKEN="t", GIT_CONFIG_GLOBAL="/dev/null", **extra_env)
+        r = subprocess.run(["bash", os.path.join(self.repo, "rhDemo", "scripts", script), *args],
                            env=env, capture_output=True, text=True, timeout=120)
         self.assertEqual(r.returncode, 0, r.stderr[-2000:])
         return r.stderr
@@ -143,6 +143,32 @@ class PollSmokeTest(unittest.TestCase):
         self.assertIn("halte automatique", self.origin_head_subject())
         with open(self.notify) as fh:
             self.assertIn("Halte", fh.read())
+
+    def replay_routes(self):
+        """Dernier build terminé vert (#20) ; build #11 en échec Trivy, scan raté (aucun rapport)."""
+        routes = self.build(20, "SUCCESS")
+        routes["/11/api/json?tree=number"] = {"number": 11, "result": "FAILURE"}
+        routes["/11/wfapi/describe"] = {"stages": [{"name": "Scan Sécurité Images Docker (Trivy)", "status": "FAILED"}]}
+        routes["/11/api/json?tree=artifacts"] = {"artifacts": []}
+        return routes
+
+    def test_replay_dry_run_traite_le_build_demande(self):
+        """DRY_RUN : replay d'un build ancien, traité à la place du dernier build terminé ; état réel intact."""
+        self.write_state(last_processed_build=20, status="pending_validation",
+                         pending={"original_build": 19, "fix_commit_sha": self.base_sha, "trigger_build_seen": 19,
+                                  "stage_type": "owasp", "original_findings": []})
+        err = self.run_poll(self.replay_routes(), "fixcve-state.sh", ("replay", "11"), FIXCVE_DRY_RUN="true")
+        self.assertIn("rejeu du build #11", err)
+        self.assertIn("Build #11 en échec sur trivy", err)
+        self.assertIn("DRY_RUN : push omis", err)
+        self.assertEqual(self.read_state()["last_processed_build"], 20, "état réel inchangé")
+        self.assertEqual(self.origin_head_subject(), "base")
+
+    def test_replay_build_ignore_hors_dry_run(self):
+        self.write_state(last_processed_build=19)
+        err = self.run_poll(self.replay_routes(), FIXCVE_REPLAY_BUILD="11")
+        self.assertNotIn("rejeu", err)
+        self.assertEqual(self.read_state()["last_processed_build"], 20)
 
 
 if __name__ == "__main__":

@@ -224,7 +224,7 @@ Paramètres du job `RHDemo-FixCVE` (« Lancer un build avec des paramètres ») 
 | Consulter l'état | `ACTION=status` ; l'état est aussi archivé à chaque passage (`fixcve-state.json`) |
 | Reprise après halte | `ACTION=resume` (compteurs remis à zéro, puis passage) |
 | Revérifier tout de suite un blocage | `ACTION=clear-blocked` (inutile après un changement de code : le SHA source change) |
-| Rejouer un build | `ACTION=replay`, `BUILD_TO_REPLAY=<build>` |
+| Rejouer un build | `ACTION=replay`, `BUILD_TO_REPLAY=<build>` (numéro seul, sans `#`). En mode réel, le build doit être le dernier terminé. Avec `DRY_RUN`, n'importe quel build encore conservé par Jenkins est traité : son rapport ancien est rejoué contre le code actuel, sans push ni modification de l'état. |
 | Essai sans effet | `DRY_RUN` coché, avec n'importe quelle action |
 
 - **Notifications** : mail si le passage échoue (Jenkins ou Codeberg injoignable, push refusé, erreur d'une étape) ou s'il est `UNSTABLE` (halte, rollback, blocage sans correctif, ligne `ALERTE`), détail dans `fixcve-notify.txt` archivé. Rien sur un passage à vide.

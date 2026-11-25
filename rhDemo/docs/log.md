@@ -519,3 +519,7 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 
 - Code : `fixcve_lib/rules.py` (seuils, images, natures de composant, constantes de cycle), `fixcve_lib/cycle.py` et `fixcve-cycle.py` (règles de cycle du poller, mémoire unique `same_cause`), `policy.decide` ; `fixcve-auto-poll.sh` n'exécute plus que les effets.
 - [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : organisation des règles, anti-boucles (`same_cause`), tests. [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) : trois lignes ajoutées (rejeu des règles de cycle, recherche d'identifiant #972, nature du composant #812). [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : bilan en tête, reste en `proposition` jusqu'à la validation `DRY_RUN`.
+
+## [2026-11-25] ingest | Replay d'un build précis en DRY_RUN
+
+- `fixcve-state.sh replay <N>` avec `DRY_RUN` : le poller traite le build N (variable `FIXCVE_REPLAY_BUILD`, ignorée hors DRY_RUN) au lieu du dernier build terminé, phase B sautée. [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : ligne « Rejouer un build » complétée. Tests : `test_poll_smoke`.

@@ -508,3 +508,9 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 
 - `secrets/inventory.yaml` : ajout de `dockerhub-renovate-readonly` (#26, OpenBao, bloquant, 365 jours), `nvd-api-key` (#27) et `ossindex-credentials` (#28) (credentials Jenkins), en `manual-value`, criticité M. Seul le mot de passe est remplacé, l'identifiant est conservé.
 - [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) §1.2 : ces accès ne sont plus hors périmètre. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) : tâches récurrentes complétées.
+
+## [2026-11-25] ingest | Étude d'isolation des règles métier de fixcve-auto
+
+- Nouvelle étude [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) (proposition) : inventaire des règles dispersées (seuil CVSS en 4 copies, liste d'images en 3 copies, type de composant recalculé dans 6 modules, règles de cycle dans `fixcve-auto-poll.sh`) et propositions P1 à P4.
+- Puis ajout de la section 3 : impact d'une réécriture complète du poller en Python (périmètre, bénéfices, risques, bascule en parallèle) ; recommandée seulement après P3.
+- Puis ajout de la section 4 : hypothèse d'une réécriture complète en Java (module Maven séparé, dépendances et circularité, comparaison des trois options).

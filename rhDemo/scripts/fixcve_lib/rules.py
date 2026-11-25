@@ -34,12 +34,13 @@ TRIVY_IMAGES = (PROJECT_IMAGE, "nginx", "postgres", "keycloak",
 # Images tierces remédiables automatiquement (nouveau tag + digest dans Jenkinsfile-CI) : jeton
 # d'image -> dépôt de registre et variable *_IMAGE. Les autres images de TRIVY_IMAGES sont
 # détectées mais jamais remédiées automatiquement.
+DOCKER_HUB = "registry-1.docker.io"
 REMEDIABLE_IMAGES = {
-    "keycloak": {"registry": "registry-1.docker.io", "path": "keycloak/keycloak",
+    "keycloak": {"registry": DOCKER_HUB, "path": "keycloak/keycloak",
                  "repository": "keycloak/keycloak", "variable": "KEYCLOAK_IMAGE"},
-    "nginx": {"registry": "registry-1.docker.io", "path": "library/nginx",
+    "nginx": {"registry": DOCKER_HUB, "path": "library/nginx",
               "repository": "nginx", "variable": "NGINX_IMAGE"},
-    "postgres": {"registry": "registry-1.docker.io", "path": "library/postgres",
+    "postgres": {"registry": DOCKER_HUB, "path": "library/postgres",
                  "repository": "postgres", "variable": "POSTGRES_IMAGE"},
 }
 

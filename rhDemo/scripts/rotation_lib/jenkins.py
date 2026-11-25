@@ -23,6 +23,8 @@ CRED_TYPES = {
     "vault-approle": ("com.datapipe.jenkins.vault.credentials.VaultAppRoleCredential", "secretId"),
 }
 
+# Déclaration explicite : Jenkins décode alors le corps en UTF-8 (accents préservés).
+_XML_HEADER = "<?xml version='1.1' encoding='UTF-8'?>\n"
 _XML_DECL = re.compile(r"^\s*<\?xml[^>]*\?>")
 _XML_ENCODING = re.compile(rb"^\s*<\?xml[^>]*encoding=['\"]([A-Za-z0-9._-]+)['\"]")
 
@@ -116,14 +118,14 @@ class Jenkins:
 
     def replace(self, cred_id, xml):
         """Remplace entièrement un credential existant (le type peut changer)."""
-        data = ("<?xml version='1.1' encoding='UTF-8'?>\n" + xml).encode("utf-8")
+        data = (_XML_HEADER + xml).encode("utf-8")
         status, body = self._post(self._path(cred_id), data)
         if status != 200:
             raise RotationError(f"Jenkins : remplacement de {cred_id} refusé ({status}) {short(body)}")
 
     def create(self, xml):
         """Crée un credential dans le domaine global à partir de son XML."""
-        data = ("<?xml version='1.1' encoding='UTF-8'?>\n" + xml).encode("utf-8")
+        data = (_XML_HEADER + xml).encode("utf-8")
         status, body = self._post("/credentials/store/system/domain/_/createCredentials", data)
         if status != 200:
             raise RotationError(f"Jenkins : création de credential refusée ({status}) {short(body)}")
@@ -151,7 +153,7 @@ class Jenkins:
             value = base64.b64encode(raw).decode("ascii")
         root.find(field).text = value
         # Déclaration explicite : Jenkins décode alors le corps en UTF-8 (accents préservés).
-        xml = "<?xml version='1.1' encoding='UTF-8'?>\n" + ET.tostring(root, encoding="unicode")
+        xml = _XML_HEADER + ET.tostring(root, encoding="unicode")
         headers = {**self._auth, **self._crumb_header(),
                    "Content-Type": "application/xml; charset=utf-8"}
         status, body = http("POST", self.url + self._path(cred_id), headers, xml.encode("utf-8"),

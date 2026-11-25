@@ -52,7 +52,7 @@ class Jenkins:
                 last = JenkinsError(url, e.code)
                 if e.code not in _TRANSIENT_CODES:
                     raise last from None
-            except (urllib.error.URLError, OSError) as e:
+            except OSError as e:  # URLError en dérive
                 last = JenkinsError(url, None, str(getattr(e, "reason", e)))
         raise last
 

@@ -100,6 +100,10 @@ BOOT_PARENT = (BOOT_GROUP, "spring-boot-starter-parent")
 BOOT_BOM = (BOOT_GROUP, "spring-boot-dependencies")
 UNPINNED_POM = ".fixcve-cycle/pom-sans-epinglages.xml"
 _FIX_COMMENT = r"<!-- Fix [^\n]*-->"
+_HSPACE = r"[ \t]*"
+_DEPENDENCY_RE = re.compile(r"<dependency>(.*?)</dependency>", re.S)
+_GROUP_RE = re.compile(r"<groupId>([^<]+)</groupId>")
+_ARTIFACT_RE = re.compile(r"<artifactId>([^<]+)</artifactId>")
 
 
 def boot_version(pom_text):
@@ -123,9 +127,9 @@ def boot_bom_text(boot, registry, bom_path_pattern=None):
 def bom_property_map(bom_text):
     """-> (exact {(g, a): prop}, imports [(g, a, prop)]) depuis spring-boot-dependencies."""
     exact, imports = {}, []
-    for block in re.findall(r"<dependency>(.*?)</dependency>", bom_text, re.S):
-        g = re.search(r"<groupId>([^<]+)</groupId>", block)
-        a = re.search(r"<artifactId>([^<]+)</artifactId>", block)
+    for block in _DEPENDENCY_RE.findall(bom_text):
+        g = _GROUP_RE.search(block)
+        a = _ARTIFACT_RE.search(block)
         v = re.search(r"<version>\$\{([^}]+)\}</version>", block)
         if not (g and a and v):
             continue
@@ -139,9 +143,9 @@ def bom_property_map(bom_text):
 def bom_literal_versions(bom_text):
     """{(g, a): version} des entrées à version écrite en dur (modules de Spring Boot)."""
     out = {}
-    for block in re.findall(r"<dependency>(.*?)</dependency>", bom_text, re.S):
-        g = re.search(r"<groupId>([^<]+)</groupId>", block)
-        a = re.search(r"<artifactId>([^<]+)</artifactId>", block)
+    for block in _DEPENDENCY_RE.findall(bom_text):
+        g = _GROUP_RE.search(block)
+        a = _ARTIFACT_RE.search(block)
         v = re.search(r"<version>([^<$]+)</version>", block)
         if g and a and v:
             out[(g.group(1), a.group(1))] = v.group(1).strip()
@@ -265,9 +269,9 @@ def boot_upgrade(pom, boot, target, package_name, registry, baseline_pom):
 def _dependency_blocks(text):
     """[(début, fin, groupId, artifactId, version|None)] des <dependency> de `text`."""
     out = []
-    for m in re.finditer(r"<dependency>(.*?)</dependency>", text, re.S):
-        g = re.search(r"<groupId>([^<]+)</groupId>", m.group(1))
-        a = re.search(r"<artifactId>([^<]+)</artifactId>", m.group(1))
+    for m in _DEPENDENCY_RE.finditer(text):
+        g = _GROUP_RE.search(m.group(1))
+        a = _ARTIFACT_RE.search(m.group(1))
         v = re.search(r"<version>([^<]+)</version>", m.group(1))
         if g and a:
             out.append((m.start(), m.end(), g.group(1).strip(), a.group(1).strip(), v.group(1).strip() if v else None))
@@ -311,7 +315,7 @@ def pin_upgrade(pom, group, artifact, installed, target, ids, baseline_pom):
             line = pom.rfind("\n", 0, block_start) + 1
             indent = pom[line:block_start]
             prev = pom.rfind("\n", 0, line - 1) + 1
-            if re.fullmatch(r"[ \t]*" + _FIX_COMMENT + r"[ \t]*\n", pom[prev:line]):
+            if re.fullmatch(_HSPACE + _FIX_COMMENT + _HSPACE + r"\n", pom[prev:line]):
                 line = prev   # commentaire « Fix » de l'épinglage remplacé, jamais un autre
             block = pom[block_start:block_end].replace(f"<version>{v}</version>", f"<version>{target}</version>")
             _write(POM, f"{pom[:line]}{indent}<!-- {comment} -->\n{indent}{block}{pom[block_end:]}")
@@ -350,7 +354,7 @@ def _fix_pins(pom):
         s = span[0] + start
         line = pom.rfind("\n", 0, s)
         prev = pom.rfind("\n", 0, line)
-        if v and re.fullmatch(r"[ \t]*" + _FIX_COMMENT + r"[ \t]*", pom[prev + 1:line]):
+        if v and re.fullmatch(_HSPACE + _FIX_COMMENT + _HSPACE, pom[prev + 1:line]):
             out.append((prev, span[0] + end, g, a, v))
     return out
 

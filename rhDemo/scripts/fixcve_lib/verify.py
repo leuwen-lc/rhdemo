@@ -66,9 +66,8 @@ def check_npm(actions, audit_doc=None):
     index = npm_mod.load_lock_index()
     audit = npm_mod.usable_audit(audit_doc if audit_doc is not None else npm_mod.run_npm_json(["audit", "--json"]))
     for a in upgrades:
-        if not npm_mod.all_copies_at_least(index, a["package_name"], a["target_version"]):
-            failed.append(key_of(a))
-        elif audit is not None and npm_mod.audit_still_reports(audit, a["package_name"], a["ids"]):
+        if (not npm_mod.all_copies_at_least(index, a["package_name"], a["target_version"])
+                or (audit is not None and npm_mod.audit_still_reports(audit, a["package_name"], a["ids"]))):
             failed.append(key_of(a))
     return failed
 
@@ -199,7 +198,12 @@ def verify(apply_result, detected, stage, audit_doc=None, odc_report=None, run_o
     failed = check_npm(actions, audit_doc)
     incomplete, new = [], []
     if stage == "owasp" and not errors:
-        report, why = (odc_report, None) if odc_report is not None else (run_odc() if run_odc_scan else (None, "desactive"))
+        if odc_report is not None:
+            report, why = odc_report, None
+        elif run_odc_scan:
+            report, why = run_odc()
+        else:
+            report, why = None, "desactive"
         if report is None:
             incomplete.append(f"dependency_check_local:{why}")
         else:

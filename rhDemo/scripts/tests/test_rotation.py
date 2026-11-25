@@ -53,11 +53,16 @@ class FakeState:
 def make_handler(state):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
+            # journal HTTP du serveur de test coupé : il polluerait la sortie des tests
             pass
 
         def reply(self, code, body=b"", ctype="application/json"):
-            data = json.dumps(body).encode() if isinstance(body, (dict, list)) else (
-                body.encode() if isinstance(body, str) else body)
+            if isinstance(body, (dict, list)):
+                data = json.dumps(body).encode()
+            elif isinstance(body, str):
+                data = body.encode()
+            else:
+                data = body
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
@@ -234,6 +239,7 @@ class StubPrompter:
         return self.answer
 
     def forget(self):
+        # rien à effacer : les secrets de ce faux prompt sont fixés par le test
         pass
 
 

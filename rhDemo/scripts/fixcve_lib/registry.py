@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 
 from .common import is_prerelease, run, version_key
-from .rules import REMEDIABLE_IMAGES
+from .rules import DOCKER_HUB, REMEDIABLE_IMAGES
 
 TIMEOUT_SECONDS = 15
 _ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -111,7 +111,7 @@ class Registry:
         if self.fixtures is not None:
             return self._fixture(f"digest:{token}:{tag}")
         url = f"https://{image['registry']}/v2/{image['path']}/manifests/{tag}"
-        headers = _registry_request(url, image, method="HEAD")
+        headers = _registry_request(url, method="HEAD")
         if headers is None:
             return None
         digest = headers.get("Docker-Content-Digest", "")
@@ -145,7 +145,7 @@ def _bearer_token(www_authenticate):
     return doc.get("token") or doc.get("access_token")
 
 
-def _registry_request(url, image, method="GET"):
+def _registry_request(url, method="GET"):
     """Requête sur l'API v2 d'un registre, jeton anonyme obtenu à la volée.
     -> en-têtes (insensibles à la casse), ou None (404)."""
     headers = {"Accept": _MANIFEST_ACCEPT}
@@ -169,7 +169,7 @@ def _registry_request(url, image, method="GET"):
 
 def _list_tags(image):
     """Liste des tags par l'API propre au registre (une page de 100, les plus récents)."""
-    if image["registry"] == "registry-1.docker.io":
+    if image["registry"] == DOCKER_HUB:
         body = _http_get(f"https://hub.docker.com/v2/repositories/{image['path']}/tags"
                          "?page_size=100&ordering=last_updated")
         return [r.get("name", "") for r in json.loads(body or b"{}").get("results", [])]

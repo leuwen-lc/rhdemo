@@ -31,6 +31,8 @@ ETUDES = "etudes"  # sous-répertoire des études (migrations, refontes, proposi
 STATUTS_ETUDES = ("historique", "proposition")
 DOCS_VIVANTS = ("actif", "proposition")  # statuts pour lesquels une référence morte est signalée
 FRESHNESS_DAYS = 180
+INDEX_MD = "index.md"  # catalogue des docs
+LOG_MD = "log.md"  # journal des opérations sur les docs
 EXCLUDED_DIRS = {"node_modules", "target", ".git", "dist", "node"}
 
 RE_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
@@ -143,7 +145,7 @@ def lint(root):
     md_names = all_md_names(root)
     statuts = {}
 
-    names = sorted(f for f in os.listdir(docs) if f.endswith(".md") and f not in ("index.md", "log.md"))
+    names = sorted(f for f in os.listdir(docs) if f.endswith(".md") and f not in (INDEX_MD, LOG_MD))
     if os.path.isdir(os.path.join(docs, ETUDES)):
         names += sorted(ETUDES + "/" + f for f in os.listdir(os.path.join(docs, ETUDES)) if f.endswith(".md"))
     def check_doc(rel, text, name=None):
@@ -196,31 +198,31 @@ def lint(root):
                     report.add("AVERTISSEMENT", rel, "fichier .md cité mais introuvable dans le dépôt : %s" % ref)
         return statut
 
-    for name in names + ["index.md", "log.md"]:
+    for name in names + [INDEX_MD, LOG_MD]:
         s = check_doc(rel_docs + name, read(os.path.join(docs, name)), name)
         if s:
             statuts[name] = s
 
     # --- index
-    index = parse_index(docs, read(os.path.join(docs, "index.md")))
+    index = parse_index(docs, read(os.path.join(docs, INDEX_MD)))
     for name in names:
         key = os.path.normpath(os.path.join(docs, name))
         if key not in index:
-            report.add("ERREUR", rel_docs + "index.md", "document absent de l'index : %s" % name)
+            report.add("ERREUR", rel_docs + INDEX_MD, "document absent de l'index : %s" % name)
         elif name in statuts and index[key] != statuts[name]:
-            report.add("ERREUR", rel_docs + "index.md",
+            report.add("ERREUR", rel_docs + INDEX_MD,
                        "statut de %s : index=%s, document=%s" % (name, index[key], statuts[name]))
     checked = set()
     for key in sorted(index):
         rel = os.path.relpath(key, root)
         if not os.path.exists(key):
-            report.add("ERREUR", rel_docs + "index.md", "entrée sans fichier : %s" % rel)
+            report.add("ERREUR", rel_docs + INDEX_MD, "entrée sans fichier : %s" % rel)
         elif not key.startswith(os.path.normpath(docs) + os.sep) and key.endswith(".md"):
             # Document hors docs/ référencé par l'index : mêmes contrôles, frontmatter facultatif.
             checked.add(rel)
             s = check_doc(rel, read(key))
             if s and s != index[key]:
-                report.add("ERREUR", rel_docs + "index.md",
+                report.add("ERREUR", rel_docs + INDEX_MD,
                            "statut de %s : index=%s, document=%s" % (rel, index[key], s))
     for rel in ("README.md", "CLAUDE.md"):
         if rel not in checked and os.path.exists(os.path.join(root, rel)):
@@ -228,17 +230,17 @@ def lint(root):
 
     # --- journal
     last_date = None
-    for n, line in enumerate(read(os.path.join(docs, "log.md")).splitlines(), 1):
+    for n, line in enumerate(read(os.path.join(docs, LOG_MD)).splitlines(), 1):
         if not line.startswith("## ["):
             continue
         m = RE_LOG_ENTRY.match(line)
         if not m:
-            report.add("ERREUR", rel_docs + "log.md", "ligne %d : entrée au mauvais format : %s" % (n, line[:60]))
+            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : entrée au mauvais format : %s" % (n, line[:60]))
             continue
         if m.group(2) not in OPERATIONS:
-            report.add("ERREUR", rel_docs + "log.md", "ligne %d : opération inconnue : %s" % (n, m.group(2)))
+            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : opération inconnue : %s" % (n, m.group(2)))
         if last_date and m.group(1) < last_date:
-            report.add("ERREUR", rel_docs + "log.md", "ligne %d : entrée antérieure à la précédente (%s < %s)" % (n, m.group(1), last_date))
+            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : entrée antérieure à la précédente (%s < %s)" % (n, m.group(1), last_date))
         last_date = m.group(1)
     return report
 

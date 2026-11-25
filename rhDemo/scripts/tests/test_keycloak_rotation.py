@@ -31,6 +31,7 @@ class FakeKc:
 def make_kc_handler(st):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
+            # journal HTTP du serveur de test coupé : il polluerait la sortie des tests
             pass
 
         def reply(self, code, body=None):

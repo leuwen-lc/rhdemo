@@ -30,6 +30,7 @@ class FakeGrafana:
 def make_grafana_handler(st):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
+            # journal HTTP du serveur de test coupé : il polluerait la sortie des tests
             pass
 
         def do_GET(self):
@@ -81,6 +82,7 @@ class GrafanaBase(Base):
                 self.url = url
 
             def close(self):
+                # rien à fermer : faux port-forward, sans processus
                 pass
 
         self._patch(tools, "PortForward", StubForward)

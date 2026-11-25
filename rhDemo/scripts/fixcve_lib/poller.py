@@ -42,6 +42,7 @@ CYCLE_ARCHIVE_RETENTION = 50
 EXPECTED_BUILD_POLLS = 24
 EXPECTED_BUILD_DELAY_SECONDS = 5
 PLACEHOLDER = "{}"
+APPLY_APPLIED = "FIXCVE_APPLY_RESULT: APPLIED"
 
 
 class Abort(Exception):
@@ -282,7 +283,7 @@ class Poller:
         return self.step("fixcve-detect.py", build, stage, out, cwd=self.repo, isolated=False)
 
     def validate(self, *args):
-        code, text = self.step("fixcve-validate-json.py", *args, cwd=self.repo)
+        _, text = self.step("fixcve-validate-json.py", *args, cwd=self.repo)
         try:
             return json.loads(text.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -640,10 +641,10 @@ class Poller:
             _, text = self.step("fixcve-apply.py", f["plan"], f["apply-result"], "--downgrade", downgrade)
             self.log_info_lines("apply", text)
             line = result_line(text, "FIXCVE_APPLY_RESULT:")
-            if not (line.startswith("FIXCVE_APPLY_RESULT: APPLIED") or line.startswith("FIXCVE_APPLY_RESULT: NO_ACTION")):
+            if not line.startswith((APPLY_APPLIED, "FIXCVE_APPLY_RESULT: NO_ACTION")):
                 self.prepush_failure("apply", "no_result_line", line or " ".join(text.strip().splitlines()[-3:]),
                                      "tooling")
-            if not line.startswith("FIXCVE_APPLY_RESULT: APPLIED"):
+            if not line.startswith(APPLY_APPLIED):
                 break
             _, vtext = self.step("fixcve-verify.py", f["apply-result"], f["detected"], self.stage, f["verify"],
                                  env=verify_env)
@@ -679,7 +680,7 @@ class Poller:
             self.prepush_failure("verify", "verification_locale_en_echec", detail + " ", "bad_fix")
         self.archive(f["apply-result"], build, "apply")
         result = load_json(f["apply-result"]) or {}
-        if line.startswith("FIXCVE_APPLY_RESULT: APPLIED"):
+        if line.startswith(APPLY_APPLIED):
             self.push_fix(result)
         else:
             self.no_change(line[len("FIXCVE_APPLY_RESULT: NO_ACTION "):], result)

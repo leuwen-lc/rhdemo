@@ -108,7 +108,8 @@ def cmd_preflight(ctx):
         try:
             check_targets(ctx, e)
             log(f"  ✓ {e['id']} : cibles accessibles")
-        except Exception as exc:  # noqa: BLE001 - le preflight rapporte tout, secret par secret
+        except Exception as exc:  # noqa: BLE001
+            # Le preflight rapporte tout, secret par secret.
             warn(f"{e['id']} : {exc if isinstance(exc, RotationError) else type(exc).__name__ + ' : ' + str(exc)}")
             ok = False
     return 0 if ok else 1

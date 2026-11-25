@@ -37,6 +37,7 @@ class FakeBao:
 def make_handler(st):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
+            # journal HTTP du serveur de test coupé : il polluerait la sortie des tests
             pass
 
         def reply(self, code, body=None):
@@ -127,6 +128,7 @@ class StubPrompter:
         return False
 
     def forget(self):
+        # rien à effacer : les secrets de ce faux prompt sont fixés par le test
         pass
 
 

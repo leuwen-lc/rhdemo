@@ -130,8 +130,13 @@ def cmd_jenkins(ctx, ids):
         entry = next((e for e in ctx.inv["secrets"] if e["id"] == cred_id), None)
         automated = entry is not None and entry["rotation"]["method"] in ("forgejo-token", "forgejo-gpg")
         if ctx.dry_run:
-            log(f"  {'déjà dans OpenBao' if stored else ('renouvelé vers OpenBao' if automated else 'valeur demandée')}"
-                f", puis credential Jenkins remplacé par une référence OpenBao")
+            if stored:
+                origin = "déjà dans OpenBao"
+            elif automated:
+                origin = "renouvelé vers OpenBao"
+            else:
+                origin = "valeur demandée"
+            log(f"  {origin}, puis credential Jenkins remplacé par une référence OpenBao")
             continue
         if not stored or not any(stored.values()):
             if automated:

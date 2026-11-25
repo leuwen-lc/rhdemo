@@ -3,6 +3,8 @@ local (test_rotation), kubectl simulé (Secrets de token, auth whoami, auth can-
 import base64
 import os
 import re
+import tempfile
+import unittest
 from unittest import mock
 
 import helpers  # noqa: F401  (ajoute scripts/ au chemin)
@@ -83,7 +85,17 @@ class FakeCluster:
         raise AssertionError(f"kubectl --kubeconfig inattendu : {args}")
 
 
-class K8sBase(Base):
+class K8sHelpers:
+    """Lectures du faux cluster et du faux Jenkins, communes aux classes de test."""
+
+    def cred_content(self):
+        return base64.b64decode(field(self.state.creds["kubeconfig-stagingkub"], "secretBytes")).decode()
+
+    def new_secrets(self):
+        return [n for n in self.cluster.secrets if n.startswith("jenkins-deployer-token-")]
+
+
+class K8sBase(K8sHelpers, Base):
     """Faux cluster et faux Jenkins, sans test (réutilisé par test_emergency_rotation)."""
 
     def setUp(self):
@@ -95,12 +107,6 @@ class K8sBase(Base):
             self.addCleanup(p.stop)
         self.inv["secrets"] = [ENTRY]
         self.state.creds["kubeconfig-stagingkub"] = file_cred("kubeconfig-stagingkub")
-
-    def cred_content(self):
-        return base64.b64decode(field(self.state.creds["kubeconfig-stagingkub"], "secretBytes")).decode()
-
-    def new_secrets(self):
-        return [n for n in self.cluster.secrets if n.startswith("jenkins-deployer-token-")]
 
 
 class K8sTokenTest(K8sBase):
@@ -114,13 +120,14 @@ class K8sTokenTest(K8sBase):
         self.assertIn(f"token: tok-{new}", content)
         self.assertIn("certificate-authority-data: Q0EtREFUQQ==", content)
         self.assertIn(f"Secret {new}, supprimés : jenkins-deployer-token", detail)
-        self.assertEqual([f for f in os.listdir("/dev/shm") if f.startswith("rot-kube-")]
-                         if os.path.isdir("/dev/shm") else [], [])
+        tmp = tools.memory_tmp_dir() or tempfile.gettempdir()
+        self.assertEqual([f for f in os.listdir(tmp) if f.startswith("rot-kube-")], [])
 
     def test_droit_inattendu_annule_tout(self):
         self.cluster.rights[SA].add("get pods -n kube-system")
+        ctx = self.ctx()
         with self.assertRaises(RotationError) as cm:
-            rotations.rotate_k8s_sa_token(self.ctx(), ENTRY)
+            rotations.rotate_k8s_sa_token(ctx, ENTRY)
         self.assertIn("accordé : get pods -n kube-system", str(cm.exception))
         self.assertEqual(self.new_secrets(), [])
         self.assertIn("jenkins-deployer-token", self.cluster.secrets)
@@ -128,8 +135,9 @@ class K8sTokenTest(K8sBase):
 
     def test_echec_jenkins_supprime_le_nouveau_secret(self):
         self.state.fail_post = True
+        ctx = self.ctx()
         with self.assertRaises(RotationError):
-            rotations.rotate_k8s_sa_token(self.ctx(), ENTRY)
+            rotations.rotate_k8s_sa_token(ctx, ENTRY)
         self.assertEqual(self.new_secrets(), [])
         self.assertIn("jenkins-deployer-token", self.cluster.secrets)
 
@@ -153,8 +161,9 @@ class K8sTokenTest(K8sBase):
 
     def test_mauvais_contexte_refuse_avant_tout(self):
         self.cluster.context = "autre-cluster"
+        ctx = self.ctx()
         with self.assertRaises(RotationError):
-            rotations.rotate_k8s_sa_token(self.ctx(), ENTRY)
+            rotations.rotate_k8s_sa_token(ctx, ENTRY)
         self.assertEqual(len(self.cluster.calls), 1)
 
     def test_dry_run_ne_modifie_rien(self):
@@ -178,3 +187,22 @@ class K8sInventoryTest(Base):
         mod = _load_cli()
         self.assertEqual(mod.main(["--if-missing", "grafana-admin"]), 2)
         self.assertEqual(mod.main(["--if-missing", "--level", "C"]), 2)
+
+
+class MemoryTmpDirTest(unittest.TestCase):
+    """Fichiers secrets temporaires : XDG_RUNTIME_DIR s'il est privé, sinon /dev/shm."""
+
+    def test_xdg_runtime_dir_prive_retenu(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.chmod(d, 0o700)
+            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": d}):
+                self.assertEqual(tools.memory_tmp_dir(), d)
+
+    def test_xdg_runtime_dir_lisible_par_autrui_ecarte(self):
+        fallback = "/dev/shm" if os.path.isdir("/dev/shm") else None
+        with tempfile.TemporaryDirectory() as d:
+            os.chmod(d, 0o755)
+            with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": d}):
+                self.assertEqual(tools.memory_tmp_dir(), fallback)
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": "/inexistant"}):
+            self.assertEqual(tools.memory_tmp_dir(), fallback)

@@ -308,7 +308,7 @@ class SimplePasswordTest(unittest.TestCase):
             pw = simple_password()
             self.assertEqual(len(pw), 12)
             self.assertTrue(pw[0].isalpha())
-            self.assertTrue(set(pw) <= allowed)
+            self.assertLessEqual(set(pw), allowed)
             self.assertTrue(any(c.isupper() for c in pw) and any(c.islower() for c in pw))
             self.assertTrue(any(c.isdigit() for c in pw) and any(c in SIMPLE_PUNCTUATION for c in pw))
 

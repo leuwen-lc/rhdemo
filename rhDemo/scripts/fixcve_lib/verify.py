@@ -90,8 +90,9 @@ def _score(vuln):
     return max(scores) if scores else 0.0
 
 
-_ID_RE = re.compile(r"^(CVE-\d{4}-\d{4,}|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})$")
-_VECTOR_RE = re.compile(r"^CVSS:[34]\.[0-9](/[A-Z]{1,3}:[A-Z])+$")
+# re.ASCII : \d n'accepte que les chiffres 0-9, pas les chiffres Unicode.
+_ID_RE = re.compile(r"^(CVE-\d{4}-\d{4,}|GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4})$", re.ASCII)
+_VECTOR_RE = re.compile(r"^CVSS:[34]\.\d(/[A-Z]{1,3}:[A-Z])+$", re.ASCII)
 _PKG_ID_RE = re.compile(r"^pkg:(maven|npm)/(.+)@([A-Za-z0-9.:+~_-]+)$")
 
 

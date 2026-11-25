@@ -74,7 +74,15 @@ def registry(**extra):
                      "pom:tools.jackson:jackson-bom:3.1.9": JACKSON_BOM, **extra})
 
 
-class Base(unittest.TestCase):
+class BomHelpers:
+    """Lecture du pom.xml de test, commune aux classes de test."""
+
+    def pom(self):
+        with open("pom.xml", encoding="utf-8") as fh:
+            return fh.read()
+
+
+class Base(BomHelpers, unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -93,10 +101,6 @@ class Base(unittest.TestCase):
     def write(self, path, text):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
-
-    def pom(self):
-        with open("pom.xml", encoding="utf-8") as fh:
-            return fh.read()
 
     def upgrade(self, package, installed, target, reg=None, baseline=None):
         return edits.maven_upgrade(package, installed, target, ["CVE-2026-59414"], reg or registry(),

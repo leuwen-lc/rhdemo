@@ -4,17 +4,33 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
 
 from .common import RotationError
 
+def memory_tmp_dir():
+    """Répertoire en mémoire pour les fichiers secrets temporaires, ou None (défaut de tempfile).
+
+    XDG_RUNTIME_DIR d'abord (tmpfs privé à l'utilisateur, mode 700). À défaut /dev/shm, partagé
+    mais sans risque ici : mkstemp/mkdtemp y créent un nom imprévisible (O_EXCL) en mode 600/700."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+    try:
+        st = os.stat(runtime) if runtime else None
+    except OSError:
+        st = None
+    if st and stat.S_ISDIR(st.st_mode) and st.st_uid == os.getuid() and not st.st_mode & 0o077:
+        return runtime
+    shm = "/dev/shm"  # NOSONAR repli en mémoire, noms imprévisibles et modes 600/700 (voir ci-dessus)
+    return shm if os.path.isdir(shm) else None
+
+
 @contextlib.contextmanager
 def gpg_home():
-    """Trousseau jetable, en mémoire (/dev/shm) quand c'est possible, détruit à la sortie."""
-    base = "/dev/shm" if os.path.isdir("/dev/shm") else None
-    home = tempfile.mkdtemp(prefix="rot-gpg-", dir=base)
+    """Trousseau jetable, en mémoire quand c'est possible (memory_tmp_dir), détruit à la sortie."""
+    home = tempfile.mkdtemp(prefix="rot-gpg-", dir=memory_tmp_dir())
     os.chmod(home, 0o700)
     try:
         yield home

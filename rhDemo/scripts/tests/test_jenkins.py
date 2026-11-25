@@ -82,27 +82,31 @@ class ClientTest(unittest.TestCase):
 
     def test_erreur_transitoire_reessayee_puis_code(self):
         self.server.routes = {"x": HttpStatus(503)}
+        url = self.client.job_url("x")
         with self.assertRaises(jenkins.JenkinsError) as ctx:
-            self.client.get(self.client.job_url("x"))
+            self.client.get(url)
         self.assertEqual(ctx.exception.code, 503)
         self.assertEqual(len(self.server.requests), jenkins.RETRIES + 1)
 
     def test_401_sans_nouvel_essai(self):
         self.server.routes = {"x": HttpStatus(401)}
+        url = self.client.job_url("x")
         with self.assertRaises(jenkins.JenkinsError) as ctx:
-            self.client.get(self.client.job_url("x"))
+            self.client.get(url)
         self.assertEqual((ctx.exception.code, len(self.server.requests)), (401, 1))
 
     def test_injoignable(self):
         client = jenkins.Jenkins("http://127.0.0.1:9", "u", "t", retry_delay=0)
+        url = client.job_url("x")
         with self.assertRaises(jenkins.JenkinsError) as ctx:
-            client.get(client.job_url("x"))
+            client.get(url)
         self.assertIsNone(ctx.exception.code)
 
     def test_json_illisible(self):
         self.server.routes = {"x": "<html>"}
+        url = self.client.job_url("x")
         with self.assertRaises(jenkins.JenkinsError):
-            self.client.json(self.client.job_url("x"))
+            self.client.json(url)
         self.assertEqual(self.client.text_or_empty(self.client.job_url("absent")), "")
 
 

@@ -82,9 +82,9 @@ def parse_frontmatter(text):
     for raw in text[4:end].splitlines():
         if not raw.strip():
             continue
-        m = re.match(r"^(\w+):\s*(.*)$", raw)
+        m = re.match(r"^(\w++):(.*)$", raw)
         if m:
-            key, value = m.group(1), m.group(2).split(" #")[0].strip()
+            key, value = m.group(1), m.group(2).lstrip().split(" #")[0].strip()
             if key == "sources":
                 data[key] = [] if value in ("", "[]") else None
                 current = key if value == "" else None

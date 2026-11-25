@@ -190,7 +190,33 @@ def verify_fail(upgrades=(), errors=(), new=()):
                               f"errors={len(errors)} new=-\n", "out": out}
 
 
-class PollerTest(unittest.TestCase):
+class PollerHelpers:
+    """Lectures de l'état, du dépôt origin, du journal et des notifications, communes aux classes de test."""
+
+    def read_state(self):
+        with open(os.path.join(self.state_dir, "state.json")) as fh:
+            return json.load(fh)
+
+    def origin_head_subject(self):
+        return self.origin_log(1)[0]
+
+    def audit_events(self):
+        path = os.path.join(self.repo, "rhDemo/docs/fixcve-audit.jsonl")
+        with open(path) as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def pushed_audit_events(self):
+        text = git(self.origin, "show", f"{BRANCH}:rhDemo/docs/fixcve-audit.jsonl")
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+    def notified(self):
+        if not os.path.exists(self.notify):
+            return ""
+        with open(self.notify) as fh:
+            return fh.read()
+
+
+class PollerTest(PollerHelpers, unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="fixcve-poller-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -237,10 +263,6 @@ class PollerTest(unittest.TestCase):
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
             json.dump(dict(INITIAL_STATE, **kw), fh)
 
-    def read_state(self):
-        with open(os.path.join(self.state_dir, "state.json")) as fh:
-            return json.load(fh)
-
     def run_poll(self, routes, action="poll", build=None, code=0, stubs=None, **extra_env):
         self.jenkins.routes = routes
         with open(self.stubs_file, "w") as fh:
@@ -267,24 +289,6 @@ class PollerTest(unittest.TestCase):
 
     def origin_log(self, n=5):
         return git(self.origin, "log", f"-{n}", "--format=%s", BRANCH).splitlines()
-
-    def origin_head_subject(self):
-        return self.origin_log(1)[0]
-
-    def audit_events(self):
-        path = os.path.join(self.repo, "rhDemo/docs/fixcve-audit.jsonl")
-        with open(path) as fh:
-            return [json.loads(line) for line in fh if line.strip()]
-
-    def pushed_audit_events(self):
-        text = git(self.origin, "show", f"{BRANCH}:rhDemo/docs/fixcve-audit.jsonl")
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
-
-    def notified(self):
-        if not os.path.exists(self.notify):
-            return ""
-        with open(self.notify) as fh:
-            return fh.read()
 
     def build(self, number, result, stage=None, sha=None):
         routes = {"lastCompletedBuild": {"number": number, "result": result}}

@@ -44,8 +44,10 @@ class ForgejoEmergencyTest(Base):
     def test_echec_verification_compte_sans_token(self):
         self.seed()
         self.state.push = False
+        ctx = emergency(self.ctx())
+        entry = self.entry()
         with self.assertRaisesRegex(RotationError, "écriture"):
-            rotate_forgejo_token(emergency(self.ctx()), self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertEqual(self.state.tokens, {})                     # anciens révoqués, nouveau supprimé
         self.assertEqual(field(self.state.creds["ci-token"], "secret"), "old")
 
@@ -64,8 +66,9 @@ class K8sEmergencyTest(k8s_tests.K8sBase):
 
     def test_droit_inattendu_ancien_deja_supprime(self):
         self.cluster.rights[k8s_tests.SA].add("get pods -n kube-system")
+        ctx = emergency(self.ctx())
         with self.assertRaises(RotationError):
-            rotations.rotate_k8s_sa_token(emergency(self.ctx()), k8s_tests.ENTRY)
+            rotations.rotate_k8s_sa_token(ctx, k8s_tests.ENTRY)
         self.assertNotIn("jenkins-deployer-token", self.cluster.secrets)
         self.assertEqual(self.new_secrets(), [])
 
@@ -136,7 +139,7 @@ class CliEmergencyTest(Base):
     def test_abandon_sans_confirmation_et_options_incompatibles(self):
         mod = _load_cli()
         journal = os.path.join(self.tmp, "j.jsonl")
-        with mock.patch.object(mod, "Journal", lambda: Journal(journal)), \
+        with mock.patch.object(mod, "Journal", return_value=Journal(journal)), \
                 mock.patch("builtins.input", return_value="n"):
             self.assertEqual(mod.main(["--emergency"]), 1)
         self.assertFalse(os.path.exists(journal))

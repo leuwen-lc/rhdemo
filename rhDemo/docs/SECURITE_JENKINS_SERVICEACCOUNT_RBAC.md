@@ -78,7 +78,7 @@ Le token de chaque ServiceAccount est porté par un Secret `kubernetes.io/servic
 3. construit le kubeconfig en mémoire (serveur `https://rhdemo-control-plane:6443`, vu des agents Jenkins) et le pousse dans le credential Jenkins « Secret file », qu'il crée s'il n'existe pas ;
 4. supprime les anciens Secrets de token du même compte, ce qui invalide leurs tokens.
 
-Un échec en 2 ou 3 supprime le nouveau Secret : rien n'a changé. Aucun kubeconfig n'est écrit sur le disque (le fichier de vérification vit en mémoire, dans `/dev/shm`, le temps des contrôles).
+Un échec en 2 ou 3 supprime le nouveau Secret : rien n'a changé. Aucun kubeconfig n'est écrit sur le disque (le fichier de vérification vit en mémoire le temps des contrôles : `XDG_RUNTIME_DIR`, privé à l'utilisateur, sinon `/dev/shm`, en mode 600).
 
 Le manifeste du ServiceAccount ne déclare plus de Secret au nom fixe : chaque `kubectl apply` en recréerait un, donc un token valide que personne ne suit. `init-stagingkub.sh` appelle `rotate-secrets.py --if-missing`, qui ne fait rien si un token existe déjà (cluster réutilisé) et sinon crée le premier (mot de passe admin de Jenkins demandé). Jenkins arrêté : l'étape échoue avant toute création, le script le signale et la commande est à relancer plus tard.
 

@@ -131,7 +131,11 @@ def add_owasp(text, ecosystem, package_name, ids, notes):
         body = text[block["start"]:block["end"]]
         extra = "".join(f"        <{'cve' if v.startswith('CVE-') else 'vulnerabilityName'}>{escape(v)}"
                         f"</{'cve' if v.startswith('CVE-') else 'vulnerabilityName'}>\n" for v in sorted(missing))
-        body = re.sub(r"([ \t]*</suppress>)", lambda m: extra + m.group(1), body, count=1)
+        # Insertion avant l'indentation de </suppress> (recherche de chaîne : pas de retour arrière).
+        end = body.find("</suppress>")
+        if end >= 0:
+            start = len(body[:end].rstrip(" \t"))
+            body = body[:start] + extra + body[start:]
         return text[:block["start"]] + body + text[block["end"]:], True
     idx = text.rfind("</suppressions>")
     if idx < 0:

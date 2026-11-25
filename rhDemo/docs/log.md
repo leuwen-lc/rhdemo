@@ -557,3 +557,7 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 ## [2026-11-25] ingest | RHDemo-Scripts : exclusions d'issues SonarQube retirées
 
 - Les exclusions `sonar.issue.ignore.multicriteria` de `Jenkinsfile-Scripts` (`ruleKey=*`, `resourceKey=**/*`, plus une clé `severity` que SonarQube ignore) masquaient toutes les issues de `rhdemo-scripts` : retirées. Le filtrage par sévérité relève de la Quality Gate ([PIPELINES_CI_CD.md](PIPELINES_CI_CD.md)).
+
+## [2026-11-25] ingest | RHDemo-Scripts : issues de la première analyse SonarQube
+
+- Fichiers secrets temporaires de la rotation (kubeconfig de vérification, trousseau GPG) : `XDG_RUNTIME_DIR` (en mémoire, privé à l'utilisateur) avant `/dev/shm` ([SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md)). Expressions régulières à retour arrière coûteux réécrites ; regex de validation en `re.ASCII` (`\d` n'accepte plus de chiffres Unicode). Tests : un seul appel par bloc `assertRaises`, helpers communs en mixins. Restent les issues de complexité cognitive (S3776).

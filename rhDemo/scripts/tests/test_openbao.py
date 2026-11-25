@@ -132,7 +132,14 @@ class StubPrompter:
         pass
 
 
-class Base(unittest.TestCase):
+class BaoHelpers:
+    """Client administrateur du faux OpenBao, commun aux classes de test."""
+
+    def admin(self):
+        return OpenBao(self.url).login_userpass("admin", ADMIN_PW)
+
+
+class Base(BaoHelpers, unittest.TestCase):
     def setUp(self):
         self.st = FakeBao()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.st))
@@ -148,9 +155,6 @@ class Base(unittest.TestCase):
     def ctx(self, dry_run=False):
         return rotations.Context(self.inv, StubPrompter(), Journal(os.path.join(self.tmp, "j.jsonl")),
                                  dry_run=dry_run)
-
-    def admin(self):
-        return OpenBao(self.url).login_userpass("admin", ADMIN_PW)
 
 
 class ClientTest(Base):
@@ -175,8 +179,9 @@ class ClientTest(Base):
             ob.kv_read("jenkins/x")
 
     def test_erreur_sans_valeur(self):
+        bao = OpenBao(self.url)
         with self.assertRaises(RotationError) as cm:
-            OpenBao(self.url).login_userpass("admin", "mauvais-mot-de-passe-0123456789")
+            bao.login_userpass("admin", "mauvais-mot-de-passe-0123456789")
         self.assertNotIn("mauvais-mot-de-passe", str(cm.exception))
 
     def test_close_revoque_la_session(self):
@@ -196,8 +201,9 @@ class TargetsTest(Base):
         self.assertEqual(self.admin().kv_read("jenkins/ci"), {"value": "tok", "keep": "x"})
 
     def test_cible_openbao_absente(self):
+        ctx = self.ctx()
         with self.assertRaisesRegex(RotationError, "absent"):
-            rotations.check_targets(self.ctx(), {"targets": [{"kind": "openbao", "path": "jenkins/z", "key": "v"}]})
+            rotations.check_targets(ctx, {"targets": [{"kind": "openbao", "path": "jenkins/z", "key": "v"}]})
 
 
 class ApproleRotationTest(Base):
@@ -220,8 +226,10 @@ class ApproleRotationTest(Base):
         self.assertNotIn(data["secret_id"], detail)
 
     def test_cible_illisible_rien_cree(self):
+        ctx = self.ctx()
+        entry = self.entry(os.path.join(self.tmp, "absent.json"))
         with self.assertRaisesRegex(RotationError, "illisible"):
-            rotations.rotate_openbao_approle(self.ctx(), self.entry(os.path.join(self.tmp, "absent.json")))
+            rotations.rotate_openbao_approle(ctx, entry)
         self.assertEqual(self.st.secret_ids, {})
 
     def test_dry_run(self):

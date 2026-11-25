@@ -3,7 +3,7 @@
 Plusieurs Secrets peuvent porter un token pour le même ServiceAccount : un nouveau Secret est
 créé (nouveau token, l'ancien reste valide), vérifié, propagé, puis les anciens Secrets sont
 supprimés, ce qui invalide leurs tokens. Les valeurs ne passent que par la mémoire, l'entrée
-standard de kubectl ou un fichier temporaire en mémoire (/dev/shm) le temps d'une vérification.
+standard de kubectl ou un fichier temporaire en mémoire (tools.memory_tmp_dir) le temps d'une vérification.
 """
 import base64
 import contextlib
@@ -88,9 +88,8 @@ def kubeconfig(server, ca_b64, token, user, namespace, cluster, header=""):
 
 @contextlib.contextmanager
 def temp_kubeconfig(text):
-    """Fichier kubeconfig temporaire en mémoire (/dev/shm), mode 600, détruit à la sortie."""
-    base = "/dev/shm" if os.path.isdir("/dev/shm") else None
-    fd, path = tempfile.mkstemp(prefix="rot-kube-", suffix=".yaml", dir=base)
+    """Fichier kubeconfig temporaire en mémoire (tools.memory_tmp_dir), mode 600, détruit à la sortie."""
+    fd, path = tempfile.mkstemp(prefix="rot-kube-", suffix=".yaml", dir=tools.memory_tmp_dir())
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:

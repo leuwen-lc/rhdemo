@@ -155,7 +155,7 @@ class ApplyTest(Workdir):
         self.assertLess(adv.index("build #42"), adv.index("build #1"))
         self.assertIn("Non traité (bloqué", adv)
         self.assertTrue(result["commit_message"].startswith("fix(security): corriger tomcat-embed-core, accepter "))
-        self.assertEqual(verify(result, {"findings": []}, "owasp", run_odc_scan=False)["ok"], True)
+        self.assertTrue(verify(result, {"findings": []}, "owasp", run_odc_scan=False)["ok"])
 
     def test_tout_bloque_aucun_fichier(self):
         blocked = finding("CVE-2026-75595", "io.netty:netty-handler", "4.1.136", ecosystem="maven", cvss=9.8,

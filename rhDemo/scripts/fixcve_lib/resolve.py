@@ -190,7 +190,7 @@ def resolve_maven_project(finding, ctx):
 
 def _tag_suffix(tag):
     """Suffixe de variante d'un tag ('1.31.3-alpine' -> '-alpine', '18.4-alpine3.22' -> '-alpine3.22')."""
-    m = re.match(r"^v?\d+(?:\.\d+)*(.*)$", tag or "")
+    m = re.match(r"^v?\d++(?:\.\d++)*+(.*)$", tag or "")
     return m.group(1) if m else ""
 
 

@@ -91,14 +91,14 @@ class TrivyTest(unittest.TestCase):
         self.assertTrue(added)
         doc = yaml.safe_load(text)
         self.assertEqual(len(doc["vulnerabilities"]), 2)
-        self.assertEqual(s.add_trivy(text, "CVE-2026-8763", "org.bouncycastle:bcprov-jdk18on", "y", "c")[1], False)
+        self.assertFalse(s.add_trivy(text, "CVE-2026-8763", "org.bouncycastle:bcprov-jdk18on", "y", "c")[1])
         entry = [e for e in s.parse_trivy(text) if e["id"] == "CVE-2026-8763"][0]
         self.assertEqual((entry["pending"], entry["osv"]), (True, {"distro": "ALPINE", "branch": "v3.23"}))
 
     def test_retrait(self):
         text, n = s.remove_trivy(self.BASE, "CVE-2025-68121", "gosu")
         self.assertEqual(n, 1)
-        self.assertEqual(yaml.safe_load(text)["vulnerabilities"], None)
+        self.assertIsNone(yaml.safe_load(text)["vulnerabilities"])
 
     def test_jeton_osv(self):
         self.assertEqual(s.osv_token("alpine", "3.23.3"), "[OSV:ALPINE:v3.23]")

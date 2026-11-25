@@ -37,7 +37,7 @@ METHOD_KEYS = {
 # de METHOD_KEYS doit y figurer (contrôlé par les tests).
 METHOD_KINDS = {
     "forgejo-token": "automatique", "forgejo-gpg": "automatique",
-    "openbao-approle": "automatique", "postgres-password": "automatique",
+    "openbao-approle": "automatique", "postgres-password": "automatique",  # NOSONAR nom de méthode, pas un secret
     "keycloak-client-secret": "automatique", "keycloak-admin": "automatique",
     "keycloak-users": "automatique", "grafana-admin": "automatique", "k8s-sa-token": "automatique",
     "manual-value": "semi-manuelle",

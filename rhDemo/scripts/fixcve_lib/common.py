@@ -7,9 +7,9 @@ import tempfile
 import unicodedata
 
 # Pré-versions : jamais une cible de remédiation.
-_PRERELEASE_RE = re.compile(
-    r"(?i)(alpha|beta|snapshot|preview|nightly|[.-]rc[.-]?\d*$|[.-]rc\d|[.-]cr\d*$|[.-]m\d+$|[.-]ea$)"
-)
+_PRERELEASE_WORD_RE = re.compile(r"(?i)alpha|beta|snapshot|preview|nightly")
+# Suffixes : -rc1, .RC2, -rc, -CR1, -M3, -ea (fin de version), ou rc suivi d'un chiffre ailleurs.
+_PRERELEASE_SUFFIX_RE = re.compile(r"(?i)[.-](?:rc[.-]?\d*$|rc\d|cr\d*$|m\d+$|ea$)")
 _NUMERIC_PREFIX_RE = re.compile(r"^v?(\d+(?:\.\d+)*)")
 
 
@@ -32,7 +32,7 @@ def version_key(version):
 
 
 def is_prerelease(version):
-    return bool(_PRERELEASE_RE.search(version or ""))
+    return bool(_PRERELEASE_WORD_RE.search(version or "") or _PRERELEASE_SUFFIX_RE.search(version or ""))
 
 
 def compare(a, b):

@@ -19,7 +19,7 @@ TIMEOUT_SECONDS = 15
 _ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _NPM_NAME_RE = re.compile(r"^(@[a-z0-9._-]+/)?[a-z0-9._-]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9._+-]{1,60}$")
-_TAG_RE = re.compile(r"^v?[0-9][A-Za-z0-9._-]{0,127}$")
+_TAG_RE = re.compile(r"^v?\d[A-Za-z0-9._-]{0,127}$", re.ASCII)  # \d en ASCII seulement
 
 # Jeton d'image (champ `image` de detected.json) -> dépôt de registre : voir rules.py.
 IMAGES = REMEDIABLE_IMAGES
@@ -133,7 +133,7 @@ def _http_get(url, headers=None):
 
 def _bearer_token(www_authenticate):
     """Jeton anonyme à partir de l'en-tête WWW-Authenticate (Bearer realm=...,service=...,scope=...)."""
-    params = dict(re.findall(r'(\w+)="([^"]*)"', www_authenticate or ""))
+    params = dict(re.findall(r'(\w++)="([^"]*+)"', www_authenticate or ""))
     realm = params.pop("realm", "")
     if not realm.startswith("https://"):
         raise RegistryError("en-tête WWW-Authenticate inattendu")

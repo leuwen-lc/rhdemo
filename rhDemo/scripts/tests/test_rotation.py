@@ -323,8 +323,9 @@ class TokenRotationTest(Base):
         ctx = self.ctx()
         leaked = "0123456789abcdef0123456789abcdef01234567"  # valeur fictive
         ctx.prompter.secrets[f"codeberg:{BOT[0]}"] = leaked     # valeur fausse, recopiée par Forgejo
+        entry = self.entry()
         with self.assertRaises(RotationError) as cm:
-            rotate_forgejo_token(ctx, self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertNotIn(leaked, str(cm.exception))
         self.assertIn("mot de passe incorrect", str(cm.exception))
         self.assertEqual(ctx.prompter.otp_calls, 1)               # TOTP pas redemandé
@@ -347,30 +348,38 @@ class TokenRotationTest(Base):
     def test_echec_propagation_supprime_le_nouveau_token(self):
         self.seed()
         self.state.fail_post = True
+        ctx = self.ctx()
+        entry = self.entry()
         with self.assertRaises(RotationError):
-            rotate_forgejo_token(self.ctx(), self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertEqual(set(self.state.tokens), {1, 2})            # rien de créé, rien de révoqué
         self.assertEqual(field(self.state.creds["ci-token"], "secret"), "old")
 
     def test_token_sans_droit_ecriture_supprime(self):
         self.seed()
         self.state.push = False
+        ctx = self.ctx()
+        entry = self.entry()
         with self.assertRaisesRegex(RotationError, "écriture"):
-            rotate_forgejo_token(self.ctx(), self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertEqual(set(self.state.tokens), {1, 2})
 
     def test_cible_absente_aucune_creation(self):
         self.seed()
         del self.state.creds["ci-token"]
+        ctx = self.ctx()
+        entry = self.entry()
         with self.assertRaisesRegex(RotationError, "introuvable"):
-            rotate_forgejo_token(self.ctx(), self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertFalse([r for r in self.state.requests if r[0] == "POST"])
 
     def test_portees_divergentes_abandon(self):
         self.seed()
         self.state.tokens[1]["scopes"] = ["write:repository"]
+        ctx = self.ctx(confirm=False)
+        entry = self.entry()
         with self.assertRaisesRegex(RotationError, "portées"):
-            rotate_forgejo_token(self.ctx(confirm=False), self.entry())
+            rotate_forgejo_token(ctx, entry)
         self.assertEqual(set(self.state.tokens), {1, 2})
 
     def test_dry_run(self):
@@ -412,8 +421,9 @@ class ManualSmtpTest(Base):
         def refuse(*a):
             raise RotationError("SMTP refusé")
         ctx.smtp_check = refuse
+        entry = self.entry()
         with self.assertRaises(RotationError):
-            rotate_manual_value(ctx, self.entry())
+            rotate_manual_value(ctx, entry)
         self.assertEqual(field(self.state.creds["smtp-cred"], "password"), "old")
         self.assertFalse([r for r in self.state.requests if r[0] == "POST"])
 
@@ -588,7 +598,7 @@ class CheckTest(unittest.TestCase):
              "rotation": {"method": "per-build", "note": "jetable"}}]}
         self.assertEqual(mod.cmd_check(inv, journal), 0)
         self.assertEqual(mod.cmd_rotate(None, inv["secrets"]), 0)
-        with mock.patch.object(mod, "Journal", lambda: journal):
+        with mock.patch.object(mod, "Journal", return_value=journal):
             self.assertEqual(mod.main(["--record", "ephemere-secrets"]), 2)
         self.assertFalse(os.path.exists(journal.path))
 

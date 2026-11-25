@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-23
+verifie_le: 2026-11-25
 sources:
   - rhDemo/Jenkinsfile-Renovate
   - rhDemo/infra/stagingkub/scripts/renovate-infra-gate.sh
@@ -113,6 +113,8 @@ Historique : une première version (5 novembre 2026) comptait le délai depuis l
 ## Synchronisation avec la base
 
 Une branche Renovate ancienne peut échouer pour une raison sans rapport avec elle, par exemple une CVE déjà corrigée sur la base. Si la base n'est pas un ancêtre de la PR (`git merge-base --is-ancestor`), le job merge la base dans la branche, par un merge classique, puis pousse avant de valider. Un merge `--squash` a été essayé puis abandonné : sans commit de fusion, git perd la trace des synchronisations précédentes et produit de faux conflits aux suivantes.
+
+Le commit de fusion est signé `ci-bot@leuwen-lc.fr`, déclaré dans `gitIgnoredAuthors` de `renovate.json`. Sans cela, Renovate prend la branche pour modifiée à la main et cesse de la mettre à jour (section « PR Edited (Blocked) » du dashboard, constaté le 2026-11-25) ; cocher la case de la PR dans le dashboard la recrée.
 
 En cas de conflit :
 

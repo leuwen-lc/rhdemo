@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-25
 sources:
   - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
   - rhDemo/infra/ephemere/docker-compose.yml
@@ -56,10 +56,10 @@ Dans stagingkub, `global.images` est la source unique des images tierces du char
 | --- | --- |
 | [`infra/jenkins-docker/Dockerfile.jenkins`](../infra/jenkins-docker/Dockerfile.jenkins) | `jenkins/jenkins` (contrôleur) |
 | [`infra/jenkins-docker/Dockerfile.agent`](../infra/jenkins-docker/Dockerfile.agent) | `jenkins/inbound-agent` (agents) |
-| [`infra/jenkins-docker/docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml) | `tecnativa/docker-socket-proxy`, `sonarqube`, `openbao/openbao` ([OPENBAO.md](OPENBAO.md)) |
+| [`infra/jenkins-docker/docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml) | `tecnativa/docker-socket-proxy`, `sonarqube`, `postgres` (base de SonarQube), `openbao/openbao` ([OPENBAO.md](OPENBAO.md)) |
 | [`infra/jenkins-docker/docker-compose.zap.yml`](../infra/jenkins-docker/docker-compose.zap.yml) | `zaproxy/zap-stable` |
 
-Restent **épinglées par tag seulement** : la base de SonarQube `postgres:18-alpine` et le registre local `registry:3` (`infra/jenkins-docker/docker-compose.yml`), ainsi que l'image `renovate/renovate` (`RENOVATE_IMAGE` de `Jenkinsfile-Renovate`). Renovate les suit par tag, avec le délai de 7 jours des nouvelles versions.
+Restent **épinglés par tag seulement** : le registre local `registry:3` (`infra/jenkins-docker/docker-compose.yml`), ainsi que l'image `renovate/renovate` (`RENOVATE_IMAGE` de `Jenkinsfile-Renovate`). Renovate les suit par tag, avec le délai de 7 jours des nouvelles versions.
 
 ### Composants système de stagingkub
 

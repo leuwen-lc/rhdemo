@@ -471,3 +471,7 @@ Passage de fixcve-auto dans Jenkins validé par un cycle réel complet (builds C
 ## [2026-11-25] ingest | renovate-github-token dans l'inventaire des rotations
 
 Token GitHub de Renovate expiré (401 sur github.com, échec des lookups `github-releases` : NGF, Maven, Helm, Cosign). Ajouté à `secrets/inventory.yaml` (n° 25, `manual-value` vers `kv/jenkins/renovate-github-token`, bloquant, 365 jours) pour que `rotate-secrets.py --check` signale son expiration. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) mis à jour.
+
+## [2026-11-25] ingest | gitIgnoredAuthors Renovate et épinglage de la base SonarQube
+
+Dashboard Renovate : les PR synchronisées par le job (merge signé `ci-bot@leuwen-lc.fr`) passaient en « PR Edited (Blocked) ». Auteur ajouté à `gitIgnoredAuthors` de `renovate.json` ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)). Base de SonarQube (`infra/jenkins-docker/docker-compose.yml`) épinglée par digest sur `postgres:18.4-alpine3.22`, comme les autres environnements : le tag flottant `18-alpine` exposait le volume persistant à une montée majeure (PR postgres v19) ([IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md)).

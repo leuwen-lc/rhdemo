@@ -682,6 +682,15 @@ class ReplayTest(PollerTest):
         self.assertEqual(self.read_state()["last_processed_build"], 20, "état réel inchangé")
         self.assertEqual(self.origin_head_subject(), "base")
 
+    def test_replay_build_absent_de_l_historique(self):
+        """Build supprimé par la rétention (#1097, 2026-11-25) : message explicite, pas de « nouvelle tentative »."""
+        self.write_state(last_processed_build=20)
+        routes = self.build(20, "SUCCESS")
+        out = self.run_poll(routes, action="replay", build=11, code=1, FIXCVE_DRY_RUN="true")
+        self.assertIn("Build #11 absent de l'historique Jenkins", out)
+        self.assertNotIn("nouvelle tentative", out)
+        self.assertEqual(self.read_state()["last_processed_build"], 20, "état réel inchangé")
+
     def test_replay_build_ignore_hors_dry_run(self):
         self.write_state(last_processed_build=19)
         out = self.run_poll(self.replay_routes(), FIXCVE_REPLAY_BUILD="11")

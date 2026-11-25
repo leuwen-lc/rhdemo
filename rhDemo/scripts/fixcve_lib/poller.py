@@ -456,7 +456,15 @@ class Poller:
         if self.replay_build is not None:
             self.log(f"DRY_RUN : rejeu du build #{self.replay_build} (rapport ancien, code actuel) à la place du "
                      "dernier build terminé.")
-            last = self.fetch_json(f"{self.replay_build}/api/json?tree=number,result")
+            try:
+                last = self.jenkins.json(self.jenkins.job_url(f"{self.replay_build}/api/json?tree=number,result"))
+            except JenkinsError as e:
+                if e.code != 404:
+                    raise
+                # Un rejeu sur un build supprimé ne réussira jamais : pas de « nouvelle tentative ».
+                self.log(f"Build #{self.replay_build} absent de l'historique Jenkins (rétention des 30 derniers "
+                         "builds, buildDiscarder de Jenkinsfile-CI) : rejeu impossible, choisir un build conservé.")
+                raise Abort(1) from None
         else:
             last = self.fetch_json("lastCompletedBuild/api/json?tree=number,result")
         build, result = last["number"], last["result"]

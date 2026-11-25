@@ -2,8 +2,8 @@
 
 Chaque fonction reçoit l'état (`state.json`), une observation (build, sha du code source, verdict...)
 et l'heure, et rend une décision : le nouvel état et ce que le poller doit faire (pousser le journal,
-s'arrêter, notifier). Le poller (fixcve-auto-poll.sh, via fixcve-cycle.py) exécute les effets (git,
-Jenkins) puis écrit le nouvel état : un push en échec laisse l'état inchangé et le passage suivant
+s'arrêter, notifier). Le poller (poller.py) exécute les effets (git, Jenkins) puis écrit le
+nouvel état : un push en échec laisse l'état inchangé et le passage suivant
 recommence.
 
 Une seule mémoire « même cause » (`same_cause`) remplace `blocked_confirmed` et

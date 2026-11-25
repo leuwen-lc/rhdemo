@@ -11,7 +11,7 @@ sources:
   - rhDemo/Jenkinsfile-CI
   - rhDemo/Jenkinsfile-CD
   - rhDemo/infra/jenkins-docker/Dockerfile.agent
-  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve_lib/poller.py
   - rhDemo/scripts/fixcve-install.sh
   - rhDemo/infra/jenkins-docker/init-registry-certs.sh
   - rhDemo/docs/CERTIFICATS_WEB.md

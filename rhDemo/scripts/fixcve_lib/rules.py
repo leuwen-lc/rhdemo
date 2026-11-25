@@ -1,6 +1,6 @@
 """Règles métier et constantes de fixcve-auto, en un seul endroit.
 
-Tous les autres modules (et fixcve-detect.py, fixcve-validate-json.py, fixcve-cycle.py) importent
+Tous les autres modules (et fixcve-detect.py, fixcve-validate-json.py) importent
 d'ici : aucun seuil, aucune liste d'images ni aucun nom d'image du projet ne doit être recopié
 ailleurs (contrôlé par tests/test_rules.py). Justification des règles : docs/FIXCVE_AUTO.md.
 """

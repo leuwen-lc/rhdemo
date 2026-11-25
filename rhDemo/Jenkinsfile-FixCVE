@@ -4,8 +4,8 @@
  *
  * Déclenché par le post { always } de chaque build RHDemo-CI (paramètre CI_BUILD_NUMBER), plus un
  * cron de secours horaire (jenkins-casc.yaml) qui rattrape un déclenchement perdu. Le bot lui-même
- * est rhDemo/scripts/fixcve-auto-poll.sh, lancé par fixcve-state.sh ; ce pipeline ne fait que lui
- * fournir son environnement et notifier.
+ * est rhDemo/scripts/fixcve-auto.py (fixcve_lib/poller.py) ; ce pipeline ne fait que lui fournir
+ * son environnement et notifier.
  *
  * Paramètres (définis dans jenkins-casc.yaml) :
  *   ACTION           poll (défaut), status, resume (reprise après halte), clear-blocked, replay
@@ -63,7 +63,7 @@ pipeline {
                             "FIXCVE_REPLAY=${params.BUILD_TO_REPLAY ?: ''}"
                         ]) {
                             // Valeurs passées par l'environnement, jamais interpolées dans la commande.
-                            sh 'rhDemo/scripts/fixcve-state.sh "$FIXCVE_ACTION" "$FIXCVE_REPLAY"'
+                            sh 'python3 -I rhDemo/scripts/fixcve-auto.py "$FIXCVE_ACTION" "$FIXCVE_REPLAY"'
                         }
                     }
                     // Halte, rollback, blocage confirmé ou ALERTE : build UNSTABLE, donc mail.

@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-25
 sources:
   - rhDemo/Jenkinsfile-CI
   - rhDemo/vars/rhDemoLib.groovy
@@ -51,6 +51,7 @@ Enchaînement CI → CD :
 │ 1. Build & Tests                                               │
 │    ├─ Compilation Maven                                        │
 │    ├─ Tests unitaires et d'intégration                         │
+│    ├─ Tests des scripts (run-all.sh)                           │
 │    ├─ Analyse OWASP Dependency-Check                           │
 │    ├─ Build Maven (JAR)                                        │
 │    └─ Analyse SonarQube + Quality Gate                         │
@@ -121,6 +122,7 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 #### Phase 2 : Build et Tests
 - Compilation Maven
 - Tests unitaires et d'intégration
+- Tests des scripts (`rhDemo/scripts/tests/run-all.sh`, hors réseau) : poller fixcve-auto exécuté de bout en bout, rotation des secrets, OpenBao
 - Analyse OWASP Dependency-Check
 - Analyse SonarQube (optionnel) : SonarQube est démarré au début du stage puis arrêté après la Quality Gate, pour libérer la mémoire du poste (voir `infra/jenkins-docker/README.md`)
 - Quality Gate SonarQube (optionnel)

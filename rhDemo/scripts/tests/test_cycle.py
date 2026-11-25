@@ -1,12 +1,8 @@
 """Règles de cycle du poller (fixcve_lib/cycle.py), rejouées sur les incidents du registre
 docs/FIXCVE_AUTO_INCIDENTS.md, sans Jenkins ni git."""
-import json
-import os
-import subprocess
-import tempfile
 import unittest
 
-from helpers import SCRIPTS
+import helpers  # noqa: F401  (chemin de fixcve_lib)
 from fixcve_lib import cycle
 from fixcve_lib.rules import (BLOCKED_RECHECK_SECONDS, MAX_CONSECUTIVE_NO_ACTION_PUSHES,
                               MAX_CONSECUTIVE_PREPUSH_FAILURES, MAX_CONSECUTIVE_ROLLBACKS,
@@ -172,34 +168,6 @@ class LegacyStateTest(unittest.TestCase):
         self.assertEqual(s["same_cause"]["kind"], "blocked")
         s = cycle.normalize({"no_action_confirmed": {"since": "2026-01-01T00:00:00Z", "source_sha": "y"}})
         self.assertEqual(s["same_cause"]["kind"], "no_action")
-
-
-class CliTest(unittest.TestCase):
-    """fixcve-cycle.py : n'écrit jamais state.json, seulement le nouvel état à part."""
-
-    def run_cli(self, *args, params=None):
-        out = subprocess.run(["python3", "-I", os.path.join(SCRIPTS, "fixcve-cycle.py"), *args],
-                             input=json.dumps(params or {}), capture_output=True, text=True, check=True)
-        return out.stdout.strip()
-
-    def test_regle_et_etat_a_part(self):
-        with tempfile.TemporaryDirectory() as d:
-            st, nxt = os.path.join(d, "state.json"), os.path.join(d, "next.json")
-            with open(st, "w") as fh:
-                json.dump(state(consecutive_prepush_failures=1), fh)
-            decision = json.loads(self.run_cli("prepush-failure", st, nxt, params={"build": 7, "step": "apply"}))
-            self.assertTrue(decision["halt"])
-            with open(st) as fh:
-                self.assertEqual(json.load(fh)["status"], "idle")
-            with open(nxt) as fh:
-                self.assertEqual(json.load(fh)["status"], "halted")
-
-    def test_stage_type_et_verdict(self):
-        self.assertEqual(self.run_cli("stage-type", "Analyse OWASP"), "owasp")
-        self.assertEqual(self.run_cli("stage-type", "Tests Selenium"), "")
-        v = json.loads(self.run_cli("verdict", params={"stage": "owasp", "original": ORIG, "detect": "ok",
-                                                       "current": ["CVE-2026-2|g:b"]}))
-        self.assertEqual(v["verdict"], "keep")
 
 
 if __name__ == "__main__":

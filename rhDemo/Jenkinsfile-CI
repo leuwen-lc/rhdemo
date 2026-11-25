@@ -490,6 +490,16 @@ YMLEOF
             }
         }
 
+        stage('🧪 Tests des scripts') {
+            steps {
+                script {
+                    echo "▶ Tests des scripts (fixcve-auto, rotation des secrets, OpenBao), hors réseau..."
+                }
+                // Seule protection du poller fixcve-auto contre une régression : il pousse seul sur le dépôt.
+                sh 'rhDemo/scripts/tests/run-all.sh'
+            }
+        }
+
             stage('🔍 Analyse OWASP Dependency-Check') {
                 steps {
                     script {

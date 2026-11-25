@@ -3,19 +3,20 @@ statut: proposition
 verifie_le: 2026-11-25
 sources:
   - rhDemo/scripts/fixcve_lib/
-  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve-auto.py
+  - rhDemo/scripts/tests/test_poller.py
   - rhDemo/scripts/fixcve-detect.py
   - rhDemo/scripts/fixcve-validate-json.py
 ---
 
 # fixcve-auto : isoler les règles métier
 
-> **Bilan au 2026-11-25 : P1 à P4 appliqués**, dans l'ordre P2, P1, P4, P3 (voir [FIXCVE_AUTO.md](../FIXCVE_AUTO.md)). Reste à faire avant de passer cette étude en `historique` : un passage du job `RHDemo-FixCVE` en `DRY_RUN`, puis un premier cycle réel, avec le poller recâblé. Écarts par rapport à la proposition :
+> **Bilan au 2026-11-25 : P1 à P4 appliqués**, dans l'ordre P2, P1, P4, P3, **puis réécriture complète du poller en Python** (section 3.5, sans fonctionnement en parallèle). Voir [FIXCVE_AUTO.md](../FIXCVE_AUTO.md). Le poller Bash recâblé a été rejoué en `DRY_RUN` sur les builds #1097, #1100 et #1102 (résultat conforme après le correctif de `maven_upgrade` du #1097). Reste à faire avant de passer cette étude en `historique` : rejouer ces trois builds avec le poller Python, puis un premier cycle réel. Écarts par rapport à la proposition :
 >
 > - P1 : la nature `image_embedded_jar` couvre aussi une bibliothèque npm vue par Trivy dans une image tierce ; un paquet système de l'image du projet est `image_os`, comme ceux des images tierces.
 > - P3 : la mémoire unique `same_cause` garde une seule cause à la fois. Seul effet de bord identifié : une cause « no action » sur un code source déjà marqué « bloqué » remplace le blocage. Ce cas est borné par la halte après 2 pushes « no action ».
 > - P3 : la recherche d'un finding du correctif dans l'extrait d'échec (#972) porte désormais sur l'identifiant entier, et non plus sur une sous-chaîne.
-> - Les règles d'exécution non décisionnelles (validation par SHA, extraction du stage fautif depuis la console Jenkins) restent dans le Bash.
+> - Les règles d'exécution non décisionnelles (validation par SHA, extraction du stage fautif depuis la console Jenkins) restaient dans le Bash ; elles sont maintenant dans `fixcve_lib/poller.py` et `fixcve_lib/jenkins.py`.
 
 Étude du 2026-11-25. Elle fait suite à [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md), dont les éléments F, G et H ne sont pas faits. Fonctionnement actuel : [FIXCVE_AUTO.md](../FIXCVE_AUTO.md). Incidents à l'origine des garde-fous : [FIXCVE_AUTO_INCIDENTS.md](../FIXCVE_AUTO_INCIDENTS.md).
 
@@ -120,7 +121,7 @@ Variante de P3 : remplacer aussi l'exécution, donc `fixcve-auto-poll.sh` (~1 00
 
 - **Effort L** (estimation : 1 500 à 2 000 lignes Python avec tests, contre ~1 150 lignes Bash remplacées). Environ deux à trois fois P3 seul.
 - **Perte de la mise au point** : chaque bloc Bash encode un incident (commentaires #752, #772, #796, #799, #812…). Une réécriture peut en perdre un. Parade : chaque entrée de [FIXCVE_AUTO_INCIDENTS.md](../FIXCVE_AUTO_INCIDENTS.md) qui concerne le poller devient un test **avant** la réécriture.
-- **Bascule** : le job pousse sur le dépôt sans validation humaine. Il faut une période en parallèle : l'ancien poller reste en production, le nouveau tourne en DRY_RUN sur les mêmes builds et l'on compare décisions et états. On bascule une fois les résultats identiques sur une série de builds réels (proposition : 2 semaines ou 20 cycles).
+- **Bascule** : le job pousse sur le dépôt sans validation humaine. Proposition initiale : une période en parallèle (ancien poller en production, nouveau en DRY_RUN sur les mêmes builds, comparaison des décisions, 2 semaines ou 20 cycles). **Abandonnée** (section 3.5) : trop complexe pour un outil dont les cycles échouent déjà assez souvent pour révéler vite un écart.
 - **Format de `state.json`** : conserver le format actuel ou fournir une migration lue au démarrage ; même chose pour les anciens événements du journal (append-only).
 - **Environnement** : l'agent Jenkins `fixcve` a déjà Python 3 (les étapes y tournent) ; aucune dépendance externe n'est nécessaire, donc pas de nouvelle surface de chaîne d'approvisionnement ni de ligne Renovate.
 - **Points de contact inchangés à conserver** : `Jenkinsfile-FixCVE` appelle `fixcve-state.sh` (garder ce nom comme simple lanceur, ou modifier le Jenkinsfile), paramètres `ACTION` / `REPLAY` / `DRY_RUN`, `trusted.sha256` de `fixcve-install.sh` à mettre à jour avec les nouveaux fichiers.
@@ -130,7 +131,22 @@ Variante de P3 : remplacer aussi l'exécution, donc `fixcve-auto-poll.sh` (~1 00
 
 La réécriture complète n'est pas un préalable, mais devient raisonnable **après P3** : une fois les règles de cycle sorties et testées, ce qui reste en Bash n'est que de l'exécution (Jenkins, git, état), et le portage se fait module par module, au risque le plus faible. La faire d'emblée cumule deux changements risqués (règles et exécution) sur un composant qui pousse seul sur le dépôt.
 
-Ordre proposé si elle est retenue : P2, P1, P4, P3, puis portage par étapes : état et verrou, puis audit et notifications, puis Jenkins, puis git en dernier ; enfin fonctionnement en parallèle en DRY_RUN avant la bascule.
+Ordre proposé si elle est retenue : P2, P1, P4, P3, puis portage par étapes : état et verrou, puis audit et notifications, puis Jenkins, puis git en dernier ; enfin fonctionnement en parallèle en DRY_RUN avant la bascule (abandonné, voir 3.5).
+
+### 3.5 Décision et réalisation (2026-11-25)
+
+Réécriture retenue après P1 à P4, **sans fonctionnement en parallèle ni retour arrière** : l'ancien poller est supprimé à la bascule. Si fixcve-auto ne se fiabilise pas, son sort sera décidé plus tard. La protection repose sur des tests, pas sur une comparaison en production.
+
+1. **Tests de caractérisation d'abord** (`tests/test_poller.py`, 49 scénarios) : poller exécuté par son point d'entrée, avec un vrai serveur HTTP local pour Jenkins, un dépôt local servant d'origin et des étapes de remédiation simulées (la classification et le validateur sont les vrais). Chaque garde-fou d'exécution du registre d'incidents y a son scénario. Les 47 premiers ont été validés contre le poller Bash avant toute ligne de Python ; les deux derniers (aucun secret en argument, #975 de bout en bout) sont propres à la réécriture.
+2. **Portage** : `fixcve-auto.py` (actions d'exploitation, DRY_RUN) et `fixcve_lib/poller.py` (phases A et B), `jenkins.py` (client HTTP, cause réelle d'un échec), `gitops.py` (commit, push, rejeu sur origin, rollback). Environ 1 150 lignes de code et 1 100 de tests, contre ~1 100 lignes Bash supprimées (`fixcve-auto-poll.sh`, `fixcve-git-sync.sh`, `fixcve-state.sh`, `fixcve-cycle.py`). Les règles de cycle sont appelées directement. Les étapes `fixcve-*.py` restent des sous-processus lus par leur ligne de résultat : ce sont les mêmes que celles du skill `/fixcve`, et un crash d'étape reste isolé du poller.
+3. **Bascule** : `Jenkinsfile-FixCVE` appelle `python3 -I rhDemo/scripts/fixcve-auto.py`. Formats de `state.json` et du journal inchangés. Les trois replays DRY_RUN (#1097, #1100, #1102) servent de contrôle avant le premier cycle réel.
+4. **Protection en continu** : `tests/run-all.sh` est lancé par le stage « Tests des scripts » de `Jenkinsfile-CI`.
+
+Écarts relevés par la réécriture :
+
+- Le jeton Jenkins passait en argument de `curl -u` (poller et `fixcve-detect.py`), visible dans `ps` : il passe désormais dans l'en-tête HTTP (`test_aucun_secret_en_argument_de_commande`).
+- PyYAML manquait dans l'image de l'agent : la vérification locale de `.trivyignore.yaml` aurait échoué sur toute suppression Trivy. `python3-yaml` est ajouté à `Dockerfile.agent` (image à reconstruire).
+- Le rejeu sur origin ne réécrit plus `pending.fix_commit_sha` : l'appel à `state_set` de `fixcve-git-sync.sh` n'était pas défini dans le poller et ne servait jamais (un correctif en attente est déjà sur origin ; le SHA d'un nouveau correctif est relu après le push).
 
 ## 4. Option : réécriture complète en Java
 
@@ -184,7 +200,9 @@ L'harmonisation avec l'application est un vrai argument pour un projet école (u
 
 À conserver dans chaque étape (repris de l'étude précédente) : aucune décision par LLM, chaque garde-fou garde son test d'incident, le skill `/fixcve` continue d'utiliser les mêmes scripts, l'état reste écrit sous verrou.
 
-## 6. Décisions à prendre
+## 6. Décisions prises
 
-- Adopter P1 à P4, ou seulement P1/P2 (gain rapide, risque faible) ?
-- Pour P3, exécuter les tests `run-all.sh` en CI (question laissée ouverte par la section 8 de l'étude précédente) : la refonte du poller en serait mieux protégée.
+- P1 à P4 adoptés et appliqués.
+- `run-all.sh` exécuté en CI (stage « Tests des scripts » de `Jenkinsfile-CI`).
+- Réécriture en Python retenue, sans fonctionnement en parallèle ni retour arrière (section 3.5).
+- Le nouveau code reste hors du périmètre SonarQube pour l'instant ; à revoir plus tard.

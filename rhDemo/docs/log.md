@@ -523,3 +523,14 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 ## [2026-11-25] ingest | Replay d'un build précis en DRY_RUN
 
 - `fixcve-state.sh replay <N>` avec `DRY_RUN` : le poller traite le build N (variable `FIXCVE_REPLAY_BUILD`, ignorée hors DRY_RUN) au lieu du dernier build terminé, phase B sautée. [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : ligne « Rejouer un build » complétée. Tests : `test_poll_smoke`.
+
+## [2026-11-25] ingest | Propriété du BOM déjà fournie (replay DRY_RUN du #1097)
+
+- `edits.maven_upgrade` : une propriété non surchargée dans `pom.xml` n'est plus posée quand le BOM du parent actuel fournit déjà la cible (`already`). [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : règle Maven complétée. [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) : ligne ajoutée.
+
+## [2026-11-25] ingest | Réécriture du poller fixcve-auto en Python
+
+- Tests de caractérisation `tests/test_poller.py` validés sur le poller Bash, puis réécriture : `fixcve-auto.py`, `fixcve_lib/poller.py`, `jenkins.py`, `gitops.py`. Supprimés : `fixcve-auto-poll.sh`, `fixcve-git-sync.sh`, `fixcve-state.sh`, `fixcve-cycle.py`. Jeton Jenkins en en-tête HTTP (plus en argument de `curl`), `python3-yaml` ajouté à l'image de l'agent.
+- `Jenkinsfile-FixCVE` lance `fixcve-auto.py` ; `Jenkinsfile-CI` gagne le stage « Tests des scripts » (`run-all.sh`).
+- [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : bilan, section 3.5 (réalisation sans fonctionnement en parallèle), décisions prises. [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : architecture et tests. [PIPELINES_CI_CD.md](PIPELINES_CI_CD.md) : nouveau stage. [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) : trois lignes ajoutées.
+- Frontmatter seul de [ETUDE_FIXCVE_DANS_JENKINS.md](etudes/ETUDE_FIXCVE_DANS_JENKINS.md) et [ETUDE_OPENBAO.md](etudes/ETUDE_OPENBAO.md) (historiques, contenu inchangé) : source supprimée `fixcve-auto-poll.sh` remplacée par son successeur `fixcve_lib/poller.py`.

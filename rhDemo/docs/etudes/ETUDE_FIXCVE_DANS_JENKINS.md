@@ -2,7 +2,7 @@
 statut: historique
 verifie_le: 2026-11-24
 sources:
-  - rhDemo/scripts/fixcve-auto-poll.sh
+  - rhDemo/scripts/fixcve_lib/poller.py
   - rhDemo/scripts/fixcve-detect.py
   - rhDemo/scripts/fixcve_lib/verify.py
   - rhDemo/scripts/fixcve-install.sh

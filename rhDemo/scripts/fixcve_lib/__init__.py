@@ -3,6 +3,9 @@
 Modules :
   rules        règles métier : seuils, images, nature du composant, constantes de cycle
   cycle        règles de cycle du poller (haltes, mémoire « même cause », verdict de validation)
+  poller       passage du bot : phases A et B, état sous verrou, journal (exécute les effets)
+  jenkins      API Jenkins (jeton en en-tête) et cause réelle d'un build en échec
+  gitops       commit, push, rejeu sur origin et rollback des commits du bot
   common       versions, JSON, sous-processus
   osv          avis OSV.dev (plage corrigée par branche, alias CVE <-> GHSA)
   registry     versions publiées : Maven Central, npm, registres d'images

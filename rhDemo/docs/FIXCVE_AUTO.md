@@ -3,13 +3,10 @@ statut: actif
 verifie_le: 2026-11-25
 sources:
   - rhDemo/Jenkinsfile-FixCVE
-  - rhDemo/scripts/fixcve-state.sh
-  - rhDemo/scripts/fixcve-auto-poll.sh
-  - rhDemo/scripts/fixcve-git-sync.sh
+  - rhDemo/scripts/fixcve-auto.py
   - rhDemo/scripts/fixcve-classify.py
   - rhDemo/scripts/fixcve-detect.py
   - rhDemo/scripts/fixcve-apply.py
-  - rhDemo/scripts/fixcve-cycle.py
   - rhDemo/scripts/fixcve_lib/
 ---
 
@@ -25,8 +22,8 @@ Automatisation complète de la remédiation des CVE bloquantes détectées par T
 
 ```text
 RHDemo-CI ── post { always } ──> job RHDemo-FixCVE (Jenkinsfile-FixCVE, agent « fixcve »)
-cron de secours horaire ────────┘   └─> fixcve-state.sh (action d'exploitation)
-                                          └─> fixcve-auto-poll.sh (checkout neuf, branche du job)
+cron de secours horaire ────────┘   └─> fixcve-auto.py (action d'exploitation)
+                                          └─> fixcve_lib/poller.py (checkout neuf, branche du job)
          │
          ├─ Phase A (idle) : nouveau build Jenkins en échec sur un stage Trivy/OWASP
          │     1. fixcve-detect.py    -> detected.json   rapports Jenkins -> findings
@@ -50,7 +47,7 @@ Les règles métier sont isolées (choix expliqués dans [FIXCVE_REGLES_METIER.m
 
 - **`fixcve_lib/rules.py`** : seuils CVSS, images surveillées et remédiables, constantes de cycle (haltes, délais), et la **nature du composant** (`component_kind` : `project_maven`, `project_npm`, `jar_embedded_js`, `image_os`, `image_embedded_jar`), calculée une fois à la détection et qui dit où se fait la montée et quels critères A s'appliquent. Aucune de ces valeurs n'est recopiée ailleurs (contrôlé par `tests/test_rules.py`).
 - **`fixcve_lib/policy.py`** : table de décision par finding (`decide`, sur des valeurs simples).
-- **`fixcve_lib/cycle.py`** : règles de cycle du poller (haltes, mémoire « même cause », verdict de la validation), fonctions pures appelées par `fixcve-cycle.py`. Le poller Bash n'exécute que les effets (Jenkins, git, journal) puis installe le nouvel état calculé ; un push en échec laisse l'état inchangé.
+- **`fixcve_lib/cycle.py`** : règles de cycle du poller (haltes, mémoire « même cause », verdict de la validation), fonctions pures. Le poller (`fixcve_lib/poller.py`, avec `jenkins.py` et `gitops.py`) n'exécute que les effets (Jenkins, git, journal) puis installe le nouvel état calculé ; un push en échec laisse l'état inchangé. Il lance les étapes `fixcve-*.py` en sous-processus, comme le skill `/fixcve`, et les lit par leur ligne de résultat. Le jeton Jenkins passe dans un en-tête HTTP et le jeton Codeberg par `GIT_ASKPASS`, jamais en argument de commande.
 
 ### Étapes et sources de vérité
 
@@ -104,7 +101,7 @@ Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>`
 | **Aucun LLM** | Plus aucune surface d'injection de prompt : les rapports et avis externes ne sont lus que par du code ; aucun secret n'est exposé à un modèle. Les textes libres externes (titres de CVE) ne sont jamais recopiés dans un fichier versionné. |
 | **Pas d'épinglage des scripts** | Comme `Jenkinsfile-CI` et `Jenkinsfile-Renovate`, `Jenkinsfile-FixCVE` et les scripts sont lus sur la branche : un compte qui pousse peut modifier le bot (risque accepté le 2026-11-22, [ETUDE_FIXCVE_DANS_JENKINS.md](etudes/ETUDE_FIXCVE_DANS_JENKINS.md), T1). |
 | **Checkout neuf à chaque passage** | Espace de travail jetable de l'agent, placé sur `origin/<branche du job>` à jour : jamais d'arbre sale hérité d'un cycle interrompu. |
-| **Push refusé** | origin a avancé pendant le cycle (merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`scripts/fixcve-git-sync.sh`) ; sinon ou en cas de conflit, échec du passage sans mise à jour de l'état, le suivant recommence. |
+| **Push refusé** | origin a avancé pendant le cycle (merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`fixcve_lib/gitops.py`) ; sinon ou en cas de conflit, échec du passage sans mise à jour de l'état, le suivant recommence. |
 | **Revert limité aux commits du bot** | Le rollback n'annule qu'un commit dont l'auteur est `RHDemo FixCVE Bot` et présent sur la branche : un état altéré ne peut pas faire annuler un commit quelconque. |
 | **Validation de schéma** | `fixcve-validate-json.py` entre chaque étape (`detect`, `lookup`, `plan`) : clés exactes, regex/enum, référence croisée, une action et une seule par finding, critère B interdit à partir du seuil bloquant (`CVSS_BLOCKING`), version Trivy imposée pour une image, `component_kind` cohérent avec l'écosystème et l'image (un jar d'image tierce ne passe jamais pour une dépendance du pom.xml, #812). |
 | **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index activé comme en CI avec le credential `ossindex-credentials`, cache de 7 jours partagé : sans lui, une faille que seul OSS Index relie à la version passait jusqu'à la CI, builds #1102 à #1107) — aucun finding traité ne doit subsister. Une CVE nouvelle (≥ 7, sur n'importe quel paquet : une montée du parent ou un nettoyage change des versions par ricochet) n'est plus ignorée : elle est ajoutée aux findings du cycle, recherchée, classée et le plan réappliqué **une fois** avant le push (build #1102 : Tomcat 11.0.27 amené par Spring Boot 4.1.3, CVE-2026-116830, que la CI avait fait annuler) ; si le rescan en trouve encore, le cycle échoue avant le push. La base NVD est celle de `RHDemo-CI` (volume Maven partagé, voir [Cache NVD](#cache-nvd)) ; tout rapport antérieur est supprimé avant le scan : un scan interrompu ne relit jamais un vieux rapport. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
@@ -165,8 +162,8 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 
 ## Tests
 
-- `rhDemo/scripts/tests/run-all.sh` : tests unitaires hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).
-- `tests/test_cycle.py` : règles de cycle rejouées sur les incidents ; `tests/test_poll_smoke.py` : poller exécuté de bout en bout avec un faux Jenkins et un dépôt local (câblage des règles, état, push, halte).
+- `rhDemo/scripts/tests/run-all.sh` : tests hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md). Lancé par le stage « Tests des scripts » de `Jenkinsfile-CI` : c'est la protection du poller contre une régression.
+- `tests/test_cycle.py` : règles de cycle rejouées sur les incidents. `tests/test_poller.py` : poller exécuté de bout en bout par `fixcve-auto.py`, avec un faux Jenkins HTTP local, un dépôt local servant d'origin et des étapes simulées (phases A et B, haltes, rollback, rejeu sur origin, DRY_RUN, aucun secret en argument). Ces tests de caractérisation ont été validés sur l'ancien poller Bash avant la réécriture. `tests/test_gitops.py` et `tests/test_jenkins.py` : opérations git du bot et cause réelle d'un échec (#819).
 - Poller complet : dans Jenkins, job `RHDemo-FixCVE` avec `DRY_RUN` coché (cycle réel sur une copie de l'état, sans push), éventuellement avec `ACTION=replay` sur un build en échec.
 
 ---
@@ -208,7 +205,7 @@ Le token Codeberg est émis directement sur le compte bot (mot de passe et code 
 
 ### 3. Jenkins
 
-Agent `fixcve` (volume `rhdemo-fixcve-state`), plafond d'un conteneur et job `RHDemo-FixCVE` sont dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) ; le répertoire du volume est créé par l'image agent (`Dockerfile.agent`, reconstruite par `start-jenkins.sh` quand elle change). Après un changement : reconstruire l'image si besoin, puis recharger JCasC. Le déclenchement vient du `post { always }` de `Jenkinsfile-CI`.
+Agent `fixcve` (volume `rhdemo-fixcve-state`), plafond d'un conteneur et job `RHDemo-FixCVE` sont dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) ; le répertoire du volume est créé par l'image agent (`Dockerfile.agent`, reconstruite par `start-jenkins.sh` quand elle change), qui fournit aussi `python3-yaml` (contrôle de syntaxe de `.trivyignore.yaml` par la vérification locale). Après un changement : reconstruire l'image si besoin, puis recharger JCasC. Le déclenchement vient du `post { always }` de `Jenkinsfile-CI`.
 
 Les commits automatiques portent l'identité `RHDemo FixCVE Bot`. Le skill interactif `/fixcve` reste sur le poste : `rhDemo/scripts/fixcve-install.sh` l'installe dans `.claude/skills`.
 

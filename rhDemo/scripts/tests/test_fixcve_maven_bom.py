@@ -47,10 +47,10 @@ POM = """<project>
 """
 
 
-def bom(boot, tomcat="11.0.27", hibernate="7.4.15.Final"):
+def bom(boot, tomcat="11.0.27", hibernate="7.4.15.Final", spring="7.0.11"):
     return f"""<project><properties>
 <tomcat.version>{tomcat}</tomcat.version><hibernate.version>{hibernate}</hibernate.version>
-<spring-framework.version>7.0.11</spring-framework.version><jackson-bom.version>3.1.8</jackson-bom.version>
+<spring-framework.version>{spring}</spring-framework.version><jackson-bom.version>3.1.8</jackson-bom.version>
 </properties><dependencyManagement><dependencies>
 <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-security</artifactId><version>{boot}</version></dependency>
 <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-actuator</artifactId><version>{boot}</version></dependency>
@@ -136,6 +136,56 @@ class BootModuleTest(Base):
         status, detail = self.upgrade("org.apache.tomcat.embed:tomcat-embed-core", "11.0.27", "11.0.28")
         self.assertEqual(status, "applied", detail)
         self.assertIn("<tomcat.version>11.0.28</tomcat.version>", self.pom())
+
+
+class BomDefaultTest(Base):
+    """Rapport plus ancien que HEAD (replay DRY_RUN du build #1097) : la propriété n'est pas
+    surchargée et le BOM du parent actuel fournit déjà la cible."""
+
+    def setUp(self):
+        super().setUp()
+        self.write("pom.xml", POM.format(parent=PARENT.format(boot="4.1.3")))
+        # spring-framework-bom 7.0.11 publié et listant spring-core : propriété spring-framework.version.
+        self.reg = registry(**{"pom:org.springframework:spring-framework-bom:7.0.11": SPRING_BOM})
+
+    def upgrade(self, package, installed, target, reg=None, baseline=None):
+        return super().upgrade(package, installed, target, reg or self.reg, baseline)
+
+    def test_cible_deja_fournie_par_le_bom(self):
+        before = self.pom()
+        status, detail = self.upgrade("org.springframework:spring-core", "7.0.10", "7.0.11", baseline=before)
+        self.assertEqual(status, "already", detail)
+        self.assertIn("par le BOM Spring Boot 4.1.3", detail)
+        self.assertEqual(self.pom(), before)
+
+    def test_cible_au_dela_du_bom_toujours_posee(self):
+        status, detail = self.upgrade("org.springframework:spring-core", "7.0.11", "7.0.12", baseline=self.pom())
+        self.assertEqual(status, "applied", detail)
+        self.assertIn("<spring-framework.version>7.0.12</spring-framework.version>", self.pom())
+
+    def test_bom_monte_par_ce_cycle(self):
+        self.write("pom.xml", POM.format(parent=PARENT.format(boot="4.1.2")))
+        self.write("bom-4.1.2.pom", bom("4.1.2", spring="7.0.10"))
+        baseline = self.pom()
+        self.upgrade("org.springframework.boot:spring-boot-security", "4.1.2", "4.1.3", baseline=baseline)
+        status, detail = self.upgrade("org.springframework:spring-core", "7.0.10", "7.0.11", baseline=baseline)
+        self.assertEqual(status, "applied", detail)
+        self.assertIn("monte par ce cycle", detail)
+        self.assertNotIn("<spring-framework.version>", self.pom())
+
+    def test_replay_1097_sans_commit(self):
+        actions = [classify(finding("CVE-2026-59414", "org.springframework.boot:spring-boot-security", "4.1.2",
+                                    ecosystem="maven", cvss=9.1),
+                            {"fix_status": "fix_available", "target_version": "4.1.3", "maven_scopes": ["compile"]}),
+                   classify(finding("CVE-2026-22", "org.springframework:spring-core", "7.0.10",
+                                    ecosystem="maven", cvss=7.5),
+                            {"fix_status": "fix_available", "target_version": "7.0.11", "maven_scopes": ["compile"]})]
+        plan = {"jenkins_build": 1097, "stage": "owasp", "pending_reverified": [], "actions": actions}
+        before = self.pom()
+        result = Applier(plan, self.reg, {}, resolve_unpinned=lambda pom: {}).run()
+        self.assertEqual((result["result"], result["reason"]), ("NO_ACTION", "deja_corrige_sur_head"))
+        self.assertEqual(result["changed_files"], [])
+        self.assertEqual(self.pom(), before)
 
 
 class ImportedBomTest(Base):

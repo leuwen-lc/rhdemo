@@ -223,7 +223,18 @@ def maven_upgrade(package_name, installed, target, ids, registry, bom_path_patte
         if baseline_pom is not None and (before is None or _raised_by_cycle(before.group(1).strip(), target)):
             return "applied", f"{prop} = {current.group(1).strip()} (monte par ce cycle, couvre {package_name})"
         return "already", f"{prop} deja a {current.group(1).strip()} (>= {target})"
-    comment = f"Fix {', '.join(ids)} : {artifact} {installed} -> {target}"
+    # Pas de surcharge dans pom.xml : la version effective est celle du BOM. Rapport plus ancien
+    # que HEAD (parent monté depuis le build en échec) : la cible peut déjà y être.
+    default = bom_properties(bom).get(prop, "").strip() if current is None else ""
+    if default and version_key(default) and compare(default, target) >= 0:
+        before = boot_version(baseline_pom) if baseline_pom is not None else None
+        raised = bool(before) and before != boot
+        before_bom = boot_bom_text(before, registry, bom_path_pattern) if raised else None
+        before_default = bom_properties(before_bom).get(prop, "").strip() if before_bom else ""
+        if raised and not (version_key(before_default) and compare(before_default, target) >= 0):
+            return "applied", f"{prop} = {default} (BOM Spring Boot {boot} monte par ce cycle, couvre {package_name})"
+        return "already", f"{prop} = {default} par le BOM Spring Boot {boot} (>= {target})"
+    comment =f"Fix {', '.join(ids)} : {artifact} {installed} -> {target}"
     new_pom, _ = _set_property(pom, prop, target, comment)
     _write(POM, new_pom)
     return "applied", f"{prop} = {target} ({package_name} {installed} -> {target})"

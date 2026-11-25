@@ -1,0 +1,132 @@
+#!/usr/bin/env groovy
+/**
+ * RHDemo-Scripts : tests et analyse SonarQube des scripts d'exploitation (rhDemo/scripts/),
+ * hors de la CI de l'application : un défaut d'un script ne bloque jamais la livraison.
+ *
+ * Déclenchement : pollSCM de la branche (jenkins-casc.yaml). Les stages ne tournent que si un
+ * commit touche rhDemo/scripts/ ou ce fichier, ou sur lancement manuel ; sinon le build se
+ * termine sans allouer d'agent. Le filtre est ici et non dans le pollSCM : une restriction de
+ * chemins du plugin git exige un workspace pour sonder, que les agents éphémères n'ont pas.
+ *
+ * SonarQube (projet rhdemo-scripts, distinct de rhdemo-api) : non bloquant, une Quality Gate
+ * en échec rend le build UNSTABLE et envoie un mail. Couverture mesurée aussi dans les
+ * sous-processus (scripts/tests/.coveragerc, .pth de Dockerfile.agent).
+ * Documentation : docs/PIPELINES_CI_CD.md
+ */
+pipeline {
+    agent none
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
+    }
+
+    environment {
+        NOTIFICATION_EMAIL = credentials('notification-email')
+    }
+
+    stages {
+        stage('Scripts') {
+            when {
+                beforeAgent true
+                anyOf {
+                    changeset 'rhDemo/scripts/**'
+                    changeset 'rhDemo/Jenkinsfile-Scripts'
+                    triggeredBy 'UserIdCause'
+                }
+            }
+            // builder : socket Docker nécessaire pour démarrer et arrêter SonarQube.
+            agent { label 'builder' }
+            stages {
+                stage('🧪 Tests des scripts') {
+                    environment {
+                        COVERAGE_PROCESS_START = "${env.WORKSPACE}/rhDemo/scripts/tests/.coveragerc"
+                        COVERAGE_FILE = "${env.WORKSPACE}/rhDemo/.coverage"
+                    }
+                    steps {
+                        sh 'rm -f rhDemo/.coverage*'
+                        sh 'rhDemo/scripts/tests/run-all.sh'
+                        dir('rhDemo') {
+                            sh '''
+                                python3 -I -m coverage combine --rcfile=scripts/tests/.coveragerc -q
+                                python3 -I -m coverage xml --rcfile=scripts/tests/.coveragerc -o scripts/coverage.xml -q
+                                python3 -I -m coverage report --rcfile=scripts/tests/.coveragerc --format=total
+                            '''
+                        }
+                    }
+                }
+
+                stage('📊 Analyse SonarQube') {
+                    when {
+                        // Paramètre défini dans jenkins-casc.yaml ; absent (null) = analyse faite.
+                        expression { params.RUN_SONAR != false }
+                    }
+                    steps {
+                        script {
+                            def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                            lib.startSonarQube()
+                            try {
+                                withSonarQubeEnv('SonarQube') {
+                                    dir('rhDemo') {
+                                        // Python seul ; mêmes exclusions de sévérité que rhdemo-api
+                                        // (sonar-project.properties) : Low et Info ignorées.
+                                        sh '''./mvnw -B -N sonar:sonar \
+                                            -Dsonar.projectKey=rhdemo-scripts \
+                                            -Dsonar.projectName="RHDemo Scripts" \
+                                            -Dsonar.sources=scripts \
+                                            -Dsonar.tests=scripts/tests \
+                                            -Dsonar.inclusions="scripts/**/*.py" \
+                                            -Dsonar.exclusions="scripts/tests/**" \
+                                            -Dsonar.test.inclusions="scripts/tests/**/*.py" \
+                                            -Dsonar.test.exclusions="scripts/tests/fixtures/**" \
+                                            -Dsonar.python.version=3.13 \
+                                            -Dsonar.python.coverage.reportPaths=scripts/coverage.xml \
+                                            -Dsonar.issue.ignore.multicriteria=e1,e2 \
+                                            -Dsonar.issue.ignore.multicriteria.e1.ruleKey="*" \
+                                            -Dsonar.issue.ignore.multicriteria.e1.severity=MINOR \
+                                            -Dsonar.issue.ignore.multicriteria.e2.ruleKey="*" \
+                                            -Dsonar.issue.ignore.multicriteria.e2.severity=INFO'''
+                                    }
+                                }
+                                timeout(time: 10, unit: 'MINUTES') {
+                                    def qg = waitForQualityGate abortPipeline: false
+                                    if (qg.status != 'OK') {
+                                        unstable("Quality Gate SonarQube rhdemo-scripts : ${qg.status} (non bloquant)")
+                                    }
+                                }
+                            } finally {
+                                lib.stopSonarQube()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        unstable {
+            script {
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "⚠️ RHDemo-Scripts #${env.BUILD_NUMBER} : Quality Gate SonarQube en échec",
+                             body: "Analyse SonarQube du projet rhdemo-scripts en échec (non bloquant).\n\nConsole : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+        failure {
+            script {
+                try {
+                    emailext to: env.NOTIFICATION_EMAIL,
+                             subject: "❌ RHDemo-Scripts #${env.BUILD_NUMBER} : tests des scripts en échec",
+                             body: "Les tests des scripts d'exploitation (rhDemo/scripts/tests/run-all.sh) ont échoué.\n\nConsole : ${env.BUILD_URL}console"
+                } catch (Exception e) {
+                    echo "⚠️  Notification email non envoyée : ${e.message}"
+                }
+            }
+        }
+    }
+}

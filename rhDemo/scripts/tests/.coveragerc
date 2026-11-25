@@ -1,0 +1,18 @@
+# Couverture des tests des scripts (job RHDemo-Scripts, rapport lu par SonarQube).
+# Mesurée aussi dans les sous-processus python3 -I (poller lancé de bout en bout par
+# test_poller.py) : COVERAGE_PROCESS_START pointe sur ce fichier, et un .pth de l'image de
+# l'agent (Dockerfile.agent) démarre coverage dans chaque processus Python.
+[run]
+parallel = True
+include = */rhDemo/scripts/*
+omit =
+    */rhDemo/scripts/tests/*
+    # Copie de fixcve-detect.py créée par test_poller.py, absente de scripts/.
+    */rhDemo/scripts/fixcve-detect-real.py
+
+[paths]
+# Les tests copient les scripts dans des dépôts temporaires : tout est ramené à scripts/,
+# relatif à rhDemo/ (base du projet SonarQube).
+source =
+    scripts/
+    */rhDemo/scripts/

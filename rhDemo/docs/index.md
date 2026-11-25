@@ -46,7 +46,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 
 | Document | Statut | Résumé |
 | --- | --- | --- |
-| [PIPELINES_CI_CD.md](PIPELINES_CI_CD.md) | actif | Architecture des pipelines CI, CD et Renovate |
+| [PIPELINES_CI_CD.md](PIPELINES_CI_CD.md) | actif | Architecture des pipelines CI, CD, Renovate, FixCVE et Scripts (tests et SonarQube des scripts d'exploitation) |
 | [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) | actif | Merge automatique des PR Renovate piloté par Jenkins |
 | [GIT-PROCEDURE-RELEASE.md](GIT-PROCEDURE-RELEASE.md) | actif | Procédure de release : PR vers master, tag, retour en SNAPSHOT |
 | [IMAGE_VERSIONS_MANAGEMENT.md](IMAGE_VERSIONS_MANAGEMENT.md) | actif | Épinglage des images Docker par digest et mises à jour Renovate |

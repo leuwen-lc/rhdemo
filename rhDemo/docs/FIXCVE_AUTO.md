@@ -162,7 +162,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 
 ## Tests
 
-- `rhDemo/scripts/tests/run-all.sh` : tests hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md). Lancé par le stage « Tests des scripts » de `Jenkinsfile-CI` : c'est la protection du poller contre une régression.
+- `rhDemo/scripts/tests/run-all.sh` : tests hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md). Lancé par le job `RHDemo-Scripts` ([PIPELINES_CI_CD.md](PIPELINES_CI_CD.md)), hors de la CI de l'application, à chaque changement de `rhDemo/scripts/` : c'est la protection du poller contre une régression.
 - `tests/test_cycle.py` : règles de cycle rejouées sur les incidents. `tests/test_poller.py` : poller exécuté de bout en bout par `fixcve-auto.py`, avec un faux Jenkins HTTP local, un dépôt local servant d'origin et des étapes simulées (phases A et B, haltes, rollback, rejeu sur origin, DRY_RUN, aucun secret en argument). Ces tests de caractérisation ont été validés sur l'ancien poller Bash avant la réécriture. `tests/test_gitops.py` et `tests/test_jenkins.py` : opérations git du bot et cause réelle d'un échec (#819).
 - Poller complet : dans Jenkins, job `RHDemo-FixCVE` avec `DRY_RUN` coché (cycle réel sur une copie de l'état, sans push), éventuellement avec `ACTION=replay` sur un build en échec.
 
@@ -205,7 +205,7 @@ Le token Codeberg est émis directement sur le compte bot (mot de passe et code 
 
 ### 3. Jenkins
 
-Agent `fixcve` (volume `rhdemo-fixcve-state`), plafond d'un conteneur et job `RHDemo-FixCVE` sont dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) ; le répertoire du volume est créé par l'image agent (`Dockerfile.agent`, reconstruite par `start-jenkins.sh` quand elle change), qui fournit aussi `python3-yaml` (contrôle de syntaxe de `.trivyignore.yaml` par la vérification locale). Après un changement : reconstruire l'image si besoin, puis recharger JCasC. Le déclenchement vient du `post { always }` de `Jenkinsfile-CI`.
+Agent `fixcve` (volume `rhdemo-fixcve-state`), plafond d'un conteneur et job `RHDemo-FixCVE` sont dans [`jenkins-casc.yaml`](../infra/jenkins-docker/casc/jenkins-casc.yaml) ; le répertoire du volume est créé par l'image agent (`Dockerfile.agent`, reconstruite par `start-jenkins.sh` quand elle change), qui fournit aussi `python3-yaml` (contrôle de syntaxe de `.trivyignore.yaml` par la vérification locale) et `python3-coverage` (job `RHDemo-Scripts`). Après un changement : reconstruire l'image si besoin, puis recharger JCasC. Le déclenchement vient du `post { always }` de `Jenkinsfile-CI`.
 
 Les commits automatiques portent l'identité `RHDemo FixCVE Bot`. Le skill interactif `/fixcve` reste sur le poste : `rhDemo/scripts/fixcve-install.sh` l'installe dans `.claude/skills`.
 

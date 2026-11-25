@@ -6,6 +6,7 @@ sources:
   - rhDemo/vars/rhDemoLib.groovy
   - rhDemo/Jenkinsfile-CD
   - rhDemo/Jenkinsfile-Renovate
+  - rhDemo/Jenkinsfile-Scripts
   - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
 ---
 
@@ -20,6 +21,7 @@ Ce document décrit l'architecture des pipelines CI/CD pour le projet RHDemo.
 - [Jenkinsfile-CD : Déploiement Continu](#jenkinsfile-cd--déploiement-continu)
 - [Jenkinsfile-Renovate : mises à jour de dépendances](#jenkinsfile-renovate--mises-à-jour-de-dépendances)
 - [Jenkinsfile-Stagingkub-Upgrade-Deploy : montées d'infra en place](#jenkinsfile-stagingkub-upgrade-deploy--montées-dinfra-en-place)
+- [Jenkinsfile-Scripts : tests et SonarQube des scripts](#jenkinsfile-scripts--tests-et-sonarqube-des-scripts)
 - [Workflow recommandé](#workflow-recommandé)
 - [Configuration Jenkins](#configuration-jenkins)
 
@@ -51,7 +53,6 @@ Enchaînement CI → CD :
 │ 1. Build & Tests                                               │
 │    ├─ Compilation Maven                                        │
 │    ├─ Tests unitaires et d'intégration                         │
-│    ├─ Tests des scripts (run-all.sh)                           │
 │    ├─ Analyse OWASP Dependency-Check                           │
 │    ├─ Build Maven (JAR)                                        │
 │    └─ Analyse SonarQube + Quality Gate                         │
@@ -122,7 +123,6 @@ Construire, tester et valider l'application, puis publier l'image Docker sur le 
 #### Phase 2 : Build et Tests
 - Compilation Maven
 - Tests unitaires et d'intégration
-- Tests des scripts (`rhDemo/scripts/tests/run-all.sh`, hors réseau) : poller fixcve-auto exécuté de bout en bout, rotation des secrets, OpenBao
 - Analyse OWASP Dependency-Check
 - Analyse SonarQube (optionnel) : SonarQube est démarré au début du stage puis arrêté après la Quality Gate, pour libérer la mémoire du poste (voir `infra/jenkins-docker/README.md`)
 - Quality Gate SonarQube (optionnel)
@@ -343,6 +343,23 @@ idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.
 
 ---
 
+## 🧪 Jenkinsfile-Scripts : tests et SonarQube des scripts
+
+**Fichier** : [`Jenkinsfile-Scripts`](../Jenkinsfile-Scripts), job `RHDemo-Scripts`
+
+### Objectif
+
+Tester et analyser les scripts d'exploitation (`rhDemo/scripts/` : fixcve-auto, rotation des secrets, OpenBao, docs-lint) **hors de la CI de l'application** : un défaut d'un script ne bloque jamais la livraison.
+
+### Points clés
+
+- **Déclenchement** : polling SCM de la branche d'évolution. Le build ne travaille que si un commit touche `rhDemo/scripts/` ou `Jenkinsfile-Scripts`, ou s'il est lancé à la main ; sinon il se termine sans allouer d'agent (`when { changeset }`, évalué avant l'agent). Le filtre n'est pas dans le polling : une restriction de chemins du plugin git exige un workspace pour sonder, ce que les agents éphémères n'ont pas. Le job charge donc son Jenkinsfile par un checkout complet (`lightweight(false)`), qui enregistre les changements.
+- **Tests** : `rhDemo/scripts/tests/run-all.sh` (hors réseau, poller fixcve-auto exécuté de bout en bout). Couverture mesurée par `coverage`, y compris dans les sous-processus `python3 -I` : configuration [`scripts/tests/.coveragerc`](../scripts/tests/.coveragerc) et `.pth` de l'image de l'agent (`Dockerfile.agent`), actif seulement si `COVERAGE_PROCESS_START` est défini.
+- **SonarQube** (paramètre `RUN_SONAR`) : projet `rhdemo-scripts`, distinct de `rhdemo-api`, Python seul, mêmes exclusions de sévérité (Low et Info ignorées). **Non bloquant** : une Quality Gate en échec rend le build UNSTABLE et envoie un mail. Agent `builder` : socket Docker nécessaire pour démarrer puis arrêter SonarQube, comme dans la CI.
+- Échec des tests : build en échec et mail.
+
+---
+
 ## 🔄 Workflow recommandé
 
 ### 1. Développement quotidien
@@ -451,7 +468,7 @@ Après build #98 :
 
 #### Option A : Configuration automatique (JCasC - Recommandé)
 
-Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) configure **automatiquement** les cinq jobs au démarrage de Jenkins.
+Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker/casc/jenkins-casc.yaml) configure **automatiquement** les six jobs au démarrage de Jenkins.
 
 **Avantages** :
 - ✅ Configuration versionnée dans Git
@@ -459,7 +476,7 @@ Le fichier [infra/jenkins-docker/casc/jenkins-casc.yaml](../infra/jenkins-docker
 - ✅ Pas de configuration manuelle
 
 Les jobs créés automatiquement : `RHDemo-CI`, `RHDemo-CD`, `RHDemo-Renovate`,
-`RHDemo-Stagingkub-Upgrade-Deploy`, `RHDemo-FixCVE`. Le dépôt est hébergé sur **Forgejo/Codeberg**
+`RHDemo-Stagingkub-Upgrade-Deploy`, `RHDemo-FixCVE`, `RHDemo-Scripts`. Le dépôt est hébergé sur **Forgejo/Codeberg**
 (pas GitHub/GitLab) ; se référer à `jenkins-casc.yaml` pour l'URL et les branches
 exactes.
 
@@ -487,7 +504,7 @@ exactes.
 
 Jenkins **n'est pas exposé sur Internet** : pas de webhook entrant depuis
 Forgejo. RHDemo-CI se déclenche par **polling SCM** sur les branches
-d'évolution ; RHDemo-Renovate par **cron** ; RHDemo-FixCVE à la fin de chaque build CI ; RHDemo-CD après un build CI réussi qui publie l'image. Les statuts CI ne remontent pas
+d'évolution ; RHDemo-Renovate par **cron** ; RHDemo-FixCVE à la fin de chaque build CI ; RHDemo-Scripts par polling SCM, filtré sur `rhDemo/scripts/` ; RHDemo-CD après un build CI réussi qui publie l'image. Les statuts CI ne remontent pas
 vers Forgejo (`prCreation: immediate`), d'où le merge des PR piloté côté
 Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 
@@ -495,14 +512,14 @@ Jenkins (cf. RENOVATE_AUTOMERGE_CI.md).
 
 ## 📊 Comparaison des pipelines
 
-| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy | Jenkinsfile-FixCVE |
-|---------|----------------|----------------|----------------------|---------------------------------------|--------------------|
-| **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra | Remédiation des CVE bloquantes de la CI |
-| **Durée indicative** | ~8 min (timeout 2 h) | ~2 min (timeout 30 min) | ~10-15 min | quelques min/composant | timeout 30 min |
-| **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) | agent `fixcve` (sans socket Docker) |
-| **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade | rescan local OWASP, preuve par le build CI suivant |
-| **Déclenchement** | SCM (branches d'évolution) | Fin de CI réussie, ou manuel | Cron | Post-merge PR infra | Fin de chaque build CI, cron de secours |
-| **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` | — |
+| Critère | Jenkinsfile-CI | Jenkinsfile-CD | Jenkinsfile-Renovate | Jenkinsfile-Stagingkub-Upgrade-Deploy | Jenkinsfile-FixCVE | Jenkinsfile-Scripts |
+|---------|----------------|----------------|----------------------|---------------------------------------|--------------------|---------------------|
+| **Objectif** | Build + tests + scans + publish | Deploy Helm sur K8s | Scan + PR + automerge deps | Upgrade en place d'un composant infra | Remédiation des CVE bloquantes de la CI | Tests + SonarQube des scripts d'exploitation |
+| **Durée indicative** | ~8 min (timeout 2 h) | ~2 min (timeout 30 min) | ~10-15 min | quelques min/composant | timeout 30 min | ~2 min, ~6 min avec SonarQube |
+| **Environnements** | ephemere (Docker Compose) | stagingkub (K8s) | agent éphémère | stagingkub (K8s) | agent `fixcve` (sans socket Docker) | agent `builder` |
+| **Tests** | Unitaires, IT, Selenium, ZAP | Health + smoke | Build + OWASP par PR | dry-run pré-merge, health post-upgrade | rescan local OWASP, preuve par le build CI suivant | `run-all.sh` + couverture |
+| **Déclenchement** | SCM (branches d'évolution) | Fin de CI réussie, ou manuel | Cron | Post-merge PR infra | Fin de chaque build CI, cron de secours | SCM, filtré sur `rhDemo/scripts/` |
+| **ServiceAccount K8s** | — | `jenkins-deployer` | — | `jenkins-infra-upgrader` | — | — |
 
 Les durées sont celles d'une exécution normale, sans contention de ressources sur la machine (le projet tourne sur un seul PC). Les valeurs « timeout » de la CI et de la CD sont les garde-fous définis dans `options { timeout(...) }` des Jenkinsfile : elles ne sont atteintes qu'en cas de forte contention ou de blocage, et ne représentent pas la durée habituelle.
 

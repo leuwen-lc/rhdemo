@@ -453,6 +453,7 @@ Les pipelines sont créés automatiquement au démarrage dans la section `jobs:`
 | `RHDemo-Renovate` | `Jenkinsfile-Renovate` | Scan Renovate + automerge des PRs de dépendances (patch/minor) |
 | `RHDemo-FixCVE` | `Jenkinsfile-FixCVE` | Remédiation automatique des CVE bloquantes de la CI (agent `fixcve`, déclenché à la fin de chaque build CI) — voir [docs/FIXCVE_AUTO.md](../../docs/FIXCVE_AUTO.md) |
 | `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md) |
+| `RHDemo-Scripts` | `Jenkinsfile-Scripts` | Tests et analyse SonarQube (projet `rhdemo-scripts`, non bloquante) des scripts d'exploitation, à chaque changement de `rhDemo/scripts/` — voir [PIPELINES_CI_CD.md](../../docs/PIPELINES_CI_CD.md) |
 
 
 ## 🐳 Docker-in-Docker (DinD)

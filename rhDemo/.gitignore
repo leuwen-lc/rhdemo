@@ -55,3 +55,8 @@ build/
 .vscode/
 /replacegit.txt
 
+
+# Couverture des tests des scripts (job RHDemo-Scripts)
+.coverage*
+!scripts/tests/.coveragerc
+scripts/coverage.xml

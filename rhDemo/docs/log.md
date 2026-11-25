@@ -543,3 +543,8 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 
 - [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : `historique` après les replays `DRY_RUN` du poller Python (#1100 et #1102 conformes, #1097 supprimé par la rétention de Jenkins). Replay d'un build supprimé : message explicite ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
 - Contrôle : [FIXCVE_AUTO.md](FIXCVE_AUTO.md) et [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) disaient encore le rescan local sans OSS Index (corrigé le 2026-11-24) ; [OPENBAO.md](OPENBAO.md) : credentials partagés de fixcve-auto ; [INSTALLATION_COMPLETE.md](INSTALLATION_COMPLETE.md) vérifié sans changement.
+
+## [2026-11-25] ingest | Job RHDemo-Scripts : tests et SonarQube des scripts hors de la CI
+
+- Les tests des scripts (`run-all.sh`) quittent `Jenkinsfile-CI` pour le job `RHDemo-Scripts` ([PIPELINES_CI_CD.md](PIPELINES_CI_CD.md)) : un défaut d'un script ne bloque plus la livraison de l'application. Analyse SonarQube non bloquante (projet `rhdemo-scripts`), couverture mesurée jusque dans les sous-processus. Avant la première analyse, issues du profil Sonar way Python corrigées (contrôles du plugin de l'image SonarQube exécutés en local), sauf la complexité cognitive (S3776).
+- Mis à jour : [FIXCVE_AUTO.md](FIXCVE_AUTO.md), [README de jenkins-docker](../infra/jenkins-docker/README.md).

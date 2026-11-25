@@ -661,6 +661,76 @@ jobs:
       }
 
   # ─────────────────────────────────────────────────────────────────
+  # PIPELINE SCRIPTS - Tests et SonarQube des scripts d'exploitation
+  # ─────────────────────────────────────────────────────────────────
+  - script: |
+      pipelineJob('RHDemo-Scripts') {
+        displayName('RHDemo - Scripts (tests et SonarQube)')
+        description('''Tests et analyse SonarQube des scripts d\'exploitation (rhDemo/scripts/)
+
+        • Hors de la CI de l\'application : un défaut d\'un script ne bloque pas la livraison
+        • Ne travaille que si un commit touche rhDemo/scripts/ ou Jenkinsfile-Scripts, ou sur lancement manuel
+        • SonarQube (projet rhdemo-scripts) non bloquant : Quality Gate en échec = UNSTABLE + mail
+
+        📖 Documentation : docs/PIPELINES_CI_CD.md''')
+
+        parameters {
+          booleanParam {
+            name('RUN_SONAR')
+            defaultValue(true)
+            description('Analyse SonarQube après les tests')
+          }
+        }
+
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('https://codeberg.org/leuwen-lc/rhdemo.git')
+                }
+                branches('*/evolutions-post-1.1.11')
+                extensions {
+                  cloneOptions {
+                    shallow(false)
+                    depth(0)
+                    honorRefspec(true)
+                  }
+                }
+              }
+            }
+            scriptPath('rhDemo/Jenkinsfile-Scripts')
+            // false : le chargement du Jenkinsfile enregistre les changements, lus par
+            // « when { changeset } » avant d'allouer un agent.
+            lightweight(false)
+          }
+        }
+
+        properties {
+          buildDiscarder {
+            strategy {
+              logRotator {
+                numToKeepStr('30')
+                daysToKeepStr('90')
+                artifactNumToKeepStr('10')
+                artifactDaysToKeepStr('30')
+              }
+            }
+          }
+          disableConcurrentBuilds()
+        }
+
+        triggers {
+          // Pas de restriction de chemins ici (elle exige un workspace pour sonder) : le filtre
+          // est dans Jenkinsfile-Scripts.
+          pollSCM {
+            scmpoll_spec('H/5 * * * *')
+            ignorePostCommitHooks(false)
+          }
+        }
+      }
+
+  # ─────────────────────────────────────────────────────────────────
   # PIPELINE STAGINGKUB UPGRADE DEPLOY - Mise à jour en place de l'infra
   # (Option 3, cf. docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md)
   # ─────────────────────────────────────────────────────────────────

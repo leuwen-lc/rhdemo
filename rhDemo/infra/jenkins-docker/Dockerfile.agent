@@ -29,8 +29,10 @@ RUN apt-get update && apt-get install -y \
     unzip \
     jq \
     # PyYAML : vérification locale de .trivyignore.yaml par fixcve-auto (agent « fixcve ») et
-    # tests des scripts (stage « Tests des scripts » de Jenkinsfile-CI, rotation_lib)
+    # tests des scripts (job RHDemo-Scripts, rotation_lib)
     python3-yaml \
+    # coverage : couverture des tests des scripts, lue par SonarQube (job RHDemo-Scripts)
+    python3-coverage \
     # Node.js pour build frontend
     nodejs \
     npm \
@@ -44,6 +46,12 @@ RUN apt-get update && apt-get install -y \
     libpci3 \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Couverture des sous-processus Python (poller lancé en python3 -I par test_poller.py) : coverage
+# démarre dans chaque processus quand COVERAGE_PROCESS_START est défini (Jenkinsfile-Scripts),
+# sinon ce .pth ne fait rien. -I n'ignore que les variables PYTHON* et le site utilisateur.
+RUN echo "import os; 'COVERAGE_PROCESS_START' in os.environ and __import__('coverage').process_startup()" \
+    > /usr/lib/python3/dist-packages/zz-coverage-subprocess.pth
 
 # ═══════════════════════════════════════════════════════════════════
 # INSTALLATION DOCKER COMPOSE

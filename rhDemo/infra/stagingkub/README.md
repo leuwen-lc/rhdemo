@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-11-23
+sources:
+  - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
+  - rhDemo/infra/stagingkub/kind-config.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+  - rhDemo/infra/stagingkub/shared-gateway.yaml
+---
+
 # 🚀 Environnement stagingkub - Déploiement Kubernetes avec KinD
 
 ## 📋 Table des matières
@@ -12,7 +22,6 @@
 - [Persistance des données](#-persistance-des-données)
 - [Opérations courantes](#opérations-courantes)
 - [Troubleshooting](#troubleshooting)
-- [Comparaison ephemere vs stagingkub](#comparaison-ephemere-vs-stagingkub)
 
 ---
 
@@ -20,30 +29,17 @@
 
 L'environnement **stagingkub** est un environnement de staging Kubernetes basé sur **KinD** (Kubernetes in Docker). Il reproduit l'architecture de l'environnement ephemere Docker Compose dans un cluster Kubernetes local, permettant de tester les déploiements Kubernetes avant la production.
 
-### Stack technique
+### Composants
 
-| Composant | Version | Description |
-|-----------|---------|-------------|
-| **KinD** | 0.33+ | Cluster Kubernetes local (node image K8s 1.36.4) |
-| **Kubernetes** | 1.36.4 | `kindest/node` pinné par digest dans `kind-config.yaml` (1.37 exclu : hors matrice Cilium 1.20) |
-| **Cilium** | 1.20.2 | CNI avec kube-proxy replacement (eBPF) |
-| **NGINX Gateway Fabric** | 2.6.0 | Gateway API (remplace nginx-ingress) |
-| **PostgreSQL** | 18.4-alpine | Base de données (pinnée par digest, gérée par Renovate) |
-| **Keycloak** | 26.8.1 | IAM / OAuth2 (pinné par digest, géré par Renovate) |
-| **Helm** | 4.x | Déploiement du chart et des composants d'infra (`--rollback-on-failure`) |
+KinD (cluster local), Cilium (CNI, remplacement de kube-proxy en eBPF), NGINX Gateway Fabric (Gateway API), PostgreSQL, Keycloak, External Secrets Operator, observabilité (Prometheus, Loki, Alloy, Grafana), le tout déployé par Helm (`--rollback-on-failure`, donc Helm 4).
 
-### Différences avec ephemere (Docker Compose)
+Les versions ne sont pas recopiées ici : elles se lisent dans leur fichier source, épinglées par digest et mises à jour par Renovate ([IMAGE_VERSIONS_MANAGEMENT.md](../../docs/IMAGE_VERSIONS_MANAGEMENT.md)) :
 
-| Aspect | ephemere (Docker Compose) | stagingkub (Kubernetes/KinD) |
-|--------|-------------------------|------------------------------|
-| **Orchestration** | Docker Compose | Kubernetes (KinD) |
-| **Package** | docker-compose.yml | Helm Chart |
-| **Secrets** | Variables d'env + docker cp | Kubernetes Secrets |
-| **Réseau** | Docker network bridge | Cilium CNI + Gateway API |
-| **Volumes** | Docker volumes | PersistentVolumeClaims |
-| **Exposition** | Port mapping direct | NGINX Gateway Fabric (NodePort) |
-| **Healthchecks** | Docker healthcheck | Liveness/Readiness probes |
-| **Use case** | Tests rapides, dev local | Tests Kubernetes, pré-prod |
+- Kubernetes : image `kindest/node` de [`kind-config.yaml`](kind-config.yaml) ;
+- Cilium, NGINX Gateway Fabric et autres composants d'infrastructure : `scripts/components/install-or-upgrade-*.sh` ;
+- PostgreSQL et Keycloak : [`helm/rhdemo/values.yaml`](helm/rhdemo/values.yaml).
+
+Différences avec l'environnement ephemere : [ENVIRONMENTS.md](../ENVIRONMENTS.md#-comparaison-ephemere--stagingkub).
 
 ---
 
@@ -66,7 +62,7 @@ L'environnement **stagingkub** est un environnement de staging Kubernetes basé 
    helm version
    ```
 
-4. **KinD** (version 0.33+ — requis pour l'image de nœud Kubernetes 1.36.4)
+4. **KinD** (version compatible avec l'image `kindest/node` de `kind-config.yaml` ; 0.33+ à ce jour)
    ```bash
    kind version
    ```
@@ -127,11 +123,11 @@ Si le conteneur du nœud KinD change d'IP sur le réseau docker `kind` après un
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Cluster KinD "rhdemo"                    │
-│              CNI: Cilium 1.20 (eBPF) — K8s 1.36.4           │
+│              CNI: Cilium (eBPF)                             │
 ├─────────────────────────────────────────────────────────────┤
 │  Namespace: nginx-gateway                                   │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │ NGINX Gateway Fabric 2.6.0                           │  │
+│  │ NGINX Gateway Fabric                                 │  │
 │  │ • NodePort 32616 (HTTPS) → 443 (host)                │  │
 │  │ • GatewayClass: nginx                                │  │
 │  │                                                      │  │
@@ -229,8 +225,8 @@ Ce script :
 - ✅ Vérifie les prérequis système (limites inotify)
 - ✅ Configure le registry Docker local
 - ✅ Crée le cluster KinD `rhdemo` avec `kind-config.yaml`
-- ✅ Installe **Cilium 1.20** (CNI avec kube-proxy replacement)
-- ✅ Installe **NGINX Gateway Fabric 2.6.0** (Gateway API)
+- ✅ Installe **Cilium** (CNI avec kube-proxy replacement)
+- ✅ Installe **NGINX Gateway Fabric** (Gateway API)
 - ✅ Crée le namespace `rhdemo-stagingkub`
 - ✅ Installe External Secrets Operator, qui crée les secrets Kubernetes depuis OpenBao
 - ✅ Configure le RBAC pour Jenkins : `jenkins-deployer` (déploiement applicatif) **et** `jenkins-infra-upgrader` (mise à jour en place de l'infra, ServiceAccount dédié) — crée leurs tokens et pousse les deux kubeconfigs dans les credentials Jenkins (`rotate-secrets.py --if-missing`, rien sur le disque)
@@ -414,7 +410,7 @@ HELM_DRY_RUN=true ./components/install-or-upgrade-cilium.sh
 
 ### Documentation complète
 
-Étude détaillée (RBAC nommé par composant, articulation avec `Jenkinsfile-Renovate`, cas particuliers Cilium/CRDs Gateway API/kube-prometheus-stack) : [`docs/STAGINGKUB_REBUILD_PIPELINE.md`](../../docs/STAGINGKUB_REBUILD_PIPELINE.md).
+Étude détaillée (RBAC nommé par composant, articulation avec `Jenkinsfile-Renovate`, cas particuliers Cilium/CRDs Gateway API/kube-prometheus-stack) : [`docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md`](../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md).
 
 ---
 
@@ -660,28 +656,6 @@ kubectl get configmap local-registry-hosting -n kube-public -o yaml
 # Vérifier les policies actives
 kubectl get networkpolicies -n rhdemo-stagingkub -o wide
 ```
-
----
-
-## 📊 Comparaison ephemere vs stagingkub
-
-### Quand utiliser ephemere (Docker Compose)
-
-✅ Tests rapides de nouvelles fonctionnalités
-✅ Développement local
-✅ Debugging facile avec `docker logs`
-✅ Démarrage/arrêt rapide
-✅ Familiarité avec Docker Compose
-
-### Quand utiliser stagingkub (Kubernetes)
-
-✅ Tester les déploiements Kubernetes avant production
-✅ Valider les manifests Kubernetes (Helm charts)
-✅ Tester les rolling updates
-✅ Valider les readiness/liveness probes
-✅ Tester Gateway API
-✅ Valider les Network Policies
-✅ Se familiariser avec kubectl et Helm
 
 ---
 

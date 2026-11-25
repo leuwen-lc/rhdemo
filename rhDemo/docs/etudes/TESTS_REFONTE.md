@@ -14,7 +14,7 @@ sources:
 > pour sécuriser les montées Renovate côté Vue.js : il n'existe pas à ce jour, voir
 > l'étude [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md).
 > Le périmètre OWASP Dependency-Check couvre désormais aussi les dépendances npm
-> ([OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md)).
+> ([OWASP_DEPENDENCY_CHECK.md](../OWASP_DEPENDENCY_CHECK.md)).
 
 ## 0. Contexte et objectifs
 

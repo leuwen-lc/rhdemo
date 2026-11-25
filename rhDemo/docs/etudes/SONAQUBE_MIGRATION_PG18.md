@@ -9,7 +9,7 @@ sources:
 
 **Symptôme** : après un rebuild (`start-jenkins.sh`), `rhdemo-sonarqube-db` en échec — Renovate
 avait bumpé `postgres:16-alpine` → `postgres:18-alpine` dans
-[`docker-compose.yml`](../infra/jenkins-docker/docker-compose.yml), un changement de version
+[`docker-compose.yml`](../../infra/jenkins-docker/docker-compose.yml), un changement de version
 majeure incompatible avec les fichiers de données existants (format sur disque différent).
 
 **Côté SonarQube** : aucun problème — PostgreSQL 18 est officiellement supporté depuis

@@ -33,6 +33,7 @@ class DocsLintTest(unittest.TestCase):
         open(os.path.join(self.root, "pom.xml"), "w").close()
 
     def write(self, name, content):
+        os.makedirs(os.path.dirname(os.path.join(self.docs, name)), exist_ok=True)
         with open(os.path.join(self.docs, name), "w", encoding="utf-8") as f:
             f.write(content)
 
@@ -68,8 +69,8 @@ class DocsLintTest(unittest.TestCase):
         self.assertEqual([m for m in msgs if "lien cassé" in m], ["lien cassé : absent.md"])
 
     def test_lien_mort_dans_doc_historique_est_un_avertissement(self):
-        self.base(rows="| [a.md](a.md) | historique | A |")
-        self.write("a.md", FM % ("historique", " []") + "[mort](absent.md)\n")
+        self.base(rows="| [a.md](a.md) | actif | A |\n| [h.md](etudes/h.md) | historique | H |")
+        self.write("etudes/h.md", FM % ("historique", " []") + "[mort](absent.md)\n")
         self.assertEqual(self.messages("ERREUR"), [])
         self.assertIn("lien cassé : absent.md", self.messages("AVERTISSEMENT"))
 
@@ -92,6 +93,31 @@ class DocsLintTest(unittest.TestCase):
         self.assertTrue(any("antérieure à la précédente" in m for m in msgs))
         self.assertTrue(any("opération inconnue : inconnu" in m for m in msgs))
         self.assertTrue(any("mauvais format" in m for m in msgs))
+
+    def test_rangement_etudes(self):
+        self.base(rows="| [a.md](a.md) | actif | A |\n| [p.md](p.md) | proposition | P |\n"
+                       "| [e.md](etudes/e.md) | actif | E |\n| [h.md](etudes/h.md) | historique | H |")
+        self.write("p.md", FM % ("proposition", " []") + "P.\n")
+        self.write("etudes/e.md", FM % ("actif", " []") + "E.\n")
+        self.write("etudes/h.md", FM % ("historique", " []") + "[a](../a.md)\n")
+        self.assertEqual(sorted(self.messages("ERREUR")), [
+            "statut actif : le document doit être dans rhDemo/docs/",
+            "statut proposition : le document doit être dans rhDemo/docs/etudes/"])
+
+    def test_document_hors_docs(self):
+        infra = os.path.join(self.root, "rhDemo", "infra")
+        os.makedirs(infra)
+        with open(os.path.join(infra, "SANS_FM.md"), "w") as f:
+            f.write("[mort](absent.md)\n")
+        with open(os.path.join(infra, "AVEC_FM.md"), "w") as f:
+            f.write(FM % ("historique", "\n  - nope.xml") + "X.\n")
+        self.base(rows="| [a.md](a.md) | actif | A |\n| [s](../infra/SANS_FM.md) | actif | S |\n"
+                       "| [f](../infra/AVEC_FM.md) | actif | F |")
+        msgs = self.messages("ERREUR")
+        self.assertIn("lien cassé : absent.md", msgs)
+        self.assertIn("source inexistante : nope.xml", msgs)
+        self.assertIn("statut de rhDemo/infra/AVEC_FM.md : index=actif, document=historique", msgs)
+        self.assertFalse(any("frontmatter absent" in m for m in msgs))
 
 
 if __name__ == "__main__":

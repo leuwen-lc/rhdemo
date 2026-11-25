@@ -11,7 +11,7 @@ resources:
   - jenkins-clusterrolebinding.yaml
   - jenkins-monitoring-role.yaml
   # ServiceAccount dédié à la mise à jour en place des composants d'infra
-  # (Option 3, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md) — distinct de
+  # (Option 3, cf. docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md) — distinct de
   # jenkins-deployer ci-dessus.
   - jenkins-infra-upgrader-serviceaccount.yaml
   - jenkins-infra-upgrader-nginx-gateway-role.yaml

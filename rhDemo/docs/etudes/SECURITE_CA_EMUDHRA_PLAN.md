@@ -101,7 +101,7 @@ Pistes identifiées pendant l'incident, non nécessaires à sa clôture et non e
 
 ## 9. Lien avec CVE-2026-114938 (Java4Shell, 2026-11-17)
 
-Temurin 25.0.5 et le JDK Red Hat 21.0.13, qui closent cet incident, sont vulnérables à CVE-2026-114938 (écriture hors limites dans l'intrinsèque Base64 AVX-512 de C2). Contournement `-XX:-UseBASE64Intrinsics` appliqué le 2026-11-19 à Keycloak, à l'application et à Jenkins ; suivi dans [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md) et `SECURITY_ADVISORIES.md`.
+Temurin 25.0.5 et le JDK Red Hat 21.0.13, qui closent cet incident, sont vulnérables à CVE-2026-114938 (écriture hors limites dans l'intrinsèque Base64 AVX-512 de C2). Contournement `-XX:-UseBASE64Intrinsics` appliqué le 2026-11-19 à Keycloak, à l'application et à Jenkins ; suivi dans [TRIVY_SECURITY_SCAN.md](../TRIVY_SECURITY_SCAN.md) et `SECURITY_ADVISORIES.md`.
 
 ## Historique du document
 

@@ -5,10 +5,10 @@ Toutes les évolutions notables du projet RHDemo, de la plus récente à la plus
 ## Version 1.1.11 (en cours)
 
 Sécurité :
-- Compromission des autorités de certification eMudhra (CVE-2026-111943) : ca-certificates à jour dans les images Jenkins et sur le nœud KinD, image applicative sur Temurin 25.0.5 (racines emSign retirées) épinglée par digest, contrôleur Jenkins 2.580.2-lts-jdk25, builder Maven 3.10.0 et SonarQube 26.11 sur Temurin 25.0.5 ; incident clos (voir rhDemo/docs/SECURITE_CA_EMUDHRA_PLAN.md)
+- Compromission des autorités de certification eMudhra (CVE-2026-111943) : ca-certificates à jour dans les images Jenkins et sur le nœud KinD, image applicative sur Temurin 25.0.5 (racines emSign retirées) épinglée par digest, contrôleur Jenkins 2.580.2-lts-jdk25, builder Maven 3.10.0 et SonarQube 26.11 sur Temurin 25.0.5 ; incident clos (voir rhDemo/docs/etudes/SECURITE_CA_EMUDHRA_PLAN.md)
 - Contournement de Java4Shell (CVE-2026-114938, intrinsèque Base64 AVX-512, aucun JDK corrigé publié) par `-XX:-UseBASE64Intrinsics` sur Keycloak, l'application et Jenkins
 - Durcissement de jenkins-docker : ports Jenkins, SonarQube et registry publiés sur 127.0.0.1 uniquement, port ZAP non publié et API ZAP restreinte, suppression des secrets par défaut (`sonar123` pour SonarQube, `changeme` pour ZAP), mot de passe admin Grafana d'au moins 16 caractères
-- Étude de renouvellement rapide des secrets puis script `rotate-secrets.py` (phase 1) : inventaire sans valeur, rotation automatisée des tokens des bots Codeberg et de la clé GPG de Renovate, mot de passe SMTP vérifié avant propagation, révocation de l'ancien secret et rollback en cas d'échec (voir rhDemo/docs/ETUDE_ROTATION_SECRETS.md) ; étude d'OpenBao comme gestionnaire de secrets (voir rhDemo/docs/ETUDE_OPENBAO.md)
+- Étude de renouvellement rapide des secrets puis script `rotate-secrets.py` (phase 1) : inventaire sans valeur, rotation automatisée des tokens des bots Codeberg et de la clé GPG de Renovate, mot de passe SMTP vérifié avant propagation, révocation de l'ancien secret et rollback en cas d'échec (voir rhDemo/docs/etudes/ETUDE_ROTATION_SECRETS.md) ; étude d'OpenBao comme gestionnaire de secrets (voir rhDemo/docs/etudes/ETUDE_OPENBAO.md)
 - Adresse de notification des pipelines sortie du code vers un credential Jenkins (dépôt public)
 - Trivy : revue des exceptions (Keycloak 26.8.1, nginx 1.31.8-alpine-slim sans brotli-libs), stage en échec si la base de vulnérabilités est périmée, signalement des exclusions `.trivyignore.yaml` devenues obsolètes ; CI recentrée sur l'applicatif, composants système scannés avant le merge des PR Renovate
 - OWASP Dependency-Check : tokens NVD et OSS Index passés par `settings.xml`, OSS Index réservé à RHDemo-CI avec cache de 7 jours (quota Sonatype), configuration alignée entre CI et Renovate
@@ -16,11 +16,11 @@ Sécurité :
 
 fixcve-auto :
 - Procédure de remédiation entièrement déterministe, sans LLM : scripts testés `fixcve-resolve.py` (version corrigée lue dans l'avis OSV et confirmée par le registre), `fixcve-classify.py` (table de décision), `fixcve-apply.py` et `fixcve-verify.py` (vérification locale avant push) ; le skill /fixcve utilise les mêmes scripts (voir rhDemo/docs/FIXCVE_AUTO.md)
-- Fiabilisation au fil des incidents : identité d'un finding = paire (CVE, paquet), CVE bloquées traitées sans bloquer le reste du cycle, validation par non-régression au lieu d'un rollback systématique, parser OWASP DC étendu (OSS Index, CVSS v4, RetireJS, Node Audit sans score), cache NVD amorcé depuis Jenkins, rejeu des commits du bot en cas de divergence ; registre des incidents et plan d'évolutions (voir rhDemo/docs/FIXCVE_AUTO_INCIDENTS.md et rhDemo/docs/FIXCVE_AUTO_REFONTE.md)
+- Fiabilisation au fil des incidents : identité d'un finding = paire (CVE, paquet), CVE bloquées traitées sans bloquer le reste du cycle, validation par non-régression au lieu d'un rollback systématique, parser OWASP DC étendu (OSS Index, CVSS v4, RetireJS, Node Audit sans score), cache NVD amorcé depuis Jenkins, rejeu des commits du bot en cas de divergence ; registre des incidents et plan d'évolutions (voir rhDemo/docs/FIXCVE_AUTO_INCIDENTS.md et rhDemo/docs/etudes/FIXCVE_AUTO_REFONTE.md)
 - Alerte quand une distribution publie le correctif d'une CVE supprimée temporairement dans Trivy
 
 Frontend :
-- Migration de Vue CLI (webpack) vers Vite 8 : 746 → 151 paquets npm, `npm audit` sans alerte, suppressions OWASP de la chaîne webpack retirées (voir rhDemo/docs/MIGRATION_VITE.md)
+- Migration de Vue CLI (webpack) vers Vite 8 : 746 → 151 paquets npm, `npm audit` sans alerte, suppressions OWASP de la chaîne webpack retirées (voir rhDemo/docs/etudes/MIGRATION_VITE.md)
 
 CI/CD :
 - Renovate : délai de quarantaine des images (minimumReleaseAge de 7 jours grâce à un accès Docker Hub authentifié, digest publié depuis 48 h vérifié par `Jenkinsfile-Renovate`, statut `renovate/stability-days` exigé avant merge), images Quay et ghcr basculées sur Docker Hub à digest identique, CRDs Gateway API embarquées dans la PR de montée de NGF (`postUpgradeTasks`), suppression du workflow Forgejo Actions de secours (voir rhDemo/docs/RENOVATE_AUTOMERGE_CI.md)
@@ -51,15 +51,15 @@ Versions :
 ## Version 1.1.10
 
 Infrastructure :
-- Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) et montée stagingkub Kubernetes 1.35 → 1.36.4 (`kindest/node`, KinD CLI 0.33+) livrées ensemble lors d'une reconstruction de cluster : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh`, `--dry-run=client` explicité dans `test-deploy-helm.sh`, point de vigilance server-side apply par défaut à l'installation neuve ; K8s 1.36 débloqué par Cilium 1.20 (matrice officielle K8s 1.33→1.36 ; 1.37 écarté) (voir rhDemo/docs/MIGRATION_HELM4_KUB1.36.md)
-- Nouveau pipeline `Jenkinsfile-Stagingkub-Upgrade-Deploy` : application réelle (post-merge) des montées de version en place des composants d'infra stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana) via des scripts idempotents `scripts/components/install-or-upgrade-<composant>.sh` avec rollback automatique ; la validation avant merge reste un `helm/kubectl --dry-run=server` sans mutation du cluster dans la boucle étendue de `Jenkinsfile-Renovate` (voir rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md)
+- Migration Helm 3 → Helm 4 (agent Jenkins `HELM_VERSION=4.2.4`) et montée stagingkub Kubernetes 1.35 → 1.36.4 (`kindest/node`, KinD CLI 0.33+) livrées ensemble lors d'une reconstruction de cluster : renommage `--atomic` → `--rollback-on-failure` dans les 6 scripts `install-or-upgrade-*.sh`, `--dry-run=client` explicité dans `test-deploy-helm.sh`, point de vigilance server-side apply par défaut à l'installation neuve ; K8s 1.36 débloqué par Cilium 1.20 (matrice officielle K8s 1.33→1.36 ; 1.37 écarté) (voir rhDemo/docs/etudes/MIGRATION_HELM4_KUB1.36.md)
+- Nouveau pipeline `Jenkinsfile-Stagingkub-Upgrade-Deploy` : application réelle (post-merge) des montées de version en place des composants d'infra stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana) via des scripts idempotents `scripts/components/install-or-upgrade-<composant>.sh` avec rollback automatique ; la validation avant merge reste un `helm/kubectl --dry-run=server` sans mutation du cluster dans la boucle étendue de `Jenkinsfile-Renovate` (voir rhDemo/docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md)
 - ServiceAccount Kubernetes dédié `jenkins-infra-upgrader` (RBAC moindre privilège, credential distinct de `jenkins-deployer`) pour ces upgrades d'infra
 - Cilium déplacé dans un namespace `cilium-system` dédié, stockage des releases Helm isolé
 - Montées kube-prometheus-stack 87 → 88.5.4 (Prometheus Operator v0.93.1), Loki chart → v18, Cilium 1.19.5 → 1.20.1, NGINX Gateway Fabric 2.6.x (NodePorts via `nginx.service.nodePorts`, extraction CRDs compatible Helm 4)
 - Routage de `/actuator/health` via le Gateway vers le port management de rhdemo-app (network policy egress `nginx-gateway` ajustée)
 
 Observabilité :
-- Migration Promtail → Grafana Alloy (Promtail EOL 02/03/2026), chart `grafana/alloy` (Alloy v1.18.0), licence Apache-2.0 (voir rhDemo/docs/ALLOY_MIGRATION.md)
+- Migration Promtail → Grafana Alloy (Promtail EOL 02/03/2026), chart `grafana/alloy` (Alloy v1.18.0), licence Apache-2.0 (voir rhDemo/docs/etudes/ALLOY_MIGRATION.md)
 - Bascule de Loki vers le fork communautaire OSS (chart v7 puis v18) pour éviter la licence AGPLv3
 - Retrait du plugin Grafana déprécié `grafana-piechart-panel` ; autorisation du sidecar Grafana à joindre l'API server
 
@@ -69,7 +69,7 @@ CI/CD :
 - Durcissement du pipeline Renovate contre une PR malveillante ; scope élargi aux images pré-épinglées (tag+digest) de stagingkub et `Jenkinsfile-CI`, `customManagers` pour les versions d'outils non détectées nativement, alertes de vulnérabilité OSV activées
 - Comptes Codeberg bot dédiés pour le merge des PR Renovate et pour fixcve-auto
 - Migration de la base SonarQube vers PostgreSQL 18
-- Build frontend via `npm ci` (au lieu de `npm install`), version Node épinglée pour `frontend-maven-plugin` ; étude de tests unitaires frontend pour sécuriser les montées Renovate (voir rhDemo/docs/TESTS_FRONTEND_UNITAIRES.md)
+- Build frontend via `npm ci` (au lieu de `npm install`), version Node épinglée pour `frontend-maven-plugin` ; étude de tests unitaires frontend pour sécuriser les montées Renovate (voir rhDemo/docs/etudes/TESTS_FRONTEND_UNITAIRES.md)
 
 Sécurité :
 - Refonte de fixcve-auto en 3 phases à privilèges disjoints : détection déterministe (script Python `fixcve-detect.py`, remplace le skill), lookup sans credential exposé au contenu Internet, apply isolé sur un clone git dédié ; périmètre étendu aux dépendances npm du frontend, revalidation des CVE OS (Alpine/Debian/Ubuntu) via OSV.dev, suppression temporaire documentée autorisée pour CVSS < 9 sans correctif disponible (voir rhDemo/docs/FIXCVE_AUTO.md)
@@ -84,7 +84,7 @@ Versions :
 
 Sécurité :
 - Automatisation complète de remédiation CVE (fixcve-auto) : un script de polling détecte les échecs Trivy/OWASP-DC sur le pipeline CI et invoque Claude Code pour appliquer, committer et pousser un correctif sans validation humaine, avec rollback automatique et journal d'audit (voir rhDemo/docs/FIXCVE_AUTO.md)
-- Remédiations de l'audit du 22/05 : PostgreSQL dev limité à localhost, HSTS avec preload, Permissions-Policy étendue, readOnlyRootFilesystem sur rhdemo-app, security.txt, validation du claim iss JWT en ephemere (voir rhDemo/docs/SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md)
+- Remédiations de l'audit du 22/05 : PostgreSQL dev limité à localhost, HSTS avec preload, Permissions-Policy étendue, readOnlyRootFilesystem sur rhdemo-app, security.txt, validation du claim iss JWT en ephemere (voir rhDemo/docs/etudes/SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md)
 - Rate limiting Nginx (ephemere) et NGF RateLimitPolicy (stagingkub) sur l'API et le login Keycloak, avec page d'erreur 429 personnalisée et notification Axios côté frontend
 - Ajout des headers COOP/CORP/COEP
 - Diverses CVE corrigées au fil de l'eau (postgresql-jdbc, Apache Tomcat, Spring Security, Spring Framework) (cf rhDemo/docs/SECURITY_ADVISORIES.md)
@@ -100,18 +100,18 @@ Versions :
 ## Version 1.1.8
 
 Architecture logicielle :
-- Etude sur le passage à Clean Architecture (non appliqué voir rhDemo/docs/IMPACT_CLEAN_ARCHITECTURE.md)
+- Etude sur le passage à Clean Architecture (non appliqué voir rhDemo/docs/etudes/IMPACT_CLEAN_ARCHITECTURE.md)
 
 Code Backend :
-- Amélioration de la gestion des Null (voir rhDemo/docs/NULL_REFONTE.md)
+- Amélioration de la gestion des Null (voir rhDemo/docs/etudes/NULL_REFONTE.md)
 
 CI/CD : 
-- Passage à des agents jenkins ephemeres (voir rhDemo/docs/JENKINS_AGENTS_EPHEMERES.md)
+- Passage à des agents jenkins ephemeres (voir rhDemo/docs/etudes/JENKINS_AGENTS_EPHEMERES.md)
 - Ajout du plugin Jenkins matrix-auth pour gestion fine des droits (notamment pour user Claude Code)
 - Verouillage des versions de plugin Jenkins dans un lockfile mis à jour par un script (sécurisation en remplacement des versions latest)
 
 Tests : 
-- Refonte des tests unitaires pour améliorer leur maintenabilité : suppression des tests triviaux et en doublon unitaires/intégration (voir rhDemo/docs/TESTS_REFONTE.md)
+- Refonte des tests unitaires pour améliorer leur maintenabilité : suppression des tests triviaux et en doublon unitaires/intégration (voir rhDemo/docs/etudes/TESTS_REFONTE.md)
 - ajout d'un test "property based" avec le framework jqwik
 
 Sécurité :
@@ -121,7 +121,7 @@ Sécurité :
 ## Version 1.1.7
 
 Architecture logicielle : 
-- Amélioration de la conformité REST de l'API Employe (voir rhDemo/docs/API_REST_NORMALISATION.md)
+- Amélioration de la conformité REST de l'API Employe (voir rhDemo/docs/etudes/API_REST_NORMALISATION.md)
 - Ajout d'une couche data transfer object (DTO) immutable (record) seule connue du Controller API pour stabiliser et sécuriser le contrat REST.
 
 Sécurité :
@@ -168,14 +168,14 @@ Outillage CI-CD (infra/jenkins-docker)
 
 Applicatif rhDemo
 
-- Montées de version (cf rhDemo/docs/SPRING_BOOT_4_MIGRATION.md):
+- Montées de version (cf rhDemo/docs/etudes/SPRING_BOOT_4_MIGRATION.md):
   - Java 25, Spring Boot 4.0.2, PostgreSQL 18.1, Keycloack 26.5.0
   - Junit 6.0.2, Selenium 4.40,
   - Frontend : Actualisation des versions par NPM update (cf package-lock.json)
 
 Environnement stagingkub
 
-- Passage de Ingress Nginx (fin de vie mars 2026) à Nginx Gateway Fabric 2.4 (cf rhDemo/docs/NGINX_GATEWAY_FABRIC_MIGRATION.md)
+- Passage de Ingress Nginx (fin de vie mars 2026) à Nginx Gateway Fabric 2.4 (cf rhDemo/docs/etudes/NGINX_GATEWAY_FABRIC_MIGRATION.md)
 - Adaptation des network policies
 - "Pin" des versions des outils d'observabilité (prometheus, loki, grafana,...) pour éviter l'instabilité liée aux versions "latest"
 

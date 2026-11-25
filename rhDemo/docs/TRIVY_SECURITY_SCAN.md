@@ -156,7 +156,7 @@ Quand aucun correctif n'est publié en amont, une vulnérabilité peut être exc
 - Une acceptation n'est pas une correction : elle doit être retirée dès que le paquet corrigé est publié. Le stage Trivy de `RHDemo-CI` signale les entrées devenues inutiles (voir « Intégration dans le pipeline »).
 - **Portée réelle d'une entrée** : Trivy ne lit pas le champ `pkg-name` (seuls `id`, `paths`, `purls`, `statement` et `expired_at` le sont, constaté avec Trivy 0.76.1). Une entrée exclut la CVE dans tous les paquets de toutes les images scannées ; `pkg-name` ne sert que de documentation et de clé pour fixcve. Pour restreindre réellement une exclusion, il faudrait `purls`.
 - Une acceptation `[MITIGATED]` signale une faille sans correctif amont mais neutralisée par configuration ; elle est retirée, avec la configuration, au correctif amont. Exemple : CVE-2026-114938 (Java4Shell) sur le JDK de l'image Keycloak, neutralisée par `-XX:-UseBASE64Intrinsics` (`JAVA_OPTS_APPEND` dans les trois environnements). Le même flag est posé sur les JDK Temurin de l'application (`Dockerfile`) et de Jenkins, que Trivy ne voit pas (JDK hors gestionnaire de paquets).
-- Une acceptation permanente est réservée aux failles que l'éditeur ne corrigera pas et qui ne sont pas atteignables dans notre contexte : CVE-2026-91403 (Red Hat `will_not_fix`, incident eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md)).
+- Une acceptation permanente est réservée aux failles que l'éditeur ne corrigera pas et qui ne sont pas atteignables dans notre contexte : CVE-2026-91403 (Red Hat `will_not_fix`, incident eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](etudes/SECURITE_CA_EMUDHRA_PLAN.md)).
 
 ## Intégration dans le pipeline
 

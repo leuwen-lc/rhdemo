@@ -27,7 +27,7 @@ Aucun des deux ServiceAccounts n'a le CLI `kind` ni un accès à `docker.sock` �
 la reconstruction complète du cluster (`kind delete`/`kind create`) reste
 exclusivement une opération de la machine hôte, jamais de Jenkins. Voir
 `Dockerfile.agent` (image des agents Jenkins) et
-`docs/STAGINGKUB_REBUILD_PIPELINE.md` pour le détail de cette séparation.
+`docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md` pour le détail de cette séparation.
 
 ## jenkins-deployer
 
@@ -35,14 +35,7 @@ Fichiers : `jenkins-serviceaccount.yaml`, `jenkins-role.yaml`,
 `jenkins-rolebinding.yaml`, `jenkins-clusterrole.yaml`,
 `jenkins-clusterrolebinding.yaml`, `jenkins-monitoring-role.yaml`.
 
-Permissions accordées :
-- Namespace `rhdemo-stagingkub` : pods, deployments, statefulsets, services,
-  secrets, configmaps, ingresses/Gateway API, etc. (déploiement Helm de
-  l'application rhDemo + Keycloak + PostgreSQL).
-- Namespace `monitoring` : ServiceMonitors/PodMonitors uniquement (CRUD).
-- Cluster-wide : PersistentVolumes, namespaces (get/list/watch/create/patch),
-  StorageClasses (lecture), GatewayClasses (lecture).
-- Pas d'accès à `kube-system`, `nginx-gateway` ni `loki-stack`.
+Permissions accordées, justification, installation, vérification et dépannage : [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](../../../docs/SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md). Ce README détaille surtout `jenkins-infra-upgrader`, que ce document ne couvre pas.
 
 ## jenkins-infra-upgrader (Option 3 — mise à jour en place)
 
@@ -61,7 +54,7 @@ kube-prometheus-stack, Loki, Alloy, Grafana) **sans jamais reconstruire le
 cluster**, en respectant malgré tout le principe de moindre privilège. C'est
 une extension RBAC réelle et documentée, pas une exception silencieuse — voir
 l'étude complète dans
-[`docs/STAGINGKUB_REBUILD_PIPELINE.md`](../../../docs/STAGINGKUB_REBUILD_PIPELINE.md)
+[`docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md`](../../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md)
 (étape 3).
 
 ### Principes appliqués

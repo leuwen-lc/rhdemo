@@ -2,7 +2,7 @@
 statut: historique
 verifie_le: 2026-11-21
 sources:
-  - rhDemo/docs/ETUDE_ROTATION_SECRETS.md
+  - rhDemo/docs/etudes/ETUDE_ROTATION_SECRETS.md
   - rhDemo/secrets/inventory.yaml
   - rhDemo/infra/jenkins-docker/docker-compose.yml
   - rhDemo/infra/stagingkub/scripts/init-stagingkub.sh
@@ -17,13 +17,13 @@ sources:
   - rhDemo/docs/CERTIFICATS_WEB.md
 ---
 
-> **Historique** : étude mise en œuvre (étapes 1 à 4) et migration depuis SOPS terminée en novembre 2026. État courant et exploitation : [OPENBAO.md](OPENBAO.md).
+> **Historique** : étude mise en œuvre (étapes 1 à 4) et migration depuis SOPS terminée en novembre 2026. État courant et exploitation : [OPENBAO.md](../OPENBAO.md).
 
 # Étude : OpenBao comme gestionnaire de secrets de RHDemo
 
 **Objectif** : évaluer ce qu'apporterait [OpenBao](https://openbao.org) (fork libre de HashiCorp Vault, licence MPL 2.0, projet de la Linux Foundation) par rapport à la démarche actuelle : secrets chiffrés par SOPS dans Git, credentials Jenkins saisis à la main, script `rotate-secrets.py` ([ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md)).
 
-**Statut** : proposition. L'étape 0 (prototype jetable) a été réalisée le 2026-11-20 : tous les points *à vérifier* sont levés, résultats au §7.1. **Décision : continuer.** Les étapes 1 à 4 sont codées sur la branche `evolution_openbao` (2026-11-21), pas encore déployées : exploitation et points restant à valider dans [OPENBAO.md](OPENBAO.md).
+**Statut** : proposition. L'étape 0 (prototype jetable) a été réalisée le 2026-11-20 : tous les points *à vérifier* sont levés, résultats au §7.1. **Décision : continuer.** Les étapes 1 à 4 sont codées sur la branche `evolution_openbao` (2026-11-21), pas encore déployées : exploitation et points restant à valider dans [OPENBAO.md](../OPENBAO.md).
 
 **Verdict** : OpenBao n'apporte presque rien pour les secrets exposés sur Internet (Codeberg, Infomaniak, Claude), qui restent gérés par `rotate-secrets.py`. Il apporte beaucoup pour les secrets internes : signature Cosign sans clé extractible, journal d'audit de chaque lecture, et plus aucun secret dans l'historique Git public. Il remplacerait avantageusement les phases 2 à 4 de l'étude de rotation. Coût principal : le **déverrouillage** manuel après chaque redémarrage du poste ou du conteneur (§5), et un service critique de plus. Le prototype a levé les doutes techniques : cosign signe par Transit avec la version des agents, le plugin Jenkins fonctionne tel quel, et la mémoire consommée est négligeable (moins de 30 Mo).
 

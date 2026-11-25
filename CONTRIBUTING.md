@@ -11,7 +11,7 @@ Merci de votre intérêt ! Ce dépôt est un projet école servant de support à
 ## Principes du projet
 
 - Logiciel libre à 100 %, pas de dépendance à une plateforme SaaS (pas de GitHub Actions).
-- Sécurité dès la conception. Invariants à respecter : tokens OAuth2 côté backend (BFF) avec CSRF actif, CSP stricte (aucun JavaScript inline, jamais `unsafe-inline` ni `unsafe-eval`), secrets uniquement chiffrés par SOPS, NetworkPolicies en Default Deny, images Docker épinglées par digest.
+- Sécurité dès la conception. Invariants à respecter : tokens OAuth2 côté backend (BFF) avec CSRF actif, CSP stricte (aucun JavaScript inline, jamais `unsafe-inline` ni `unsafe-eval`), secrets jamais en clair dans Git (référencés dans OpenBao), NetworkPolicies en Default Deny, images Docker épinglées par digest.
 - L'application métier reste volontairement simple.
 
 ## Mise en place

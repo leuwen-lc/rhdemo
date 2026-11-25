@@ -17,7 +17,7 @@ Ce guide couvre l'exploitation courante des secrets : ce qu'il faut faire régul
 
 - [OPENBAO.md](OPENBAO.md) : installation, déverrouillage, sauvegarde, jeton root, et détail de chaque rotation automatisée (section « Rotation ») ;
 - `rhDemo/secrets/inventory.yaml` : liste de référence de tous les secrets, sans valeur, avec leur méthode ou procédure de rotation ;
-- [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) : raisons des choix (criticité, exposition, ordre d'urgence) et ce qui reste à automatiser.
+- [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) : raisons des choix (criticité, exposition, ordre d'urgence) et ce qui reste à automatiser.
 
 ## Où vivent les secrets
 
@@ -126,7 +126,7 @@ Depuis `rhDemo/scripts/`, OpenBao déverrouillé et le cluster stagingkub démar
 
 Ce que fait le mode urgence, par rapport à une rotation ordinaire :
 
-- **tout le périmètre**, dans l'ordre ci-dessous (exposition Internet, réseau local, puis local, et par criticité ; raisons : [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md), §3.3), après une confirmation unique ;
+- **tout le périmètre**, dans l'ordre ci-dessous (exposition Internet, réseau local, puis local, et par criticité ; raisons : [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md), §3.3), après une confirmation unique ;
 - **révocation avant création** pour les secrets qui se révoquent à part (tokens et clé GPG Codeberg, `secret_id` AppRole, tokens Kubernetes) : mieux vaut une CI cassée qu'un attaquant actif. Sur les comptes bots, **tous** les tokens sont révoqués, y compris ceux qui n'ont pas été créés par le script, sans question. Les mots de passe changés en place (PostgreSQL, Keycloak, Grafana) invalident l'ancien dès le changement ; si l'étape échoue, l'ancien est rétabli et le bilan le signale ;
 - **procédures manuelles une à une** : le script affiche la procédure et attend. Répondre `o` une fois faite (elle est tracée), sinon elle part dans les « restent à faire » du bilan. Après le mot de passe `admin` de Jenkins, le script redemande le nouveau ;
 - **bilan final** : renouvelés, en échec (à relancer par `rotate-secrets.py <id>`), restant à faire. Code retour 1 s'il reste un échec ou une procédure.

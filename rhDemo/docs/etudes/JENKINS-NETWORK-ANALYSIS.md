@@ -22,7 +22,7 @@ sources:
 - `localhost:5000` dans le contexte de l'agent fait référence au container agent lui-même, pas à l'hôte
 - Le registry `kind-registry` est sur un réseau Docker différent
 
-**Note importante** : Le registry doit s'appeler **exactement** `kind-registry` pour garantir la résolution DNS dans le cluster KinD. Voir [REGISTRY.md](REGISTRY.md) pour plus de détails.
+**Note importante** : Le registry doit s'appeler **exactement** `kind-registry` pour garantir la résolution DNS dans le cluster KinD. Voir [REGISTRY.md](../REGISTRY.md) pour plus de détails.
 
 **Solution appliquée** :
 - Détection dynamique du nom du registry : `docker ps --filter "publish=5000"`
@@ -58,7 +58,7 @@ Unable to connect to the server: dial tcp 127.0.0.1:33309: connect: connection r
 docker network connect kind rhdemo-jenkins-agent
 ```
 
-#### b) Configuration kubectl dynamique : [Jenkinsfile-CD:233-305](../Jenkinsfile-CD#L233-L305)
+#### b) Configuration kubectl dynamique : [Jenkinsfile-CD:233-305](../../Jenkinsfile-CD#L233-L305)
 
 Étape dans le pipeline : `☸️ Configure Kubernetes Access`
 
@@ -148,7 +148,7 @@ docker network inspect kind | grep kind-registry
 # ❌ Pas de résultat - registry NON connecté au réseau kind
 ```
 
-**Solution appliquée** : [Jenkinsfile-CD:260-300](../Jenkinsfile-CD#L260-L300)
+**Solution appliquée** : [Jenkinsfile-CD:260-300](../../Jenkinsfile-CD#L260-L300)
 
 Ajout dans le stage `☸️ Configure Kubernetes Access` :
 ```bash
@@ -205,7 +205,7 @@ kubectl get pods -n rhdemo-stagingkub -w
 - Le pipeline Jenkinsfile-CD vérifie le nom du registry et échoue si incorrect
 - Le pipeline connecte automatiquement le registry avec l'alias à chaque déploiement
 - Le script `init-stagingkub.sh` connecte le registry avec l'alias lors de l'initialisation du cluster
-- Voir [REGISTRY.md](REGISTRY.md) pour la documentation complète
+- Voir [REGISTRY.md](../REGISTRY.md) pour la documentation complète
 
 ---
 
@@ -307,7 +307,7 @@ Avant de lancer un build Jenkins avec `DEPLOY_ENV=stagingkub` :
 - Il n'y a plus d'agent permanent à démarrer — les agents éphémères sont créés automatiquement par le Docker Cloud au déclenchement d'un build
 - La connexion de l'agent (éphémère) et du Registry au réseau kind est vérifiée et établie automatiquement par le pipeline Jenkinsfile-CD (stage `☸️ Configure Kubernetes Access`)
 - L'agent éphémère est identifié par son hash court (`$(hostname)`) — ce pattern fonctionne sans modification dans les pipelines
-- Voir [REGISTRY.md](REGISTRY.md) pour la configuration complète du registry
+- Voir [REGISTRY.md](../REGISTRY.md) pour la configuration complète du registry
 
 **Commande d'initialisation** :
 ```bash
@@ -419,4 +419,4 @@ kind get kubeconfig --name rhdemo | \
 **Auteur** : Configuration automatisée via Claude Code
 
 **Voir aussi** :
-- [REGISTRY.md](REGISTRY.md) - Configuration complète du registry Docker local
+- [REGISTRY.md](../REGISTRY.md) - Configuration complète du registry Docker local

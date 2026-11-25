@@ -936,4 +936,4 @@ lignes supplémentaires, restant **bien en deçà** de l'équivalent Groovy).
 - Woodpecker plugins index : <https://woodpecker-ci.org/plugins>
 - Comparaison Woodpecker vs Drone : <https://woodpecker-ci.org/docs/migrations#drone>
 - SonarCloud Quality Gate API : <https://sonarcloud.io/web_api/api/qualitygates>
-- Pipeline actuel : [Jenkinsfile-CI](../Jenkinsfile-CI), [Jenkinsfile-CD](../Jenkinsfile-CD)
+- Pipeline actuel : [Jenkinsfile-CI](../../Jenkinsfile-CI), [Jenkinsfile-CD](../../Jenkinsfile-CD)

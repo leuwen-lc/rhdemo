@@ -145,7 +145,7 @@ v1.36`, politique n-3 ⇒ 1.33 → 1.36.
 | `…/scripts/rbac-preflight-check.sh` | tolère « namespace not found » |
 | `infra/stagingkub/scripts/test-deploy-helm.sh` | `--dry-run` → `--dry-run=client` (explicitation) |
 | `infra/stagingkub/scripts/install-observability.sh` | prérequis « Helm 3 » → « Helm 4 » |
-| Docs / commentaires réalignés | `README-helm-unlock.md`, `jenkins-casc.yaml`, `Jenkinsfile-Stagingkub-Upgrade-Deploy`, `Jenkinsfile-Renovate`, `STAGINGKUB_REBUILD_PIPELINE.md`, `infra/stagingkub/README.md`, `infra/stagingkub/rbac/README.md`, `helm/observability/{loki-modern,prometheus}-values.yaml`, `docs/JENKINS_AGENTS_EPHEMERES.md`, `README.md` (racine) |
+| Docs / commentaires réalignés | `README-helm-unlock.md`, `jenkins-casc.yaml`, `Jenkinsfile-Stagingkub-Upgrade-Deploy`, `Jenkinsfile-Renovate`, `STAGINGKUB_REBUILD_PIPELINE.md`, `infra/stagingkub/README.md`, `infra/stagingkub/rbac/README.md`, `helm/observability/{loki-modern,prometheus}-values.yaml`, `docs/etudes/JENKINS_AGENTS_EPHEMERES.md`, `README.md` (racine) |
 
 **Non modifiés** : `renovate.json` (bump `helm/helm` major déjà bloqué
 derrière `dependencyDashboardApproval`) · `Jenkinsfile-CD` / `Jenkinsfile-CI`

@@ -1,5 +1,5 @@
 ---
-statut: journal
+statut: historique
 verifie_le: 2026-10-22
 sources: []
 ---

@@ -70,7 +70,7 @@ Déclenché par `RHDemo-Renovate` pour les composants Cilium/NGF/kube-prometheus
 |----|------|-----------------|
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | Créé directement dans Jenkins par `rhDemo/scripts/rotate-secrets.py`, appelé par `./scripts/init-stagingkub.sh` (ServiceAccount dédié `jenkins-infra-upgrader`, distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`) |
 
-> Détail de l'étude et du RBAC : `docs/STAGINGKUB_REBUILD_PIPELINE.md` et `infra/stagingkub/rbac/README.md`.
+> Détail de l'étude et du RBAC : `docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md` et `infra/stagingkub/rbac/README.md`.
 
 ### Secrets
 

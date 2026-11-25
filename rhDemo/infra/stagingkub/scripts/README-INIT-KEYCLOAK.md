@@ -126,6 +126,6 @@ Si le realm existe déjà, vous pouvez :
 
 ## Voir aussi
 
-- [init-stagingkub.sh](./init-stagingkub.sh) : Script d'initialisation complète de l'environnement
+- [init-stagingkub.sh](init-stagingkub.sh) : Script d'initialisation complète de l'environnement
 - [../../../secrets/README-SECRETS-SEPARATION.md](../../../secrets/README-SECRETS-SEPARATION.md) : Documentation sur la séparation des secrets
-- [../../Jenkinsfile-CD](../../Jenkinsfile-CD) : Pipeline de déploiement continu
+- [Jenkinsfile-CD](../../../Jenkinsfile-CD) : Pipeline de déploiement continu

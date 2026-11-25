@@ -13,6 +13,8 @@ Principe et statuts : `rhDemo/docs/index.md`. Journal : `rhDemo/docs/log.md`.
 - Le script `rhDemo/scripts/docs-lint.py` fait les contrôles déterministes. Ne pas les refaire à la main.
 - **Premier passage : rapport seul.** Ne rien modifier avant d'avoir présenté le rapport et obtenu l'accord de l'utilisateur sur ce qui est corrigé.
 - Ne jamais réécrire un doc `historique` ou `journal` pour l'aligner sur l'état courant : signaler l'écart. Seule exception : corriger un lien ou un nom de fichier mort, si l'utilisateur le demande.
+- Rangement : docs opérationnels (`actif`, `journal`) dans `rhDemo/docs/`, études (`historique`, `proposition`) dans `rhDemo/docs/etudes/`. Reclasser entre ces familles = `git mv` + mise à jour des liens entrants (dépôt entier, `log.md` compris).
+- Documents hors `docs/` référencés par l'index (README d'environnement, de module) : liens toujours contrôlés ; frontmatter facultatif, et s'il est présent (README d'infra les plus vivants), mêmes contrôles qu'un doc de `docs/`.
 - Pas de frontmatter sur `fixcve-audit.md` (généré) ni `SECURITY_ADVISORIES.md` (modifié par fixcve-auto).
 - Ne pas copier plus de 10 lignes de code dans un doc : renvoyer au fichier.
 - Aucun commit ni push sans accord explicite. Messages de commit en français, préfixe `docs:`, sans ligne `Co-Authored-By`.
@@ -33,5 +35,5 @@ Principe et statuts : `rhDemo/docs/index.md`. Journal : `rhDemo/docs/log.md`.
 ## Ce que le script ne couvre pas (jugement à exercer)
 
 - Versions et valeurs citées dans un doc actif (images, ports, noms de ressources) : les comparer à la source de vérité (`pom.xml`, `values.yaml`, Jenkinsfile, scripts) quand `sources` en désigne une qui a changé.
-- Un doc `proposition` dont la décision a été prise : à reclasser en `historique` (avec bilan de ce qui est appliqué) ou à supprimer.
+- Un doc `proposition` dont la décision a été prise : à reclasser en `historique` (avec bilan de ce qui est appliqué, il reste dans `etudes/`) ou à supprimer.
 - Un doc `historique` ou `journal` encore cité comme référence courante par un doc actif.

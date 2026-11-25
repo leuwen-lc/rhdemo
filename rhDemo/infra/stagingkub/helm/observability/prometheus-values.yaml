@@ -23,7 +23,7 @@ prometheusOperator:
   enabled: true
 
   # Admission webhooks désactivés explicitement (décision actée,
-  # cf. rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md étape 3) : le projet
+  # cf. rhDemo/docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md étape 3) : le projet
   # n'a pas de besoin identifié de validation stricte du contenu des
   # PrometheusRule, et un ValidatingWebhookConfiguration/
   # MutatingWebhookConfiguration cluster-scoped mal configuré peut

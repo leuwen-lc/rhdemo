@@ -1,6 +1,6 @@
 # Politique de sécurité
 
-Ce projet est une **preuve de concept école**, non destinée à la production, mais la sécurité y est traitée sérieusement (BFF, CSP stricte, secrets chiffrés SOPS, NetworkPolicies, scans Trivy et OWASP Dependency-Check en CI).
+Ce projet est une **preuve de concept école**, non destinée à la production, mais la sécurité y est traitée sérieusement (BFF, CSP stricte, secrets gérés par OpenBao, NetworkPolicies, scans Trivy et OWASP Dependency-Check en CI).
 
 ## Versions prises en charge
 
@@ -32,4 +32,4 @@ Hors périmètre : les vulnérabilités des dépendances amont déjà suivies pa
 
 ## Pour en savoir plus
 
-Voir `rhDemo/docs/` (notamment `CSRF_GUIDE.md`, `SECURITE_WEB_CSP.md`, `SECURITE_NETWORK_POLICY.md`, `SOPS_SETUP.md`).
+Voir `rhDemo/docs/` (notamment `CSRF_GUIDE.md`, `SECURITE_WEB_CSP.md`, `SECURITE_NETWORK_POLICY.md`, `OPENBAO.md`).

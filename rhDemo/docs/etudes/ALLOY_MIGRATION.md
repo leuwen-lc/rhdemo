@@ -176,4 +176,4 @@ kubectl get ciliumnetworkpolicies -n loki-stack
 | `rbac/jenkins-infra-upgrader-clusterrole.yaml` | `resourceNames` `promtail` → `alloy` |
 | `networkpolicies/loki-stack-networkpolicies.yaml` | `alloy-netpol` + `allow-apiserver-alloy` |
 | `Jenkinsfile-Stagingkub-Upgrade-Deploy`, `jenkins-casc.yaml` | Texte du paramètre `COMPONENT` |
-| `docs/STAGINGKUB_REBUILD_PIPELINE.md` | Section "Cas particulier Alloy" (RBAC + scheduling détaillés) |
+| `docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md` | Section "Cas particulier Alloy" (RBAC + scheduling détaillés) |

@@ -40,79 +40,56 @@ Toutes les policies suivent la même stratégie **Zero Trust / Default Deny** :
 
 ## Vérification
 
-### Lister les Network Policies
+### Lister toutes les policies
 
 ```bash
-kubectl get networkpolicies -A | grep -E '(monitoring|loki-stack|nginx-gateway)'
+kubectl get networkpolicies -A
 ```
 
-### Tester la connectivité
+### Tester la connectivité autorisée
+
+```bash
+# rhdemo-app → postgresql-rhdemo
+kubectl exec -n rhdemo-stagingkub deploy/rhdemo-app -- nc -zv postgresql-rhdemo 5432
+
+# rhdemo-app → keycloak
+kubectl exec -n rhdemo-stagingkub deploy/rhdemo-app -- nc -zv keycloak 8080
+
+# Grafana → Prometheus
+kubectl exec -n loki-stack deploy/grafana -- wget -qO- --timeout=5 http://prometheus-kube-prometheus-prometheus.monitoring:9090/-/ready
+
+# Prometheus → rhdemo-app
+kubectl exec -n monitoring deploy/prometheus-kube-prometheus-prometheus -- wget -qO- http://rhdemo-app.rhdemo-stagingkub:9000/actuator/prometheus | head
+```
+
+### Tester le blocage
+
+```bash
+# rhdemo-app → Internet (doit échouer)
+kubectl exec -n rhdemo-stagingkub deploy/rhdemo-app -- wget -qO- --timeout=5 http://example.com || echo "BLOQUÉ (OK)"
+
+# postgresql → Internet (doit échouer)
+kubectl exec -n rhdemo-stagingkub sts/postgresql-rhdemo -- wget -qO- --timeout=5 http://example.com || echo "BLOQUÉ (OK)"
+
+# keycloak → postgresql-rhdemo (doit échouer - mauvaise DB)
+kubectl exec -n rhdemo-stagingkub deploy/keycloak -- nc -zv postgresql-rhdemo 5432 || echo "BLOQUÉ (OK)"
+
+# nginx-gateway → Internet (doit échouer)
+kubectl exec -n nginx-gateway deploy/nginx-gateway-fabric -- wget -qO- --timeout=5 http://example.com || echo "BLOQUÉ (OK)"
+
+# Loki → Internet (doit échouer)
+kubectl exec -n loki-stack deploy/loki -- wget -qO- --timeout=5 http://example.com || echo "BLOQUÉ (OK)"
+```
+
+### Script de test automatisé
 
 ```bash
 ../scripts/test-network-policies.sh
 ```
 
-## Architecture des flux
+## Flux autorisés
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CLUSTER KUBERNETES                              │
-│                                                                              │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                        nginx-gateway                                    │ │
-│  │  ┌─────────────────────────────────────────────────────────────────┐   │ │
-│  │  │  nginx-gateway-fabric                                           │   │ │
-│  │  │  INGRESS: Internet (80, 443), Prometheus (9113)                 │   │ │
-│  │  │  EGRESS: rhdemo-app (9000), keycloak (8080), grafana (80)      │   │ │
-│  │  └─────────────────────────────────────────────────────────────────┘   │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                    │                                         │
-│                    ┌───────────────┼───────────────┐                        │
-│                    ▼               ▼               ▼                        │
-│  ┌─────────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐ │
-│  │  rhdemo-stagingkub  │  │    loki-stack   │  │       monitoring        │ │
-│  │  (Helm chart)       │  │                 │  │                         │ │
-│  │  - rhdemo-app       │  │  - Grafana ◄────┼──┼─ Prometheus             │ │
-│  │  - keycloak         │  │  - Loki ◄───────┼──┤                         │ │
-│  │  - postgresql x2    │  │  - Alloy        │  │  - AlertManager         │ │
-│  └─────────────────────┘  └─────────────────┘  │  - Node Exporter        │ │
-│                                                 │  - Kube State Metrics   │ │
-│                                                 └─────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Flux autorisés par namespace
-
-### monitoring
-
-| Source | Destination | Port | Description |
-|--------|-------------|------|-------------|
-| Prometheus | rhdemo-stagingkub/* | 9000, 9187 | Scrape métriques |
-| Prometheus | loki-stack/* | 3100, 80 | Scrape Loki, Grafana |
-| Prometheus | nginx-gateway/* | 9113 | Scrape NGF |
-| Prometheus | kube-system/* | 10250, 9153 | Scrape kubelet, CoreDNS |
-| loki-stack/Grafana | Prometheus | 9090 | Requêtes PromQL |
-| Prometheus | AlertManager | 9093 | Push alertes |
-
-### loki-stack
-
-| Source | Destination | Port | Description |
-|--------|-------------|------|-------------|
-| Alloy | Loki | 3100 | Push logs |
-| Grafana | Loki | 3100 | Requêtes LogQL |
-| Grafana | monitoring/Prometheus | 9090 | Requêtes PromQL |
-| nginx-gateway | Grafana | 80 | Trafic utilisateur |
-| monitoring/Prometheus | Loki, Grafana | 3100, 80 | Scrape métriques |
-
-### nginx-gateway
-
-| Source | Destination | Port | Description |
-|--------|-------------|------|-------------|
-| Internet | nginx-gateway-fabric | 80, 443 | Trafic utilisateur |
-| nginx-gateway-fabric | rhdemo-stagingkub/rhdemo-app | 9000 | Backend app |
-| nginx-gateway-fabric | rhdemo-stagingkub/keycloak | 8080 | Backend auth |
-| nginx-gateway-fabric | loki-stack/grafana | 80 | Backend monitoring |
-| monitoring/Prometheus | nginx-gateway-fabric | 9113 | Scrape métriques |
+Inventaire des flux par namespace, matrice des communications et justification : [SECURITE_NETWORK_POLICY.md](../../../docs/SECURITE_NETWORK_POLICY.md). Ce README ne porte que l'exploitation.
 
 ## Intégration avec le chart Helm rhdemo
 
@@ -123,45 +100,26 @@ Ces policies externes complètent la sécurité en isolant également les namesp
 
 ## CiliumNetworkPolicies pour l'API Server
 
-### Pourquoi des CiliumNetworkPolicies ?
-
-Avec Cilium comme CNI, l'API Server Kubernetes (qui tourne sur le node host) est vu comme l'entité spéciale "host" et non comme un CIDR externe. Les règles `ipBlock` standard des NetworkPolicies ne fonctionnent **pas** pour atteindre le node host.
-
-**Symptôme** : Les pods qui ont besoin d'accéder à l'API Server (prometheus-operator, kube-state-metrics, nginx-gateway-fabric) restent en `CrashLoopBackOff` avec l'erreur :
-
-```text
-failed to get server groups: Get "https://10.96.0.1:443/api?timeout=10s": context deadline exceeded
-```
-
-**Solution** : Utiliser des `CiliumNetworkPolicy` avec `toEntities: [host, kube-apiserver]` pour autoriser l'egress vers l'API Server.
-
-### Composants nécessitant l'accès API Server
-
-| Namespace | Composant | Raison |
-|-----------|-----------|--------|
-| nginx-gateway | nginx-gateway-fabric | Lecture Gateway/HTTPRoute CRDs |
-| monitoring | prometheus-operator | Gestion CRDs ServiceMonitor, etc. |
-| monitoring | kube-state-metrics | Lecture état cluster |
-
-### Vérifier les drops Cilium
-
-Pour diagnostiquer les problèmes de Network Policy avec Cilium :
-
-```bash
-# Voir les paquets bloqués par Cilium
-kubectl get pods -n cilium-system -l k8s-app=cilium -o name | head -1 | \
-    xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
-```
+Avec Cilium, l'API Server est vu comme l'entité `host`/`kube-apiserver` et non comme un CIDR : les composants qui l'interrogent (NGF et son job `cert-generator`, prometheus-operator, kube-state-metrics, Alloy) ont besoin d'une `CiliumNetworkPolicy` avec `toEntities`. Explication et liste : [SECURITE_NETWORK_POLICY.md](../../../docs/SECURITE_NETWORK_POLICY.md#ciliumnetworkpolicy-et-accès-api-server).
 
 ## Dépannage
 
-### Les pods ne démarrent pas
+### Les pods ne peuvent plus communiquer après déploiement des policies
 
-Vérifiez que le CNI (Cilium) supporte les Network Policies :
+1. Vérifiez que Cilium est bien installé et fonctionnel :
+   ```bash
+   kubectl get pods -n cilium-system -l k8s-app=cilium
+   ```
 
-```bash
-kubectl get pods -n cilium-system -l k8s-app=cilium
-```
+2. Vérifiez les labels des pods :
+   ```bash
+   kubectl get pods -n rhdemo-stagingkub --show-labels
+   ```
+
+3. Vérifiez les Network Policies actives :
+   ```bash
+   kubectl describe networkpolicy -n rhdemo-stagingkub
+   ```
 
 ### Pod en CrashLoopBackOff avec "context deadline exceeded"
 
@@ -180,34 +138,79 @@ C'est probablement un problème d'accès à l'API Server. Vérifiez :
        xargs -I {} kubectl -n cilium-system exec {} -- cilium monitor --type drop
    ```
 
-### Grafana ne peut pas accéder à Prometheus
+### Prometheus ne scrape plus les métriques
 
-Vérifiez les labels des pods :
-
-```bash
-kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --show-labels
-kubectl get pods -n loki-stack -l app.kubernetes.io/name=grafana --show-labels
-```
-
-### Grafana crash à cause du téléchargement de plugins
-
-En mode Zero Trust, l'accès à Internet (grafana.com) est bloqué. Options :
-
-1. Pré-installer les plugins dans l'image Docker
-2. Désactiver l'installation automatique dans la configuration Helm
-3. (Non recommandé) Autoriser l'egress vers grafana.com
-
-### Prometheus ne scrape pas les métriques
-
-Vérifiez les Network Policies actives :
+Vérifiez que le namespace monitoring a le bon label :
 
 ```bash
-kubectl describe networkpolicy prometheus-netpol -n monitoring
+kubectl get namespace monitoring --show-labels
+# Doit avoir: kubernetes.io/metadata.name=monitoring
 ```
 
-Testez la connectivité manuellement :
+### Grafana affiche "Data source is not working"
+
+Testez manuellement la connexion depuis le pod Grafana :
 
 ```bash
-kubectl exec -n monitoring deploy/prometheus-kube-prometheus-prometheus -- \
-    wget -qO- --timeout=5 http://rhdemo-app.rhdemo-stagingkub:9000/actuator/prometheus | head
+kubectl exec -n loki-stack deploy/grafana -- wget -qO- http://prometheus-kube-prometheus-prometheus.monitoring:9090/-/ready
+kubectl exec -n loki-stack deploy/grafana -- wget -qO- http://loki.loki-stack:3100/ready
 ```
+
+### Routes HTTPS inaccessibles (timeout nginx-gateway)
+
+Si les URLs `https://*.intra.leuwen-lc.fr` répondent par un timeout, vérifiez les points suivants :
+
+**1. Architecture NGF 2.4 : controller et data plane séparés**
+
+Dans NGINX Gateway Fabric 2.4+, le controller et le data plane sont des **pods distincts**
+avec des labels différents :
+
+| Composant | Pod | Label |
+|-----------|-----|-------|
+| Controller | `ngf-nginx-gateway-fabric-*` | `app.kubernetes.io/name: nginx-gateway-fabric` |
+| Data Plane | `shared-gateway-nginx-*` | `app.kubernetes.io/name: shared-gateway-nginx` |
+
+Les NetworkPolicies doivent cibler le **bon pod** :
+- `nginx-gateway-fabric-netpol` (ingress/egress trafic) → `shared-gateway-nginx` (data plane)
+- `nginx-gateway-controller-netpol` (API Server, config) → `nginx-gateway-fabric` (controller)
+
+**2. Communication data plane ↔ controller (gRPC)**
+
+Le data plane se connecte au controller via gRPC pour recevoir sa configuration.
+Le Service ClusterIP expose le port 443, mais le conteneur écoute sur 8443.
+Avec Cilium DNAT, **les deux ports doivent être autorisés** dans les NetworkPolicies.
+
+```bash
+# Vérifier les logs du data plane
+kubectl logs -n nginx-gateway -l app.kubernetes.io/name=shared-gateway-nginx --tail=50
+
+# Si vous voyez "dial tcp <IP>:443: i/o timeout", la communication gRPC est bloquée
+# Vérifier les drops Cilium
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg endpoint list | grep shared-gateway
+kubectl exec -n cilium-system ds/cilium -- cilium-dbg monitor --type drop --from <ENDPOINT_ID>
+```
+
+**3. Vérifier que les HTTPRoutes sont acceptées**
+
+```bash
+kubectl get httproutes -n rhdemo-stagingkub -o wide
+kubectl get gateway -n nginx-gateway
+```
+
+### Alloy ne collecte aucun log (i/o timeout vers l'API Server)
+
+Si Alloy affiche des erreurs `failed to list *v1.Pod: dial tcp 10.96.0.1:443: i/o timeout`,
+c'est que l'accès à l'API Server est bloqué. Avec Cilium, il faut une CiliumNetworkPolicy :
+
+```bash
+# Vérifier que la CiliumNetworkPolicy existe
+kubectl get ciliumnetworkpolicies -n loki-stack
+
+# Si elle manque, l'appliquer
+kubectl apply -f rhDemo/infra/stagingkub/networkpolicies/loki-stack-networkpolicies.yaml
+
+# Redémarrer Alloy
+kubectl rollout restart daemonset/alloy -n loki-stack
+```
+
+Voir la section [CiliumNetworkPolicy et accès API Server](../../../docs/SECURITE_NETWORK_POLICY.md#ciliumnetworkpolicy-et-accès-api-server) pour plus de détails.

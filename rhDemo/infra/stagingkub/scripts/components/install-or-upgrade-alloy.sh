@@ -4,7 +4,7 @@ set -e
 # ═══════════════════════════════════════════════════════════════
 # Installation ou mise à jour en place de Grafana Alloy
 # ═══════════════════════════════════════════════════════════════
-# Remplace Promtail (EOL depuis le 02/03/2026, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md).
+# Remplace Promtail (EOL depuis le 02/03/2026, cf. docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md).
 # Idempotent (helm upgrade --install). Composant le plus sûr du lot :
 # ClusterRole strictement en lecture (get/list/watch pods/pods-log/
 # namespaces/endpoints/endpointslices/ingresses/services pour la découverte

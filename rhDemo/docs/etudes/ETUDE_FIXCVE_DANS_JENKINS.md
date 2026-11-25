@@ -14,7 +14,7 @@ sources:
 
 # Étude : exécuter fixcve-auto dans Jenkins
 
-Objectif : ne plus lancer fixcve-auto par un cron du poste, mais par un pipeline Jenkins. Cette étude évalue la faisabilité, liste les points durs et les décisions prises le 2026-11-22 (§4). **Mise en œuvre le 2026-11-22** (§8), **validée le 2026-11-24** par de vrais cycles dans Jenkins (remédiation complète des builds #1110 et #1111 : correctif poussé par le bot, validé par la CI). Document historique : il n'est plus mis à jour. Le fonctionnement actuel est décrit dans [FIXCVE_AUTO.md](FIXCVE_AUTO.md), qui envisageait déjà cette évolution (section « Évolution future »).
+Objectif : ne plus lancer fixcve-auto par un cron du poste, mais par un pipeline Jenkins. Cette étude évalue la faisabilité, liste les points durs et les décisions prises le 2026-11-22 (§4). **Mise en œuvre le 2026-11-22** (§8), **validée le 2026-11-24** par de vrais cycles dans Jenkins (remédiation complète des builds #1110 et #1111 : correctif poussé par le bot, validé par la CI). Document historique : il n'est plus mis à jour. Le fonctionnement actuel est décrit dans [FIXCVE_AUTO.md](../FIXCVE_AUTO.md), qui envisageait déjà cette évolution (section « Évolution future »).
 
 ## 1. Conclusion
 

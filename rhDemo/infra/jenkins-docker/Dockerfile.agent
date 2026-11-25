@@ -8,7 +8,7 @@ USER root
 # ═══════════════════════════════════════════════════════════════════
 # Version Debian 13 corrigée : 20250419+deb13u1. Couche dédiée et placée en tête :
 # elle évite qu'un cache de couche réutilise un ca-certificates antérieur au correctif.
-# Voir docs/SECURITE_CA_EMUDHRA_PLAN.md
+# Voir docs/etudes/SECURITE_CA_EMUDHRA_PLAN.md
 RUN apt-get update && apt-get install -y --only-upgrade ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 

@@ -662,7 +662,7 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────────
   # PIPELINE STAGINGKUB UPGRADE DEPLOY - Mise à jour en place de l'infra
-  # (Option 3, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md)
+  # (Option 3, cf. docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md)
   # ─────────────────────────────────────────────────────────────────
   - script: |
       pipelineJob('RHDemo-Stagingkub-Upgrade-Deploy') {
@@ -679,7 +679,7 @@ jobs:
         kubeconfig-stagingkub-infra-upgrader), distinct de jenkins-deployer/RHDemo-CD.
         Rollback automatique porté par --rollback-on-failure dans chaque script composant.
 
-        📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md''')
+        📖 Documentation : docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md''')
 
         parameters {
           string {

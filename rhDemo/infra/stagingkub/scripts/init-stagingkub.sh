@@ -211,7 +211,7 @@ echo -e "${YELLOW}▶ Configuration du registry HTTPS dans le nœud KinD...${NC}
 docker cp "$REGISTRY_CERT" rhdemo-control-plane:/usr/local/share/ca-certificates/kind-registry.crt
 
 # Mettre à jour ca-certificates du nœud (CVE-2026-111943, CA eMudhra compromises :
-# correctif Debian 13 20250419+deb13u1, voir docs/SECURITE_CA_EMUDHRA_PLAN.md)
+# correctif Debian 13 20250419+deb13u1, voir docs/etudes/SECURITE_CA_EMUDHRA_PLAN.md)
 docker exec rhdemo-control-plane sh -c 'apt-get update -qq && apt-get install -y -qq --only-upgrade ca-certificates' > /dev/null 2>&1 \
   || echo -e "${YELLOW}  ⚠ Mise à jour de ca-certificates du nœud impossible (réseau ?)${NC}"
 
@@ -415,7 +415,7 @@ if [ -d "$RBAC_DIR" ]; then
     # ═══════════════════════════════════════════════════════════════
     # CONFIGURATION RBAC POUR JENKINS-INFRA-UPGRADER (mise à jour en place
     # des composants d'infra — Option 3, ServiceAccount dédié et distinct
-    # de jenkins-deployer, cf. docs/STAGINGKUB_REBUILD_PIPELINE.md étape 3)
+    # de jenkins-deployer, cf. docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md étape 3)
     # ═══════════════════════════════════════════════════════════════
     echo -e "${YELLOW}▶ Configuration RBAC pour jenkins-infra-upgrader...${NC}"
 

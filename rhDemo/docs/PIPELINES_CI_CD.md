@@ -34,7 +34,7 @@ Le projet RHDemo utilise **cinq pipelines Jenkins distincts** :
 | **RHDemo-CI** (`Jenkinsfile-CI`) | Build, tests, scans qualité/sécurité, déploiement ephemere, tests Selenium/ZAP, publication image | SCM sur les branches d'évolution | ce document |
 | **RHDemo-CD** (`Jenkinsfile-CD`) | Déploiement Helm de l'image validée sur stagingkub (K8s) | Automatique après un build CI réussi qui publie l'image, ou manuel | ce document |
 | **RHDemo-Renovate** (`Jenkinsfile-Renovate`) | Scan Renovate, ouverture des PR, build/test/OWASP puis **merge automatique** des PR patch/minor qui passent la CI | Cron | [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) |
-| **RHDemo-Stagingkub-Upgrade-Deploy** (`Jenkinsfile-Stagingkub-Upgrade-Deploy`) | Application réelle (post-merge) des montées de version en place des composants d'infra stagingkub | Après merge d'une PR Renovate d'infra | [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) |
+| **RHDemo-Stagingkub-Upgrade-Deploy** (`Jenkinsfile-Stagingkub-Upgrade-Deploy`) | Application réelle (post-merge) des montées de version en place des composants d'infra stagingkub | Après merge d'une PR Renovate d'infra | [STAGINGKUB_REBUILD_PIPELINE.md](etudes/STAGINGKUB_REBUILD_PIPELINE.md) |
 | **RHDemo-FixCVE** (`Jenkinsfile-FixCVE`) | Remédiation automatique des CVE bloquantes Trivy/OWASP de la CI, validation ou rollback au build suivant | Fin de chaque build CI (`post { always }`), cron de secours horaire | [FIXCVE_AUTO.md](FIXCVE_AUTO.md) |
 
 Les pipelines envoient une **notification email** (email-ext) : à chaque fin de
@@ -316,13 +316,13 @@ celles qui passent la CI — patch/minor uniquement.
 > Pourquoi un merge piloté côté Jenkins plutôt que l'automerge natif de
 > Renovate ? Jenkins n'est pas exposé sur Internet : Forgejo ne peut pas
 > déclencher de webhook entrant et les statuts CI ne remontent jamais vers
-> Forgejo. Voir [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md).
+> Forgejo. Voir [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](etudes/CICD_JENKINS_VS_FORGEJO_ACTIONS.md).
 
 ---
 
 ## 🧱 Jenkinsfile-Stagingkub-Upgrade-Deploy : montées d'infra en place
 
-**Fichier**: [`Jenkinsfile-Stagingkub-Upgrade-Deploy`](../Jenkinsfile-Stagingkub-Upgrade-Deploy) — **doc de référence** : [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)
+**Fichier**: [`Jenkinsfile-Stagingkub-Upgrade-Deploy`](../Jenkinsfile-Stagingkub-Upgrade-Deploy) — **doc de référence** : [STAGINGKUB_REBUILD_PIPELINE.md](etudes/STAGINGKUB_REBUILD_PIPELINE.md)
 
 ### Objectif
 
@@ -337,7 +337,7 @@ idempotents `infra/stagingkub/scripts/components/install-or-upgrade-<composant>.
 - La **validation avant merge** est faite dans la boucle étendue de `Jenkinsfile-Renovate` par un `helm upgrade --dry-run=server` / `kubectl apply --dry-run=server`, après une garde qui limite le diff de la PR aux lignes de version et au manifeste officiel des CRD : le script modifié détient un credential capable de muter le cluster, le dry-run seul ne le garantit pas.
 - ServiceAccount Kubernetes **dédié** `jenkins-infra-upgrader` (namespace `jenkins-infra`, credential `kubeconfig-stagingkub-infra-upgrader`), distinct de `jenkins-deployer` utilisé par RHDemo-CD. Ses droits en font l'équivalent d'un administrateur du cluster : `RHDemo-Renovate` n'exécute le script d'une PR avec ce credential qu'après la garde des PR d'infra ([RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)).
 - Agent éphémère standard (pas de `docker.sock`, pas de `kind`).
-- `kindest/node` (version Kubernetes) reste **hors périmètre** : toute montée K8s passe par une reconstruction complète du cluster (cf. [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md)).
+- `kindest/node` (version Kubernetes) reste **hors périmètre** : toute montée K8s passe par une reconstruction complète du cluster (cf. [MIGRATION_HELM4_KUB1.36.md](etudes/MIGRATION_HELM4_KUB1.36.md)).
 
 ---
 
@@ -604,18 +604,18 @@ docker network connect kind kind-registry --alias kind-registry
 kubectl delete pod <pod-name> -n rhdemo-stagingkub
 ```
 
-Voir [REGISTRY.md](REGISTRY.md) et [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) pour plus de détails.
+Voir [REGISTRY.md](REGISTRY.md) et [JENKINS-NETWORK-ANALYSIS.md](etudes/JENKINS-NETWORK-ANALYSIS.md) pour plus de détails.
 
 ---
 
 ## 📚 Documentation complémentaire
 
 - [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md) - Pipeline Renovate et merge automatique
-- [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) - Montées d'infra en place / reconstruction de cluster
-- [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) - Pourquoi Jenkins plutôt que Forgejo/Woodpecker
-- [JENKINS_AGENTS_EPHEMERES.md](JENKINS_AGENTS_EPHEMERES.md) - Agents Jenkins éphémères
+- [STAGINGKUB_REBUILD_PIPELINE.md](etudes/STAGINGKUB_REBUILD_PIPELINE.md) - Montées d'infra en place / reconstruction de cluster
+- [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](etudes/CICD_JENKINS_VS_FORGEJO_ACTIONS.md) - Pourquoi Jenkins plutôt que Forgejo/Woodpecker
+- [JENKINS_AGENTS_EPHEMERES.md](etudes/JENKINS_AGENTS_EPHEMERES.md) - Agents Jenkins éphémères
 - [REGISTRY.md](REGISTRY.md) - Configuration du registry Docker local
-- [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) - Analyse des problèmes réseau Jenkins/KinD
+- [JENKINS-NETWORK-ANALYSIS.md](etudes/JENKINS-NETWORK-ANALYSIS.md) - Analyse des problèmes réseau Jenkins/KinD
 - [DATABASE.md](DATABASE.md) - Gestion de la base de données
 - [POSTGRESQL_BACKUP_CRONJOBS.md](POSTGRESQL_BACKUP_CRONJOBS.md) - Backups automatiques PostgreSQL
 - [../infra/jenkins-docker/README.md](../infra/jenkins-docker/README.md) - Configuration Jenkins complète

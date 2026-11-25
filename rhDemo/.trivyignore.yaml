@@ -21,7 +21,7 @@ vulnerabilities:
   # « will_not_fix » (constaté le 2026-11-19) : aucun RPM correctif ne viendra, acceptation permanente.
   # Risque réel : faible - Keycloak n'ouvre pas de TLS sortant vers une CA publique (pas de SMTP,
   # LDAP ni fournisseur d'identité externe) et le magasin système de l'image (ca-certificates) est
-  # corrigé depuis Keycloak 26.8.1. Voir docs/SECURITE_CA_EMUDHRA_PLAN.md.
+  # corrigé depuis Keycloak 26.8.1. Voir docs/etudes/SECURITE_CA_EMUDHRA_PLAN.md.
   # À revoir si : Keycloak ouvre un flux sortant vers Internet (IdP externe, SMTP public).
   - id: CVE-2026-91403
     pkg-name: java-21-openjdk-headless

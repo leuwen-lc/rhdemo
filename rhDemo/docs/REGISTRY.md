@@ -92,7 +92,7 @@ Cela permet au cluster KinD d'accéder au registry via le nom `kind-registry`.
 Le cluster KinD est créé sans mirror containerd (voir `kind-config.yaml`). `init-stagingkub.sh` configure ensuite le nœud `rhdemo-control-plane` :
 
 1. copie le certificat de la CA du registry dans `/usr/local/share/ca-certificates/kind-registry.crt` ;
-2. met à jour le paquet `ca-certificates` du nœud (correctif de l'incident des CA eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md)), puis lance `update-ca-certificates` ;
+2. met à jour le paquet `ca-certificates` du nœud (correctif de l'incident des CA eMudhra, voir [SECURITE_CA_EMUDHRA_PLAN.md](etudes/SECURITE_CA_EMUDHRA_PLAN.md)), puis lance `update-ca-certificates` ;
 3. écrit `/etc/containerd/certs.d/localhost:5000/hosts.toml` : serveur `https://kind-registry:5000` avec cette CA.
 
 Quand Kubernetes demande une image `localhost:5000/*`, containerd la télécharge donc en HTTPS depuis `kind-registry:5000`.

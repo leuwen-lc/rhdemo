@@ -1,3 +1,13 @@
+---
+statut: actif
+verifie_le: 2026-11-22
+sources:
+  - rhDemo/infra/dev/docker-compose.yml
+  - rhDemo/infra/ephemere/docker-compose.yml
+  - rhDemo/infra/stagingkub/kind-config.yaml
+  - rhDemo/infra/stagingkub/helm/rhdemo/values.yaml
+---
+
 # 🌍 Guide des environnements RHDemo
 
 Ce document compare les environnements du projet et donne, pour chacun, comment le démarrer et comment y accéder. Le détail de chaque environnement est dans son README ; les images et versions se lisent dans les fichiers cités ([IMAGE_VERSIONS_MANAGEMENT.md](../docs/IMAGE_VERSIONS_MANAGEMENT.md)).
@@ -8,10 +18,10 @@ Ce document compare les environnements du projet et donne, pour chacun, comment 
 
 | Environnement | Technologie | Rôle | Démarrage | README |
 |---------------|-------------|------|-----------|--------|
-| **dev** | Docker Compose (PostgreSQL + Keycloak), application lancée par Maven ou l'IDE | Développement local | `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` depuis `rhDemo/` | [dev/README.md](./dev/README.md) |
-| **ephemere** | Docker Compose | Environnement jetable de la CI : tests Selenium et scan OWASP ZAP | Créé et détruit par chaque build `RHDemo-CI` | [ephemere/README.md](./ephemere/README.md) |
-| **stagingkub** | Kubernetes KinD, chart Helm | Environnement proche de la production | `init-stagingkub.sh` une fois, puis job `RHDemo-CD` | [stagingkub/README.md](./stagingkub/README.md) |
-| **jenkins-docker** | Docker Compose | Usine logicielle : Jenkins, SonarQube, registre local, OpenBao | [QUICKSTART.md](./jenkins-docker/QUICKSTART.md) | [jenkins-docker/README.md](./jenkins-docker/README.md) |
+| **dev** | Docker Compose (PostgreSQL + Keycloak), application lancée par Maven ou l'IDE | Développement local | `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` depuis `rhDemo/` | [dev/README.md](dev/README.md) |
+| **ephemere** | Docker Compose | Environnement jetable de la CI : tests Selenium et scan OWASP ZAP | Créé et détruit par chaque build `RHDemo-CI` | [ephemere/README.md](ephemere/README.md) |
+| **stagingkub** | Kubernetes KinD, chart Helm | Environnement proche de la production | `init-stagingkub.sh` une fois, puis job `RHDemo-CD` | [stagingkub/README.md](stagingkub/README.md) |
+| **jenkins-docker** | Docker Compose | Usine logicielle : Jenkins, SonarQube, registre local, OpenBao | [QUICKSTART.md](jenkins-docker/QUICKSTART.md) | [jenkins-docker/README.md](jenkins-docker/README.md) |
 
 Installation de l'ensemble depuis une machine vide : [INSTALLATION_COMPLETE.md](../docs/INSTALLATION_COMPLETE.md).
 
@@ -22,14 +32,14 @@ Installation de l'ensemble depuis une machine vide : [INSTALLATION_COMPLETE.md](
 | Environnement | Service | Accès | Source |
 |---------------|---------|-------|--------|
 | dev | Application | http://localhost:9000 | `server.port` de `application.yml` |
-| dev | Keycloak | http://localhost:6090 | [`dev/docker-compose.yml`](./dev/docker-compose.yml) |
+| dev | Keycloak | http://localhost:6090 | [`dev/docker-compose.yml`](dev/docker-compose.yml) |
 | dev | PostgreSQL | `127.0.0.1:5432` | idem |
-| ephemere | Application | https://rhdemo.ephemere.local:58443 | [`ephemere/docker-compose.yml`](./ephemere/docker-compose.yml), seul port publié (nginx) |
+| ephemere | Application | https://rhdemo.ephemere.local:58443 | [`ephemere/docker-compose.yml`](ephemere/docker-compose.yml), seul port publié (nginx) |
 | ephemere | Keycloak | https://keycloak.ephemere.local:58443 | idem |
-| stagingkub | Application | https://rhdemo-stagingkub.intra.leuwen-lc.fr | port 443 de l'hôte → NodePort 32616 de NGF ([`kind-config.yaml`](./stagingkub/kind-config.yaml)) |
+| stagingkub | Application | https://rhdemo-stagingkub.intra.leuwen-lc.fr | port 443 de l'hôte → NodePort 32616 de NGF ([`kind-config.yaml`](stagingkub/kind-config.yaml)) |
 | stagingkub | Keycloak | https://keycloak-stagingkub.intra.leuwen-lc.fr | idem |
 | stagingkub | Grafana | https://grafana-stagingkub.intra.leuwen-lc.fr | idem ([OBSERVABILITY_STACK_INTEGRATION.md](../docs/OBSERVABILITY_STACK_INTEGRATION.md)) |
-| jenkins-docker | Jenkins | http://localhost:8080 | [`jenkins-docker/docker-compose.yml`](./jenkins-docker/docker-compose.yml) |
+| jenkins-docker | Jenkins | http://localhost:8080 | [`jenkins-docker/docker-compose.yml`](jenkins-docker/docker-compose.yml) |
 | jenkins-docker | SonarQube | http://localhost:9020 (démarré seulement pendant l'analyse de la CI) | idem |
 | jenkins-docker | Registre `kind-registry` | `localhost:5000` (HTTPS, autorité locale) | idem ([REGISTRY.md](../docs/REGISTRY.md)) |
 | jenkins-docker | OpenBao | `https://127.0.0.1:8200` | idem ([OPENBAO.md](../docs/OPENBAO.md)) |
@@ -66,8 +76,8 @@ Autres namespaces : external-secrets (ESO), monitoring et loki-stack (observabil
 ```
 
 - **Initialisation** (une fois, ou après recréation du cluster) : `rhDemo/infra/stagingkub/scripts/init-stagingkub.sh`. Il crée le cluster, Cilium, NGF et le Gateway partagé, le certificat TLS, le namespace, ESO et son raccordement à OpenBao (qui doit être démarré et déverrouillé), et connecte le registre local. L'observabilité s'installe ensuite par `install-observability.sh`.
-- **Déploiement** : job `RHDemo-CD`, déclenché par chaque build `RHDemo-CI` réussi qui publie l'image, ou lancé à la main avec `IMAGE_TAG=<tag>` ([PIPELINES_CI_CD.md](../docs/PIPELINES_CI_CD.md)). Contenu du chart : [helm/rhdemo/README.md](./stagingkub/helm/rhdemo/README.md).
-- **Composants système** (Cilium, NGF, observabilité) : mis à jour en place par `RHDemo-Stagingkub-Upgrade-Deploy` après merge d'une PR Renovate ([STAGINGKUB_REBUILD_PIPELINE.md](../docs/STAGINGKUB_REBUILD_PIPELINE.md)).
+- **Déploiement** : job `RHDemo-CD`, déclenché par chaque build `RHDemo-CI` réussi qui publie l'image, ou lancé à la main avec `IMAGE_TAG=<tag>` ([PIPELINES_CI_CD.md](../docs/PIPELINES_CI_CD.md)). Contenu du chart : [helm/rhdemo/README.md](stagingkub/helm/rhdemo/README.md).
+- **Composants système** (Cilium, NGF, observabilité) : mis à jour en place par `RHDemo-Stagingkub-Upgrade-Deploy` après merge d'une PR Renovate ([STAGINGKUB_REBUILD_PIPELINE.md](../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md)).
 - **Contrôle** : `rhDemo/infra/stagingkub/scripts/validate-stagingkub.sh`.
 
 ---

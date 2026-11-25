@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-25
 sources:
   - rhDemo/docs/
 ---
@@ -18,6 +18,10 @@ Catalogue des documents du projet : une ligne par page, classée par catégorie.
 | `proposition` | Évolution étudiée, non validée | À reclasser (`historique` ou suppression) quand une décision est prise |
 | `journal` | Audit, registre ou avis, en ajout seul | Immuable, sauf ajout d'entrées |
 
+**Rangement** : `docs/` contient la documentation opérationnelle à jour (statuts `actif` et `journal`) ; `docs/etudes/` contient les études : migrations, refontes, nouvelles fonctionnalités (statuts `historique` et `proposition`). Toute nouvelle étude se crée dans `docs/etudes/` ; reclasser un document entre ces deux familles implique de le déplacer. `docs-lint.py` vérifie cette règle.
+
+Un document hors `docs/` (README d'environnement, de module…) figure ici avec son statut ; son frontmatter est facultatif. S'il en a un (README d'infra les plus vivants), `docs-lint.py` lui applique les mêmes contrôles qu'à un doc de `docs/` ; dans tous les cas ses liens sont vérifiés.
+
 Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un document sans frontmatter (`fixcve-audit.md`, `SECURITY_ADVISORIES.md`) est modifié automatiquement par `fixcve-auto` : son statut est donné ici.
 
 ---
@@ -28,6 +32,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | --- | --- | --- |
 | [README.md](../../README.md) | actif | Présentation du projet et feuille de route |
 | [CHANGELOG.md](../../CHANGELOG.md) | actif | Historique des versions, de la plus récente à la plus ancienne |
+| [CONTRIBUTING.md](../../CONTRIBUTING.md) | actif | Règles de contribution : invariants, conventions, déroulé d'une PR |
 | [INSTALLATION_COMPLETE.md](INSTALLATION_COMPLETE.md) | actif | Ordre d'installation de toute la chaîne depuis une machine vide, avec renvoi à la documentation de chaque composant |
 | [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) | actif | Comparaison des environnements dev, ephemere, stagingkub et Jenkins |
 | [DECISIONS.md](DECISIONS.md) | actif | Raisons des choix techniques structurants (BFF, Keycloak, OpenBao, KinD, RBAC, NetworkPolicies) |
@@ -57,6 +62,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CSRF_GUIDE.md](CSRF_GUIDE.md) | actif | Protection CSRF (cookie, Spring Security, Vue.js) |
 | [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) | actif | Flux réseau légitimes et NetworkPolicies Zero Trust |
 | [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) | actif | RBAC du ServiceAccount Jenkins (moindre privilège) |
+| [SECURITY.md](../../SECURITY.md) | actif | Politique de sécurité : versions prises en charge, signalement d'une vulnérabilité |
 | [OPENBAO.md](OPENBAO.md) | actif | Exploitation d'OpenBao : installation à blanc, alimentation initiale des secrets, déverrouillage, rotation, jeton root ponctuel |
 | [ROTATION_SECRETS.md](ROTATION_SECRETS.md) | actif | Secrets au quotidien : tâches récurrentes, usage de `rotate-secrets.py`, rotation d'urgence, où retrouver un mot de passe (Keycloak, Grafana, profils de l'application) |
 | [CERTIFICATS_WEB.md](CERTIFICATS_WEB.md) | actif | Certificats TLS stagingkub : auto-signés ou Let's Encrypt |
@@ -64,8 +70,6 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [TRIVY_SECURITY_SCAN.md](TRIVY_SECURITY_SCAN.md) | actif | Scan des images Docker avec Trivy |
 | [secrets/README-SECRETS-SEPARATION.md](../secrets/README-SECRETS-SEPARATION.md) | actif | Secrets par environnement (ephemere, stagingkub, dev) et inventaire |
 | [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md) | journal | Avis de sécurité et remédiations (alimenté par fixcve-auto) |
-| [SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md](SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md) | journal | Revue de sécurité du 2026-04-24 et remédiations |
-| [SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md](SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md) | journal | Audit de sécurité du 2026-05-22 (score 58/100) et remédiations |
 | [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) | journal | Registre des incidents de fixcve-auto et des tests qui les rejouent |
 | [fixcve-audit.md](fixcve-audit.md) | journal | Journal d'audit de fixcve-auto, généré depuis `fixcve-audit.jsonl` (ne pas éditer) |
 
@@ -76,8 +80,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [DATABASE.md](DATABASE.md) | actif | Fichiers SQL de schéma et de données de test |
 | [PAGINATION.md](PAGINATION.md) | actif | Pagination côté serveur et côté Vue.js |
 | [PARAMETRAGE-APPLICATIF-AVEC-KUB.md](PARAMETRAGE-APPLICATIF-AVEC-KUB.md) | actif | Trois niveaux de paramétrage de l'application dans Kubernetes |
-| [frontend/ROUTES_CONFIGURATION.md](../frontend/ROUTES_CONFIGURATION.md) | actif | Routes Vue.js avec préfixe `/front` |
-| [frontend/GUIDE_NAVIGATION.md](../frontend/GUIDE_NAVIGATION.md) | actif | Menu de navigation du frontend |
+| [frontend/NAVIGATION.md](../frontend/NAVIGATION.md) | actif | Navigation du frontend : préfixe `/front`, organisation des écrans |
 
 ## Tests
 
@@ -105,45 +108,47 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [infra/stagingkub/scripts/README-helm-unlock.md](../infra/stagingkub/scripts/README-helm-unlock.md) | actif | Déblocage d'une release Helm en échec |
 | [rhDemoInitKeycloak/README.md](../../rhDemoInitKeycloak/README.md) | actif | Outil de chargement initial des données Keycloak |
 
-## Traces de migration (historique)
+## Études terminées (`etudes/`, historique)
 
 | Document | Statut | Résumé |
 | --- | --- | --- |
-| [SPRING_BOOT_4_MIGRATION.md](SPRING_BOOT_4_MIGRATION.md) | historique | Migration vers Spring Boot 4 et Spring Security 7 (livrée en 1.1.5) |
-| [MIGRATION_HELM4_KUB1.36.md](MIGRATION_HELM4_KUB1.36.md) | historique | Migration Helm 3 vers 4 et Kubernetes 1.35 vers 1.36 (livrée en 1.1.10) |
-| [NGINX_GATEWAY_FABRIC_MIGRATION.md](NGINX_GATEWAY_FABRIC_MIGRATION.md) | historique | Passage à NGINX Gateway Fabric et au Shared Gateway |
-| [STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md) | historique | Mise à jour en place de l'infrastructure stagingkub |
-| [ALLOY_MIGRATION.md](ALLOY_MIGRATION.md) | historique | Remplacement de Promtail par Grafana Alloy |
-| [PAKETO-DOCKERFILE-MIGRATION.md](PAKETO-DOCKERFILE-MIGRATION.md) | historique | Abandon de Paketo pour un Dockerfile classique |
-| [SOPS_SETUP.md](SOPS_SETUP.md) | historique | Ancienne gestion des secrets par SOPS/AGE, remplacée par OpenBao |
-| [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) | historique | Étude d'OpenBao comme gestionnaire de secrets (apport par secret, déverrouillage, plan par étapes), mise en œuvre en novembre 2026 |
-| [SONAQUBE_MIGRATION_PG18.md](SONAQUBE_MIGRATION_PG18.md) | historique | Migration de la base SonarQube vers PostgreSQL 18 |
-| [JENKINS_AGENTS_EPHEMERES.md](JENKINS_AGENTS_EPHEMERES.md) | historique | Étude et plan de passage aux agents Jenkins éphémères |
-| [JENKINS-NETWORK-ANALYSIS.md](JENKINS-NETWORK-ANALYSIS.md) | historique | Analyse des problèmes d'accès Jenkins vers stagingkub |
-| [NULL_REFONTE.md](NULL_REFONTE.md) | historique | Refonte de la gestion des null (Java 25) |
-| [TESTS_REFONTE.md](TESTS_REFONTE.md) | historique | Refonte du parc de tests backend |
-| [API_REST_NORMALISATION.md](API_REST_NORMALISATION.md) | historique | Normalisation REST de l'API Employé |
-| [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md) | historique | Plan d'évolutions de fixcve-auto, essentiellement appliqué (voir le bilan en tête) |
-| [MIGRATION_VITE.md](MIGRATION_VITE.md) | historique | Migration du frontend de Vue CLI (webpack) vers Vite : étude et bilan |
-| [SECURITE_CA_EMUDHRA_PLAN.md](SECURITE_CA_EMUDHRA_PLAN.md) | historique | Compromission des CA intermédiaires eMudhra (CVE-2026-111943) : remédiation par image, incident clos le 2026-11-19 |
+| [SPRING_BOOT_4_MIGRATION.md](etudes/SPRING_BOOT_4_MIGRATION.md) | historique | Migration vers Spring Boot 4 et Spring Security 7 (livrée en 1.1.5) |
+| [MIGRATION_HELM4_KUB1.36.md](etudes/MIGRATION_HELM4_KUB1.36.md) | historique | Migration Helm 3 vers 4 et Kubernetes 1.35 vers 1.36 (livrée en 1.1.10) |
+| [NGINX_GATEWAY_FABRIC_MIGRATION.md](etudes/NGINX_GATEWAY_FABRIC_MIGRATION.md) | historique | Passage à NGINX Gateway Fabric et au Shared Gateway |
+| [STAGINGKUB_REBUILD_PIPELINE.md](etudes/STAGINGKUB_REBUILD_PIPELINE.md) | historique | Mise à jour en place de l'infrastructure stagingkub |
+| [ALLOY_MIGRATION.md](etudes/ALLOY_MIGRATION.md) | historique | Remplacement de Promtail par Grafana Alloy |
+| [PAKETO-DOCKERFILE-MIGRATION.md](etudes/PAKETO-DOCKERFILE-MIGRATION.md) | historique | Abandon de Paketo pour un Dockerfile classique |
+| [SOPS_SETUP.md](etudes/SOPS_SETUP.md) | historique | Ancienne gestion des secrets par SOPS/AGE, remplacée par OpenBao |
+| [ETUDE_OPENBAO.md](etudes/ETUDE_OPENBAO.md) | historique | Étude d'OpenBao comme gestionnaire de secrets (apport par secret, déverrouillage, plan par étapes), mise en œuvre en novembre 2026 |
+| [SONAQUBE_MIGRATION_PG18.md](etudes/SONAQUBE_MIGRATION_PG18.md) | historique | Migration de la base SonarQube vers PostgreSQL 18 |
+| [JENKINS_AGENTS_EPHEMERES.md](etudes/JENKINS_AGENTS_EPHEMERES.md) | historique | Étude et plan de passage aux agents Jenkins éphémères |
+| [JENKINS-NETWORK-ANALYSIS.md](etudes/JENKINS-NETWORK-ANALYSIS.md) | historique | Analyse des problèmes d'accès Jenkins vers stagingkub |
+| [NULL_REFONTE.md](etudes/NULL_REFONTE.md) | historique | Refonte de la gestion des null (Java 25) |
+| [TESTS_REFONTE.md](etudes/TESTS_REFONTE.md) | historique | Refonte du parc de tests backend |
+| [API_REST_NORMALISATION.md](etudes/API_REST_NORMALISATION.md) | historique | Normalisation REST de l'API Employé |
+| [FIXCVE_AUTO_REFONTE.md](etudes/FIXCVE_AUTO_REFONTE.md) | historique | Plan d'évolutions de fixcve-auto, essentiellement appliqué (voir le bilan en tête) |
+| [MIGRATION_VITE.md](etudes/MIGRATION_VITE.md) | historique | Migration du frontend de Vue CLI (webpack) vers Vite : étude et bilan |
+| [SECURITE_CA_EMUDHRA_PLAN.md](etudes/SECURITE_CA_EMUDHRA_PLAN.md) | historique | Compromission des CA intermédiaires eMudhra (CVE-2026-111943) : remédiation par image, incident clos le 2026-11-19 |
+| [ETUDE_FIXCVE_DANS_JENKINS.md](etudes/ETUDE_FIXCVE_DANS_JENKINS.md) | historique | Faisabilité de l'exécution de fixcve-auto par un pipeline Jenkins au lieu du cron local : points durs et décisions du 2026-11-22 (Jenkinsfile lu sur la branche sans épinglage, agent dédié avec volume d'état, déclenchement à chaque fin de CI, mode local retiré) ; mis en œuvre le 2026-11-22, validé dans Jenkins le 2026-11-24 |
+| [SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md](etudes/SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md) | historique | Revue de sécurité du 2026-04-24 et remédiations |
+| [SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md](etudes/SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md) | historique | Audit de sécurité du 2026-05-22 (score 58/100) et remédiations |
 
-## Propositions (non validées)
+## Études en cours ou non validées (`etudes/`, proposition)
 
 | Document | Statut | Résumé |
 | --- | --- | --- |
-| [IMPACT_CLEAN_ARCHITECTURE.md](IMPACT_CLEAN_ARCHITECTURE.md) | proposition | Analyse d'impact d'une migration vers la Clean Architecture |
-| [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
-| [TESTS_FRONTEND_UNITAIRES.md](TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
-| [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) | historique | Faisabilité de l'exécution de fixcve-auto par un pipeline Jenkins au lieu du cron local : points durs et décisions du 2026-11-22 (Jenkinsfile lu sur la branche sans épinglage, agent dédié avec volume d'état, déclenchement à chaque fin de CI, mode local retiré) ; mis en œuvre le 2026-11-22, validé dans Jenkins le 2026-11-24 |
-| [ETUDE_ROTATION_SECRETS.md](ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), kubeconfigs et mode urgence (`--emergency`) le 2026-11-23 ; restent rappel périodique, clé AGE et la création de tokens par Secret (remontée vers l'administration du cluster) |
+| [IMPACT_CLEAN_ARCHITECTURE.md](etudes/IMPACT_CLEAN_ARCHITECTURE.md) | proposition | Analyse d'impact d'une migration vers la Clean Architecture |
+| [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](etudes/CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
+| [TESTS_FRONTEND_UNITAIRES.md](etudes/TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
+| [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), kubeconfigs et mode urgence (`--emergency`) le 2026-11-23 ; restent rappel périodique, clé AGE et la création de tokens par Secret (remontée vers l'administration du cluster) |
 
 ---
 
 ## Pour le LLM qui maintient ce wiki
 
 - **Contrôler la cohérence** : `python3 -I rhDemo/scripts/docs-lint.py` (lecture seule) ou le skill `/docs-lint` (source : `rhDemo/scripts/docs-skills/docs-lint/SKILL.md`). Rapport d'abord, corrections après accord, entrée `lint` dans [log.md](log.md).
-- **Ajouter un document** : poser le frontmatter (`statut`, `verifie_le`, `sources`), ajouter une ligne dans la bonne catégorie ci-dessus, journaliser dans [log.md](log.md).
-- **Changer le statut d'un document** : modifier son frontmatter **et** la colonne Statut de cet index, puis journaliser.
-- **Ne jamais réécrire** un document `historique` ou `journal` pour l'aligner sur l'état courant. Une divergence se signale, elle ne se corrige pas dans ces fichiers.
+- **Ajouter un document** : une étude (migration, refonte, nouvelle fonctionnalité) va dans `etudes/`, la documentation opérationnelle dans `docs/` ; poser le frontmatter (`statut`, `verifie_le`, `sources`), ajouter une ligne dans la bonne catégorie ci-dessus, journaliser dans [log.md](log.md).
+- **Changer le statut d'un document** : modifier son frontmatter **et** la colonne Statut de cet index, puis journaliser. Passer entre `actif`/`journal` et `historique`/`proposition` impose un `git mv` entre `docs/` et `docs/etudes/` et la mise à jour des liens qui pointent vers le document.
+- **Ne jamais réécrire** un document `historique` ou `journal` pour l'aligner sur l'état courant. Une divergence se signale, elle ne se corrige pas dans ces fichiers. Seule exception : la cible d'un lien ou un chemin de fichier mort après un déplacement.
 - **Ne pas copier** plus de 10 lignes de code : renvoyer au fichier (règle de `CLAUDE.md`).
 - **Ne pas ajouter de frontmatter** à `fixcve-audit.md` (généré) ni à `SECURITY_ADVISORIES.md` (modifié par `fixcve-auto`, qui insère ses entrées après le premier `---`).

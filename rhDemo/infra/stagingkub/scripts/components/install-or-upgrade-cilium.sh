@@ -28,7 +28,7 @@ set -e
 # Mode validation (HELM_DRY_RUN=true) : utilisé par la boucle de
 # validation pré-merge de Jenkinsfile-Renovate — `helm upgrade
 # --dry-run=server` uniquement, sans preflight (mutant) ni attente de
-# rollout. Voir docs/STAGINGKUB_REBUILD_PIPELINE.md étape 4.
+# rollout. Voir docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md étape 4.
 # ═══════════════════════════════════════════════════════════════
 
 HELM_DRY_RUN="${HELM_DRY_RUN:-false}"

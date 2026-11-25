@@ -100,7 +100,7 @@ Paramétrage de l'application dans le cluster : [PARAMETRAGE-APPLICATIF-AVEC-KUB
 
 1. Comptes bots Codeberg et accès externes (GitHub, Docker Hub) : [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md), « Comptes et credentials ».
 2. Valeurs dans OpenBao et credentials Jenkins de même identifiant : `rhDemo/scripts/openbao-setup.py jenkins` (étape 7 d'OPENBAO.md ; les tokens Codeberg et la clé GPG sont émis directement).
-3. Le job `RHDemo-Renovate` tourne chaque jour ; `RHDemo-Stagingkub-Upgrade-Deploy` applique les montées de version de l'infrastructure de stagingkub ([STAGINGKUB_REBUILD_PIPELINE.md](STAGINGKUB_REBUILD_PIPELINE.md)).
+3. Le job `RHDemo-Renovate` tourne chaque jour ; `RHDemo-Stagingkub-Upgrade-Deploy` applique les montées de version de l'infrastructure de stagingkub ([STAGINGKUB_REBUILD_PIPELINE.md](etudes/STAGINGKUB_REBUILD_PIPELINE.md)).
 
 ## 9. fixcve-auto (facultatif)
 

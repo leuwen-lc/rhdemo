@@ -6,7 +6,7 @@
  * Application RÉELLE (post-merge) d'une mise à jour en place d'un composant
  * d'infrastructure stagingkub (Cilium, NGINX Gateway Fabric, kube-prometheus-
  * stack, Loki, Alloy, Grafana) — Option 3 de
- * rhDemo/docs/STAGINGKUB_REBUILD_PIPELINE.md.
+ * rhDemo/docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md.
  *
  * ARTICULATION AVEC Jenkinsfile-Renovate :
  *   - La validation de la PR (avant merge) se fait dans la boucle étendue de
@@ -24,7 +24,7 @@
  *   - Rollback automatique porté par `--rollback-on-failure` dans chaque script composant
  *     (rhDemo/infra/stagingkub/scripts/components/).
  *
- * 📖 Documentation : docs/STAGINGKUB_REBUILD_PIPELINE.md
+ * 📖 Documentation : docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md
  * ═══════════════════════════════════════════════════════════════════════════
  */
 

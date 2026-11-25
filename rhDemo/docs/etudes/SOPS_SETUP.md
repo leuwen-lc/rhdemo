@@ -5,7 +5,7 @@ sources:
   - rhDemo/docs/OPENBAO.md
 ---
 
-> **Historique** : SOPS n'est plus utilisé depuis la migration vers OpenBao (2026-11). Les fichiers chiffrés ont été supprimés du dépôt et leurs valeurs renouvelées. Gestion actuelle des secrets : [OPENBAO.md](OPENBAO.md).
+> **Historique** : SOPS n'est plus utilisé depuis la migration vers OpenBao (2026-11). Les fichiers chiffrés ont été supprimés du dépôt et leurs valeurs renouvelées. Gestion actuelle des secrets : [OPENBAO.md](../OPENBAO.md).
 
 # Installation et configuration de SOPS/AGE
 
@@ -490,7 +490,7 @@ git push
 
 ## Intégration CI/CD (Jenkins)
 
-Dans le [Jenkinsfile-CI](../Jenkinsfile-CI), SOPS est utilisé pour déchiffrer les secrets :
+Dans le [Jenkinsfile-CI](../../Jenkinsfile-CI), SOPS est utilisé pour déchiffrer les secrets :
 
 ```groovy
 stage('🔓 Déchiffrement SOPS des secrets') {
@@ -554,4 +554,4 @@ stage('🔓 Déchiffrement SOPS des secrets') {
 
 ## Voir aussi
 
-- [ENVIRONMENTS.md](../infra/ENVIRONMENTS.md) - Environnements rhDemo
+- [ENVIRONMENTS.md](../../infra/ENVIRONMENTS.md) - Environnements rhDemo

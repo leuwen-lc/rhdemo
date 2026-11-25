@@ -8,7 +8,7 @@ sources:
 
 # fixcve-auto — plan d'évolutions
 
-> **Bilan au 2026-10-22 : plan essentiellement appliqué, conservé pour l'historique.** Les éléments A, B, C, D, E (hors exécution en CI), I, K, L et M sont réalisés (voir la section 1 et [FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+> **Bilan au 2026-10-22 : plan essentiellement appliqué, conservé pour l'historique.** Les éléments A, B, C, D, E (hors exécution en CI), I, K, L et M sont réalisés (voir la section 1 et [FIXCVE_AUTO.md](../FIXCVE_AUTO.md)).
 >
 > **Non appliqué** (aucun n'est abandonné formellement ; vérifié dans le code le 2026-10-22) :
 >
@@ -20,7 +20,7 @@ sources:
 > | **J** (publication par branche de validation) | Reporté le 2026-10-09 (modification de `jenkins-casc.yaml`). |
 > | Exécution des tests en CI (section 8) | Décision non prise. |
 
-Plan détaillé issu de la revue complète du 2026-09-28, complété par la revue du 2026-10-09 (section 10, qui ajuste l'ordre de la section 6), à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
+Plan détaillé issu de la revue complète du 2026-09-28, complété par la revue du 2026-10-09 (section 10, qui ajuste l'ordre de la section 6), à reprendre au fil de l'eau. Il complète [FIXCVE_AUTO.md](../FIXCVE_AUTO.md) (fonctionnement actuel) sans le remplacer.
 
 **Principe directeur** : simplifier et harmoniser **sans perdre** ce que la mise au point incrémentale a construit (chaque garde-fou existe à cause d'un incident réel) ni le modèle de sécurité contre l'injection de prompt. Chaque étape est donc livrée avec un test qui rejoue l'incident d'origine.
 
@@ -34,7 +34,7 @@ Plan détaillé issu de la revue complète du 2026-09-28, complété par la revu
 | **B** (commit/push par le script) | **Fait** : application, commit (correctif puis journal) et push par `fixcve-auto-poll.sh` ; le message de commit est construit par `fixcve-apply.py`. |
 | **C** (épinglage de confiance, skills versionnés) | **Fait** : `trusted.sha256` + `fixcve-install.sh --trust` ; skill interactif versionné dans `rhDemo/scripts/fixcve-skills/`. Les skills `fixcve-auto-lookup`/`-apply` ne sont plus utilisés (suppression locale manuelle). |
 | **D** (décisions et recherches déterministes) | **Fait** : `fixcve-resolve.py` (Maven, npm, images, revérification des suppressions temporaires), `fixcve-classify.py` (table de décision). D4 sans objet (aucun LLM ne lit plus de texte externe). |
-| **E** (tests issus des incidents) | **Fait** : `tests/run-all.sh` (hors réseau), fixtures réelles, registre [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md), bac à sable du poller `tests/poll-sandbox.sh`. Exécution en CI : non décidée (section 8). |
+| **E** (tests issus des incidents) | **Fait** : `tests/run-all.sh` (hors réseau), fixtures réelles, registre [FIXCVE_AUTO_INCIDENTS.md](../FIXCVE_AUTO_INCIDENTS.md), bac à sable du poller `tests/poll-sandbox.sh`. Exécution en CI : non décidée (section 8). |
 | **K** (indicateur), **L** (avis OSV commun, vérification locale), **M** (normalisation CVE/GHSA) | **Faits** (`fixcve-stats.py`, `fixcve_lib/osv.py`, `verify.py`, alias OSV). Preuve par scan Trivy locale : non faite (Trivy absent de l'hôte), preuve par le build CI. |
 | **J** (publication par branche de validation) | **Reporté** (décision du 2026-10-09 : modification de `jenkins-casc.yaml`). |
 | **F**, **G**, **H**, **I** | F, G, H à faire ; G partiellement (blocage transitoire borné, fonction d'échec d'étape commune) ; I fait avec C (skill `/fixcve` sur les mêmes scripts). |
@@ -197,7 +197,7 @@ Décision **reportée** : pour l'instant les tests se lancent à la main.
 
 ## 9. Reprise
 
-- État du bot : `~/.config/rhdemo-fixcve/state.json` ; toute édition à la main se fait sous le verrou `~/.config/rhdemo-fixcve/poll.lock` (`flock`). Reprise, pause et remise en arrière sont décrites dans [FIXCVE_AUTO.md](FIXCVE_AUTO.md) ; l'outil F les automatisera.
+- État du bot : `~/.config/rhdemo-fixcve/state.json` ; toute édition à la main se fait sous le verrou `~/.config/rhdemo-fixcve/poll.lock` (`flock`). Reprise, pause et remise en arrière sont décrites dans [FIXCVE_AUTO.md](../FIXCVE_AUTO.md) ; l'outil F les automatisera.
 - Journal des cycles : `poll.log` (local) et `docs/fixcve-audit.md` (versionné).
 - Pour rejouer une phase sans rien pousser, il faut aujourd'hui copier le fichier de cycle archivé dans `.fixcve-cycle/` du clone, sous le verrou, puis lancer `claude -p` avec le fichier de permissions de la phase : F remplacera cette procédure manuelle.
 

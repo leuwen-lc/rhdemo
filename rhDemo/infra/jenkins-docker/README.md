@@ -1,3 +1,15 @@
+---
+statut: actif
+verifie_le: 2026-11-25
+sources:
+  - rhDemo/infra/jenkins-docker/docker-compose.yml
+  - rhDemo/infra/jenkins-docker/Dockerfile.jenkins
+  - rhDemo/infra/jenkins-docker/Dockerfile.agent
+  - rhDemo/infra/jenkins-docker/casc/jenkins-casc.yaml
+  - rhDemo/infra/jenkins-docker/plugins.txt
+  - rhDemo/infra/jenkins-docker/start-jenkins.sh
+---
+
 # 🚀 Jenkins CI/CD pour RHDemo
 
 Infrastructure Jenkins complète avec architecture master/agent dédiée et tous les outils nécessaires pour exécuter les pipelines CI/CD RHDemo.
@@ -55,7 +67,7 @@ docker info
 │                                    │  Créés à la demande, détruits après le build │ │
 │                                    │                                              │ │
 │                                    │  Outils de build :                           │ │
-│                                    │  • JDK 25 (Eclipse Temurin) + Maven 3.9.12   │ │
+│                                    │  • JDK 25 (Eclipse Temurin) + Maven          │ │
 │                                    │  • Docker CLI + Docker Compose (socket hôte) │ │
 │                                    │  • Node.js/npm (build frontend)              │ │
 │                                    │  • Firefox ESR + Xvfb (Selenium headless)    │ │
@@ -75,7 +87,7 @@ docker info
 │  └──────────┬───────────────┘                                                       │
 │             ▼                                                                       │
 │  ┌──────────────────────────┐                                                       │
-│  │   PostgreSQL 16          │                                                       │
+│  │   PostgreSQL             │                                                       │
 │  │   (sonarqube-db)         │                                                       │
 │  └──────────────────────────┘                                                       │
 │                                                                                     │
@@ -123,7 +135,7 @@ docker info
                                      └──────────────────────────────────────┘
 ```
 
-> Deux ServiceAccounts Kubernetes distincts pour `stagingkub`, générés par `init-stagingkub.sh` : `jenkins-deployer` (déploiement applicatif, `Jenkinsfile-CD`) et `jenkins-infra-upgrader` (mise à jour en place de l'infrastructure — Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana — `Jenkinsfile-Stagingkub-Upgrade-Deploy`). Voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
+> Deux ServiceAccounts Kubernetes distincts pour `stagingkub`, générés par `init-stagingkub.sh` : `jenkins-deployer` (déploiement applicatif, `Jenkinsfile-CD`) et `jenkins-infra-upgrader` (mise à jour en place de l'infrastructure — Cilium, NGINX Gateway Fabric, kube-prometheus-stack, Loki, Alloy, Grafana — `Jenkinsfile-Stagingkub-Upgrade-Deploy`). Voir [docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md) et [stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 
 ### Volumes persistants
 
@@ -188,7 +200,7 @@ Le controller Jenkins ne fait que du **pilotage** : orchestration des pipelines,
 - Deux modèles : `builder` (tous les jobs, socket Docker de l'hôte monté) et `fixcve` (job `RHDemo-FixCVE` : volume d'état `rhdemo-fixcve-state` et cache Maven, **sans** socket Docker ni certificats locaux)
 - Un seul conteneur d'agent à la fois pour tout le nuage (`containerCap: 1`) : les builds de tous les jobs sont sérialisés, les suivants attendent dans la file ; un agent `builder` inactif garde la place 5 min, un agent `fixcve` 1 min
 - Contiennent tous les outils de build :
-  - JDK 25 (Eclipse Temurin) + Maven 3.9.12
+  - JDK 25 (Eclipse Temurin) + Maven (versions : `Dockerfile.agent`)
   - Docker CLI + Docker Compose (socket hôte monté dans l'agent)
   - Firefox ESR + Xvfb (tests Selenium headless)
   - yq (parsing YAML)
@@ -438,7 +450,7 @@ Les pipelines sont créés automatiquement au démarrage dans la section `jobs:`
 | `RHDemo-CD` | `Jenkinsfile-CD` | Déploiement de l'application sur stagingkub |
 | `RHDemo-Renovate` | `Jenkinsfile-Renovate` | Scan Renovate + automerge des PRs de dépendances (patch/minor) |
 | `RHDemo-FixCVE` | `Jenkinsfile-FixCVE` | Remédiation automatique des CVE bloquantes de la CI (agent `fixcve`, déclenché à la fin de chaque build CI) — voir [docs/FIXCVE_AUTO.md](../../docs/FIXCVE_AUTO.md) |
-| `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) |
+| `RHDemo-Stagingkub-Upgrade-Deploy` | `Jenkinsfile-Stagingkub-Upgrade-Deploy` | Mise à jour en place d'un composant d'infra stagingkub (Cilium, NGF, kube-prometheus-stack, Loki, Alloy, Grafana), déclenché par `RHDemo-Renovate` après un merge réussi — voir [docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md) |
 
 
 ## 🐳 Docker-in-Docker (DinD)
@@ -492,7 +504,7 @@ SonarQube est inclus dans le docker-compose mais **ne tourne que pendant la CI**
 
 **Services SonarQube :**
 - `sonarqube` : Serveur SonarQube Community Edition (version : `docker-compose.yml`)
-- `sonarqube-db` : Base de données PostgreSQL 16 dédiée
+- `sonarqube-db` : Base de données PostgreSQL dédiée (image épinglée dans `docker-compose.yml`)
 
 **Webhook vers Jenkins :** l'étape `waitForQualityGate` attend un appel de SonarQube vers `http://jenkins:8080/sonarqube-webhook/`. Depuis SonarQube 26.10, les webhooks vers une adresse privée sont refusés (`Invalid URL: … site-local …` dans `ce.log`) et la Quality Gate part en timeout alors que l'analyse a réussi. Le service définit donc `SONAR_VALIDATEWEBHOOKS=false` ; le webhook ne vise que le réseau Docker interne.
 
@@ -642,7 +654,7 @@ Pour éviter les limitations de taux (rate limiting) de l'API NVD :
 - Scans plus rapides et fiables
 - Données NVD à jour
 
-**Dépannage clé invalide :** Voir [../../docs/TEST_NVD_API_KEY.md](../../docs/TEST_NVD_API_KEY.md)
+**Dépannage clé invalide :** Voir [OWASP_DEPENDENCY_CHECK.md](../../docs/OWASP_DEPENDENCY_CHECK.md)
 
 ### OWASP ZAP - Proxy de sécurité pour tests Selenium
 
@@ -803,7 +815,7 @@ Pour les PRs Renovate qui touchent un composant d'infrastructure (`rhDemo/infra/
 |----|------|---------|-------------|
 | `kubeconfig-stagingkub-infra-upgrader` | Secret file | Créé directement dans Jenkins par `rhDemo/scripts/rotate-secrets.py`, appelé par `init-stagingkub.sh` | `RHDemo-Renovate` (validation dry-run) + `RHDemo-Stagingkub-Upgrade-Deploy` (application réelle) |
 
-Ce credential porte les droits du ServiceAccount **dédié** `jenkins-infra-upgrader` — distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`, qui ne gagne aucun droit supplémentaire de ce fait. Détail du RBAC et de l'étude ayant motivé cette séparation : [docs/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/STAGINGKUB_REBUILD_PIPELINE.md) et [infra/stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
+Ce credential porte les droits du ServiceAccount **dédié** `jenkins-infra-upgrader` — distinct de `kubeconfig-stagingkub`/`jenkins-deployer` utilisé par `RHDemo-CD`, qui ne gagne aucun droit supplémentaire de ce fait. Détail du RBAC et de l'étude ayant motivé cette séparation : [docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md](../../docs/etudes/STAGINGKUB_REBUILD_PIPELINE.md) et [infra/stagingkub/rbac/README.md](../stagingkub/rbac/README.md).
 
 ## 🔧 Dépannage
 
@@ -967,7 +979,7 @@ docker run --rm \
 - [Documentation Jenkins](https://www.jenkins.io/doc/)
 - [Jenkins Configuration as Code](https://github.com/jenkinsci/configuration-as-code-plugin)
 - [Pipeline Syntax](https://www.jenkins.io/doc/book/pipeline/syntax/)
-- [Jenkinsfile du projet](../Jenkinsfile)
+- [Pipelines du projet](../../docs/PIPELINES_CI_CD.md) (`Jenkinsfile-CI`, `Jenkinsfile-CD`, …)
 
 ## 🆘 Support
 

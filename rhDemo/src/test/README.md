@@ -9,7 +9,7 @@ Deux familles de tests, exécutées par deux plugins Maven distincts :
 | Surefire | `*Test.java` | `test` | Non (ou minimal) |
 | Failsafe | `*IT.java` / `*ITCase.java` | `integration-test` / `verify` | Oui (`@SpringBootTest` ou `@DataJpaTest`) |
 
-Voir `docs/TESTS_REFONTE.md` pour la justification de cette répartition et l'historique de la refonte.
+Voir `docs/etudes/TESTS_REFONTE.md` pour la justification de cette répartition et l'historique de la refonte.
 
 ## Tests unitaires (Surefire — `*Test.java`)
 
@@ -78,7 +78,7 @@ Tests démarrant un contexte Spring (souvent avec `MockMvc`) — valident la cha
 
 Couverture mesurée après refonte (rapport aggregate `target/site/jacoco/jacoco.csv`) : **~82 %** brute, **~97 %** après exclusions Sonar.
 
-Classes exclues du calcul de couverture (déclaré dans `sonar-project.properties`, justifications dans `docs/TESTS_REFONTE.md` §4) :
+Classes exclues du calcul de couverture (déclaré dans `sonar-project.properties`, justifications dans `docs/etudes/TESTS_REFONTE.md` §4) :
 - `RhdemoApplication` — main Spring Boot.
 - `SecurityConfig`, `SpaCsrfTokenRequestHandler` — `@Profile("!test")`, configuration déclarative Spring Security DSL non exercée en test.
 - `WebMvcConfig` — mapping statique de ressources, pas de logique.
@@ -95,7 +95,7 @@ Classes exclues du calcul de couverture (déclaré dans `sonar-project.propertie
 
 ## Voir aussi
 
-- `docs/TESTS_REFONTE.md` — Refonte des tests : suppressions, refactorings, exclusions Sonar.
+- `docs/etudes/TESTS_REFONTE.md` — Refonte des tests : suppressions, refactorings, exclusions Sonar.
 - `docs/TESTS_SECURITE_COUVERTURE.md` — Couverture des tests de sécurité.
 - `docs/DATA_TESTID_GUIDE.md` — Marqueurs `data-testid` pour Selenium.
 - `rhDemoAPITestIHM/` — Tests E2E Selenium (projet séparé, hors couverture JaCoCo).

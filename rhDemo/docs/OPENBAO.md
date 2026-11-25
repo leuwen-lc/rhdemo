@@ -20,7 +20,7 @@ sources:
 
 # OpenBao : exploitation
 
-Mise en œuvre de [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md), qui en donne les raisons. Ce guide décrit l'installation à blanc, l'alimentation initiale des secrets, le déverrouillage et la rotation.
+Mise en œuvre de [ETUDE_OPENBAO.md](etudes/ETUDE_OPENBAO.md), qui en donne les raisons. Ce guide décrit l'installation à blanc, l'alimentation initiale des secrets, le déverrouillage et la rotation.
 
 **État** : en service. La migration depuis SOPS est terminée (novembre 2026) : fichiers chiffrés supprimés, valeurs renouvelées, outils de migration retirés (trace dans [log.md](log.md)). Ce qui a été vérifié, et ce qui reste à valider, est listé en fin de document.
 
@@ -117,7 +117,7 @@ OpenBao redémarre **scellé** après un redémarrage du poste, du démon Docker
 rhDemo/infra/jenkins-docker/openbao/unseal.sh   # coller la clé depuis KeePassXC
 ```
 
-La clé n'est jamais passée en argument (visible dans `ps`). `unseal.sh` raccorde ensuite OpenBao au réseau `kind` avec son IP fixe s'il l'a perdu (conteneur recréé, par exemple au redémarrage de la stack Jenkins) ; dans ce cas, il force aussi la revalidation des `SecretStore` d'ESO et la resynchronisation des `ExternalSecret`, sans quoi la CD refuse de déployer jusqu'à ce qu'ESO réessaie de lui-même. `repair-cluster-after-restart.sh` fait le même raccordement et rappelle l'état scellé, mais ne déverrouille jamais. Le healthcheck Docker du conteneur est `unhealthy` tant qu'il est scellé. Raisons du choix manuel : [ETUDE_OPENBAO.md](ETUDE_OPENBAO.md) §5.
+La clé n'est jamais passée en argument (visible dans `ps`). `unseal.sh` raccorde ensuite OpenBao au réseau `kind` avec son IP fixe s'il l'a perdu (conteneur recréé, par exemple au redémarrage de la stack Jenkins) ; dans ce cas, il force aussi la revalidation des `SecretStore` d'ESO et la resynchronisation des `ExternalSecret`, sans quoi la CD refuse de déployer jusqu'à ce qu'ESO réessaie de lui-même. `repair-cluster-after-restart.sh` fait le même raccordement et rappelle l'état scellé, mais ne déverrouille jamais. Le healthcheck Docker du conteneur est `unhealthy` tant qu'il est scellé. Raisons du choix manuel : [ETUDE_OPENBAO.md](etudes/ETUDE_OPENBAO.md) §5.
 
 ## Journal d'audit
 

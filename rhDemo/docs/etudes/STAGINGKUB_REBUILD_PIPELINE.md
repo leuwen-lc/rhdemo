@@ -115,7 +115,7 @@ Avec ces ajouts, **seule la version de Kubernetes elle-même (`kindest/node`) re
 
 > **Aiguillage de la validation Renovate** (quelle PR reçoit quelle validation — Maven+OWASP,
 > Kubernetes dry-run, ou Trivy scan ciblé — et selon quels fichiers modifiés) : voir
-> [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md), section « Aiguillage de la validation selon
+> [RENOVATE_AUTOMERGE_CI.md](../RENOVATE_AUTOMERGE_CI.md), section « Aiguillage de la validation selon
 > les fichiers modifiés ». Ce document-ci ne couvre que ce qui concerne spécifiquement le pipeline
 > `RHDemo-Stagingkub-Upgrade-Deploy` lui-même (déclenché post-merge pour les PR de composants
 > d'infra stagingkub).
@@ -155,6 +155,6 @@ Avant de brancher l'automerge Renovate sur ces fichiers, dérouler manuellement 
 - **Scripts** : `rhDemo/infra/stagingkub/scripts/components/install-or-upgrade-{cilium,ngf,kube-prometheus-stack,loki,alloy,grafana}.sh`, `scripts/vendor-gateway-api-crds.sh` (+ manifeste vendoré `gateway-api-crds/v2.6.0/crds.yaml`). `init-stagingkub.sh`/`install-observability.sh` refactorés pour les appeler.
 - **RBAC** : `rhDemo/infra/stagingkub/rbac/jenkins-infra-upgrader-*.yaml` + `rbac/README.md`.
 - **Renovate** : `renovate.json` étendu (customManagers infra + `kind-config.yaml`).
-- **Jenkins** : `Jenkinsfile-Stagingkub-Upgrade-Deploy` (nouveau), `Jenkinsfile-Renovate` (bascule vers Kubernetes dry-run pour les composants d'infra — algorithme complet documenté dans [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)), `jenkins-casc.yaml` (job `RHDemo-Stagingkub-Upgrade-Deploy`).
+- **Jenkins** : `Jenkinsfile-Stagingkub-Upgrade-Deploy` (nouveau), `Jenkinsfile-Renovate` (bascule vers Kubernetes dry-run pour les composants d'infra — algorithme complet documenté dans [RENOVATE_AUTOMERGE_CI.md](../RENOVATE_AUTOMERGE_CI.md)), `jenkins-casc.yaml` (job `RHDemo-Stagingkub-Upgrade-Deploy`).
 - **Observabilité** : `prometheus-values.yaml` — admission webhooks désactivés.
 - **Non testé** : aucun cluster stagingkub réel n'était disponible pour valider l'exécution de bout en bout (preflight Cilium, ordre des stages Jenkins, job JCasC) — seules les vérifications statiques (syntaxe, rendu Helm, dry-run client RBAC) ont pu être faites.

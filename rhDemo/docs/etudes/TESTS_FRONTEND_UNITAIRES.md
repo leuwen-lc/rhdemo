@@ -12,7 +12,7 @@ sources:
 
 Le frontend Vue.js (`rhDemo/frontend/`) n'a aujourd'hui **aucun test isolé** : la seule validation fonctionnelle vient des tests Selenium (`rhDemoAPITestIHM/`), qui s'exécutent tard dans le pipeline CI, contre l'environnement `ephemere` complet (Keycloak, PostgreSQL, backend réel).
 
-Renovate met à jour `vue`, `vue-router`, `element-plus`, `axios` et `@vue/cli-service` de façon autonome (patch/minor auto-mergés, major derrière le Dependency Dashboard — voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)). Un exemple concret de risque déjà survenu : le commit `283ac00` (`fix(deps): update dependency vue-router to v5 (#172)`) a fait passer `vue-router` en version majeure 5 sans qu'aucun test ne valide le comportement du routage après coup — seule la CI Selenium a servi de filet, plusieurs minutes après le build et sur un périmètre large.
+Renovate met à jour `vue`, `vue-router`, `element-plus`, `axios` et `@vue/cli-service` de façon autonome (patch/minor auto-mergés, major derrière le Dependency Dashboard — voir [RENOVATE_AUTOMERGE_CI.md](../RENOVATE_AUTOMERGE_CI.md)). Un exemple concret de risque déjà survenu : le commit `283ac00` (`fix(deps): update dependency vue-router to v5 (#172)`) a fait passer `vue-router` en version majeure 5 sans qu'aucun test ne valide le comportement du routage après coup — seule la CI Selenium a servi de filet, plusieurs minutes après le build et sur un périmètre large.
 
 **Objectif de cette étude** : proposer une couche de tests qui détecte les régressions introduites par ces montées de version, sans les deux écueils identifiés :
 - **fragilité** : un test qui casse à chaque changement mineur de libellé/style (typiquement un snapshot test ou une assertion sur une classe CSS interne d'Element Plus) génère du bruit et finit ignoré ;
@@ -40,7 +40,7 @@ La couche unitaire proposée se positionne donc **avant** Selenium dans la pyram
 | Conflit avec Vue CLI Service 5 (webpack) | Sans objet depuis la migration vers Vite (voir MIGRATION_VITE.md) : Vitest réutilise `vite.config.js` | Aucun non plus, mais configuration ESM plus verbeuse pour Vue 3 |
 | Maintenance | Activement maintenu, écosystème Vite/Vitest = standard actuel Vue 3 | Toujours maintenu mais plus de friction sur ce stack |
 
-**Recommandation : Vitest + `@vue/test-utils` v2**, complété par `@testing-library/vue` pour interroger le DOM par rôle/texte/`data-testid` plutôt que par structure interne des composants — cohérent avec la logique déjà en place pour Selenium (voir [DATA_TESTID_GUIDE.md](DATA_TESTID_GUIDE.md)).
+**Recommandation : Vitest + `@vue/test-utils` v2**, complété par `@testing-library/vue` pour interroger le DOM par rôle/texte/`data-testid` plutôt que par structure interne des composants — cohérent avec la logique déjà en place pour Selenium (voir [DATA_TESTID_GUIDE.md](../DATA_TESTID_GUIDE.md)).
 
 Vitest n'entre pas en conflit avec `vue-cli-service` : c'est un outil de test autonome, il ne remplace ni la commande `serve` ni `build`.
 
@@ -58,14 +58,14 @@ Vitest n'entre pas en conflit avec `vue-cli-service` : c'est un outil de test au
 ### À ne PAS tester (source de fragilité ou de duplication)
 - **Pas de snapshot tests** : un simple changement de libellé Element Plus après montée de version ferait tout casser sans qu'il y ait de régression réelle.
 - **Pas d'assertions sur les classes CSS ou la structure DOM interne** d'Element Plus (`el-form-item__error`, etc.) — cibler les `data-testid` existants.
-- **Pas de re-test du parcours Keycloak/CSRF réel** : c'est le rôle de Selenium et des tests d'intégration backend (voir [TESTS_INTEGRATION_SANS_KEYCLOAK.md](TESTS_INTEGRATION_SANS_KEYCLOAK.md)).
+- **Pas de re-test du parcours Keycloak/CSRF réel** : c'est le rôle de Selenium et des tests d'intégration backend (voir [TESTS_INTEGRATION_SANS_KEYCLOAK.md](../TESTS_INTEGRATION_SANS_KEYCLOAK.md)).
 - **Pas de test des internes d'Element Plus lui-même** (ce n'est pas notre code).
 
 ---
 
 ## 5. Stratégie de mock
 
-Le module `services/api.js` centralise tous les appels Axios (voir [frontend/src/services/api.js](../frontend/src/services/api.js)). Dans les tests, ce module est mocké avec `vi.mock('@/services/api')` : on n'appelle jamais un backend réel, on vérifie uniquement que le composant appelle la bonne fonction avec les bons arguments et réagit correctement à la réponse (succès) ou au rejet (erreur) simulés.
+Le module `services/api.js` centralise tous les appels Axios (voir [frontend/src/services/api.js](../../frontend/src/services/api.js)). Dans les tests, ce module est mocké avec `vi.mock('@/services/api')` : on n'appelle jamais un backend réel, on vérifie uniquement que le composant appelle la bonne fonction avec les bons arguments et réagit correctement à la réponse (succès) ou au rejet (erreur) simulés.
 
 Ce point est important vis-à-vis de Renovate : une montée de version d'Axios peut changer la forme des objets d'erreur (`error.response` vs `error.cause`, etc.). Le mock doit reproduire fidèlement la forme réelle des erreurs Axios actuelles pour que le test reste pertinent après upgrade.
 
@@ -95,7 +95,7 @@ Convention de nommage : `<Composant>.spec.js`, à côté d'un dossier `tests/uni
 
 ## 7. Exemple illustratif (EmployeForm.vue)
 
-`EmployeForm.vue` (voir [frontend/src/components/EmployeForm.vue](../frontend/src/components/EmployeForm.vue)) est un bon candidat prioritaire : validation de formulaire, deux branches API (création/modification), gestion d'erreur, navigation différée. Extrait de la forme attendue d'un test (le fichier complet contiendrait plusieurs `it(...)` de ce type) :
+`EmployeForm.vue` (voir [frontend/src/components/EmployeForm.vue](../../frontend/src/components/EmployeForm.vue)) est un bon candidat prioritaire : validation de formulaire, deux branches API (création/modification), gestion d'erreur, navigation différée. Extrait de la forme attendue d'un test (le fichier complet contiendrait plusieurs `it(...)` de ce type) :
 
 ```js
 it("appelle createEmploye avec les données saisies", async () => {
@@ -145,7 +145,7 @@ Dans `pom.xml`, ajouter une exécution `npm run test:unit` entre `npm install` e
 Ajouter une étape (ou un `sh` supplémentaire dans l'étape Build existante, puisque le build Maven inclut déjà npm) qui publie `frontend/test-results.xml` via le step `junit` de Jenkins, à côté des rapports Surefire/Failsafe. Impact temps estimé : quelques secondes à ~1 minute selon le nombre de tests — négligeable sur le budget de 2h du pipeline CI.
 
 ### 9.5 Articulation avec le pipeline Renovate
-`Jenkinsfile-Renovate` construit déjà chaque PR (build + tests + OWASP Dependency-Check) avant merge automatique (voir [RENOVATE_AUTOMERGE_CI.md](RENOVATE_AUTOMERGE_CI.md)). Comme les tests unitaires frontend seraient exécutés au sein du build Maven standard, ils bénéficient automatiquement du même circuit d'automerge sans modification supplémentaire du pipeline Renovate — c'est le point qui répond directement au besoin initial : une PR Renovate qui casse le comportement d'`EmployeForm.vue` ou de `services/api.js` échouera la CI et restera bloquée en l'état, comme n'importe quelle régression backend aujourd'hui.
+`Jenkinsfile-Renovate` construit déjà chaque PR (build + tests + OWASP Dependency-Check) avant merge automatique (voir [RENOVATE_AUTOMERGE_CI.md](../RENOVATE_AUTOMERGE_CI.md)). Comme les tests unitaires frontend seraient exécutés au sein du build Maven standard, ils bénéficient automatiquement du même circuit d'automerge sans modification supplémentaire du pipeline Renovate — c'est le point qui répond directement au besoin initial : une PR Renovate qui casse le comportement d'`EmployeForm.vue` ou de `services/api.js` échouera la CI et restera bloquée en l'état, comme n'importe quelle régression backend aujourd'hui.
 
 ---
 

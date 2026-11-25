@@ -137,112 +137,145 @@ def parse_index(docs, index_text):
     return entries
 
 
-def lint(root):
-    report = Report()
-    docs = os.path.join(root, "rhDemo", "docs")
-    rel_docs = "rhDemo/docs/"
-    today = datetime.date.today()
-    md_names = all_md_names(root)
-    statuts = {}
+class _Linter:
+    """Contrôles de la documentation d'un dépôt ; les écarts vont dans self.report."""
 
-    names = sorted(f for f in os.listdir(docs) if f.endswith(".md") and f not in (INDEX_MD, LOG_MD))
-    if os.path.isdir(os.path.join(docs, ETUDES)):
-        names += sorted(ETUDES + "/" + f for f in os.listdir(os.path.join(docs, ETUDES)) if f.endswith(".md"))
-    def check_doc(rel, text, name=None):
+    def __init__(self, root):
+        self.report = Report()
+        self.root = root
+        self.docs = os.path.join(root, "rhDemo", "docs")
+        self.rel_docs = "rhDemo/docs/"
+        self.today = datetime.date.today()
+        self.md_names = all_md_names(root)
+
+    def run(self):
+        names = sorted(f for f in os.listdir(self.docs) if f.endswith(".md") and f not in (INDEX_MD, LOG_MD))
+        if os.path.isdir(os.path.join(self.docs, ETUDES)):
+            names += sorted(ETUDES + "/" + f for f in os.listdir(os.path.join(self.docs, ETUDES)) if f.endswith(".md"))
+        statuts = {}
+        for name in names + [INDEX_MD, LOG_MD]:
+            s = self.check_doc(self.rel_docs + name, read(os.path.join(self.docs, name)), name)
+            if s:
+                statuts[name] = s
+        self.check_index(names, statuts)
+        self.check_journal()
+        return self.report
+
+    # --- un document
+    def check_doc(self, rel, text, name=None):
         """Contrôles d'un document ; name = chemin relatif à docs/ (None hors docs/). Retourne le statut."""
         statut = None
         fm, err = parse_frontmatter(text)
         if err:
-            report.add("ERREUR", rel, err)
+            self.report.add("ERREUR", rel, err)
         if name in SANS_FRONTMATTER:
             if fm is not None:
-                report.add("ERREUR", rel, "ne doit pas avoir de frontmatter (modifié automatiquement par fixcve-auto)")
+                self.report.add("ERREUR", rel, "ne doit pas avoir de frontmatter (modifié automatiquement par fixcve-auto)")
             statut = SANS_FRONTMATTER[name]
         elif fm is None:
             # Hors docs/, le frontmatter est facultatif : seul le statut de l'index s'applique.
             if not err and name is not None:
-                report.add("ERREUR", rel, "frontmatter absent")
+                self.report.add("ERREUR", rel, "frontmatter absent")
         else:
-            s = fm.get("statut", "")
-            if s not in STATUTS:
-                report.add("ERREUR", rel, "statut invalide : %r (attendu : %s)" % (s, ", ".join(STATUTS)))
-            else:
-                statut = s
-            verifie = fm.get("verifie_le", "")
-            try:
-                verifie_date = datetime.date.fromisoformat(verifie)
-            except ValueError:
-                report.add("ERREUR", rel, "verifie_le invalide : %r (attendu AAAA-MM-JJ)" % verifie)
-                verifie_date = None
-            if "sources" not in fm:
-                report.add("ERREUR", rel, "champ sources absent")
-            for src in fm.get("sources", []):
-                if not os.path.exists(os.path.join(root, src)):
-                    report.add("ERREUR", rel, "source inexistante : %s" % src)
-            if s == "actif" and verifie_date:
-                if (today - verifie_date).days > FRESHNESS_DAYS:
-                    report.add("AVERTISSEMENT", rel, "non revérifié depuis %s (plus de %d jours)" % (verifie, FRESHNESS_DAYS))
-                for src in fm.get("sources", []):
-                    last = git_last_date(root, src)
-                    if last and last > verifie:
-                        report.add("AVERTISSEMENT", rel, "source modifiée le %s après verifie_le (%s) : %s" % (last, verifie, src))
+            statut = self.check_frontmatter(rel, fm)
+        self.check_content(rel, text, name, statut)
+        return statut
+
+    def check_content(self, rel, text, name, statut):
+        """Rangement selon le statut, liens et noms de fichiers .md cités."""
         if name is not None and statut and name.startswith(ETUDES + "/") != (statut in STATUTS_ETUDES):
-            report.add("ERREUR", rel, "statut %s : le document doit être dans %s" % (
-                statut, rel_docs + ETUDES + "/" if statut in STATUTS_ETUDES else rel_docs))
+            self.report.add("ERREUR", rel, "statut %s : le document doit être dans %s" % (
+                statut, self.rel_docs + ETUDES + "/" if statut in STATUTS_ETUDES else self.rel_docs))
         # Un doc historique ou journal n'est pas réécrit : son lien mort est signalé sans échouer.
-        check_links(report, root, rel, text,
+        check_links(self.report, self.root, rel, text,
                     "ERREUR" if statut in DOCS_VIVANTS + (None,) else "AVERTISSEMENT")
         if statut in DOCS_VIVANTS:
             for ref in sorted(set(RE_MD_NAME.findall(strip_code(text)))):
-                if ref not in md_names:
-                    report.add("AVERTISSEMENT", rel, "fichier .md cité mais introuvable dans le dépôt : %s" % ref)
+                if ref not in self.md_names:
+                    self.report.add("AVERTISSEMENT", rel, "fichier .md cité mais introuvable dans le dépôt : %s" % ref)
+
+    def check_frontmatter(self, rel, fm):
+        """Champs statut, verifie_le et sources. Retourne le statut, ou None s'il est invalide."""
+        s = fm.get("statut", "")
+        statut = s if s in STATUTS else None
+        if statut is None:
+            self.report.add("ERREUR", rel, "statut invalide : %r (attendu : %s)" % (s, ", ".join(STATUTS)))
+        verifie = fm.get("verifie_le", "")
+        try:
+            verifie_date = datetime.date.fromisoformat(verifie)
+        except ValueError:
+            self.report.add("ERREUR", rel, "verifie_le invalide : %r (attendu AAAA-MM-JJ)" % verifie)
+            verifie_date = None
+        if "sources" not in fm:
+            self.report.add("ERREUR", rel, "champ sources absent")
+        for src in fm.get("sources", []):
+            if not os.path.exists(os.path.join(self.root, src)):
+                self.report.add("ERREUR", rel, "source inexistante : %s" % src)
+        if s == "actif" and verifie_date:
+            self.check_freshness(rel, verifie, verifie_date, fm.get("sources", []))
         return statut
 
-    for name in names + [INDEX_MD, LOG_MD]:
-        s = check_doc(rel_docs + name, read(os.path.join(docs, name)), name)
-        if s:
-            statuts[name] = s
+    def check_freshness(self, rel, verifie, verifie_date, sources):
+        """Doc actif : revérification ancienne, ou source modifiée depuis la dernière vérification."""
+        if (self.today - verifie_date).days > FRESHNESS_DAYS:
+            self.report.add("AVERTISSEMENT", rel, "non revérifié depuis %s (plus de %d jours)" % (verifie, FRESHNESS_DAYS))
+        for src in sources:
+            last = git_last_date(self.root, src)
+            if last and last > verifie:
+                self.report.add("AVERTISSEMENT", rel, "source modifiée le %s après verifie_le (%s) : %s" % (last, verifie, src))
 
     # --- index
-    index = parse_index(docs, read(os.path.join(docs, INDEX_MD)))
-    for name in names:
-        key = os.path.normpath(os.path.join(docs, name))
-        if key not in index:
-            report.add("ERREUR", rel_docs + INDEX_MD, "document absent de l'index : %s" % name)
-        elif name in statuts and index[key] != statuts[name]:
-            report.add("ERREUR", rel_docs + INDEX_MD,
-                       "statut de %s : index=%s, document=%s" % (name, index[key], statuts[name]))
-    checked = set()
-    for key in sorted(index):
-        rel = os.path.relpath(key, root)
-        if not os.path.exists(key):
-            report.add("ERREUR", rel_docs + INDEX_MD, "entrée sans fichier : %s" % rel)
-        elif not key.startswith(os.path.normpath(docs) + os.sep) and key.endswith(".md"):
-            # Document hors docs/ référencé par l'index : mêmes contrôles, frontmatter facultatif.
-            checked.add(rel)
-            s = check_doc(rel, read(key))
-            if s and s != index[key]:
-                report.add("ERREUR", rel_docs + INDEX_MD,
-                           "statut de %s : index=%s, document=%s" % (rel, index[key], s))
-    for rel in ("README.md", "CLAUDE.md"):
-        if rel not in checked and os.path.exists(os.path.join(root, rel)):
-            check_links(report, root, rel, read(os.path.join(root, rel)))
+    def check_index(self, names, statuts):
+        index_rel = self.rel_docs + INDEX_MD
+        index = parse_index(self.docs, read(os.path.join(self.docs, INDEX_MD)))
+        for name in names:
+            key = os.path.normpath(os.path.join(self.docs, name))
+            if key not in index:
+                self.report.add("ERREUR", index_rel, "document absent de l'index : %s" % name)
+            elif name in statuts and index[key] != statuts[name]:
+                self.report.add("ERREUR", index_rel,
+                                "statut de %s : index=%s, document=%s" % (name, index[key], statuts[name]))
+        checked = self.check_index_entries(index)
+        for rel in ("README.md", "CLAUDE.md"):
+            if rel not in checked and os.path.exists(os.path.join(self.root, rel)):
+                check_links(self.report, self.root, rel, read(os.path.join(self.root, rel)))
+
+    def check_index_entries(self, index):
+        """Entrées de l'index : fichier présent ; document hors docs/ contrôlé. -> chemins contrôlés."""
+        index_rel = self.rel_docs + INDEX_MD
+        checked = set()
+        for key in sorted(index):
+            rel = os.path.relpath(key, self.root)
+            if not os.path.exists(key):
+                self.report.add("ERREUR", index_rel, "entrée sans fichier : %s" % rel)
+            elif not key.startswith(os.path.normpath(self.docs) + os.sep) and key.endswith(".md"):
+                # Document hors docs/ référencé par l'index : mêmes contrôles, frontmatter facultatif.
+                checked.add(rel)
+                s = self.check_doc(rel, read(key))
+                if s and s != index[key]:
+                    self.report.add("ERREUR", index_rel, "statut de %s : index=%s, document=%s" % (rel, index[key], s))
+        return checked
 
     # --- journal
-    last_date = None
-    for n, line in enumerate(read(os.path.join(docs, LOG_MD)).splitlines(), 1):
-        if not line.startswith("## ["):
-            continue
-        m = RE_LOG_ENTRY.match(line)
-        if not m:
-            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : entrée au mauvais format : %s" % (n, line[:60]))
-            continue
-        if m.group(2) not in OPERATIONS:
-            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : opération inconnue : %s" % (n, m.group(2)))
-        if last_date and m.group(1) < last_date:
-            report.add("ERREUR", rel_docs + LOG_MD, "ligne %d : entrée antérieure à la précédente (%s < %s)" % (n, m.group(1), last_date))
-        last_date = m.group(1)
-    return report
+    def check_journal(self):
+        log_rel = self.rel_docs + LOG_MD
+        last_date = None
+        for n, line in enumerate(read(os.path.join(self.docs, LOG_MD)).splitlines(), 1):
+            if not line.startswith("## ["):
+                continue
+            m = RE_LOG_ENTRY.match(line)
+            if not m:
+                self.report.add("ERREUR", log_rel, "ligne %d : entrée au mauvais format : %s" % (n, line[:60]))
+                continue
+            if m.group(2) not in OPERATIONS:
+                self.report.add("ERREUR", log_rel, "ligne %d : opération inconnue : %s" % (n, m.group(2)))
+            if last_date and m.group(1) < last_date:
+                self.report.add("ERREUR", log_rel, "ligne %d : entrée antérieure à la précédente (%s < %s)" % (n, m.group(1), last_date))
+            last_date = m.group(1)
+
+
+def lint(root):
+    return _Linter(root).run()
 
 
 def main(argv=None):

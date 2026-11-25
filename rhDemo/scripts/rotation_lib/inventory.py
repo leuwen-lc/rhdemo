@@ -67,10 +67,7 @@ def load(path=DEFAULT_PATH):
 
 
 def validate(inv):
-    errors = []
-    for key in ("periods", "services", "secrets"):
-        if key not in (inv or {}):
-            errors.append(f"clé racine « {key} » absente")
+    errors = [f"clé racine « {key} » absente" for key in ("periods", "services", "secrets") if key not in (inv or {})]
     if errors:
         return errors
     seen = set()
@@ -79,56 +76,89 @@ def validate(inv):
         if sid in seen:
             errors.append(f"{sid} : identifiant en double")
         seen.add(sid)
-        for k in ("num", "label", "criticality", "exposure", "rotation"):
-            if k not in e:
-                errors.append(f"{sid} : champ « {k} » absent")
-        if e.get("criticality") not in LEVELS:
-            errors.append(f"{sid} : criticité {e.get('criticality')} inconnue")
-        if e.get("exposure") not in EXPOSURES:
-            errors.append(f"{sid} : exposition {e.get('exposure')} inconnue")
+        errors += _validate_description(e, sid)
         method = (e.get("rotation") or {}).get("method")
         if method not in METHOD_KEYS:
             errors.append(f"{sid} : méthode {method} inconnue")
             continue
-        missing = METHOD_KEYS[method] - set(e["rotation"])
-        if missing:
-            errors.append(f"{sid} : {method} exige {', '.join(sorted(missing))}")
-        if e["rotation"].get("verify") not in (None, "smtp"):
-            errors.append(f"{sid} : vérification {e['rotation']['verify']} inconnue")
-        if e["rotation"].get("verify") == "smtp" and "smtp_credential" not in e["rotation"]:
-            errors.append(f"{sid} : verify smtp exige smtp_credential")
-        if not isinstance(e.get("blocking", False), bool):
-            errors.append(f"{sid} : blocking doit valoir true ou false")
-        life = e.get("lifetime_days")
-        if life is not None:
-            if isinstance(life, bool) or not isinstance(life, int) or life <= EXPIRY_MARGIN_DAYS:
-                errors.append(f"{sid} : lifetime_days doit être un entier > {EXPIRY_MARGIN_DAYS}")
-            if e.get("blocking") is not True:
-                errors.append(f"{sid} : lifetime_days exige blocking: true")
-        if e["rotation"].get("session") not in (None, *SESSIONS):
-            errors.append(f"{sid} : session {e['rotation']['session']} inconnue")
-        if method in NO_ROTATION and e.get("blocking"):
-            errors.append(f"{sid} : {method} ne peut pas être bloquant")
-        targets = e.get("targets") or []
-        if method in NEEDS_TARGETS and not targets:
-            errors.append(f"{sid} : {method} exige au moins une cible")
-        if method == "k8s-sa-token":
-            if any(t.get("kind") != "jenkins" or t.get("type") != "file" for t in targets):
-                errors.append(f"{sid} : {method} n'admet que des cibles jenkins de type file")
-            for k in ("allowed", "denied"):
-                if not all(isinstance(c, str) and c.strip() for c in e["rotation"].get(k, [])):
-                    errors.append(f"{sid} : {k} doit être une liste de vérifications auth can-i")
-        if method in NO_ROTATION and targets:
-            errors.append(f"{sid} : {method} n'admet aucune cible")
-        for t in targets:
-            kind = t.get("kind")
-            if kind not in TARGET_KEYS:
-                errors.append(f"{sid} : cible {kind} inconnue")
-            elif TARGET_KEYS[kind] - set(t):
-                errors.append(f"{sid} : cible {kind} incomplète")
-            elif kind == "jenkins" and t["type"] not in JENKINS_TYPES:
-                errors.append(f"{sid} : type Jenkins {t['type']} inconnu")
+        errors += _validate_rotation(e, sid, method)
+        errors += _validate_lifecycle(e, sid, method)
+        errors += _validate_targets(e, sid, method)
     return errors + _validate_emergency(inv)
+
+
+def _validate_description(e, sid):
+    """Champs obligatoires, criticité et exposition."""
+    errors = [f"{sid} : champ « {k} » absent" for k in ("num", "label", "criticality", "exposure", "rotation")
+              if k not in e]
+    if e.get("criticality") not in LEVELS:
+        errors.append(f"{sid} : criticité {e.get('criticality')} inconnue")
+    if e.get("exposure") not in EXPOSURES:
+        errors.append(f"{sid} : exposition {e.get('exposure')} inconnue")
+    return errors
+
+
+def _validate_rotation(e, sid, method):
+    """Paramètres exigés par la méthode, vérification après rotation."""
+    errors = []
+    rotation = e["rotation"]
+    missing = METHOD_KEYS[method] - set(rotation)
+    if missing:
+        errors.append(f"{sid} : {method} exige {', '.join(sorted(missing))}")
+    if rotation.get("verify") not in (None, "smtp"):
+        errors.append(f"{sid} : vérification {rotation['verify']} inconnue")
+    if rotation.get("verify") == "smtp" and "smtp_credential" not in rotation:
+        errors.append(f"{sid} : verify smtp exige smtp_credential")
+    return errors
+
+
+def _validate_lifecycle(e, sid, method):
+    """Secret bloquant, durée de vie, session à oublier en urgence."""
+    errors = []
+    if not isinstance(e.get("blocking", False), bool):
+        errors.append(f"{sid} : blocking doit valoir true ou false")
+    life = e.get("lifetime_days")
+    if life is not None:
+        if isinstance(life, bool) or not isinstance(life, int) or life <= EXPIRY_MARGIN_DAYS:
+            errors.append(f"{sid} : lifetime_days doit être un entier > {EXPIRY_MARGIN_DAYS}")
+        if e.get("blocking") is not True:
+            errors.append(f"{sid} : lifetime_days exige blocking: true")
+    if e["rotation"].get("session") not in (None, *SESSIONS):
+        errors.append(f"{sid} : session {e['rotation']['session']} inconnue")
+    if method in NO_ROTATION and e.get("blocking"):
+        errors.append(f"{sid} : {method} ne peut pas être bloquant")
+    return errors
+
+
+def _validate_targets(e, sid, method):
+    """Cibles exigées ou interdites par la méthode, puis chaque cible."""
+    errors = []
+    targets = e.get("targets") or []
+    if method in NEEDS_TARGETS and not targets:
+        errors.append(f"{sid} : {method} exige au moins une cible")
+    if method == "k8s-sa-token":
+        errors += _validate_k8s_sa_token(e, sid, method, targets)
+    if method in NO_ROTATION and targets:
+        errors.append(f"{sid} : {method} n'admet aucune cible")
+    for t in targets:
+        kind = t.get("kind")
+        if kind not in TARGET_KEYS:
+            errors.append(f"{sid} : cible {kind} inconnue")
+        elif TARGET_KEYS[kind] - set(t):
+            errors.append(f"{sid} : cible {kind} incomplète")
+        elif kind == "jenkins" and t["type"] not in JENKINS_TYPES:
+            errors.append(f"{sid} : type Jenkins {t['type']} inconnu")
+    return errors
+
+
+def _validate_k8s_sa_token(e, sid, method, targets):
+    errors = []
+    if any(t.get("kind") != "jenkins" or t.get("type") != "file" for t in targets):
+        errors.append(f"{sid} : {method} n'admet que des cibles jenkins de type file")
+    for k in ("allowed", "denied"):
+        if not all(isinstance(c, str) and c.strip() for c in e["rotation"].get(k, [])):
+            errors.append(f"{sid} : {k} doit être une liste de vérifications auth can-i")
+    return errors
 
 
 def _validate_emergency(inv):

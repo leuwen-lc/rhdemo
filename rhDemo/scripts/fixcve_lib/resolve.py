@@ -267,54 +267,62 @@ def reverify_pending(ctx, owasp_text, trivy_text):
     alerte si la distribution a publié un correctif (voir `alert_trivy_pending`)."""
     out = []
     lock = ctx.lock_index()
-    for block in parse_owasp(owasp_text or ""):
-        if not block["pending"] or not block["ecosystem"]:
-            continue
-        if not kind_of({"ecosystem": block["ecosystem"], "image": PROJECT_IMAGE}).reverifiable:
-            continue  # lib JS embarquée dans un jar : aucun registre à interroger, décision humaine
-        if block["ecosystem"] == "npm":
-            installed = sorted({v for (v, _) in lock.get(block["package"], []) if version_key(v)}, key=version_key)
-            targets = [(block["package"], installed[0])] if installed else []
-        else:
-            group, _, artifact = block["package"].partition(":")
-            try:
-                deps = ctx.maven_deps()
-            except RegistryError:
-                ctx.log(f"revérification {block['package']} impossible (dependency:list)")
-                continue
-            targets = [(ga, vs[0][0]) for ga, vs in deps.items()
-                       if ga.split(":")[0] == group and (artifact in ("*", "") or ga.split(":")[1] == artifact)]
-        for vid in block["ids"]:
-            for package, installed in targets:
-                try:
-                    kind, fixed, vuln_aliases = advisory_fix(ctx.osv, [vid], block["ecosystem"], package, installed)
-                except OsvError:
-                    kind, fixed, vuln_aliases = "error", None, []
-                if kind != "fix" or major(fixed) != major(installed):
-                    continue
-                try:
-                    published = (ctx.registry.npm_versions(package) if block["ecosystem"] == "npm"
-                                 else ctx.registry.maven_versions(*package.split(":", 1))) or []
-                except RegistryError:
-                    continue
-                if fixed in published:
-                    # Toutes les formes de la faille présentes dans le bloc (CVE + GHSA) : en retirer une
-                    # seule laisserait la suppression active pour l'autre.
-                    for same in [i for i in block["ids"] if i == vid or i in vuln_aliases]:
-                        out.append({"cve_id": same, "package": package,
-                                    "previous_note": ascii_text(html.unescape(block["notes"] or "")) or "(sans note)",
-                                    "new_fixed_version": fixed})
+    for block in filter(_reverifiable, parse_owasp(owasp_text or "")):
+        targets = _pending_targets(ctx, block, lock) or []
+        out += [entry for vid in block["ids"] for package, installed in targets
+                for entry in _reverified_entries(ctx, block, vid, package, installed)]
     for entry in parse_trivy(trivy_text or ""):
         if entry["pending"]:
             alert_trivy_pending(ctx, entry)
     # Dédoublonnage (un même CVE peut figurer dans deux blocs).
-    seen, unique = set(), []
+    unique = {}
     for e in out:
-        key = (e["cve_id"], e["package"])
-        if key not in seen:
-            seen.add(key)
-            unique.append(e)
-    return unique
+        unique.setdefault((e["cve_id"], e["package"]), e)
+    return list(unique.values())
+
+
+def _reverifiable(block):
+    """Suppression temporaire d'une dépendance du projet dont un registre peut être interrogé."""
+    # Lib JS embarquée dans un jar : aucun registre à interroger, décision humaine.
+    return bool(block["pending"] and block["ecosystem"]
+                and kind_of({"ecosystem": block["ecosystem"], "image": PROJECT_IMAGE}).reverifiable)
+
+
+def _pending_targets(ctx, block, lock):
+    """(paquet, version installée) visés par un bloc de suppression, ou None si inconnus."""
+    if block["ecosystem"] == "npm":
+        installed = sorted({v for (v, _) in lock.get(block["package"], []) if version_key(v)}, key=version_key)
+        return [(block["package"], installed[0])] if installed else []
+    group, _, artifact = block["package"].partition(":")
+    try:
+        deps = ctx.maven_deps()
+    except RegistryError:
+        ctx.log(f"revérification {block['package']} impossible (dependency:list)")
+        return None
+    return [(ga, vs[0][0]) for ga, vs in deps.items()
+            if ga.split(":")[0] == group and (artifact in ("*", "") or ga.split(":")[1] == artifact)]
+
+
+def _reverified_entries(ctx, block, vid, package, installed):
+    """Entrées pending_reverified si un correctif de même majeure est publié pour (vid, paquet)."""
+    try:
+        kind, fixed, vuln_aliases = advisory_fix(ctx.osv, [vid], block["ecosystem"], package, installed)
+    except OsvError:
+        return []
+    if kind != "fix" or major(fixed) != major(installed):
+        return []
+    try:
+        published = (ctx.registry.npm_versions(package) if block["ecosystem"] == "npm"
+                     else ctx.registry.maven_versions(*package.split(":", 1))) or []
+    except RegistryError:
+        return []
+    if fixed not in published:
+        return []
+    # Toutes les formes de la faille présentes dans le bloc (CVE + GHSA) : en retirer une
+    # seule laisserait la suppression active pour l'autre.
+    note = ascii_text(html.unescape(block["notes"] or "")) or "(sans note)"
+    return [{"cve_id": same, "package": package, "previous_note": note, "new_fixed_version": fixed}
+            for same in block["ids"] if same == vid or same in vuln_aliases]
 
 
 def alert_trivy_pending(ctx, entry):

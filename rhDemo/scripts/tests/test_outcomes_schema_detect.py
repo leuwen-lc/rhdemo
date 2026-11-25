@@ -136,6 +136,71 @@ class DetectTest(unittest.TestCase):
         doc = {"jenkins_build": 972, "stage": "owasp", "findings": found}
         schema.validate_detect(doc)
 
+    # Caractérisation de detect_owasp (avant son découpage, S3776) : rapport HTML réduit au
+    # balisage réellement émis par dependency-check (voir les expressions de fixcve-detect.py).
+    @staticmethod
+    def _block(header, *findings, pkg_line=""):
+        return (f'<h3 class="subsectionheader "><a name="x"></a>{header}</h3>'
+                + (f"<p>{pkg_line}</p>" if pkg_line else "") + "".join(findings))
+
+    @staticmethod
+    def _nvd(cve, scores=(), pkgurl=None, desc="desc", extra=""):
+        cvss = "".join(f"CVSSv{v}: <ul><li>Base Score: HIGH ({s})</li> <li>Vector: CVSS:{v}.1/AV:N/AC:L</li>"
+                       for v, s in scores)
+        button = f'<button data-pkgurl="pkg:{pkgurl}">suppress</button>' if pkgurl else ""
+        return f'<p><b><a name="{cve}" href="u">{cve}</a></b>{button}</p><p><pre>{desc}</pre>{extra}{cvss}'
+
+    def _detect(self, html):
+        self.detect.fetch = lambda path: html
+        return self.detect.detect_owasp(1)
+
+    def test_owasp_maven_score_le_plus_eleve_et_coordonnees(self):
+        html = self._block("tomcat-embed-core-11.0.27.jar", self._nvd(
+            "CVE-2026-10001", scores=((3, 7.5), (4, 9.1)),
+            pkgurl="maven/org.apache.tomcat.embed/tomcat-embed-core@11.0.27", desc="Faille Tomcat"))
+        [f] = self._detect(html)
+        self.assertEqual((f["finding_id"], f["ecosystem"], f["package_name"], f["installed_version"], f["cvss"],
+                          f["cvss_vector"], f["title"]),
+                         ("CVE-2026-10001", "maven", "org.apache.tomcat.embed:tomcat-embed-core", "11.0.27", 9.1,
+                          "CVSS:4.1/AV:N/AC:L", "Faille Tomcat"))
+        self.assertNotIn("advisory_aliases", f)
+
+    def test_owasp_sous_le_seuil_supprime_ou_inclassable_ignores(self):
+        html = self._block("a.jar",
+                           self._nvd("CVE-2026-10002", scores=((3, 6.9),), pkgurl="maven/g/a@1"),
+                           self._nvd("CVE-2026-10003", scores=((3, 9.8),), pkgurl="maven/g/a@1",
+                                     extra='<span class="suppressedLabel">suppressed</span>'))
+        html += self._block("b.jar", self._nvd("CVE-2026-10004", scores=((3, 9.8),)))  # ni data-pkgurl ni pkg:
+        self.assertEqual(self._detect(html), [])
+
+    def test_owasp_fenetre_par_finding_et_repli_sur_le_pkg_du_bloc(self):
+        """Deux findings d'un bloc : chacun son score ; sans bouton, coordonnées du pkg: du bloc."""
+        html = self._block("lodash", self._nvd("CVE-2026-10005", scores=((3, 7.1),)),
+                           self._nvd("CVE-2026-10006", scores=((3, 9.0),)), pkg_line="pkg:npm/lodash@4.17.20")
+        found = self._detect(html)
+        self.assertEqual([(f["finding_id"], f["package_name"], f["installed_version"], f["cvss"]) for f in found],
+                         [("CVE-2026-10005", "lodash", "4.17.20", 7.1), ("CVE-2026-10006", "lodash", "4.17.20", 9.0)])
+
+    def test_owasp_pkg_du_bloc_sans_version(self):
+        html = self._block("x", self._nvd("CVE-2026-10007", scores=((3, 8.0),)), pkg_line="pkg:maven/g/a")
+        [f] = self._detect(html)
+        self.assertEqual((f["package_name"], f["installed_version"]), ("g:a", "unknown"))
+
+    def test_owasp_alias_ghsa_npm_seulement(self):
+        refs = ('<a href="https://github.com/x/security/advisories/GHSA-aaaa-bbbb-cccc">r</a>'
+                '<a href="https://github.com/advisories/GHSA-aaaa-bbbb-cccc">r</a>')
+        npm = self._block("p", self._nvd("CVE-2026-10008", scores=((3, 9.0),), pkgurl="npm/p@1.0.0", extra=refs))
+        mvn = self._block("q", self._nvd("CVE-2026-10009", scores=((3, 9.0),), pkgurl="maven/g/q@1.0", extra=refs))
+        by_id = {f["finding_id"]: f for f in self._detect(npm + mvn)}
+        self.assertEqual(by_id["CVE-2026-10008"]["advisory_aliases"], ["GHSA-aaaa-bbbb-cccc"])
+        self.assertNotIn("advisory_aliases", by_id["CVE-2026-10009"])
+
+    def test_owasp_meme_cve_meme_paquet_dedoublonne_score_max(self):
+        """Même (CVE, paquet) listé dans deux blocs (« Related Dependencies ») : un finding, score max."""
+        html = (self._block("a", self._nvd("CVE-2026-10010", scores=((3, 7.5),), pkgurl="maven/g/a@1"))
+                + self._block("a bis", self._nvd("CVE-2026-10010", scores=((3, 8.8),), pkgurl="maven/g/a@1")))
+        self.assertEqual([(f["finding_id"], f["cvss"]) for f in self._detect(html)], [("CVE-2026-10010", 8.8)])
+
 
 if __name__ == "__main__":
     unittest.main()

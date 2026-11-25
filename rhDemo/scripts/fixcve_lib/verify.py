@@ -28,9 +28,9 @@ import xml.etree.ElementTree as ET
 
 from . import npm as npm_mod
 from .common import load_json, run
+from .rules import CVSS_FAIL_THRESHOLD as CVSS_THRESHOLD, PROJECT_IMAGE, kind_name, kind_of
 
 ODC_REPORT = "target/dependency-check-report.json"
-CVSS_THRESHOLD = 7.0
 
 
 def check_syntax(changed):
@@ -60,7 +60,7 @@ def key_of(action):
 def check_npm(actions, audit_doc=None):
     """Montées npm appliquées : effectives dans le lockfile et absentes de npm audit."""
     failed = []
-    upgrades = [a for a in actions if a["action"] == "upgrade" and a["ecosystem"] == "npm" and a["image"] == "rhdemo-app"]
+    upgrades = [a for a in actions if a["action"] == "upgrade" and kind_of(a).fix_target == "npm"]
     if not upgrades:
         return failed
     index = npm_mod.load_lock_index()
@@ -125,7 +125,8 @@ def odc_new_findings(report, known):
             if _score(vuln) < CVSS_THRESHOLD or not _ID_RE.match(vid) or (vid, name) in known or (vid, name) in seen:
                 continue
             seen.add((vid, name))
-            out.append({"finding_id": vid, "source": "owasp", "ecosystem": m.group(1), "image": "rhdemo-app",
+            out.append({"finding_id": vid, "source": "owasp", "ecosystem": m.group(1), "image": PROJECT_IMAGE,
+                        "component_kind": kind_name(m.group(1), PROJECT_IMAGE),
                         "package_name": name, "installed_version": m.group(3), "cvss": round(_score(vuln), 1),
                         "cvss_vector": _vector(vuln), "fixed_version_hint": None, "fixed_versions": [],
                         "title": _title(vuln)})

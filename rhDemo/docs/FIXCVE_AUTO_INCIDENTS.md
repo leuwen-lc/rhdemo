@@ -1,6 +1,6 @@
 ---
 statut: journal
-verifie_le: 2026-10-29
+verifie_le: 2026-11-25
 sources:
   - rhDemo/scripts/tests/
 ---
@@ -42,3 +42,6 @@ Chaque garde-fou de [FIXCVE_AUTO.md](FIXCVE_AUTO.md) vient d'un incident réel. 
 | #1097 (2026-11-24) | `spring-boot-security` 4.1.2 (CVE-2026-59414, CVSS 9.1) bloqué « sans correctif » alors que Spring Boot 4.1.3 le corrige : module de Spring Boot (version en dur dans le BOM) non montable, rattaché par préfixe au BOM de Spring Framework, cause d'échec écrasée au journal. Constat associé : surcharges de version restées en place après une montée du parent, devenues des rétrogradations | Montée du parent pour un module de Spring Boot ; BOM importé retenu seulement s'il liste l'artefact ; épinglage `<dependencyManagement>` hors BOM ; nettoyage des surcharges « Fix » périmées ; cause gardée, blocage avec correctif publié compté `tooling` | `test_fixcve_maven_bom` (`IncidentCycleTest.test_cycle_du_build_1097`, `ImportedBomTest.test_prefixe_sans_appartenance_epingle`, `CleanupTest`) |
 | #1102 à #1104 (2026-11-24) | Montée du parent Spring Boot 4.1.3 : Tomcat passe en 11.0.27 par ricochet, CVE-2026-116830 (8,7) que Dependency-Check ne voit pas sur 11.0.25 ; la vérification locale ignorait une CVE nouvelle sur un paquet non monté directement, la CI l'a vue et le correctif a été annulé puis refait à l'identique (boucle jusqu'à la halte) | CVE nouvelles du rescan local ajoutées au cycle et retraitées une fois avant push (`new_findings`) | `test_apply_verify.VerifyTest.test_1102_cve_nouvelle_par_ricochet_retraitee` |
 | #1106, #1107 (2026-11-24) | Malgré le retraitement des CVE nouvelles, Tomcat 11.0.27 non monté : le rescan local désactivait OSS Index, seule source qui relie CVE-2026-116830 (fiche NVD sans plages de versions) à cette version ; la CI, elle, l'interroge | Rescan local avec OSS Index (credential `ossindex-credentials` passé au job, `.mvn/ci-settings.xml`) | `test_apply_verify.OdcRunTest.test_oss_index_comme_en_ci_si_compte_present` |
+| Rejeu 2026-11-25 : #710, #718/#734, #735 à #745, #772 à #802, #890, #972, #975 | Règles de cycle du poller sans test de comportement (`poll-sandbox.sh` retiré) | Règles sorties du Bash dans `fixcve_lib/cycle.py` (fonctions pures) | `test_cycle` (`SameCauseTest`, `NoActionTest`, `HaltTest`, `PartialVerdictTest`), `test_poll_smoke` |
+| #972 (revu le 2026-11-25) | Recherche d'un finding du correctif dans l'extrait d'échec par sous-chaîne : `CVE-2026-1160` trouvé dans `CVE-2026-116804`, rollback à tort possible | Identifiant entier | `test_cycle.PartialVerdictTest.test_972_echec_sur_finding_non_detecte_garde_le_correctif` |
+| #812 (revu le 2026-11-25) | Nature du composant recalculée dans six modules à partir de `image` et `ecosystem` | `component_kind` calculé une fois (`rules.py`), cohérence vérifiée par le validateur | `test_rules.KindTest.test_812_jar_image_tierce_ne_passe_pas_pour_le_pom` |

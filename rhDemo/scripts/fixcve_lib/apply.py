@@ -11,6 +11,7 @@ import os
 from . import advisories, edits, suppressions
 from .common import clean_text
 from .policy import downgrade_failed_upgrade
+from .rules import kind_of
 
 
 def _read(path):
@@ -55,13 +56,16 @@ class Applier:
     # --- montées de version --------------------------------------------------------------
     def _upgrade_group(self, group):
         a0 = group[0]
-        if a0["image"] != "rhdemo-app":
+        target = kind_of(a0).fix_target
+        if target == "image":
             current = self.image_refs.get(a0["image"])
             if current is None:
                 return "failed", f"reference d'image {a0['image']} introuvable dans Jenkinsfile-CI"
             return edits.image_upgrade(a0["image"], current, a0["target_version"], a0["target_digest"])
+        if target != "pom":
+            return "failed", f"aucune montee automatique pour un composant {kind_of(a0).name}"
         ids = sorted({i for a in group for i in a["ids"]})
-        if a0["ecosystem"] == "npm":
+        if target == "npm":
             return edits.npm_upgrade(a0["package_name"], a0["target_version"])
         return edits.maven_upgrade(a0["package_name"], a0["installed_version"], a0["target_version"],
                                    ids, self.registry, baseline_pom=self.baseline_pom)
@@ -70,7 +74,7 @@ class Applier:
         groups = {}
         for a in actions:
             if a["action"] == "upgrade":
-                gkey = a["image"] if a["image"] != "rhdemo-app" else a["package_name"]
+                gkey = a["image"] if kind_of(a).fix_target == "image" else a["package_name"]
                 groups.setdefault(gkey, []).append(a)
         out = []
         for a in actions:
@@ -84,7 +88,7 @@ class Applier:
             for a in group:
                 if status == "applied":
                     version = edits.installed_npm_version(a["package_name"]) if (
-                        a["ecosystem"] == "npm" and a["image"] == "rhdemo-app") else a["target_version"]
+                        kind_of(a).fix_target == "npm") else a["target_version"]
                     out.append(dict(a, applied_detail=detail, applied_version=version))
                     self._touch_for(a)
                 elif status == "already":
@@ -94,9 +98,10 @@ class Applier:
         return out
 
     def _touch_for(self, action):
-        if action["image"] != "rhdemo-app":
+        target = kind_of(action).fix_target
+        if target == "image":
             self.changed.update(p for p in edits.IMAGE_FILES if os.path.exists(p))
-        elif action["ecosystem"] == "npm":
+        elif target == "npm":
             self.changed.update(["frontend/package.json", "frontend/package-lock.json"])
         else:
             self.changed.add(edits.POM)

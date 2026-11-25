@@ -141,7 +141,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](etudes/CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](etudes/TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
 | [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), kubeconfigs et mode urgence (`--emergency`) le 2026-11-23 ; restent rappel périodique, clé AGE et la création de tokens par Secret (remontée vers l'administration du cluster) |
-| [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) | proposition | Isolation des règles métier de fixcve-auto : type de composant nommé, configuration unique, décision de cycle sortie du Bash |
+| [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) | proposition | Isolation des règles métier de fixcve-auto : P1 à P4 appliqués le 2026-11-25, validation `DRY_RUN` dans Jenkins à faire avant passage en historique ; options de réécriture Python ou Java |
 
 ---
 

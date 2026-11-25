@@ -5,6 +5,8 @@ donc aucun contenu externe (titre de CVE) recopié dans un fichier versionné.
 """
 import datetime
 
+from .rules import CVSS_BLOCKING
+
 ADVISORIES_FILE = "docs/SECURITY_ADVISORIES.md"
 
 _CRITERION_TEXT = {
@@ -31,7 +33,7 @@ def suppression_note(action, build):
         body = f"Critère A ({action['criterion']}) : {criterion_text(action['criterion'])}. Aucun correctif publié dans la branche installée."
     else:
         body = ("Critère B : aucun correctif publié dans la branche installée (avis OSV + registre), "
-                "CVSS < 9.0 ; acceptation temporaire revérifiée à chaque cycle.")
+                f"CVSS < {CVSS_BLOCKING} ; acceptation temporaire revérifiée à chaque cycle.")
         head = "[PENDING_UPSTREAM_FIX] " + head
     return f"{head} {body} Remédiation automatique build #{build}."
 

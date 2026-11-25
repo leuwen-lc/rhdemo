@@ -208,7 +208,8 @@ class EvaluatePartialValidationTest(unittest.TestCase):
                     f"json.dump({{'findings': {findings!r}}}, open(sys.argv[3], 'w'))\n"
                     "print('FIXCVE_DETECT_RESULT: OK', len(sys.argv))\n")
         script = (f'log() {{ :; }}; CYCLE_DIR={self.tmp.name}; CYCLE_PLACEHOLDER=x; DETECT_SCRIPT={self.detect}; '
-                  f'VALIDATE_SCRIPT={self.validate}; capture_failure_context() {{ :; }}; '
+                  f'VALIDATE_SCRIPT={self.validate}; CYCLE_SCRIPT={os.path.join(helpers.SCRIPTS, "fixcve-cycle.py")}; '
+                  'capture_failure_context() { :; }; '
                   f'. {LIB}; eval "$(sed -n \'/^evaluate_partial_validation() {{/,/^}}/p\' {self.POLL})"; '
                   f'cd {self.repo}; evaluate_partial_validation 975 owasp \'{json.dumps(original)}\' {fix}; '
                   'echo "$PARTIAL_VERDICT|$PARTIAL_REASON|$PARTIAL_NEXT_STAGE"')

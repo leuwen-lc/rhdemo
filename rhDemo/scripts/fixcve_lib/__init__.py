@@ -1,6 +1,8 @@
 """Bibliothèque déterministe de fixcve-auto (aucun LLM).
 
 Modules :
+  rules        règles métier : seuils, images, nature du composant, constantes de cycle
+  cycle        règles de cycle du poller (haltes, mémoire « même cause », verdict de validation)
   common       versions, JSON, sous-processus
   osv          avis OSV.dev (plage corrigée par branche, alias CVE <-> GHSA)
   registry     versions publiées : Maven Central, npm, registres d'images

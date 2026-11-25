@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-24
+verifie_le: 2026-11-25
 sources:
   - rhDemo/Jenkinsfile-FixCVE
   - rhDemo/scripts/fixcve-state.sh
@@ -9,6 +9,7 @@ sources:
   - rhDemo/scripts/fixcve-classify.py
   - rhDemo/scripts/fixcve-detect.py
   - rhDemo/scripts/fixcve-apply.py
+  - rhDemo/scripts/fixcve-cycle.py
   - rhDemo/scripts/fixcve_lib/
 ---
 
@@ -44,6 +45,12 @@ cron de secours horaire ────────┘   └─> fixcve-state.sh (a
 ```
 
 Tout le code est dans [`rhDemo/scripts/`](../scripts/) : les points d'entrée `fixcve-*.py` et la bibliothèque [`fixcve_lib/`](../scripts/fixcve_lib/__init__.py) (un module par responsabilité, décrits dans son `__init__.py`).
+
+Les règles métier sont isolées (choix expliqués dans [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md)) :
+
+- **`fixcve_lib/rules.py`** : seuils CVSS, images surveillées et remédiables, constantes de cycle (haltes, délais), et la **nature du composant** (`component_kind` : `project_maven`, `project_npm`, `jar_embedded_js`, `image_os`, `image_embedded_jar`), calculée une fois à la détection et qui dit où se fait la montée et quels critères A s'appliquent. Aucune de ces valeurs n'est recopiée ailleurs (contrôlé par `tests/test_rules.py`).
+- **`fixcve_lib/policy.py`** : table de décision par finding (`decide`, sur des valeurs simples).
+- **`fixcve_lib/cycle.py`** : règles de cycle du poller (haltes, mémoire « même cause », verdict de la validation), fonctions pures appelées par `fixcve-cycle.py`. Le poller Bash n'exécute que les effets (Jenkins, git, journal) puis installe le nouvel état calculé ; un push en échec laisse l'état inchangé.
 
 ### Étapes et sources de vérité
 
@@ -99,13 +106,13 @@ Générées, jamais rédigées : toutes les formes connues de la faille (`<cve>`
 | **Checkout neuf à chaque passage** | Espace de travail jetable de l'agent, placé sur `origin/<branche du job>` à jour : jamais d'arbre sale hérité d'un cycle interrompu. |
 | **Push refusé** | origin a avancé pendant le cycle (merge Renovate) : si tous les commits locaux sont ceux du bot, rebase sur origin puis push (`scripts/fixcve-git-sync.sh`) ; sinon ou en cas de conflit, échec du passage sans mise à jour de l'état, le suivant recommence. |
 | **Revert limité aux commits du bot** | Le rollback n'annule qu'un commit dont l'auteur est `RHDemo FixCVE Bot` et présent sur la branche : un état altéré ne peut pas faire annuler un commit quelconque. |
-| **Validation de schéma** | `fixcve-validate-json.py` entre chaque étape (`detect`, `lookup`, `plan`) : clés exactes, regex/enum, référence croisée, une action et une seule par finding, critère B interdit au-dessus de 9.0, version Trivy imposée pour une image. |
+| **Validation de schéma** | `fixcve-validate-json.py` entre chaque étape (`detect`, `lookup`, `plan`) : clés exactes, regex/enum, référence croisée, une action et une seule par finding, critère B interdit à partir du seuil bloquant (`CVSS_BLOCKING`), version Trivy imposée pour une image, `component_kind` cohérent avec l'écosystème et l'image (un jar d'image tierce ne passe jamais pour une dépendance du pom.xml, #812). |
 | **Vérification locale avant push** | Syntaxe de chaque fichier modifié ; npm : copies du lockfile et `npm audit` ; OWASP : rescan Dependency-Check local (clé NVD lue dans l'environnement par le plugin, OSS Index activé comme en CI avec le credential `ossindex-credentials`, cache de 7 jours partagé : sans lui, une faille que seul OSS Index relie à la version passait jusqu'à la CI, builds #1102 à #1107) — aucun finding traité ne doit subsister. Une CVE nouvelle (≥ 7, sur n'importe quel paquet : une montée du parent ou un nettoyage change des versions par ricochet) n'est plus ignorée : elle est ajoutée aux findings du cycle, recherchée, classée et le plan réappliqué **une fois** avant le push (build #1102 : Tomcat 11.0.27 amené par Spring Boot 4.1.3, CVE-2026-116830, que la CI avait fait annuler) ; si le rescan en trouve encore, le cycle échoue avant le push. La base NVD est celle de `RHDemo-CI` (volume Maven partagé, voir [Cache NVD](#cache-nvd)) ; tout rapport antérieur est supprimé avant le scan : un scan interrompu ne relit jamais un vieux rapport. Sans clé NVD : événement `local_validation_incomplete`, la preuve revient au build CI. Trivy : pas de scan local, preuve par le build CI. |
 | **Deux commits** | Le correctif, puis le journal : un rollback (`git revert` du seul correctif) ne touche jamais au journal append-only. |
 | **Validation par SHA** | La phase B ne juge que le build dont le commit contient le correctif (`git merge-base --is-ancestor`), jamais un build intercalé (#749/#750). |
 | **Validation par non-régression** | Build rouge après correctif : conservé si les findings traités ont disparu sans nouveau finding (`validation_partial`), ou si le stage d'origine est propre et l'échec porte sur le scan suivant (`validation_stage_cleared`, #890), ou si le détecteur ne voit rien alors que le build échoue sur ce même stage sans citer aucun finding du correctif (#972), ou si le correctif se réduit à des suppressions/documentation, que tous ses findings ont disparu et qu'une CVE nouvelle apparaît (cause indépendante, #975 ; fonction `fix_commit_only_suppressions`) ; sinon rollback. Un `git revert` en conflit est abandonné (`revert_fix_commit`) : le correctif est conservé, événement `rollback_conflict`, attente humaine (#975). Cause réelle du rollback journalisée (`failure_stage`, `failure_detail`, #819). |
 | **Haltes** | 2 rollbacks consécutifs, 2 échecs pré-push consécutifs (étape en échec, schéma invalide, vérification locale), 2 pushes « sans finding » consécutifs. |
-| **Anti-boucles** | Blocage confirmé : silence 48 h sur le même code source ; blocage transitoire : 1 h, 3 essais, sans commit ; hors périmètre (ni Trivy ni OWASP) : jamais committé ; « déjà corrigé sur HEAD » : aucun commit. |
+| **Anti-boucles** | Une seule mémoire « même cause » dans `state.json` (`same_cause` : nature, SHA du code source, depuis, délai, essais) : blocage confirmé, silence 48 h sur le même code source ; recherche en panne, 1 h, 3 essais, sans commit ; stage Trivy/OWASP sans CVE exploitable, notifié une fois par code source. Hors périmètre (ni Trivy ni OWASP) : jamais committé ; « déjà corrigé sur HEAD » : aucun commit. L'ancien format (`blocked_confirmed`, `no_action_confirmed`) est relu et converti au premier passage. |
 | **Un passage à la fois** | `disableConcurrentBuilds()` du job, `flock` sur `poll.lock` du volume d'état, un seul conteneur d'agent pour tout le nuage Docker (jamais en même temps qu'un build CI). Durée maximale d'un passage : 30 min. |
 | **Journal d'audit append-only** | `rhDemo/docs/fixcve-audit.jsonl` (vue `fixcve-audit.md` générée), un `outcome_code` par événement. |
 
@@ -159,6 +166,7 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 ## Tests
 
 - `rhDemo/scripts/tests/run-all.sh` : tests unitaires hors réseau (OSV, registres, npm injectés), dont les incidents réels rejoués à partir des archives de cycle (`tests/fixtures/`) — registre dans [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md).
+- `tests/test_cycle.py` : règles de cycle rejouées sur les incidents ; `tests/test_poll_smoke.py` : poller exécuté de bout en bout avec un faux Jenkins et un dépôt local (câblage des règles, état, push, halte).
 - Poller complet : dans Jenkins, job `RHDemo-FixCVE` avec `DRY_RUN` coché (cycle réel sur une copie de l'état, sans push), éventuellement avec `ACTION=replay` sur un build en échec.
 
 ---

@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 
 from .common import is_prerelease, run, version_key
+from .rules import REMEDIABLE_IMAGES
 
 TIMEOUT_SECONDS = 15
 _ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -20,16 +21,8 @@ _NPM_NAME_RE = re.compile(r"^(@[a-z0-9._-]+/)?[a-z0-9._-]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9._+-]{1,60}$")
 _TAG_RE = re.compile(r"^v?[0-9][A-Za-z0-9._-]{0,127}$")
 
-# Jeton d'image (champ `image` de detected.json) -> dépôt de registre. Doit rester aligné sur
-# TRIVY_IMAGES de fixcve-detect.py et sur les variables *_IMAGE de Jenkinsfile-CI.
-IMAGES = {
-    "keycloak": {"registry": "registry-1.docker.io", "path": "keycloak/keycloak",
-                 "repository": "keycloak/keycloak", "variable": "KEYCLOAK_IMAGE"},
-    "nginx": {"registry": "registry-1.docker.io", "path": "library/nginx",
-              "repository": "nginx", "variable": "NGINX_IMAGE"},
-    "postgres": {"registry": "registry-1.docker.io", "path": "library/postgres",
-                 "repository": "postgres", "variable": "POSTGRES_IMAGE"},
-}
+# Jeton d'image (champ `image` de detected.json) -> dépôt de registre : voir rules.py.
+IMAGES = REMEDIABLE_IMAGES
 
 _MANIFEST_ACCEPT = ", ".join([
     "application/vnd.oci.image.index.v1+json",

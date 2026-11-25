@@ -6,6 +6,8 @@ critère A (`blocked_no_fix_ge9`, « échec conforme »). Tout autre échec est 
 import collections
 import json
 
+from .rules import CVSS_BLOCKING
+
 SUCCESS = {"fixed", "already_fixed", "accepted_permanent", "accepted_temporary"}
 CONFORMING = {"blocked_no_fix_ge9"}
 # Défauts de la procédure, comptés dans le taux d'échec.
@@ -43,7 +45,7 @@ def legacy_outcome(event):
         if "lookup_failed" in text or "introuvable" in text:
             return "lookup_gap"
         cvss = event.get("cvss")
-        if isinstance(cvss, (int, float)) and cvss >= 9.0:
+        if isinstance(cvss, (int, float)) and cvss >= CVSS_BLOCKING:
             return "blocked_no_fix_ge9"
         return "policy"
     return None

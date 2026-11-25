@@ -10,6 +10,13 @@ sources:
 
 # fixcve-auto : isoler les règles métier
 
+> **Bilan au 2026-11-25 : P1 à P4 appliqués**, dans l'ordre P2, P1, P4, P3 (voir [FIXCVE_AUTO.md](../FIXCVE_AUTO.md)). Reste à faire avant de passer cette étude en `historique` : un passage du job `RHDemo-FixCVE` en `DRY_RUN`, puis un premier cycle réel, avec le poller recâblé. Écarts par rapport à la proposition :
+>
+> - P1 : la nature `image_embedded_jar` couvre aussi une bibliothèque npm vue par Trivy dans une image tierce ; un paquet système de l'image du projet est `image_os`, comme ceux des images tierces.
+> - P3 : la mémoire unique `same_cause` garde une seule cause à la fois. Seul effet de bord identifié : une cause « no action » sur un code source déjà marqué « bloqué » remplace le blocage. Ce cas est borné par la halte après 2 pushes « no action ».
+> - P3 : la recherche d'un finding du correctif dans l'extrait d'échec (#972) porte désormais sur l'identifiant entier, et non plus sur une sous-chaîne.
+> - Les règles d'exécution non décisionnelles (validation par SHA, extraction du stage fautif depuis la console Jenkins) restent dans le Bash.
+
 Étude du 2026-11-25. Elle fait suite à [FIXCVE_AUTO_REFONTE.md](FIXCVE_AUTO_REFONTE.md), dont les éléments F, G et H ne sont pas faits. Fonctionnement actuel : [FIXCVE_AUTO.md](../FIXCVE_AUTO.md). Incidents à l'origine des garde-fous : [FIXCVE_AUTO_INCIDENTS.md](../FIXCVE_AUTO_INCIDENTS.md).
 
 **Constat en une phrase** : la *décision* sur un finding est déjà isolée (`fixcve_lib/policy.py`, testée par `tests/test_policy.py`). Ce qui s'est dispersé au fil des incidents, ce sont **les notions qui alimentent cette décision** (de quel type de composant s'agit-il ?) et **les règles de cycle** (quand réessayer, quand s'arrêter), écrites en Bash.

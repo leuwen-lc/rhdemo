@@ -15,7 +15,8 @@ import re
 from . import npm as npm_mod
 from .common import ascii_text, compare, is_prerelease, major, numeric, run, same_minor, version_key
 from .osv import OsvError, advisory_fix, distro_fixes
-from .registry import IMAGES, RegistryError
+from .registry import RegistryError
+from .rules import PROJECT_IMAGE, REMEDIABLE_IMAGES as IMAGES, kind_of
 from .suppressions import OWASP_FILE, TRIVY_FILE, parse_owasp, parse_trivy
 
 JENKINSFILE = "Jenkinsfile-CI"
@@ -229,13 +230,12 @@ def resolve_image(finding, ctx):
 
 
 def resolve_finding(finding, ctx):
+    resolvers = {"image_os": resolve_image, "image_embedded_jar": resolve_image,
+                 "project_npm": resolve_npm, "project_maven": resolve_maven_project}
+    resolver = resolvers.get(kind_of(finding).name)
     try:
-        if finding["image"] != "rhdemo-app" or finding["ecosystem"] == "docker":
-            return resolve_image(finding, ctx)
-        if finding["ecosystem"] == "npm":
-            return resolve_npm(finding, ctx)
-        if finding["ecosystem"] == "maven":
-            return resolve_maven_project(finding, ctx)
+        if resolver:
+            return resolver(finding, ctx)
     except OsvError:
         return _entry(finding, "lookup_failed")
     return _entry(finding, "no_fix_available")
@@ -270,7 +270,7 @@ def reverify_pending(ctx, owasp_text, trivy_text):
     for block in parse_owasp(owasp_text or ""):
         if not block["pending"] or not block["ecosystem"]:
             continue
-        if block["ecosystem"] == "javascript":
+        if not kind_of({"ecosystem": block["ecosystem"], "image": PROJECT_IMAGE}).reverifiable:
             continue  # lib JS embarquée dans un jar : aucun registre à interroger, décision humaine
         if block["ecosystem"] == "npm":
             installed = sorted({v for (v, _) in lock.get(block["package"], []) if version_key(v)}, key=version_key)

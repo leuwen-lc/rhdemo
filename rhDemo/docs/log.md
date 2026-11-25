@@ -514,3 +514,8 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 - Nouvelle étude [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) (proposition) : inventaire des règles dispersées (seuil CVSS en 4 copies, liste d'images en 3 copies, type de composant recalculé dans 6 modules, règles de cycle dans `fixcve-auto-poll.sh`) et propositions P1 à P4.
 - Puis ajout de la section 3 : impact d'une réécriture complète du poller en Python (périmètre, bénéfices, risques, bascule en parallèle) ; recommandée seulement après P3.
 - Puis ajout de la section 4 : hypothèse d'une réécriture complète en Java (module Maven séparé, dépendances et circularité, comparaison des trois options).
+
+## [2026-11-25] ingest | Isolation des règles métier de fixcve-auto (P1 à P4)
+
+- Code : `fixcve_lib/rules.py` (seuils, images, natures de composant, constantes de cycle), `fixcve_lib/cycle.py` et `fixcve-cycle.py` (règles de cycle du poller, mémoire unique `same_cause`), `policy.decide` ; `fixcve-auto-poll.sh` n'exécute plus que les effets.
+- [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : organisation des règles, anti-boucles (`same_cause`), tests. [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) : trois lignes ajoutées (rejeu des règles de cycle, recherche d'identifiant #972, nature du composant #812). [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : bilan en tête, reste en `proposition` jusqu'à la validation `DRY_RUN`.

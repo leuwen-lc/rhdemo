@@ -68,9 +68,9 @@ Exposition : d'où un secret volé est **exploitable**, indépendamment de l'end
 | 23 | Mot de passe de l'utilisateur `admin` d'OpenBao | KeePassXC | Lire et écrire tous les secrets d'OpenBao | C | Local |
 | 24 | Clé de déverrouillage d'OpenBao | KeePassXC et papier | Déverrouiller OpenBao, recréer un jeton root | C | Local |
 
-### 1.2 Hors périmètre (quota de lecture seulement)
+### 1.2 Accès en lecture seule (quotas)
 
-`nvd-api-key`, `ossindex-credentials`, `renovate-github-token` (lecture des dépôts publics), `dockerhub-renovate-readonly` (« Public Repo Read-only »). `notification-email` n'est pas un secret mais une donnée personnelle masquée.
+`renovate-github-token` (#25, lecture des dépôts publics), `dockerhub-renovate-readonly` (#26, « Public Repo Read-only »), `nvd-api-key` (#27) et `ossindex-credentials` (#28) ne donnent qu'un quota de lecture. D'abord laissés hors périmètre, ils sont entrés dans l'inventaire (rotation `manual-value`, criticité M) après l'expiration du token GitHub constatée le 2026-11-25 : expirés ou révoqués, ils cassent Renovate ou Dependency-Check, et `--check` comme `--emergency` doivent les connaître. Les jetons GitHub et Docker Hub ont une expiration imposée (bloquants). `notification-email` n'est pas un secret mais une donnée personnelle masquée.
 
 ### 1.3 Constats faits pendant l'inventaire
 

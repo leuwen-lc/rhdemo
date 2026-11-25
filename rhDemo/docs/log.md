@@ -503,3 +503,8 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 - `infra/stagingkub/README.md` : les deux tables de comparaison avec ephemere sont remplacées par un renvoi à `ENVIRONMENTS.md` ; le tableau de versions (Kubernetes, Cilium, NGF, PostgreSQL, Keycloak) et les versions du schéma d'architecture sont remplacés par un renvoi aux fichiers sources (`kind-config.yaml`, `scripts/components/`, `helm/rhdemo/values.yaml`).
 - NetworkPolicies : [SECURITE_NETWORK_POLICY.md](SECURITE_NETWORK_POLICY.md) garde la conception (flux, matrice, Cilium, flux externes) et reçoit les flux Prometheus vers kubelet/CoreDNS et AlertManager qui n'étaient que dans le README ; `infra/stagingkub/networkpolicies/README.md` garde l'exploitation et reçoit les tests de connectivité et de blocage et le dépannage complet du doc (fusionné avec le sien).
 - RBAC Jenkins : la section `jenkins-deployer` de `infra/stagingkub/rbac/README.md` renvoie à [SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md](SECURITE_JENKINS_SERVICEACCOUNT_RBAC.md) ; le README garde le détail de `jenkins-infra-upgrader`.
+
+## [2026-11-25] ingest | Rotation des accès en lecture seule
+
+- `secrets/inventory.yaml` : ajout de `dockerhub-renovate-readonly` (#26, OpenBao, bloquant, 365 jours), `nvd-api-key` (#27) et `ossindex-credentials` (#28) (credentials Jenkins), en `manual-value`, criticité M. Seul le mot de passe est remplacé, l'identifiant est conservé.
+- [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) §1.2 : ces accès ne sont plus hors périmètre. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) : tâches récurrentes complétées.

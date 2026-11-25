@@ -112,6 +112,9 @@ pipeline {
         stage('🛠️ Checkout') {
             steps {
                 script {
+                    // Lu par le post { always } : un échec avant ce stage (credential OpenBao illisible à
+                    // l'ouverture du bloc environment) laisse le post sans agent ni espace de travail.
+                    env.CI_AGENT_READY = 'true'
                     // Charger la bibliothèque
                     def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
@@ -1909,69 +1912,76 @@ YMLEOF
     post {
         always {
             script {
-                // Charger la bibliothèque
-                def lib = load 'rhDemo/vars/rhDemoLib.groovy'
+                if (env.CI_AGENT_READY != 'true') {
+                    // Aucun stage exécuté : rien à nettoyer, et load/sh échoueraient sans agent en
+                    // masquant la vraie cause (plus haut dans la console).
+                    echo "⚠️  Échec avant le premier stage : nettoyage sans objet. Cause la plus fréquente : " +
+                         "OpenBao arrêté ou scellé (infra/jenkins-docker : docker compose up -d openbao, puis openbao/unseal.sh)."
+                } else {
+                    // Charger la bibliothèque
+                    def lib = load 'rhDemo/vars/rhDemoLib.groovy'
 
-                lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
+                    lib.printSectionHeader("Pipeline CI terminé: ${currentBuild.currentResult}")
 
-                // Filet de sécurité (idempotent) : SonarQube reste démarré si l'analyse échoue
-                // ou si le build est interrompu avant le post de la Quality Gate.
-                if (params.RUN_SONAR) {
-                    lib.stopSonarQube()
-                }
-
-                // Nettoyage de l'environnement ephemere
-                if (!params.KEEP_EPHEMERE_ENV) {
-                    echo "🧹 Nettoyage de l'environnement ephemere..."
-
-                    // Déconnecter l'agent du réseau ephemere
-                    sh """
-                        AGENT_CONTAINER=\$(hostname)
-                        docker network disconnect ${env.NETWORK_EPHEMERE} \$AGENT_CONTAINER 2>/dev/null || echo "⚠️  Agent déjà déconnecté"
-                        echo "✅ Agent déconnecté du réseau ephemere"
-                    """
-
-                    // Arrêter et supprimer le container ZAP
-                    echo "🧹 Nettoyage du container OWASP ZAP..."
-                    sh """
-                        docker stop rhdemo-jenkins-zap 2>/dev/null || true
-                        docker rm rhdemo-jenkins-zap 2>/dev/null || true
-                        echo "✅ Container ZAP supprimé"
-                    """
-
-                    dir(env.EPHEMERE_INFRA_PATH) {
-                        sh """
-                            # Arrêter et supprimer l'environnement Docker Compose
-                            docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
-
-                            # Supprimer les containers isolés
-                            docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
-
-                            # Supprimer l'image de build temporaire
-                            docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || true
-                        """
+                    // Filet de sécurité (idempotent) : SonarQube reste démarré si l'analyse échoue
+                    // ou si le build est interrompu avant le post de la Quality Gate.
+                    if (params.RUN_SONAR) {
+                        lib.stopSonarQube()
                     }
 
+                    // Nettoyage de l'environnement ephemere
+                    if (!params.KEEP_EPHEMERE_ENV) {
+                        echo "🧹 Nettoyage de l'environnement ephemere..."
+
+                        // Déconnecter l'agent du réseau ephemere
+                        sh """
+                            AGENT_CONTAINER=\$(hostname)
+                            docker network disconnect ${env.NETWORK_EPHEMERE} \$AGENT_CONTAINER 2>/dev/null || echo "⚠️  Agent déjà déconnecté"
+                            echo "✅ Agent déconnecté du réseau ephemere"
+                        """
+
+                        // Arrêter et supprimer le container ZAP
+                        echo "🧹 Nettoyage du container OWASP ZAP..."
+                        sh """
+                            docker stop rhdemo-jenkins-zap 2>/dev/null || true
+                            docker rm rhdemo-jenkins-zap 2>/dev/null || true
+                            echo "✅ Container ZAP supprimé"
+                        """
+
+                        dir(env.EPHEMERE_INFRA_PATH) {
+                            sh """
+                                # Arrêter et supprimer l'environnement Docker Compose
+                                docker-compose -p ${env.COMPOSE_PROJECT_NAME} down -v 2>/dev/null || true
+
+                                # Supprimer les containers isolés
+                                docker rm -f ${env.CONTAINER_NGINX} ${env.CONTAINER_APP} ${env.CONTAINER_DB} ${env.CONTAINER_KEYCLOAK} ${env.CONTAINER_KEYCLOAK_DB} 2>/dev/null || true
+
+                                # Supprimer l'image de build temporaire
+                                docker rmi ${env.RHDEMO_IMAGE} 2>/dev/null || true
+                            """
+                        }
+
+                        echo "✅ Nettoyage terminé"
+                    } else {
+                        echo "🔧 Mode DEBUG: Environnement ephemere préservé pour tests manuels"
+                        echo "⚠️  RAPPEL: L'environnement sera nettoyé au prochain build"
+                        echo "📋 Containers actifs: ${env.CONTAINER_NGINX}, ${env.CONTAINER_APP}, ${env.CONTAINER_DB}, ${env.CONTAINER_KEYCLOAK}"
+                        echo "🌐 URLs d'accès:"
+                        echo "   - RHDemo: https://rhdemo.ephemere.local"
+                        echo "   - Keycloak: https://keycloak.ephemere.local"
+                    }
+
+                    // Supprimer les fichiers de secrets de manière sécurisée
+                    lib.cleanupSecrets([
+                        env.SECRETS_ENV_VARS,
+                        env.SECRETS_RHDEMO,
+                        env.KEYCLOAK_CONFIG_TMP
+                    ])
+                    // Supprimer le répertoire temporaire isolé
+                    sh "rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true"
+
                     echo "✅ Nettoyage terminé"
-                } else {
-                    echo "🔧 Mode DEBUG: Environnement ephemere préservé pour tests manuels"
-                    echo "⚠️  RAPPEL: L'environnement sera nettoyé au prochain build"
-                    echo "📋 Containers actifs: ${env.CONTAINER_NGINX}, ${env.CONTAINER_APP}, ${env.CONTAINER_DB}, ${env.CONTAINER_KEYCLOAK}"
-                    echo "🌐 URLs d'accès:"
-                    echo "   - RHDemo: https://rhdemo.ephemere.local"
-                    echo "   - Keycloak: https://keycloak.ephemere.local"
                 }
-
-                // Supprimer les fichiers de secrets de manière sécurisée
-                lib.cleanupSecrets([
-                    env.SECRETS_ENV_VARS,
-                    env.SECRETS_RHDEMO,
-                    env.KEYCLOAK_CONFIG_TMP
-                ])
-                // Supprimer le répertoire temporaire isolé
-                sh "rm -rf ${env.SECRETS_TMP_DIR} 2>/dev/null || true"
-
-                echo "✅ Nettoyage terminé"
 
                 // fixcve-auto (docs/FIXCVE_AUTO.md) : à chaque fin de build, quel que soit le
                 // résultat (un échec Trivy/OWASP se corrige, le build qui suit un correctif le

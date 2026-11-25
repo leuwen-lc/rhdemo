@@ -302,8 +302,10 @@ jenkins-docker/
    section [Email](#email) plus bas.
 
 4. **Secrets des pipelines** : pas dans `.env`, mais dans OpenBao (`kv/jenkins/*`), lus par Jenkins à
-   chaque utilisation. `docker compose up -d openbao`, déverrouillage (`openbao/unseal.sh`, clé dans
-   KeePassXC) après chaque démarrage, puis `rhDemo/scripts/openbao-setup.py jenkins-approle` et
+   chaque utilisation. `start-jenkins.sh` démarre OpenBao s'il est installé (sinon
+   `docker compose up -d openbao`) et signale s'il est scellé ; déverrouillage (`openbao/unseal.sh`, clé dans
+   KeePassXC) après chaque démarrage. OpenBao arrêté ou scellé : `RHDemo-CI` échoue avant son premier stage
+   (« could not log in into vault »). À l'installation, puis `rhDemo/scripts/openbao-setup.py jenkins-approle` et
    `openbao-setup.py jenkins` à l'installation : [docs/OPENBAO.md](../../docs/OPENBAO.md). Les comptes
    Jenkins et la base SonarQube restent dans `.env`, pour que Jenkins démarre sans OpenBao.
 

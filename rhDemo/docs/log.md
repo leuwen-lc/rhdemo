@@ -534,3 +534,7 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 - `Jenkinsfile-FixCVE` lance `fixcve-auto.py` ; `Jenkinsfile-CI` gagne le stage « Tests des scripts » (`run-all.sh`).
 - [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : bilan, section 3.5 (réalisation sans fonctionnement en parallèle), décisions prises. [FIXCVE_AUTO.md](FIXCVE_AUTO.md) : architecture et tests. [PIPELINES_CI_CD.md](PIPELINES_CI_CD.md) : nouveau stage. [FIXCVE_AUTO_INCIDENTS.md](FIXCVE_AUTO_INCIDENTS.md) : trois lignes ajoutées.
 - Frontmatter seul de [ETUDE_FIXCVE_DANS_JENKINS.md](etudes/ETUDE_FIXCVE_DANS_JENKINS.md) et [ETUDE_OPENBAO.md](etudes/ETUDE_OPENBAO.md) (historiques, contenu inchangé) : source supprimée `fixcve-auto-poll.sh` remplacée par son successeur `fixcve_lib/poller.py`.
+
+## [2026-11-25] ingest | OpenBao au démarrage de Jenkins, post de la CI sans agent
+
+- `start-jenkins.sh` démarre OpenBao s'il est installé et signale son état (scellé, non initialisé). `Jenkinsfile-CI` : le `post { always }` ne lance plus le nettoyage quand aucun stage n'a tourné (échec à l'ouverture d'un credential OpenBao), ce qui masquait la vraie cause. [README de jenkins-docker](../infra/jenkins-docker/README.md) : paragraphe des secrets des pipelines.

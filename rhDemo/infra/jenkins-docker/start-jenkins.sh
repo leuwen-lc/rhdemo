@@ -284,6 +284,28 @@ fi
 # Pour ouvrir l'interface : docker start rhdemo-sonarqube-db rhdemo-sonarqube
 docker compose up --no-start sonarqube sonarqube-db
 
+# OpenBao : sans lui, tout pipeline qui lit un credential échoue dès son ouverture (nom
+# « openbao » introuvable sur le réseau Docker). Démarré ici s'il est installé (certificats
+# créés par openbao/init-local-ca.sh) ; il redémarre scellé, le déverrouillage reste manuel.
+if [ -f certs/openbao/openbao.crt ] && [ -f certs/ca/root-ca.crt ]; then
+    docker compose up -d openbao || echo "⚠️  OpenBao n'a pas démarré : voir docker compose logs openbao"
+    # shellcheck source=openbao/lib.sh
+    source openbao/lib.sh
+    for _ in $(seq 1 10); do
+        OPENBAO_STATE="$(openbao_seal_state)"
+        [ "${OPENBAO_STATE}" != "down" ] && break
+        sleep 2
+    done
+    case "${OPENBAO_STATE}" in
+        unsealed) echo "✅ OpenBao déverrouillé" ;;
+        sealed) echo "⚠️  OpenBao est scellé : lancer openbao/unseal.sh avant tout build (clé dans KeePassXC)" ;;
+        uninitialized) echo "⚠️  OpenBao n'est pas initialisé : openbao/configure-openbao.sh init" ;;
+        *) echo "⚠️  OpenBao injoignable : voir docker compose logs openbao" ;;
+    esac
+else
+    echo "⚠️  OpenBao non installé (certs/openbao absent, voir docs/OPENBAO.md) : les pipelines échoueront"
+fi
+
 echo ""
 echo "⏳ Attente du démarrage de Jenkins (peut prendre 1-2 minutes)..."
 

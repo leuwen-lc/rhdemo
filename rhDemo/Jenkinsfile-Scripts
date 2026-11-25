@@ -69,8 +69,9 @@ pipeline {
                             try {
                                 withSonarQubeEnv('SonarQube') {
                                     dir('rhDemo') {
-                                        // Python seul ; issues Low et Info ignorées. resourceKey est
-                                        // obligatoire pour chaque entrée multicriteria (sinon l'analyse échoue).
+                                        // Python seul. Pas de sonar.issue.ignore.multicriteria : ses entrées ne
+                                        // filtrent que par règle et fichier (une clé « severity » y est ignorée),
+                                        // et ruleKey=* masquait toutes les issues. La sévérité relève de la Quality Gate.
                                         sh '''./mvnw -B -N sonar:sonar \
                                             -Dsonar.projectKey=rhdemo-scripts \
                                             -Dsonar.projectName="RHDemo Scripts" \
@@ -81,14 +82,7 @@ pipeline {
                                             -Dsonar.test.inclusions="scripts/tests/**/*.py" \
                                             -Dsonar.test.exclusions="scripts/tests/fixtures/**" \
                                             -Dsonar.python.version=3.13 \
-                                            -Dsonar.python.coverage.reportPaths=scripts/coverage.xml \
-                                            -Dsonar.issue.ignore.multicriteria=e1,e2 \
-                                            -Dsonar.issue.ignore.multicriteria.e1.ruleKey="*" \
-                                            -Dsonar.issue.ignore.multicriteria.e1.resourceKey="**/*" \
-                                            -Dsonar.issue.ignore.multicriteria.e1.severity=MINOR \
-                                            -Dsonar.issue.ignore.multicriteria.e2.ruleKey="*" \
-                                            -Dsonar.issue.ignore.multicriteria.e2.resourceKey="**/*" \
-                                            -Dsonar.issue.ignore.multicriteria.e2.severity=INFO'''
+                                            -Dsonar.python.coverage.reportPaths=scripts/coverage.xml'''
                                     }
                                 }
                                 timeout(time: 10, unit: 'MINUTES') {

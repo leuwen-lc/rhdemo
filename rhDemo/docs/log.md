@@ -553,3 +553,7 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 
 - `sonar-project.properties` supprimé : la CI analyse `rhdemo-api` par le scanner Maven, qui ne lit pas ce fichier (et ses exclusions `multicriteria` sans `resourceKey` auraient fait échouer l'analyse). Ses exclusions de couverture n'ont donc jamais été appliquées, la Quality Gate passant sans elles. [TESTS_REFONTE.md](etudes/TESTS_REFONTE.md) (historique) : frontmatter seul, source supprimée retirée.
 - [TESTS_SECURITE_COUVERTURE.md](TESTS_SECURITE_COUVERTURE.md) : section des exclusions remplacée par la mesure réelle, `SpaCsrfTokenRequestHandlerTest` (4 tests) ajouté au tableau, chiffre « > 95 % sur le périmètre mesuré » retiré.
+
+## [2026-11-25] ingest | RHDemo-Scripts : exclusions d'issues SonarQube retirées
+
+- Les exclusions `sonar.issue.ignore.multicriteria` de `Jenkinsfile-Scripts` (`ruleKey=*`, `resourceKey=**/*`, plus une clé `severity` que SonarQube ignore) masquaient toutes les issues de `rhdemo-scripts` : retirées. Le filtrage par sévérité relève de la Quality Gate ([PIPELINES_CI_CD.md](PIPELINES_CI_CD.md)).

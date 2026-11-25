@@ -10,6 +10,9 @@
   "prCreation": "immediate",
   "minimumReleaseAge": "7 days",
   "rebaseWhen": "behind-base-branch",
+  "gitIgnoredAuthors": [
+    "ci-bot@leuwen-lc.fr"
+  ],
   "osvVulnerabilityAlerts": true,
   "packageRules": [
     {

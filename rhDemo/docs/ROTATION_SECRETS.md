@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-23
+verifie_le: 2026-11-25
 sources:
   - rhDemo/scripts/rotate-secrets.py
   - rhDemo/scripts/rotation_lib/
@@ -40,7 +40,7 @@ Dans la console Jenkins (Administrer Jenkins > Credentials), les secrets de `kv/
 | Tous les 90 jours au plus | `secret_id` AppRole de Jenkins et Cosign : **ils expirent à 100 jours**, après quoi les pipelines (dont fixcve-auto) perdent l'accès à OpenBao | `rotate-secrets.py openbao-approle-jenkins openbao-approle-cosign` |
 | Avant l'échéance annuelle | Certificat TLS d'OpenBao (1 an) | Échéance : `openssl x509 -enddate -noout -in rhDemo/infra/jenkins-docker/certs/openbao/openbao.crt` ; renouvellement : `openbao/init-local-ca.sh openbao`, `docker compose restart openbao`, déverrouillage |
 | Tous les 5 ans (racine : 10 ans) | Certificat de l'intermédiaire de l'autorité locale | Pas de commande dédiée : signer un nouvel intermédiaire avec la clé racine sortie de KeePassXC (mêmes commandes `openssl` que `init-local-ca.sh ca`), puis réémettre le certificat d'OpenBao |
-| Avant leur expiration | Clé GPG de Renovate (2 ans), token SonarQube (1 an, fixé à sa création) | `rotate-secrets.py renovate-gpg-key`, `rotate-secrets.py jenkins-sonar-token` |
+| Avant leur expiration | Clé GPG de Renovate (2 ans), token SonarQube et token GitHub de Renovate (1 an, fixé à leur création) | `rotate-secrets.py renovate-gpg-key`, `rotate-secrets.py jenkins-sonar-token`, `rotate-secrets.py renovate-github-token` (expiré : 401 sur github.com dans le dashboard Renovate) |
 | Après une série de rotations | Instantané d'OpenBao et copie du journal des rotations (`journal.jsonl`) | [OPENBAO.md](OPENBAO.md), « Sauvegarde et restauration » |
 | Chaque dimanche (cron, automatique) | Rotation du journal d'audit d'OpenBao, 12 archives compressées gardées | `openbao/rotate-audit.sh` ; vérifier de temps en temps `~/.cache/rhdemo-openbao-audit-rotate.log` ([OPENBAO.md](OPENBAO.md), « Journal d'audit ») |
 
@@ -76,7 +76,7 @@ Quatre sortes de rotation, affichées par `--list` (colonne « rotation », mét
 - **manuelle** (`manual` : mots de passe des comptes Jenkins, clé Cosign, clés TLS, mot de passe `admin` et clé de déverrouillage d'OpenBao…) : `rotate-secrets.py <id>` affiche la procédure, sans rien modifier ; une fois faite, `--record <id>` la trace pour `--check` ;
 - **à chaque build** (`per-build` : secrets d'ephemere) : rien à renouveler. `--check` les affiche (« régénéré à chaque build ») sans les compter en retard ; la rotation et `--record` les refusent, pour que le journal ne contienne pas de fausse trace.
 
-« (bloquant) » à la fin de l'état dans `--check` (« , bloquant » après la méthode dans `--list`) marque un secret qui **cesse de fonctionner** s'il n'est pas renouvelé à temps : `secret_id` AppRole (100 jours), clé GPG de Renovate (2 ans), token SonarQube (1 an). Les autres secrets en retard ne posent qu'une question d'hygiène. Pour un secret bloquant de durée de vie connue (`blocking` et `lifetime_days` dans l'inventaire), les jours restants sont comptés jusqu'à 14 jours avant l'expiration si cette échéance précède la période de sa criticité (`secret_id` AppRole : 86 jours) ; au-delà, l'état devient « EN RETARD (expire dans N j) », puis « EXPIRÉ ». La dernière ligne compte les secrets bloquants parmi ceux en retard.
+« (bloquant) » à la fin de l'état dans `--check` (« , bloquant » après la méthode dans `--list`) marque un secret qui **cesse de fonctionner** s'il n'est pas renouvelé à temps : `secret_id` AppRole (100 jours), clé GPG de Renovate (2 ans), token SonarQube et token GitHub de Renovate (1 an). Les autres secrets en retard ne posent qu'une question d'hygiène. Pour un secret bloquant de durée de vie connue (`blocking` et `lifetime_days` dans l'inventaire), les jours restants sont comptés jusqu'à 14 jours avant l'expiration si cette échéance précède la période de sa criticité (`secret_id` AppRole : 86 jours) ; au-delà, l'état devient « EN RETARD (expire dans N j) », puis « EXPIRÉ ». La dernière ligne compte les secrets bloquants parmi ceux en retard.
 
 « aucune rotation journalisée » dans `--check` signifie seulement que le journal local n'a pas d'entrée pour ce secret (par exemple une rotation antérieure à la création du journal) : renouveler le secret, ou le tracer par `--record` s'il vient d'être renouvelé à la main.
 

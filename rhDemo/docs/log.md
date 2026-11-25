@@ -467,3 +467,7 @@ Builds #1106 et #1107 : le retraitement des CVE nouvelles n'a rien vu, car le re
 ## [2026-11-24] lint | ETUDE_FIXCVE_DANS_JENKINS.md en historique
 
 Passage de fixcve-auto dans Jenkins validé par un cycle réel complet (builds CI #1110 et #1111, `RHDemo-FixCVE` #86 : correctif poussé par le bot puis validé par la CI). [ETUDE_FIXCVE_DANS_JENKINS.md](ETUDE_FIXCVE_DANS_JENKINS.md) passe en `historique`. Contrôle des restes de la migration : dépôt déjà nettoyé le 2026-11-23 (commit `6d8f628`), poste sans ligne fixcve dans la crontab ni répertoire `~/.config/rhdemo-fixcve`.
+
+## [2026-11-25] ingest | renovate-github-token dans l'inventaire des rotations
+
+Token GitHub de Renovate expiré (401 sur github.com, échec des lookups `github-releases` : NGF, Maven, Helm, Cosign). Ajouté à `secrets/inventory.yaml` (n° 25, `manual-value` vers `kv/jenkins/renovate-github-token`, bloquant, 365 jours) pour que `rotate-secrets.py --check` signale son expiration. [ROTATION_SECRETS.md](ROTATION_SECRETS.md) mis à jour.

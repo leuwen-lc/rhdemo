@@ -132,6 +132,7 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [ETUDE_FIXCVE_DANS_JENKINS.md](etudes/ETUDE_FIXCVE_DANS_JENKINS.md) | historique | Faisabilité de l'exécution de fixcve-auto par un pipeline Jenkins au lieu du cron local : points durs et décisions du 2026-11-22 (Jenkinsfile lu sur la branche sans épinglage, agent dédié avec volume d'état, déclenchement à chaque fin de CI, mode local retiré) ; mis en œuvre le 2026-11-22, validé dans Jenkins le 2026-11-24 |
 | [SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md](etudes/SECURITE_RHDEMO_AUDIT_20260424_REMEDIE.md) | historique | Revue de sécurité du 2026-04-24 et remédiations |
 | [SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md](etudes/SECURITE_RHDEMO_AUDIT_20260522_REMEDIE.md) | historique | Audit de sécurité du 2026-05-22 (score 58/100) et remédiations |
+| [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) | historique | Isolation des règles métier de fixcve-auto : P1 à P4 appliqués, poller réécrit en Python le 2026-11-25 (replays `DRY_RUN` #1100 et #1102 conformes) ; options Python ou Java |
 
 ## Études en cours ou non validées (`etudes/`, proposition)
 
@@ -141,7 +142,6 @@ Les chemins du champ `sources` sont relatifs à la racine du dépôt. Un documen
 | [CICD_JENKINS_VS_FORGEJO_ACTIONS.md](etudes/CICD_JENKINS_VS_FORGEJO_ACTIONS.md) | proposition | Comparaison Jenkins, Forgejo Actions et Woodpecker CI |
 | [TESTS_FRONTEND_UNITAIRES.md](etudes/TESTS_FRONTEND_UNITAIRES.md) | proposition | Étude de tests unitaires frontend pour sécuriser les montées Renovate |
 | [ETUDE_ROTATION_SECRETS.md](etudes/ETUDE_ROTATION_SECRETS.md) | proposition | Inventaire des secrets sensibles et renouvellement rapide par API ; phases 0 à 2 réalisées (en partie par OpenBao), kubeconfigs et mode urgence (`--emergency`) le 2026-11-23 ; restent rappel périodique, clé AGE et la création de tokens par Secret (remontée vers l'administration du cluster) |
-| [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) | proposition | Isolation des règles métier de fixcve-auto : P1 à P4 appliqués et poller réécrit en Python le 2026-11-25, replays `DRY_RUN` et premier cycle réel à faire avant passage en historique ; options de réécriture Python ou Java |
 
 ---
 

@@ -538,3 +538,8 @@ Exception assumée à l'immuabilité : dans ce journal et dans les docs `histori
 ## [2026-11-25] ingest | OpenBao au démarrage de Jenkins, post de la CI sans agent
 
 - `start-jenkins.sh` démarre OpenBao s'il est installé et signale son état (scellé, non initialisé). `Jenkinsfile-CI` : le `post { always }` ne lance plus le nettoyage quand aucun stage n'a tourné (échec à l'ouverture d'un credential OpenBao), ce qui masquait la vraie cause. [README de jenkins-docker](../infra/jenkins-docker/README.md) : paragraphe des secrets des pipelines.
+
+## [2026-11-25] restructure | FIXCVE_REGLES_METIER passée en historique
+
+- [FIXCVE_REGLES_METIER.md](etudes/FIXCVE_REGLES_METIER.md) : `historique` après les replays `DRY_RUN` du poller Python (#1100 et #1102 conformes, #1097 supprimé par la rétention de Jenkins). Replay d'un build supprimé : message explicite ([FIXCVE_AUTO.md](FIXCVE_AUTO.md)).
+- Contrôle : [FIXCVE_AUTO.md](FIXCVE_AUTO.md) et [OWASP_DEPENDENCY_CHECK.md](OWASP_DEPENDENCY_CHECK.md) disaient encore le rescan local sans OSS Index (corrigé le 2026-11-24) ; [OPENBAO.md](OPENBAO.md) : credentials partagés de fixcve-auto ; [INSTALLATION_COMPLETE.md](INSTALLATION_COMPLETE.md) vérifié sans changement.

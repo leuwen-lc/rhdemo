@@ -1,5 +1,5 @@
 ---
-statut: proposition
+statut: historique
 verifie_le: 2026-11-25
 sources:
   - rhDemo/scripts/fixcve_lib/
@@ -11,7 +11,7 @@ sources:
 
 # fixcve-auto : isoler les règles métier
 
-> **Bilan au 2026-11-25 : P1 à P4 appliqués**, dans l'ordre P2, P1, P4, P3, **puis réécriture complète du poller en Python** (section 3.5, sans fonctionnement en parallèle). Voir [FIXCVE_AUTO.md](../FIXCVE_AUTO.md). Le poller Bash recâblé a été rejoué en `DRY_RUN` sur les builds #1097, #1100 et #1102 (résultat conforme après le correctif de `maven_upgrade` du #1097). Reste à faire avant de passer cette étude en `historique` : rejouer ces trois builds avec le poller Python, puis un premier cycle réel. Écarts par rapport à la proposition :
+> **Bilan au 2026-11-25 : P1 à P4 appliqués**, dans l'ordre P2, P1, P4, P3, **puis réécriture complète du poller en Python** (section 3.5, sans fonctionnement en parallèle). Voir [FIXCVE_AUTO.md](../FIXCVE_AUTO.md). Le poller Bash recâblé a été rejoué en `DRY_RUN` sur les builds #1097, #1100 et #1102 (résultat conforme après le correctif de `maven_upgrade` du #1097). Le poller Python a ensuite été rejoué en `DRY_RUN` sur #1100 et #1102 : conformes (`deja_corrige_sur_head`). #1097 n'a pas pu l'être, la rétention des 30 derniers builds de `RHDemo-CI` l'avait supprimé. Étude close le 2026-11-25 ; le suivi des cycles réels relève de [FIXCVE_AUTO_INCIDENTS.md](../FIXCVE_AUTO_INCIDENTS.md). Écarts par rapport à la proposition :
 >
 > - P1 : la nature `image_embedded_jar` couvre aussi une bibliothèque npm vue par Trivy dans une image tierce ; un paquet système de l'image du projet est `image_os`, comme ceux des images tierces.
 > - P3 : la mémoire unique `same_cause` garde une seule cause à la fois. Seul effet de bord identifié : une cause « no action » sur un code source déjà marqué « bloqué » remplace le blocage. Ce cas est borné par la halte après 2 pushes « no action ».
@@ -206,3 +206,4 @@ L'harmonisation avec l'application est un vrai argument pour un projet école (u
 - `run-all.sh` exécuté en CI (stage « Tests des scripts » de `Jenkinsfile-CI`).
 - Réécriture en Python retenue, sans fonctionnement en parallèle ni retour arrière (section 3.5).
 - Le nouveau code reste hors du périmètre SonarQube pour l'instant ; à revoir plus tard.
+- Pas de premier cycle réel exigé avant la clôture : un écart se verra au prochain échec CI pour cause de CVE, et sera traité comme un incident.

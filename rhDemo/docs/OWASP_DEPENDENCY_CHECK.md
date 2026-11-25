@@ -1,6 +1,6 @@
 ---
 statut: actif
-verifie_le: 2026-11-22
+verifie_le: 2026-11-25
 sources:
   - rhDemo/pom.xml
   - rhDemo/Jenkinsfile-CI
@@ -59,7 +59,7 @@ Le build frontend lui-même utilise `npm ci` (et non `npm install`) via `fronten
 
 Dependency-Check ne tourne pas uniquement dans `Jenkinsfile-CI` : `Jenkinsfile-Renovate` l'exécute aussi (`./mvnw org.owasp:dependency-check-maven:check`) pour toute PR Renovate qui touche un manifeste de dépendances (`pom.xml`, `frontend/package.json`, `frontend/package-lock.json`) — voir [Jenkinsfile-Renovate](../Jenkinsfile-Renovate). Les PR qui ne touchent aucun de ces fichiers (Jenkinsfile, Helm values, etc.) suivent un chemin de validation direct, hors périmètre OWASP.
 
-`fixcve-auto` (job `RHDemo-FixCVE`) relance aussi `dependency-check:check` (`-DfailBuildOnCVSS=11`, OSS Index désactivé) pour vérifier un correctif avant push, sur la base NVD de `RHDemo-CI` (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
+`fixcve-auto` (job `RHDemo-FixCVE`) relance aussi `dependency-check:check` (`-DfailBuildOnCVSS=11`, OSS Index activé comme en CI avec `ossindex-credentials`, désactivé si ce compte manque) pour vérifier un correctif avant push, sur la base NVD de `RHDemo-CI` (voir « Performance et cache »). Avant chaque scan il supprime l'ancien `target/dependency-check-report.json` : un scan qui échoue ou expire ne peut pas être confondu avec un rapport antérieur.
 
 **Différence CI / Renovate depuis l'incident #104/#871 (voir section OSS Index ci-dessous)** : `Jenkinsfile-Renovate` exécute le scan avec `-DossIndexAnalyzerEnabled=false` — seul `Jenkinsfile-CI` interroge OSS Index. Les deux pipelines restent donc couverts par NVD/CPE + Node Audit + RetireJS, mais seul CI peut détecter une CVE qui ne serait visible que via OSS Index. Le rapport du scan Renovate est archivé (`dependency-check-report-pr<N>.html/json`) par PR pour permettre un diagnostic après coup sans dépendre du log de build (tronqué par le `-q` de l'invocation Maven).
 

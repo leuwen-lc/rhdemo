@@ -178,9 +178,9 @@ Par mois : cycles, succès, échecs conformes, pannes d'infrastructure (hors tau
 
 ⚠️ **Images tierces** : un composant interne vulnérable sans tag corrigé (CVSS ≥ 9) est un échec conforme ; l'acceptation documentée reste une décision humaine (exemples : bcprov, freemarker, netty dans Keycloak, voir [SECURITY_ADVISORIES.md](SECURITY_ADVISORIES.md)).
 
-⚠️ **Écart CI / local** : le rescan local n'interroge pas OSS Index (quota partagé avec `RHDemo-CI`) ; une faille connue d'OSS Index seul n'est vue que par le build CI (phase B).
+⚠️ **Écart CI / local** : le rescan local interroge OSS Index comme la CI (credential `ossindex-credentials`). Sans ce compte, il tourne sans OSS Index (message `rescan local sans OSS Index`) et une faille connue d'OSS Index seul n'est vue que par le build CI (phase B).
 
-⚠️ **Credentials** : credentials Jenkins références OpenBao (`kv/jenkins/fixcve-forgejo-token`, `kv/jenkins/fixcve-jenkins-api`), plus `nvd-api-key` partagé avec la CI, passés au poller par variables d'environnement le temps du passage ([OPENBAO.md](OPENBAO.md)). Une compromission de Jenkins donne aussi le token du bot, avec les mêmes droits que `ci-bot-forgejo-token` déjà présent. L'agent `fixcve` n'a pas le socket Docker de l'hôte, mais les agents de la CI l'ont et peuvent lire tous les volumes.
+⚠️ **Credentials** : credentials Jenkins références OpenBao (`kv/jenkins/fixcve-forgejo-token`, `kv/jenkins/fixcve-jenkins-api`), plus `nvd-api-key` et `ossindex-credentials` partagés avec la CI, passés au poller par variables d'environnement le temps du passage ([OPENBAO.md](OPENBAO.md)). Une compromission de Jenkins donne aussi le token du bot, avec les mêmes droits que `ci-bot-forgejo-token` déjà présent. L'agent `fixcve` n'a pas le socket Docker de l'hôte, mais les agents de la CI l'ont et peuvent lire tous les volumes.
 
 ---
 
@@ -221,7 +221,7 @@ Paramètres du job `RHDemo-FixCVE` (« Lancer un build avec des paramètres ») 
 | Consulter l'état | `ACTION=status` ; l'état est aussi archivé à chaque passage (`fixcve-state.json`) |
 | Reprise après halte | `ACTION=resume` (compteurs remis à zéro, puis passage) |
 | Revérifier tout de suite un blocage | `ACTION=clear-blocked` (inutile après un changement de code : le SHA source change) |
-| Rejouer un build | `ACTION=replay`, `BUILD_TO_REPLAY=<build>` (numéro seul, sans `#`). En mode réel, le build doit être le dernier terminé. Avec `DRY_RUN`, n'importe quel build encore conservé par Jenkins est traité : son rapport ancien est rejoué contre le code actuel, sans push ni modification de l'état. |
+| Rejouer un build | `ACTION=replay`, `BUILD_TO_REPLAY=<build>` (numéro seul, sans `#`). En mode réel, le build doit être le dernier terminé. Avec `DRY_RUN`, n'importe quel build encore conservé par Jenkins est traité : son rapport ancien est rejoué contre le code actuel, sans push ni modification de l'état. Jenkins ne conserve que les 30 derniers builds CI : un build plus ancien est signalé absent de l'historique (HTTP 404) et le rejeu s'arrête. |
 | Essai sans effet | `DRY_RUN` coché, avec n'importe quelle action |
 
 - **Notifications** : mail si le passage échoue (Jenkins ou Codeberg injoignable, push refusé, erreur d'une étape) ou s'il est `UNSTABLE` (halte, rollback, blocage sans correctif, ligne `ALERTE`), détail dans `fixcve-notify.txt` archivé. Rien sur un passage à vide.

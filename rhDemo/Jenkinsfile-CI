@@ -47,7 +47,7 @@ pipeline {
 
         // Configuration Docker
         // renovate: datasource=docker depName=nginx
-        NGINX_IMAGE = "nginx:1.31.8-alpine-slim@sha256:4c734d33ee731135dc9f2349914a34551c920f4451fca8bb05bf5880eb9079e8"
+        NGINX_IMAGE = "nginx:1.31.9-alpine-slim@sha256:5bfced78d24d644270bedb0a9968697042e38d5c03fb6354603df025279c1cbe"
         // renovate: datasource=docker depName=postgres
         POSTGRES_IMAGE = "postgres:18.4-alpine3.22@sha256:56ba71bf54060de15a6b2df1a18081b8f6c5bf61255b7ed6f1ef10ee868eaff0"
         // renovate: datasource=docker depName=keycloak/keycloak
